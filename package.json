@@ -1,0 +1,23 @@
+{
+  "name": "tasks",
+  "version": "0.2.0",
+  "description": "Простой таск-трекер: юниты, доски, задачи с настраиваемыми полями",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.js",
+    "build": "vite build",
+    "start": "node --disable-warning=ExperimentalWarning server/index.js",
+    "seed": "node --disable-warning=ExperimentalWarning scripts/seed.js",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js"
+  },
+  "dependencies": {
+    "sortablejs": "^1.15.7"
+  },
+  "devDependencies": {
+    "vite": "^8.3.1"
+  }
+}
