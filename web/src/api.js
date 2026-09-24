@@ -1,5 +1,6 @@
-/** Клиент API: POST /api/<method>. Записи идут строго по очереди. */
+/** Клиент API: методы бэкенда (Supabase или локальная база). Записи идут строго по очереди. */
 import { S } from './state.js';
+import { getBackend } from './data.js';
 
 let pending = 0;
 function setPending(d) {
@@ -9,20 +10,14 @@ function setPending(d) {
 }
 
 export async function call(method, payload) {
-  let res;
-  try {
-    res = await fetch('/api/' + method, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Actor': S.meId || '' },
-      body: JSON.stringify(payload || {}),
-    });
-  } catch {
-    throw new Error('Нет связи с сервером');
-  }
   let r;
-  try { r = await res.json(); } catch { throw new Error('Сервер ответил ошибкой (' + res.status + ')'); }
+  try {
+    r = await getBackend().call(method, payload || {}, { actorId: S.meId || '' });
+  } catch (e) {
+    throw new Error(/fetch|network/i.test(String(e && e.message)) ? 'Нет связи с сервером' : String(e && e.message || e));
+  }
   if (r.ok) return r.data;
-  const e = new Error(r.error || 'Ошибка сервера');
+  const e = new Error(/Failed to fetch|NetworkError/i.test(r.error) ? 'Нет связи с сервером' : r.error || 'Ошибка сервера');
   e.code = r.code;
   e.data = r.data;
   throw e;

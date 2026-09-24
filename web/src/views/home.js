@@ -54,7 +54,7 @@ export async function renderHome() {
           ? h('div', { class: 'unit-grid' }, units.map(unitCard), h('button', { class: 'unit-card add', onclick: openCreateUnit }, icon('plus', 18), 'Новый юнит'))
           : h('div', { class: 'card-box empty-state' },
             h('h2', null, 'Создайте первый юнит'),
-            h('p', null, 'Юнит — отдельное пространство со своей доской, задачами и набором полей: проект, команда или направление.'),
+            h('p', null, 'Юнит — это команда: своя доска и задачи, участники из разных отделов (ASO, Design, iOS…).'),
             h('button', { class: 'btn primary', onclick: openCreateUnit }, icon('plus', 15), 'Создать юнит'))),
       h('section', null,
         h('div', { class: 'section-head' }, h('h2', null, 'Последние события')),

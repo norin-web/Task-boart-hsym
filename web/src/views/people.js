@@ -113,41 +113,59 @@ export function openPeople() {
   });
 }
 
-/** «Кто я» — пока без авторизации выбор хранится в браузере. Профили редактируются прямо здесь. */
-export function openWhoAmI({ welcome = false } = {}) {
+/**
+ * «Кто я».
+ * С входом через Supabase (email задан): занять свободный профиль (без email) или создать свой.
+ * В локальном режиме: выбрать себя из списка — выбор хранится в браузере.
+ */
+export function openWhoAmI({ welcome = false, email = '' } = {}) {
   const name = h('input', { class: 'inp', placeholder: 'Ваше имя' });
-  let changed = false;
-  const choose = p => { setMe(p.id); changed = true; close(); };
-  const list = peopleList({ people: () => S.people.filter(p => p.active), onPick: choose });
+  const choose = async p => {
+    try {
+      if (email) Object.assign(p, await send('updatePerson', { id: p.id, email }));
+      setMe(p.id);
+      close();
+    } catch (e) { showErr(e); }
+  };
+  const available = () => S.people.filter(p => p.active && (!email || !p.email));
+  const list = peopleList({ people: available, onPick: choose });
   const create = async () => {
     if (!name.value.trim()) return name.focus();
-    const p = await send('createPerson', { name: name.value });
+    const p = await send('createPerson', { name: name.value, email });
     S.people.push(p);
     sortPeople();
     setMe(p.id);
-    changed = true;
     name.value = '';
     list.draw();
     list.edit(p.id); // сразу предложим заполнить профиль
     toast('Приятно познакомиться, ' + p.name + '! Заполните профиль или просто закройте окно.');
   };
-  const hasPeople = S.people.some(p => p.active);
+  const has = available().length > 0;
   const close = modal({
     title: welcome ? 'Добро пожаловать в Tasks' : 'Кто вы?',
     body: [
-      h('p', { class: 'hint', style: { marginTop: 0 } }, welcome
-        ? 'Представьтесь — так будет видно, кто создал задачу или оставил комментарий, и заработают «Мои задачи».'
-        : 'Выберите себя. Нажмите ✎, чтобы изменить имя, должность, email или цвет аватара.'),
-      hasPeople && list.el,
-      field(hasPeople ? 'Или добавьте себя' : 'Как вас зовут?', h('div', { class: 'row', style: { flexWrap: 'nowrap' } }, name,
+      h('p', { class: 'hint', style: { marginTop: 0 } }, email
+        ? ['Вы вошли как ', h('b', null, email), '. ', has ? 'Если вас уже добавили в команду — выберите себя, иначе создайте профиль.' : 'Создайте свой профиль.']
+        : welcome ? 'Представьтесь — так будет видно, кто создал задачу или оставил комментарий, и заработают «Мои задачи».'
+          : 'Выберите себя. Нажмите ✎, чтобы изменить имя, должность, email или цвет аватара.'),
+      has && list.el,
+      field(has ? 'Или создайте профиль' : 'Как вас зовут?', h('div', { class: 'row', style: { flexWrap: 'nowrap' } }, name,
         h('button', { class: 'btn primary', onclick: () => create().catch(showErr) }, 'Продолжить'))),
     ],
     actions: [{ label: welcome ? 'Позже' : 'Готово' }],
     onClose: () => rerender(),
   });
   name.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); create().catch(showErr); } });
-  if (hasPeople) name.blur();
   return close;
+}
+
+/** Мой профиль: только своя карточка с редактором. */
+export function openMyProfile() {
+  const p = S.people.find(x => x.id === S.meId);
+  if (!p) return openWhoAmI({ email: S.session && S.session.user.email });
+  const list = peopleList({ people: () => S.people.filter(x => x.id === S.meId) });
+  modal({ title: 'Мой профиль', body: list.el, actions: [{ label: 'Готово', primary: true, action: c => c() }], onClose: rerender });
+  list.edit(p.id);
 }
 
 /**

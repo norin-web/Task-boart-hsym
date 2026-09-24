@@ -473,3 +473,15 @@ button.trow:hover { background: var(--surface-2); }
 }
 .dept-color { width: 30px; height: 30px; border: 1px solid var(--border); border-radius: 8px; padding: 2px; background: var(--surface); flex: none; cursor: pointer; margin-left: 6px; }
 .uc-team { display: flex; align-items: center; gap: 8px; min-height: 22px; }
+
+/* ================= Вход ================= */
+body.login-page #shell { display: block; }
+.login { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; background: radial-gradient(1200px 600px at 50% -10%, var(--accent-soft), transparent 60%), var(--bg); }
+.login-card { width: min(400px, 100%); background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-lg); padding: 28px; text-align: left; }
+.login-card h1 { font-size: 22px; text-align: center; }
+.login-card > .hint { text-align: center; }
+.login-error { color: var(--danger); }
+.login-sent { text-align: center; display: grid; justify-items: center; gap: 6px; color: var(--accent-text); }
+.login-sent h2 { color: var(--text); margin-top: 4px; }
+.login-sent p { color: var(--text-2); margin: 0 0 8px; }
+.mode-badge { margin: 6px 10px 0; font-size: 11px; color: var(--warn); background: var(--warn-soft); border-radius: 6px; padding: 4px 8px; line-height: 1.35; }

@@ -92,7 +92,7 @@ function panelMenu(anchor, t) {
 }
 
 function copyLink(t) {
-  const url = location.origin + '/u/' + t.unitId + '?task=' + t.id;
+  const url = location.origin + location.pathname + '#/u/' + t.unitId + '?task=' + t.id;
   (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject())
     .then(() => toast('Ссылка на ' + taskKey(t) + ' скопирована'), () => toast(url));
 }

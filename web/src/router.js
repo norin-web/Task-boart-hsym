@@ -1,8 +1,8 @@
 /**
- * Маршруты:
- *   /                       главная
- *   /my                     мои задачи
- *   /u/:unit[/list|/settings][?task=:id]
+ * Маршруты (в hash — GitHub Pages не умеет отдавать index.html на любые пути):
+ *   #/                       главная
+ *   #/my                     мои задачи
+ *   #/u/:unit[/list|/settings][?task=:id]
  */
 import { S, freshFilters } from './state.js';
 import { $, h, fill, closeMenu, closeNav, showErr } from './ui.js';
@@ -17,8 +17,9 @@ let rendered = null;
 export const currentView = () => rendered;
 
 export function parseLocation() {
-  const path = location.pathname.replace(/\/+$/, '') || '/';
-  const task = new URLSearchParams(location.search).get('task');
+  const [rawPath, query] = location.hash.replace(/^#/, '').split('?');
+  const path = (rawPath || '/').replace(/\/+$/, '') || '/';
+  const task = new URLSearchParams(query || '').get('task');
   if (path === '/my') return { view: 'my' };
   const m = /^\/u\/([\w-]+)(?:\/(list|settings))?$/.exec(path);
   if (m) return { unit: m[1], mode: m[2] || 'board', task: task || null };
@@ -26,8 +27,8 @@ export function parseLocation() {
 }
 
 export function routeUrl(r) {
-  if (r.unit) return '/u/' + r.unit + (r.mode && r.mode !== 'board' ? '/' + r.mode : '') + (r.task ? '?task=' + encodeURIComponent(r.task) : '');
-  return r.view === 'my' ? '/my' : '/';
+  if (r.unit) return '#/u/' + r.unit + (r.mode && r.mode !== 'board' ? '/' + r.mode : '') + (r.task ? '?task=' + encodeURIComponent(r.task) : '');
+  return r.view === 'my' ? '#/my' : '#/';
 }
 
 export function navigate(r, { replace = false } = {}) {
@@ -103,7 +104,11 @@ export async function render() {
   }
 }
 
-window.addEventListener('popstate', () => {
-  S.route = parseLocation();
+const onLocation = () => {
+  const next = parseLocation();
+  if (routeUrl(next) === routeUrl(S.route)) return;
+  S.route = next;
   render();
-});
+};
+window.addEventListener('popstate', onLocation);
+window.addEventListener('hashchange', onLocation);

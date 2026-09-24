@@ -1,20 +1,21 @@
 {
   "name": "tasks",
-  "version": "0.2.0",
-  "description": "Простой таск-трекер: юниты, доски, задачи с настраиваемыми полями",
+  "version": "0.3.0",
+  "description": "Простой таск-трекер для кросс-функциональных команд: GitHub Pages + Supabase",
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22.13"
+    "node": ">=20"
   },
   "scripts": {
-    "dev": "node scripts/dev.js",
+    "dev": "vite",
     "build": "vite build",
-    "start": "node --disable-warning=ExperimentalWarning server/index.js",
-    "seed": "node --disable-warning=ExperimentalWarning scripts/seed.js",
-    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js"
+    "preview": "vite preview",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@supabase/supabase-js": "^2.117.1",
     "sortablejs": "^1.15.7"
   },
   "devDependencies": {

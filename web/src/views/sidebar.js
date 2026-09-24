@@ -1,11 +1,12 @@
 import Sortable from 'sortablejs';
 import { S, LS, byOrder, openCount, me, unitById } from '../state.js';
-import { $, h, icon, avatar, showErr, fill } from '../ui.js';
+import { $, h, icon, avatar, menu, showErr, fill } from '../ui.js';
 import { send } from '../api.js';
 import { link } from '../router.js';
 import { openPalette } from './palette.js';
 import { openCreateUnit } from './units.js';
-import { openPeople, openWhoAmI, openDepartments } from './people.js';
+import { openPeople, openWhoAmI, openDepartments, openMyProfile } from './people.js';
+import { mode, supabase } from '../data.js';
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 
@@ -66,7 +67,8 @@ export function renderSidebar() {
     h('button', { class: 'nav-item', onclick: openPeople }, icon('users'), h('span', { class: 'nav-label' }, 'Люди')),
     h('button', { class: 'nav-item', onclick: openDepartments }, icon('layers'), h('span', { class: 'nav-label' }, 'Отделы')),
     h('button', { class: 'nav-item', onclick: cycleTheme, title: 'Переключить тему' }, icon(themeIcon), h('span', { class: 'nav-label' }, themeLabel)),
-    h('button', { class: 'nav-item me', onclick: () => openWhoAmI(), title: 'Сменить пользователя' },
+    mode === 'local' && h('div', { class: 'mode-badge', title: 'Supabase не подключён: данные хранятся в этом браузере. См. README.' }, 'Локальный режим: данные только в этом браузере'),
+    h('button', { class: 'nav-item me', onclick: e => meMenu(e.currentTarget), title: 'Профиль' },
       avatar(person, 'sm'), h('span', { class: 'nav-label' }, person ? person.name : 'Кто вы?')));
 
   if (units.length > 1) {
@@ -80,6 +82,17 @@ export function renderSidebar() {
       },
     });
   }
+}
+
+function meMenu(anchor) {
+  const email = S.session && S.session.user.email;
+  menu(anchor, [
+    email && { title: email },
+    { label: 'Мой профиль', icon: 'user', action: openMyProfile },
+    mode === 'local' && { label: 'Сменить пользователя', icon: 'users', action: () => openWhoAmI() },
+    mode === 'supabase' && { sep: true },
+    mode === 'supabase' && { label: 'Выйти', icon: 'back', action: () => supabase.auth.signOut() },
+  ]);
 }
 
 /** Лёгкое обновление счётчиков без перерисовки (после правок на доске). */

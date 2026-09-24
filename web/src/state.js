@@ -24,6 +24,7 @@ export const S = {
   units: [],
   people: [],
   departments: [],          // общий справочник отделов
+  session: null,            // сессия Supabase Auth (в локальном режиме — null)
   board: null,              // { unit, fields, tasks, units, people }
   route: { view: 'home' },  // { view } | { unit, mode: board|list|settings, task }
   filters: freshFilters(),

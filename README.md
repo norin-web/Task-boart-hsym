@@ -2,6 +2,8 @@
 
 Простой таск-трекер — упрощённая Jira. Верхний уровень — **юниты**: это кросс-функциональные команды (внутри работают ASO, Design, iOS и т.д.), у каждой своя доска, задачи и набор полей.
 
+Хостинг — **GitHub Pages**, данные — **Supabase** (Postgres + вход по email). Сервер не нужен.
+
 **Возможности**
 
 - Юниты-команды: состав с отделом каждого участника (человек может быть в нескольких командах), настройка, дублирование, архив
@@ -9,84 +11,76 @@
 - Доска со своими колонками в каждом юните (добавить, переименовать, цвет, тип «не начато / в работе / готово», порядок, удаление с переносом задач), колонки тянутся на всю ширину
 - Дорожки по отделам на доске, вид «Список» с сортировкой, drag & drop
 - Задачи: номер вида `DEV-12`, исполнитель, срок, описание, чеклист, комментарии, история изменений
-- Настраиваемая карточка: 9 типов полей (текст, число, дата, список, мультисписок, человек, флажок, ссылка), обязательные поля, показ на карточке
+- Настраиваемая карточка: 9 типов полей, обязательные поля, показ на карточке
 - Фильтры: поиск, исполнители, отделы, значения полей, просроченные, архив
 - Главная со статистикой и лентой событий, «Мои задачи» по всем юнитам
 - Глобальный поиск `⌘K`, горячие клавиши (`C` — новая задача, `/` — поиск, `?` — подсказка)
-- Удаление задачи с отменой, защита от одновременного редактирования, светлая/тёмная тема, мобильная вёрстка
+- Вход по ссылке на email, светлая/тёмная тема, мобильная вёрстка
 
-**Стек:** Node.js ≥ 22.13 (встроенный `node:sqlite`, без серверных зависимостей), Vanilla JS + Vite, SortableJS.
+## Запуск в продакшене: Supabase + GitHub Pages
 
-## Быстрый старт
+### 1. Supabase (≈5 минут, бесплатный тариф подходит)
+
+1. Создайте проект на [supabase.com](https://supabase.com).
+2. **SQL Editor → New query**: вставьте содержимое [`supabase/schema.sql`](supabase/schema.sql) и нажмите **Run**. Скрипт создаёт таблицы, функции и правила доступа; его можно запускать повторно.
+3. **Authentication → Sign In / Providers → Email**: оставьте Email включённым. В настройках Auth выключите **Allow new users to sign up** — в команду попадают только приглашённые.
+4. **Authentication → URL Configuration**: в **Site URL** и **Redirect URLs** укажите адрес сайта, например `https://norin-web.github.io/Task-boart-hsym/` (и `http://localhost:5177/` для разработки).
+5. **Authentication → Users → Invite user** — пригласите себя и коллег по email.
+6. **Project Settings → API**: скопируйте **Project URL** и ключ **anon public**.
+
+> Ключ `anon` публичный по замыслу Supabase — его можно класть во фронт. Доступ к данным закрыт правилами RLS: читать и писать могут только вошедшие пользователи.
+
+### 2. GitHub Pages
+
+1. **Settings → Secrets and variables → Actions → Variables** → добавьте:
+   - `VITE_SUPABASE_URL` — Project URL
+   - `VITE_SUPABASE_ANON_KEY` — ключ anon public
+2. **Settings → Pages → Build and deployment → Source: GitHub Actions**. Готовые шаблоны выбирать не нужно — workflow уже в репозитории: [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
+3. Сделайте push в `main` (или **Actions → Deploy to GitHub Pages → Run workflow**). Через минуту сайт появится по адресу из настроек Pages.
+
+При первом входе приложение предложит создать профиль (или выбрать себя, если вас уже добавили в «Люди» без email).
+
+## Локальная разработка
 
 ```bash
 npm install
-npm run seed      # демо-данные (необязательно)
-npm run dev       # http://localhost:5177
+cp .env.example .env.local   # вписать ключи Supabase — или пропустить
+npm run dev                  # http://localhost:5177
 ```
 
-`npm run dev` поднимает API на `:8787` (перезапуск при правках) и Vite на `:5177` с HMR и прокси `/api`.
-
-## Скрипты
+**Без ключей** приложение работает в **локальном режиме**: та же схема Postgres (PGlite, WebAssembly) крутится прямо в браузере, данные хранятся только в этом браузере. Удобно для разработки и демо; в интерфейсе видна плашка «Локальный режим».
 
 | Команда | Что делает |
 |---|---|
-| `npm run dev` | Разработка: API + Vite |
-| `npm run build` | Сборка фронта в `dist/` |
-| `npm start` | Продакшен: один процесс отдаёт API и `dist/` |
-| `npm test` | Тесты API (`node:test`, база в памяти) |
-| `npm run seed` | Демо-данные в пустую базу; `-- --reset` — пересоздать базу |
-
-## Настройки (переменные окружения)
-
-| Переменная | По умолчанию | |
-|---|---|---|
-| `PORT` | `8787` | Порт сервера |
-| `DATA_DIR` | `./data` | Папка с базой `tasks.db` — её и нужно бэкапить |
-| `APP_PASSWORD` | — | Если задан, весь сайт закрыт паролем (HTTP Basic, логин любой) |
-
-## Деплой
-
-Нужен хостинг с постоянным диском — база хранится в файле.
-
-**Docker (VPS, Railway, Fly.io и т.п.)**
-
-```bash
-docker build -t tasks .
-docker run -d -p 8787:8787 -v tasks-data:/data -e APP_PASSWORD=придумайте tasks
-```
-
-**Render / любой Node-хостинг:** build `npm ci && npm run build`, start `npm start`, подключить диск и указать его путь в `DATA_DIR`.
-
-> Пока нет авторизации, «кто я» выбирается в браузере. Если сайт открыт в интернет — обязательно задайте `APP_PASSWORD`.
+| `npm run dev` | Vite с HMR |
+| `npm run build` | Сборка в `dist/` |
+| `npm run preview` | Просмотр собранной версии |
+| `npm test` | Тесты бизнес-логики на настоящем Postgres (PGlite) с `supabase/schema.sql` |
 
 ## Устройство
 
 ```
-server/
-  index.js   HTTP: POST /api/<метод>, раздача dist/, SPA-фолбэк, пароль
-  api.js     вся бизнес-логика (методы API)
-  db.js      SQLite и миграции (PRAGMA user_version)
+supabase/schema.sql      таблицы, SQL-функции (номера задач, удаления), RLS
 web/
   index.html
   src/
-    main.js      старт, горячие клавиши
-    router.js    маршруты: /, /my, /u/:unit[/list|/settings][?task=:id]
-    api.js       клиент API с очередью записей
-    state.js     состояние и хелперы
-    ui.js        DOM-хелпер, иконки, модалки, меню, тосты
-    views/       sidebar, home, my, board, task, settings, units, people, palette
+    main.js              старт, вход, горячие клавиши
+    data.js              выбор хранилища: Supabase или локальный PGlite
+    backend.js           вся бизнес-логика (методы API) поверх supabase-js
+    pglite-client.js     совместимый с supabase-js клиент над PGlite (локальный режим, тесты)
+    api.js               вызов методов с очередью записей
+    router.js            маршруты в hash: #/, #/my, #/u/:unit[/list|/settings][?task=:id]
+    state.js, ui.js      состояние, хелперы, DOM, модалки, меню
+    views/               sidebar, home, my, board, task, settings, units, people, palette
     styles.css
-test/api.test.js
-scripts/         dev.js, seed.js
+test/backend.test.js
+.github/workflows/deploy.yml
 ```
 
-API — это RPC: `POST /api/<метод>` с JSON-телом, ответ `{ ok, data }` или `{ ok: false, error, code }`. Список методов — объект `methods` в `server/api.js`. Заголовок `X-Actor` — id человека, от чьего имени действие.
-
-Новая миграция БД — новый элемент в конце массива `MIGRATIONS` в `server/db.js`.
+Изменение схемы — дописать в `supabase/schema.sql` идемпотентные команды (`create … if not exists`, `alter table … add column if not exists`) и выполнить их в SQL Editor.
 
 ## Дальше
 
-- Авторизация (вход по email / Google) вместо выбора «кто я»
+- Обновления в реальном времени (Supabase Realtime): изменения коллег без перезагрузки
 - Telegram-бот: уведомления о назначении и комментариях (журнал `activity` и `people.telegram_chat_id` уже есть)
 - Экспорт в CSV, вложения
