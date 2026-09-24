@@ -485,3 +485,4 @@ body.login-page #shell { display: block; }
 .login-sent h2 { color: var(--text); margin-top: 4px; }
 .login-sent p { color: var(--text-2); margin: 0 0 8px; }
 .mode-badge { margin: 6px 10px 0; font-size: 11px; color: var(--warn); background: var(--warn-soft); border-radius: 6px; padding: 4px 8px; line-height: 1.35; }
+.login-tabs { justify-content: center; margin: 14px 0 14px; }

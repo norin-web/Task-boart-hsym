@@ -2,6 +2,7 @@ import { S, setMe, colorFor, unitById, activeDepts, PALETTE } from '../state.js'
 import { h, icon, avatar, field, modal, promptDlg, confirmDlg, showErr, toast, fill, colorPicker } from '../ui.js';
 import { send } from '../api.js';
 import { rerender } from '../router.js';
+import { mode, supabase } from '../data.js';
 
 const sortPeople = () => S.people.sort((a, b) => a.name.localeCompare(b.name));
 
@@ -164,8 +165,26 @@ export function openMyProfile() {
   const p = S.people.find(x => x.id === S.meId);
   if (!p) return openWhoAmI({ email: S.session && S.session.user.email });
   const list = peopleList({ people: () => S.people.filter(x => x.id === S.meId) });
-  modal({ title: 'Мой профиль', body: list.el, actions: [{ label: 'Готово', primary: true, action: c => c() }], onClose: rerender });
+  modal({ title: 'Мой профиль', body: [list.el, mode === 'supabase' && passwordBlock()], actions: [{ label: 'Готово', primary: true, action: c => c() }], onClose: rerender });
   list.edit(p.id);
+}
+
+/** Смена пароля для входа (Supabase Auth). */
+function passwordBlock() {
+  const pass = h('input', { class: 'inp', type: 'password', placeholder: 'Новый пароль (от 6 символов)', autocomplete: 'new-password' });
+  const again = h('input', { class: 'inp', type: 'password', placeholder: 'Ещё раз', autocomplete: 'new-password' });
+  const save = async () => {
+    if (pass.value.length < 6) { toast('Пароль должен быть не короче 6 символов', { type: 'error' }); return pass.focus(); }
+    if (pass.value !== again.value) { toast('Пароли не совпадают', { type: 'error' }); return again.focus(); }
+    const { error } = await supabase.auth.updateUser({ password: pass.value });
+    if (error) return showErr(new Error(/different from the old/i.test(error.message) ? 'Новый пароль совпадает со старым' : error.message));
+    pass.value = '';
+    again.value = '';
+    toast('Пароль изменён');
+  };
+  return h('div', null,
+    h('div', { class: 'sub-title' }, 'Пароль для входа'),
+    h('div', { class: 'row', style: { flexWrap: 'nowrap' } }, pass, again, h('button', { class: 'btn', onclick: () => save().catch(showErr) }, 'Сменить')));
 }
 
 /**
