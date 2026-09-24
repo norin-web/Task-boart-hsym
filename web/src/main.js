@@ -8,7 +8,11 @@ import { openPalette, isPaletteOpen } from './views/palette.js';
 import { openCreateTask, closeTask } from './views/task.js';
 import { openWhoAmI, openShortcuts } from './views/people.js';
 
-const fatal = text => fill($('#shell'), h('div', { class: 'boot error', style: { gridColumn: '1 / -1' } }, text));
+const fatal = text => fill($('#shell'), h('div', { class: 'boot error', style: { gridColumn: '1 / -1', flexDirection: 'column' } },
+  h('div', null, text),
+  h('div', { class: 'row', style: { justifyContent: 'center', marginTop: '12px' } },
+    h('button', { class: 'btn primary', onclick: () => location.reload() }, 'Обновить'),
+    supabase && h('button', { class: 'btn', onclick: () => supabase.auth.signOut() }, 'Выйти'))));
 
 async function start() {
   try {

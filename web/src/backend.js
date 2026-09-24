@@ -192,9 +192,17 @@ export function createBackend(db) {
   const T = name => db.from(name);
 
   async function run(query) {
-    const { data, error } = await query;
-    if (error) throw new ApiError(error.message || 'Ошибка базы данных', 'DB');
-    return data;
+    // Сразу после входа часы сервера базы могут отставать от сервера входа на пару секунд —
+    // тогда свежий токен отклоняется («JWT issued at future»). Повторяем запрос с паузой.
+    for (let attempt = 0; ; attempt++) {
+      const { data, error } = await query;
+      if (!error) return data;
+      if (/issued at future/i.test(error.message || '') && attempt < 5) {
+        await new Promise(r => setTimeout(r, 1000));
+        continue;
+      }
+      throw new ApiError(error.message || 'Ошибка базы данных', 'DB');
+    }
   }
   const rpc = (fn, args) => run(db.rpc(fn, args));
 
