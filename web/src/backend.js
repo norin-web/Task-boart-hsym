@@ -26,6 +26,7 @@ export function defaultSettings() {
     },
     autoArchiveDays: 0,
     hideDoneDays: 0, // сколько дней держать выполненные на доске и в списке (0 — всегда)
+    checklistBeforeDone: false, // участник не перенесёт в «готово», пока чеклист не закрыт
   };
 }
 
@@ -126,6 +127,7 @@ export function unitSettings(raw) {
     autoArchiveDays: Math.max(0, Math.min(365, parseInt(s.autoArchiveDays, 10) || 0)),
     hideDoneDays: Math.max(0, Math.min(365, parseInt(s.hideDoneDays, 10) || 0)),
     review: reviewSettings(s.review, columns),
+    checklistBeforeDone: !!s.checklistBeforeDone,
   };
 }
 
@@ -137,6 +139,7 @@ function storedSettings(s) {
     autoArchiveDays: full.autoArchiveDays,
     hideDoneDays: full.hideDoneDays,
     review: full.review,
+    checklistBeforeDone: full.checklistBeforeDone,
   };
 }
 
@@ -202,7 +205,7 @@ const taskOut = r => ({
 const fieldOut = r => ({
   id: r.id, unitId: r.unit_id, name: r.name, type: r.type, options: json(r.options, []),
   showOnCard: !!r.show_on_card, required: !!r.required, requiredFrom: r.required_from || '',
-  staffOnly: !!r.staff_only, role: r.role || '', order: r.ord, archived: !!r.archived,
+  staffOnly: !!r.staff_only, role: r.role || '', requiredOnCreate: !!r.required_on_create, order: r.ord, archived: !!r.archived,
 });
 
 export const ACCESS = ['superadmin', 'moderator', 'member'];
@@ -386,6 +389,7 @@ export function createBackend(db, opts = {}) {
       type: FIELD_TYPES.includes(p.type) ? p.type : 'text', options: cleanOptions(p.options),
       show_on_card: !!p.showOnCard, required: !!p.required, required_from: str(p.requiredFrom, 40), ord: order, archived: false,
       staff_only: !!p.staffOnly, role: p.role === 'priority' && p.type === 'select' ? 'priority' : '',
+      required_on_create: !!p.requiredOnCreate,
     };
   }
 
@@ -960,6 +964,7 @@ export function createBackend(db, opts = {}) {
       if ('required' in p) upd.required = !!p.required;
       if ('requiredFrom' in p) upd.required_from = str(p.requiredFrom, 40);
       if ('staffOnly' in p) upd.staff_only = !!p.staffOnly;
+      if ('requiredOnCreate' in p) upd.required_on_create = !!p.requiredOnCreate;
       if ('role' in p) upd.role = p.role === 'priority' && (upd.type || f.type) === 'select' ? 'priority' : '';
       // Приоритет в юните один: новый снимает флаг с прежнего
       if (upd.role === 'priority') await run(T('fields').update({ role: '' }).eq('unit_id', f.unit_id).eq('role', 'priority').neq('id', f.id));

@@ -54,6 +54,8 @@ alter table fields add column if not exists role text not null default '';
 
 -- Обязательное поле: с какой колонки оно нужно ('' — для любого переноса)
 alter table fields add column if not exists required_from text not null default '';
+-- Поле нужно уже при создании задачи (для всех, включая администраторов)
+alter table fields add column if not exists required_on_create boolean not null default false;
 
 create table if not exists people (
   id               text primary key,
@@ -313,6 +315,12 @@ begin
   if app_system() then return new; end if;
   if tg_op = 'INSERT' then
     new.created_by := coalesce(my_person_id(), '');
+    select string_agg(f.name, ', ' order by f.ord) into missing from fields f
+     where f.unit_id = new.unit_id and f.required_on_create and not f.archived
+       and coalesce(new.fields -> f.id, 'null'::jsonb) in ('null'::jsonb, '""'::jsonb, '[]'::jsonb, 'false'::jsonb);
+    if missing is not null then
+      raise exception 'Заполните при создании: %', missing using errcode = 'P0001';
+    end if;
     return new;
   end if;
   if not is_staff() then
@@ -339,6 +347,13 @@ begin
          and coalesce(new.fields -> f.id, 'null'::jsonb) in ('null'::jsonb, '""'::jsonb, '[]'::jsonb, 'false'::jsonb);
       if missing is not null then
         raise exception 'Сначала заполните обязательные поля: %', missing using errcode = 'P0001';
+      end if;
+      -- юнит может требовать закрытый чеклист перед «готово»
+      if exists (select 1 from units u, jsonb_array_elements(u.settings -> 'columns') c
+                  where u.id = new.unit_id and coalesce((u.settings ->> 'checklistBeforeDone')::boolean, false)
+                    and c ->> 'id' = new.status and c ->> 'kind' = 'done')
+         and exists (select 1 from jsonb_array_elements(new.checklist) i where not coalesce((i ->> 'done')::boolean, false)) then
+        raise exception 'Сначала закройте чеклист: в «готово» нельзя с невыполненными пунктами' using errcode = 'P0001';
       end if;
     end if;
   end if;

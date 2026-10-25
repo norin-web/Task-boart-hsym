@@ -319,6 +319,17 @@ function onDragEnd(evt) {
   if (evt.to.dataset.lane && evt.to.dataset.dept !== (t.departmentId || '')) patch.departmentId = evt.to.dataset.dept;
   // Участник не может сменить статус, пока не заполнены обязательные поля — возвращаем и открываем карточку
   const missing = patch.status && !isStaff() && missingFor(t, patch.status);
+  // В «готово» с открытым чеклистом участнику нельзя (если так настроен юнит) — возвращаем карточку на место
+  const openCl = patch.status && !isStaff() && S.board.unit.settings.checklistBeforeDone && colById(patch.status).kind === 'done'
+    && (t.checklist || []).some(i => !i.done);
+  if (openCl) {
+    setTimeout(() => {
+      renderTasks();
+      toast('Сначала закройте чеклист', { type: 'error' });
+      navigate({ unit: S.board.unit.id, mode: S.route.mode, task: t.id });
+    }, 0);
+    return;
+  }
   if (missing && missing.length) {
     setTimeout(() => {
       renderTasks();

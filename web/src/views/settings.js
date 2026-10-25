@@ -18,6 +18,7 @@ export function renderSettings() {
   const desc = h('textarea', { class: 'inp', rows: 2, value: u.description, maxlength: 1000 });
   const autoArchive = h('select', { class: 'inp', value: String(st.autoArchiveDays) },
     AUTO_ARCHIVE.map(d => h('option', { value: String(d) }, d ? `Через ${d} дн. после выполнения` : 'Выключен')));
+  const clGate = h('input', { type: 'checkbox', checked: !!st.checklistBeforeDone });
   const hideDone = h('select', { class: 'inp', value: String(st.hideDoneDays || 0) },
     HIDE_DONE.map(([d, label]) => h('option', { value: String(d) }, label)));
   const colEditor = columnsEditor(st.columns);
@@ -36,6 +37,7 @@ export function renderSettings() {
     try {
       st.autoArchiveDays = Number(autoArchive.value);
       st.hideDoneDays = Number(hideDone.value);
+      st.checklistBeforeDone = clGate.checked;
       st.columns = colEditor.value();
       // Задачи из удалённых колонок — в первую оставшуюся (с подтверждением)
       const ids = new Set(st.columns.map(c => c.id));
@@ -77,6 +79,7 @@ export function renderSettings() {
     f.required && h('span', { class: 'badge' }, requiredLabel(f)),
     f.role === 'priority' && h('span', { class: 'badge' }, 'приоритет'),
     f.staffOnly && h('span', { class: 'badge' }, 'меняют админы'),
+    f.requiredOnCreate && h('span', { class: 'badge' }, 'при создании'),
     h('span', { class: 'spacer' }),
     h('button', { class: 'btn sm', onclick: () => openFieldEditor(f) }, icon('edit', 13), 'Изменить'),
     h('button', { class: 'btn ghost sm', title: 'Убрать с карточек (значения сохранятся)', onclick: () => setFieldArchived(f, true) }, 'Убрать'))));
@@ -97,6 +100,7 @@ export function renderSettings() {
         h('div', { class: 'grid2', style: { alignItems: 'start' } },
           field('Выполненные на доске', hideDone, 'Сколько держать задачи в «Готово» на доске и в списке. Давние скрываются (внизу колонки — «показать»), но остаются в поиске и статистике.'),
           field('Автоархив выполненных', autoArchive, 'Задачи из последней колонки уходят в архив. Архив можно показать фильтром на доске.')),
+        h('label', { class: 'chk', style: { margin: '4px 0 12px' } }, clGate, 'В «готово» — только с закрытым чеклистом (для участников; администраторы могут перенести)'),
 
         h('div', { class: 'sub-title' }, 'Колонки доски'),
         h('p', { class: 'hint', style: { marginTop: '-4px' } }, 'Тип колонки влияет на статистику: «Готово» — задача выполнена (не просрочена, считается в прогрессе).'),
@@ -176,6 +180,7 @@ function openFieldEditor(f) {
     Object.entries(TYPE_LABELS).map(([k, v]) => h('option', { value: k }, v)));
   const showOnCard = h('input', { type: 'checkbox', checked: f ? f.showOnCard : true });
   const staffOnly = h('input', { type: 'checkbox', checked: f ? f.staffOnly : false });
+  const onCreate = h('input', { type: 'checkbox', checked: f ? f.requiredOnCreate : false });
   const isPriority = h('input', { type: 'checkbox', checked: f ? f.role === 'priority' : false });
   const prioRow = h('label', { class: 'chk' }, isPriority, 'Это приоритет: полоса на карточке и сортировка в колонке (варианты сверху вниз — от низкого к высокому)');
   // '' — не обязательное, '*' — для любого переноса, id колонки — с неё и правее
@@ -225,6 +230,7 @@ function openFieldEditor(f) {
       h('div', { class: 'grid2', style: { alignItems: 'end' } },
         field('Обязательное для участников', required),
         h('label', { class: 'chk', style: { marginBottom: '10px' } }, showOnCard, 'Показывать на карточке')),
+      h('label', { class: 'chk' }, onCreate, 'Нужно уже при создании задачи (без него задачу не создать)'),
       h('label', { class: 'chk' }, staffOnly, 'Меняют только администратор и модератор (участник видит, но не правит)'),
       prioRow,
     ],
@@ -236,7 +242,7 @@ function openFieldEditor(f) {
           if (!name.value.trim()) { name.focus(); return; }
           const payload = {
             name: name.value, type: type.value, showOnCard: showOnCard.checked, required: !!required.value, requiredFrom: required.value === '*' ? '' : required.value,
-            staffOnly: staffOnly.checked, role: type.value === 'select' && isPriority.checked ? 'priority' : '',
+            staffOnly: staffOnly.checked, requiredOnCreate: onCreate.checked, role: type.value === 'select' && isPriority.checked ? 'priority' : '',
             options: ['select', 'multiselect'].includes(type.value) ? options.filter(o => o.name.trim()) : [],
           };
           const saved = isNew ? await send('createField', { unitId: S.board.unit.id, ...payload }) : await send('updateField', { id: f.id, ...payload });

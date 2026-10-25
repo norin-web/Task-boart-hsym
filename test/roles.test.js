@@ -300,6 +300,30 @@ test('ревью: автоназначение ревьюера по позиц�
   });
 });
 
+test('чеклист перед «готово» и поля, обязательные при создании', async () => {
+  const api = await setup();
+  const { designer, A, link, t1 } = await team(api);
+  await api('updateField', { id: link.id, required: false });
+  const st = (await api('getBoard', { unitId: A.id })).unit.settings;
+  assert.equal(st.checklistBeforeDone, false);
+  await api('updateUnit', { id: A.id, settings: { ...st, checklistBeforeDone: true } });
+  await api.as(designer, async () => {
+    await api('updateTask', { id: t1.id, patch: { checklist: [{ text: 'a' }, { text: 'b', done: true }] } });
+    await assert.rejects(() => api('updateTask', { id: t1.id, patch: { status: 'done' } }), e => e.code === 'RULE' && /чеклист/.test(e.message));
+    const cl = (await api('getBoard', { unitId: A.id })).tasks.find(t => t.id === t1.id).checklist.map(i => ({ ...i, done: true }));
+    await api('updateTask', { id: t1.id, patch: { checklist: cl } });
+    assert.equal((await api('updateTask', { id: t1.id, patch: { status: 'done' } })).status, 'done');
+  });
+
+  const ch = await api('createField', { unitId: A.id, name: 'Канал', type: 'text', requiredOnCreate: true });
+  assert.equal(ch.requiredOnCreate, true);
+  await assert.rejects(() => api.as({ uid: '00000000-0000-4000-8000-000000000001', email: 'u1@x.ru' }, () =>
+    api('createTask', { unitId: A.id, title: 'Без канала' })), e => e.code === 'RULE' && /Канал/.test(e.message));
+  const ok = await api.as({ uid: '00000000-0000-4000-8000-000000000001', email: 'u1@x.ru' }, () =>
+    api('createTask', { unitId: A.id, title: 'С каналом', fields: { [ch.id]: 'ASO' } }));
+  assert.equal(ok.fields[ch.id], 'ASO');
+});
+
 test('профили: свой профиль, роли меняет только супер-админ', async () => {
   const api = await setup();
   const { admin, mod, designer, dev } = await team(api);
