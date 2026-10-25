@@ -1,5 +1,5 @@
 import { S, greeting, me, personById, plural, emptyCounts, isStaff, deptById, todayStr, fmtDate, activeDepts, ACCESS_LABELS } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill, toast, menu } from '../ui.js';
+import { $, h, icon, avatar, topbar, showErr, fill, toast, menu, closeMenu } from '../ui.js';
 import { call } from '../api.js';
 import { currentView, link, navigate, taskLink, rerender } from '../router.js';
 import { renderSidebar } from './sidebar.js';
@@ -63,10 +63,15 @@ export async function renderHome() {
       h('div', { class: 'row' },
         h('button', { class: 'btn', onclick: () => navigate({ view: 'my' }) }, icon('user', 15), 'Мои задачи'))),
 
-    signalsBlock(ov),
+    h('div', { class: 'stats' },
+      stat('К выполнению', st.todo, 'circle', 'var(--st-todo)', t => t.statusKind === 'todo'),
+      stat('В работе', st.in_progress, 'progress', 'var(--st-progress)', t => t.statusKind === 'progress'),
+      stat('Просрочено', st.overdue, 'alert', 'var(--danger)', t => t.statusKind !== 'done' && t.dueDate && t.dueDate < todayStr()),
+      stat('Сделано за 7 дней', st.doneWeek, 'done', 'var(--st-done)', t => t.statusKind === 'done' && t.doneAt && t.doneAt >= weekAgo())),
 
     h('div', { class: 'home-grid' },
       h('div', { class: 'home-col' },
+        attentionBlock(ov),
         workloadBlock(ov),
         h('section', null,
           h('div', { class: 'section-head' }, h('h2', null, 'Юниты'),
@@ -88,172 +93,84 @@ export function roleBadge(p) {
   return h('span', { class: 'role-badge role-' + p.access }, ACCESS_LABELS[p.access]);
 }
 
-/**
- * Сигналы для админа: что сделать с командой прямо сейчас. 4 главные плашки + мелкие пробелы строкой ниже.
- * Клик открывает под плашками список с действием на месте; исправленная строка исчезает, счётчик уменьшается.
- */
-export function signalsBlock(ov) {
+/** Что требует внимания: каждый пункт раскрывается и чинится прямо здесь, без перехода в юнит. */
+export function attentionBlock(ov) {
+  const items = [];
   const name = id => (personById(id) || { name: '—' }).name;
   const members = S.people.filter(p => p.active && p.access === 'member');
-  const positions = () => activeDepts().map(d => [d.id, d.name]);
-  const teamOf = unitId => (ov.unitMembers[unitId] || []).map(personById).filter(p => p && p.active);
-  const today = todayStr();
 
-  // Перегружены: открытых заметно больше среднего или 2+ просрочки
-  const loads = members.map(p => ov.byPerson[p.id] || { open: 0, overdue: 0 });
-  const busy = loads.filter(c => c.open);
-  const avg = busy.length ? busy.reduce((n, c) => n + c.open, 0) / busy.length : 0;
-  const heavy = c => c.open >= Math.max(4, Math.ceil(avg * 1.5)) || c.overdue >= 2;
-  const overloaded = members.filter(p => heavy(ov.byPerson[p.id] || { open: 0, overdue: 0 }));
-  const idle = members.filter(p => !(ov.byPerson[p.id] || {}).open);
-
-  const SIG = [
-    {
-      key: 'unassigned', main: true, tone: 'warn', icon: 'user', n: ov.unassigned, rows: ov.unassignedTasks, tag: 'Без исполнителя',
-      forms: ['задача без исполнителя', 'задачи без исполнителя', 'задач без исполнителя'], label: 'Без исполнителя',
-      row: (t, done) => {
-        const team = teamOf(t.unit.id);
-        return [taskRef(t), quickSelect(team.length ? 'Назначить…' : 'В юните нет команды', team.map(p => [p.id, p.name + ' · ' + ((ov.byPerson[p.id] || {}).open || 0)]),
-          v => call('updateTask', { id: t.id, patch: { assigneeId: v } }).then(() => { t.assigneeId = v; done('Назначено: ' + name(v)); }))];
-      },
-    },
-    {
-      key: 'overdue', main: true, tone: 'danger', icon: 'alert', n: ov.overdueTotal, rows: ov.overdue, tag: 'Просрочено',
-      forms: ['просроченная задача', 'просроченные задачи', 'просроченных задач'], label: 'Просрочено',
-      row: (t, done) => [taskRef(t), h('span', { class: 'muted att-meta' }, t.assigneeId ? name(t.assigneeId) : 'без исполнителя'),
-        h('input', {
-          class: 'inp sm', type: 'date', value: t.dueDate, title: 'Перенести срок',
-          onchange: async e => {
-            const v = e.target.value;
-            try {
-              await call('updateTask', { id: t.id, patch: { dueDate: v } });
-              if (!v || v >= today) done('Срок перенесён' + (v ? ' на ' + fmtDate(v) : ''));
-            } catch (err) { showErr(err); e.target.value = t.dueDate; }
-          },
-        })],
-    },
-    {
-      key: 'idle', main: true, tone: 'info', icon: 'user', n: idle.length, rows: idle, tag: 'Без задач',
-      forms: ['участник без задач', 'участника без задач', 'участников без задач'], label: 'Свободны',
-      row: (p, done) => {
-        const free = ov.unassignedTasks.filter(t => (ov.unitMembers[t.unit.id] || []).includes(p.id) && !t.assigneeId);
-        return [personRef(p),
-          free.length > 0 && quickSelect('Свободная задача…', free.map(t => [t.id, t.key + ' ' + t.title]),
-            v => call('updateTask', { id: v, patch: { assigneeId: p.id } }).then(() => { ov.unassignedTasks.find(t => t.id === v).assigneeId = p.id; done('Задача назначена: ' + p.name); })),
-          h('button', { class: 'btn ghost sm', onclick: () => openCreateTask({ assigneeId: p.id, departmentId: p.positionId || '', onCreated: () => done('Задача создана: ' + p.name) }) }, icon('plus', 13), 'Новая')];
-      },
-    },
-    {
-      key: 'overloaded', main: true, tone: 'warn', icon: 'progress', n: overloaded.length, rows: overloaded, tag: 'Перегрузка',
-      forms: ['перегруженный участник', 'перегруженных участника', 'перегруженных участников'], label: 'Перегружены',
-      row: p => {
-        const c = ov.byPerson[p.id];
-        // Выбор задачи открывает её карточку поверх — там и передаём другому
-        const sel = h('select', {
-          class: 'inp sm', title: 'Открыть задачу, чтобы передать её',
-          onfocus: async () => {
-            if (sel.options.length > 1) return;
-            try {
-              const list = (await call('queryTasks', { assigneeId: p.id, limit: 200 })).filter(t => t.statusKind !== 'done');
-              sel.append(...list.map(t => h('option', { value: t.unit.id + '|' + t.id }, t.key + ' ' + t.title)));
-            } catch (e) { showErr(e); }
-          },
-          onchange: e => { const [u, id] = e.target.value.split('|'); e.target.value = ''; if (id) peekTask(u, id); },
-        }, h('option', { value: '' }, 'Передать задачу…'));
-        return [personRef(p), h('span', { class: 'muted att-meta' }, c.open + ' откр.' + (c.overdue ? ' · ' + c.overdue + ' просроч.' : '')), sel];
-      },
-    },
-    {
-      key: 'noPosition', label: 'Без позиции', n: ov.noPosition, rows: ov.noPositionTasks,
-      forms: ['задача без позиции', 'задачи без позиции', 'задач без позиции'],
-      row: (t, done) => [taskRef(t), quickSelect('Позиция…', positions(),
-        v => call('updateTask', { id: t.id, patch: { departmentId: v } }).then(() => done('Позиция: ' + deptById(v).name)))],
-    },
-    {
-      key: 'peopleNoPosition', label: 'Человек без позиции', n: ov.peopleNoPosition.length, rows: ov.peopleNoPosition.map(personById).filter(Boolean),
-      forms: ['участник без позиции', 'участника без позиции', 'участников без позиции'],
-      row: (p, done) => [personRef(p), quickSelect('Позиция…', positions(),
-        v => call('updatePerson', { id: p.id, positionId: v }).then(() => { p.positionId = v; done(p.name + ' — ' + deptById(v).name); }))],
-    },
-    {
-      key: 'unitsNoTeam', label: 'Юнит без команды', n: ov.unitsNoTeam.length, rows: ov.unitsNoTeam.map(id => S.units.find(u => u.id === id)).filter(Boolean),
-      forms: ['юнит без команды', 'юнита без команды', 'юнитов без команды'],
-      row: (u, done) => [h('span', { class: 'att-who' }, h('span', { class: 'unit-dot', style: { background: u.color, margin: 0 } }), u.name),
-        quickSelect(members.length ? 'Добавить участника…' : 'Нет участников', members.map(p => [p.id, p.name + (deptById(p.positionId) ? ' · ' + deptById(p.positionId).name : '')]),
-          v => call('setMember', { unitId: u.id, personId: v, departmentId: personById(v).positionId || '' }).then(() => {
-            u.members = [...(u.members || []), v];
-            done(name(v) + ' в команде ' + u.name);
-          }))],
-    },
-    mode === 'supabase' && { key: 'noLogin', label: 'Без входа', n: ov.peopleNoLogin.length, rows: ov.peopleNoLogin.map(personById).filter(Boolean), row: p => [personRef(p), h('button', { class: 'btn ghost sm', onclick: openPeople }, 'Создать вход')] },
-  ].filter(Boolean);
-
-  // Один постоянный список «Что сделать»; плашки только фильтруют его. Строки строятся один раз — без перерисовок.
-  let active = null;
-  const items = SIG.filter(sg => sg.rows).flatMap(sg => sg.rows.map(r => ({ sg, r })));
-  const list = h('div', { class: 'todo-list' });
-  const footer = h('div', { class: 'todo-foot' });
-  const LIMIT = 8;
-  let showAll = false;
-  const tileCount = new Map();
-  const tagOf = sg => h('span', { class: 'todo-tag sig-' + (sg.tone || 'warn') }, sg.tag || sg.label);
-
-  for (const it of items) {
-    it.el = h('div', { class: 'att-row todo-row' });
-    fill(it.el, tagOf(it.sg), it.sg.row(it.r, msg => {
-      it.done = true;
-      it.sg.n--;
-      toast(msg);
-      it.el.classList.add('leaving');
-      setTimeout(() => { it.el.remove(); update(); }, 220);
-      updateCounts();
-    }));
-  }
-
-  const updateCounts = () => SIG.forEach(sg => {
-    const el = tileCount.get(sg);
-    if (!el) return;
-    el.textContent = sg.n;
-    el.closest('.signal').classList.toggle('ok', !sg.n);
-  });
-
-  const update = () => {
-    const vis = items.filter(it => !it.done && (!active || it.sg === active));
-    const shown = showAll ? vis : vis.slice(0, LIMIT);
-    fill(list, shown.length ? shown.map(it => it.el) : h('div', { class: 'att-ok' }, icon('done', 16), active ? 'Здесь всё сделано' : 'Всё в порядке — делать ничего не нужно'));
-    const hidden = SIG.filter(sg => (!active || sg === active) && sg.n > sg.rows.length).reduce((n, sg) => n + sg.n - sg.rows.length, 0);
-    fill(footer,
-      vis.length > LIMIT && h('button', { class: 'link-btn', onclick: () => { showAll = !showAll; update(); } }, showAll ? 'Свернуть' : 'Показать все ' + vis.length),
-      hidden > 0 && h('span', { class: 'muted' }, 'ещё ' + hidden + ' — в юнитах'));
-    tiles.querySelectorAll('.signal').forEach(t => t.classList.toggle('on', t._sg === active));
-    resetBtn.hidden = !active;
-    if (active) fill(resetBtn, active.label, icon('x', 12));
-  };
-
-  const tiles = h('div', { class: 'stats signals' }, SIG.filter(x => x.main).map(sg => {
-    const val = h('div', { class: 'stat-val' }, sg.n);
-    tileCount.set(sg, val);
-    const el = h('button', {
-      class: 'stat signal sig-' + sg.tone, title: 'Показать только: ' + sg.label,
-      onclick: () => { active = active === sg ? null : sg; showAll = false; update(); },
-    },
-    h('div', { class: 'stat-ic' }, icon(sg.icon, 18)),
-    h('div', { class: 'sig-body' }, val, h('div', { class: 'stat-label' }, sg.label)));
-    el._sg = sg;
-    el.classList.toggle('ok', !sg.n);
-    return el;
+  if (ov.overdueTotal) items.push(attItem({
+    tone: 'danger', open: true, n: ov.overdueTotal,
+    forms: ['просроченная задача', 'просроченные задачи', 'просроченных задач'],
+    rows: ov.overdue, row: t => [taskRef(t), h('span', { class: 'muted' }, t.assigneeId ? name(t.assigneeId) : 'без исполнителя'), h('span', { class: 'due overdue' }, fmtDate(t.dueDate))],
   }));
-  const resetBtn = h('button', { class: 'btn ghost sm on', title: 'Показать всё', onclick: () => { active = null; update(); } });
-  const head = h('div', { class: 'section-head' }, h('h2', null, 'Что сделать'), resetBtn);
-  update();
-  return h('section', { class: 'signals-wrap' }, tiles, head, h('div', { class: 'card-box todo-box' }, list, footer));
+
+  items.push(attItem({
+    n: ov.unassigned, rows: ov.unassignedTasks,
+    forms: ['задача без исполнителя', 'задачи без исполнителя', 'задач без исполнителя'],
+    row: (t, done) => {
+      const team = (ov.unitMembers[t.unit.id] || []).map(personById).filter(p => p && p.active);
+      return [taskRef(t), quickSelect(team.length ? 'Назначить…' : 'В юните нет команды', team.map(p => [p.id, p.name]),
+        v => call('updateTask', { id: t.id, patch: { assigneeId: v } }).then(() => { t.assigneeId = v; done('Назначено: ' + name(v)); }))];
+    },
+  }));
+
+  items.push(attItem({
+    n: ov.noPosition, rows: ov.noPositionTasks,
+    forms: ['задача без позиции — участники её не видят', 'задачи без позиции — участники их не видят', 'задач без позиции — участники их не видят'],
+    row: (t, done) => [taskRef(t), quickSelect('Позиция…', activeDepts().map(d => [d.id, d.name]),
+      v => call('updateTask', { id: t.id, patch: { departmentId: v } }).then(() => done('Позиция: ' + deptById(v).name)))],
+  }));
+
+  items.push(attItem({
+    n: ov.peopleNoPosition.length, rows: ov.peopleNoPosition.map(personById).filter(Boolean),
+    forms: ['участник без позиции', 'участника без позиции', 'участников без позиции'],
+    row: (p, done) => [h('span', { class: 'att-who' }, avatar(p, 'sm'), p.name), quickSelect('Позиция…', activeDepts().map(d => [d.id, d.name]),
+      v => call('updatePerson', { id: p.id, positionId: v }).then(() => { p.positionId = v; done(p.name + ' — ' + deptById(v).name); }))],
+  }));
+
+  items.push(attItem({
+    n: ov.unitsNoTeam.length, rows: ov.unitsNoTeam.map(id => S.units.find(u => u.id === id)).filter(Boolean),
+    forms: ['юнит без команды', 'юнита без команды', 'юнитов без команды'],
+    row: (u, done) => [h('span', { class: 'att-who' }, h('span', { class: 'unit-dot', style: { background: u.color, margin: 0 } }), u.name),
+      quickSelect(members.length ? 'Добавить участника…' : 'Нет участников', members.map(p => [p.id, p.name + (deptById(p.positionId) ? ' · ' + deptById(p.positionId).name : '')]),
+        v => call('setMember', { unitId: u.id, personId: v, departmentId: personById(v).positionId || '' }).then(() => {
+          u.members = [...(u.members || []), v];
+          done(name(v) + ' в команде ' + u.name);
+        }))],
+  }));
+
+  // Участники без открытых задач — свободные руки. Можно сразу дать задачу без исполнителя из их юнитов.
+  const idle = members.filter(p => !(ov.byPerson[p.id] || {}).open);
+  items.push(attItem({
+    n: idle.length, rows: idle, tone: 'info', icon: 'user',
+    forms: ['участник без задач', 'участника без задач', 'участников без задач'],
+    row: (p, done) => {
+      const free = ov.unassignedTasks.filter(t => (ov.unitMembers[t.unit.id] || []).includes(p.id) && !t.assigneeId);
+      return [h('span', { class: 'att-who' }, avatar(p, 'sm'), p.name, h('small', { class: 'muted' }, personCaption(p))),
+        quickSelect(free.length ? 'Дать задачу…' : 'Свободных задач нет', free.map(t => [t.id, t.key + ' ' + t.title]),
+          v => call('updateTask', { id: v, patch: { assigneeId: p.id } }).then(() => {
+            ov.unassignedTasks.find(t => t.id === v).assigneeId = p.id;
+            done('Задача назначена: ' + p.name);
+          }))];
+    },
+  }));
+
+  if (mode === 'supabase' && ov.peopleNoLogin.length) items.push(h('button', { class: 'att-item att-info att-simple', onclick: openPeople },
+    icon('user', 15), h('span', null, h('b', null, ov.peopleNoLogin.length), ' ' + plural(ov.peopleNoLogin.length, ['человек без входа', 'человека без входа', 'человек без входа'])),
+    h('span', { class: 'muted' }, 'Открыть доступы')));
+
+  const list = items.filter(Boolean);
+  return h('section', null,
+    h('div', { class: 'section-head' }, h('h2', null, 'Требует внимания')),
+    list.length ? h('div', { class: 'att' }, list) : attOk());
 }
+
+const attOk = () => h('div', { class: 'card-box att-ok' }, icon('done', 16), 'Всё в порядке: просрочек и пробелов нет');
 
 /** Ссылка на задачу — открывает карточку поверх текущего экрана. */
 const taskRef = t => taskLink(t.unit.id, t.id, { class: 'att-ref' },
   h('span', { class: 'unit-dot', style: { background: t.unit.color, margin: 0 } }), h('span', { class: 'key-badge' }, t.key), h('span', { class: 'ft-title' }, t.title));
-
-const personRef = p => h('span', { class: 'att-who' }, avatar(p, 'sm'), p.name, h('small', { class: 'muted' }, personCaption(p)));
 
 /** Компактный выбор с действием: после успеха строка исчезает. */
 function quickSelect(placeholder, options, onPick) {
@@ -267,6 +184,39 @@ function quickSelect(placeholder, options, onPick) {
     },
   }, h('option', { value: '' }, placeholder), options.map(([v, t]) => h('option', { value: v }, t)));
   return sel;
+}
+
+/** Пункт «Требует внимания»: заголовок со счётчиком, по клику — строки с быстрыми действиями. */
+function attItem({ n, forms, rows, row, tone = 'warn', icon: ic = 'alert', open = false }) {
+  if (!n) return null;
+  let count = n;
+  let left = rows.slice();
+  const el = h('div', { class: 'att-item att-' + tone });
+  const draw = () => {
+    if (!count) {
+      el.replaceWith(h('div', { class: 'att-item att-done' }, icon('done', 15), 'Готово'));
+      return;
+    }
+    fill(el,
+      h('button', { class: 'att-head', onclick: () => { open = !open; draw(); } },
+        icon(ic, 15), h('span', null, h('b', null, count), ' ' + plural(count, forms)),
+        h('span', { class: 'att-chev' + (open ? ' on' : '') }, icon('chevron', 14))),
+      open && h('div', { class: 'att-list' },
+        left.map(r => {
+          const line = h('div', { class: 'att-row' });
+          const done = msg => {
+            left = left.filter(x => x !== r);
+            count--;
+            toast(msg);
+            draw();
+          };
+          fill(line, row(r, done));
+          return line;
+        }),
+        count > left.length && h('div', { class: 'muted att-more' }, 'и ещё ' + (count - left.length))));
+  };
+  draw();
+  return el;
 }
 
 const loadFilter = { pos: '', unit: '' };
@@ -356,10 +306,41 @@ function summary(st) {
   return open + ' ' + plural(open, ['открытая задача', 'открытые задачи', 'открытых задач']) + (st.overdue ? ', ' + st.overdue + ' просрочено' : '');
 }
 
-function stat(label, value, ic, color) {
-  return h('div', { class: 'stat' },
+const weekAgo = () => new Date(Date.now() - 7 * 864e5).toISOString();
+
+/** Плашка статистики. С фильтром — кликабельна: список задач в выпадающем меню, каждая открывается поверх. */
+function stat(label, value, ic, color, pick) {
+  const open = async e => {
+    const anchor = e.currentTarget;
+    if (anchor.classList.contains('on')) return closeMenu();
+    let tasks;
+    try { tasks = (await call('queryTasks', { limit: 500 })).filter(pick); } catch (err) { return showErr(err); }
+    const byDue = (a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999');
+    tasks.sort(label.startsWith('Сделано') ? (a, b) => (b.doneAt || '').localeCompare(a.doneAt || '') : byDue);
+    const m = menu(anchor, [
+      { title: label + ' · ' + tasks.length },
+      ...(tasks.length ? tasks.map(statRow) : [h('div', { class: 'muted', style: { padding: '8px 10px' } }, 'Задач нет')]),
+    ]);
+    m.classList.add('menu-tasks');
+    m.style.left = Math.max(8, Math.min(window.innerWidth - m.offsetWidth - 8, anchor.getBoundingClientRect().left)) + 'px';
+    anchor.classList.add('on');
+    new MutationObserver((_, obs) => { if (!m.isConnected) { anchor.classList.remove('on'); obs.disconnect(); } }).observe(document.body, { childList: true });
+  };
+  return h(pick ? 'button' : 'div', { class: 'stat' + (pick ? ' clickable' : ''), onclick: pick && value ? open : null },
     h('div', { class: 'stat-ic', style: { background: `color-mix(in srgb, ${color} 14%, transparent)`, color } }, icon(ic, 18)),
     h('div', null, h('div', { class: 'stat-val' }, value), h('div', { class: 'stat-label' }, label)));
+}
+
+function statRow(t) {
+  const due = t.dueDate && fmtDate(t.dueDate);
+  const late = t.statusKind !== 'done' && t.dueDate && t.dueDate < todayStr();
+  const p = personById(t.assigneeId);
+  return h('button', { class: 'menu-item st-row', onclick: () => { closeMenu(); peekTask(t.unit.id, t.id); } },
+    h('span', { class: 'unit-dot', style: { background: t.unit.color, margin: 0 } }),
+    h('span', { class: 'key-badge' }, t.key),
+    h('span', { class: 'ft-title' }, t.title),
+    h('span', { class: 'muted st-who' }, p ? p.name : 'без исполнителя'),
+    due && h('span', { class: 'due' + (late ? ' overdue' : '') }, due));
 }
 
 function unitCard(u) {
