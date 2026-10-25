@@ -30,15 +30,9 @@ export function defaultSettings() {
   };
 }
 
+/** Свои поля нового юнита. Приоритет — общее поле на все юниты (создаёт schema.sql). */
 function defaultFields() {
-  return [{
-    name: 'Приоритет', type: 'select', showOnCard: true, required: false, staffOnly: true, role: 'priority',
-    options: [
-      { id: 'o_low', name: 'Low', color: '#64748b' },
-      { id: 'o_medium', name: 'Medium', color: '#f59e0b' },
-      { id: 'o_high', name: 'High', color: '#ef4444' },
-    ],
-  }];
+  return [];
 }
 
 export class ApiError extends Error {
@@ -203,7 +197,7 @@ const taskOut = r => ({
 });
 
 const fieldOut = r => ({
-  id: r.id, unitId: r.unit_id, name: r.name, type: r.type, options: json(r.options, []),
+  id: r.id, unitId: r.unit_id || '', global: !r.unit_id, name: r.name, type: r.type, options: json(r.options, []),
   showOnCard: !!r.show_on_card, required: !!r.required, requiredFrom: r.required_from || '',
   staffOnly: !!r.staff_only, role: r.role || '', requiredOnCreate: !!r.required_on_create, order: r.ord, archived: !!r.archived,
 });
@@ -302,7 +296,10 @@ export function createBackend(db, opts = {}) {
     return [...new Set((Array.isArray(list) ? list : []).map(String))].filter(id => ids.has(id));
   };
   const departments = async () => (await all(() => T('departments').select('*').order('ord').order('id'))).map(deptOut);
-  const unitFields = async unitId => (await all(() => T('fields').select('*').eq('unit_id', unitId).order('ord').order('id'))).map(fieldOut);
+  /** Поля юнита: сначала общие (на все юниты), потом свои. */
+  const globalFields = async () => (await all(() => T('fields').select('*').is('unit_id', null).order('ord').order('id'))).map(fieldOut);
+  const ownFields = async unitId => (await all(() => T('fields').select('*').eq('unit_id', unitId).order('ord').order('id'))).map(fieldOut);
+  const unitFields = async unitId => [...await globalFields(), ...await ownFields(unitId)];
   const templates = async () => (await all(() => T('task_templates').select('*').order('ord').order('id'))).map(templateOut);
   const linkFields = async () => (await all(() => T('link_fields').select('*').order('ord').order('id'))).map(linkFieldOut);
   const cleanPositions = async list => {
@@ -399,10 +396,10 @@ export function createBackend(db, opts = {}) {
 
   function fieldRow(unitId, p, order) {
     return {
-      id: uid('f'), unit_id: unitId, name: req(str(p.name, 60), 'Название поля'),
+      id: uid('f'), unit_id: unitId || null, name: req(str(p.name, 60), 'Название поля'),
       type: FIELD_TYPES.includes(p.type) ? p.type : 'text', options: cleanOptions(p.options),
       show_on_card: !!p.showOnCard, required: !!p.required, required_from: str(p.requiredFrom, 40), ord: order, archived: false,
-      staff_only: !!p.staffOnly, role: p.role === 'priority' && p.type === 'select' ? 'priority' : '',
+      staff_only: !!p.staffOnly, role: '', // приоритет — только общее поле (schema.sql)
       required_on_create: !!p.requiredOnCreate,
     };
   }
@@ -678,7 +675,7 @@ export function createBackend(db, opts = {}) {
       const src = p.copyFieldsFrom && (await one('units', p.copyFieldsFrom));
       if (src) {
         settings = storedSettings(src.settings);
-        fields = (await unitFields(src.id)).filter(f => !f.archived);
+        fields = (await ownFields(src.id)).filter(f => !f.archived);
       }
       const ts = now();
       const unit = {
@@ -727,7 +724,7 @@ export function createBackend(db, opts = {}) {
         ord: (await maxOrd('units')) + 1, archived: false, created_at: ts, updated_at: ts,
       };
       await run(T('units').insert(unit));
-      await insertFields(unit.id, (await unitFields(src.id)).filter(f => !f.archived));
+      await insertFields(unit.id, (await ownFields(src.id)).filter(f => !f.archived));
       return { ...unitOut(unit), counts: emptyCounts(), members: [] };
     },
 
@@ -968,10 +965,16 @@ export function createBackend(db, opts = {}) {
 
     /* ---------- поля карточки ---------- */
 
+    /** Общие поля карточки (на все юниты) — для Панели админа. */
+    async getGlobalFields() {
+      return globalFields();
+    },
+
+    /** Поле юнита (unitId) или общее на все юниты (global: true). */
     async createField(p) {
-      const unit = await findUnit(p.unitId);
-      const f = fieldRow(unit.id, p, (await maxOrd('fields', { unit_id: unit.id })) + 1);
-      if (f.role === 'priority') await run(T('fields').update({ role: '' }).eq('unit_id', unit.id).eq('role', 'priority'));
+      const unitId = p.global ? null : (await findUnit(p.unitId)).id;
+      const list = unitId ? await ownFields(unitId) : await globalFields();
+      const f = fieldRow(unitId, p, Math.max(0, ...list.map(x => Number(x.order) || 0)) + 1);
       await run(T('fields').insert(f));
       return fieldOut(f);
     },
@@ -987,16 +990,19 @@ export function createBackend(db, opts = {}) {
       if ('requiredFrom' in p) upd.required_from = str(p.requiredFrom, 40);
       if ('staffOnly' in p) upd.staff_only = !!p.staffOnly;
       if ('requiredOnCreate' in p) upd.required_on_create = !!p.requiredOnCreate;
-      if ('role' in p) upd.role = p.role === 'priority' && (upd.type || f.type) === 'select' ? 'priority' : '';
-      // Приоритет в юните один: новый снимает флаг с прежнего
-      if (upd.role === 'priority') await run(T('fields').update({ role: '' }).eq('unit_id', f.unit_id).eq('role', 'priority').neq('id', f.id));
+      // приоритет остаётся выбором из списка
+      if (f.role === 'priority' && upd.type && upd.type !== 'select') fail('Приоритет — всегда список вариантов');
       if ('archived' in p) upd.archived = !!p.archived;
       await updateOne('fields', f.id, upd);
       return fieldOut({ ...f, ...upd });
     },
 
     async reorderFields(p) {
-      await Promise.all((p.ids || []).map((id, i) => run(T('fields').update({ ord: i + 1 }).eq('id', String(id)).eq('unit_id', String(p.unitId)))));
+      // unitId пустой — порядок общих полей
+      await Promise.all((p.ids || []).map((id, i) => {
+        const q = T('fields').update({ ord: i + 1 }).eq('id', String(id));
+        return run(p.unitId ? q.eq('unit_id', String(p.unitId)) : q.is('unit_id', null));
+      }));
       return true;
     },
 

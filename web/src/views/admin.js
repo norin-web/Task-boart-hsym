@@ -1,7 +1,8 @@
 /** Панель админа (#/admin): обзор, люди и доступы, юниты, позиции, карточка, журнал. Для модераторов и супер-админов. */
 import Sortable from 'sortablejs';
 import { AUTO_ARCHIVE, HIDE_DONE } from '../state.js';
-import { reviewSection } from './settings.js';
+import { reviewSection, openFieldEditor, requiredLabel } from './settings.js';
+import { TYPE_LABELS } from '../state.js';
 import { S, LS, me, byOrder, unitById, emptyCounts, personById, todayStr, isSuper, ACCESS_LABELS, plural, LINK_KINDS, activeDepts, deptById, activeTeams } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, toast, confirmDlg, menu, modal, field } from '../ui.js';
 import { call, send } from '../api.js';
@@ -265,6 +266,66 @@ const guessKind = name => {
   return /figma/.test(n) ? 'figma' : /git/.test(n) ? 'github' : /drive|диск/.test(n) ? 'drive' : /meta|мета/.test(n) ? 'meta' : 'link';
 };
 
+/**
+ * Общие поля карточки — одни на все юниты (приоритет и любые свои). У юнита ещё могут быть свои поля — в его настройках.
+ * Порядок — перетаскиванием, правка — в окне; «Убрать» скрывает с карточек, значения сохраняются.
+ */
+function globalFieldsManager() {
+  let fields = null;
+  const list = h('div', { class: 'field-list' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' })));
+  const removedBox = h('div');
+  const edit = f => openFieldEditor(f, {
+    global: true,
+    onSaved: (saved, isNew) => { if (isNew) fields.push(saved); else Object.assign(f, saved); draw(); toast(isNew ? `Поле «${saved.name}» добавлено во все юниты` : 'Сохранено'); },
+  });
+  const setArchived = (f, archived) => send('updateField', { id: f.id, archived })
+    .then(saved => { Object.assign(f, saved); draw(); }).catch(showErr);
+  const remove = async f => {
+    if (!(await confirmDlg(`Удалить общее поле «${f.name}» навсегда? Его значения сотрутся во всех задачах всех юнитов.`, { ok: 'Удалить', danger: true }))) return;
+    await send('deleteField', { id: f.id });
+    fields = fields.filter(x => x !== f);
+    draw();
+  };
+  const row = f => h('div', { class: 'field-row', dataset: { id: f.id } },
+    h('span', { class: 'drag', title: 'Перетащите, чтобы изменить порядок' }, icon('grip', 16)),
+    h('span', { class: 'name' }, f.name),
+    h('span', { class: 'badge' }, f.role === 'priority' ? 'приоритет' : TYPE_LABELS[f.type] || f.type),
+    f.showOnCard && h('span', { class: 'badge' }, 'на карточке'),
+    f.required && h('span', { class: 'badge' }, requiredLabel(f)),
+    f.staffOnly && h('span', { class: 'badge' }, 'меняют админы'),
+    f.requiredOnCreate && h('span', { class: 'badge' }, 'при создании'),
+    h('span', { class: 'spacer' }),
+    h('button', { class: 'btn sm', onclick: () => edit(f) }, icon('edit', 13), 'Изменить'),
+    f.role !== 'priority' && h('button', { class: 'btn ghost sm', title: 'Убрать с карточек всех юнитов (значения сохранятся)', onclick: () => setArchived(f, true) }, 'Убрать'));
+  const draw = () => {
+    const active = fields.filter(f => !f.archived).sort(byOrder);
+    const removed = fields.filter(f => f.archived);
+    fill(list, active.map(row));
+    fill(removedBox, removed.length > 0 && [
+      h('div', { class: 'sub-title' }, 'Убранные'),
+      h('div', { class: 'field-list' }, removed.map(f => h('div', { class: 'field-row' },
+        h('span', { class: 'name muted' }, f.name),
+        h('span', { class: 'spacer' }),
+        h('button', { class: 'btn sm', onclick: () => setArchived(f, false) }, 'Вернуть'),
+        h('button', { class: 'btn ghost sm danger', onclick: () => remove(f).catch(showErr) }, 'Удалить навсегда'))))]);
+  };
+  Sortable.create(list, {
+    handle: '.drag', animation: 150, forceFallback: true, fallbackTolerance: 4,
+    onEnd: () => {
+      const ids = [...list.children].map(el => el.dataset.id).filter(Boolean);
+      ids.forEach((id, i) => { fields.find(f => f.id === id).order = i + 1; });
+      send('reorderFields', { ids }).catch(showErr);
+    },
+  });
+  call('getGlobalFields', {}).then(r => { fields = r; draw(); }).catch(showErr);
+  return h('div', null,
+    h('div', { class: 'section-head', style: { marginBottom: '4px' } },
+      h('h2', { style: { margin: 0, fontSize: '16px' } }, 'Общие поля карточки'),
+      h('button', { class: 'btn primary sm', onclick: () => edit(null) }, icon('plus', 14), 'Поле')),
+    h('p', { class: 'hint', style: { marginTop: 0 } }, 'Есть у задач всех юнитов и идут на карточке первыми. Свои поля юнита — в его настройках. Обязательность задаётся типом колонки («В работе», «Готово»): колонки у юнитов разные.'),
+    list, removedBox);
+}
+
 /** Ссылки в карточке задачи (Figma, GitHub…): общий набор для всех юнитов и кому из позиций их видно. Только супер-админ. */
 function linkFieldsManager() {
   const list = h('div', { class: 'lf-list' });
@@ -508,6 +569,7 @@ function peopleTab() {
 /** Карточка и автоматика: ссылки в карточке (супер-админ), шаблоны, правила юнитов, уведомления. */
 function automationsTab() {
   return h('div', { class: 'auto-page' },
+    h('div', { class: 'card-box' }, globalFieldsManager()),
     isSuper() && h('div', { class: 'card-box' }, linkFieldsManager()),
     h('div', { class: 'card-box' }, templatesManager()),
     h('div', { class: 'card-box' }, unitRules()),

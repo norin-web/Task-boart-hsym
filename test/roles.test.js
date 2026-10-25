@@ -188,7 +188,7 @@ test('уведомления о назначении и онлайн-метка'
 
 test('несколько позиций, приоритет — только админы, удаление человека', async () => {
   const api = await setup();
-  const { admin, mod, designer, dev, A, t1, t2 } = await team(api);
+  const { admin, mod, designer, dev, A, t1, t2, link } = await team(api);
   // Product owner + дизайнер видит задачи обеих позиций
   const po = await api('createTask', { unitId: A.id, title: 'Roadmap', departmentId: 'd_po' });
   await api.as(designer, async () => {
@@ -200,17 +200,28 @@ test('несколько позиций, приоритет — только а�
     await assert.rejects(() => api('updatePerson', { id: designer.id, extraPositionIds: [] }), forbidden);
   });
 
-  // приоритет — поле «только администраторы»
-  const prio = await api('createField', { unitId: A.id, name: 'Приоритет', type: 'select', staffOnly: true, role: 'priority',
-    options: [{ id: 'lo', name: 'Low', color: '#999' }, { id: 'hi', name: 'High', color: '#f00' }] });
-  assert.equal(prio.role, 'priority');
+  // приоритет — одно общее поле на все юниты, «только администраторы»
   const other = await api('createField', { unitId: A.id, name: 'Срочность', type: 'select', role: 'priority', options: [{ id: 'x', name: 'x', color: '#000' }] });
+  assert.equal(other.role, ''); // своё поле юнита приоритетом не становится
   const fields = (await api('getBoard', { unitId: A.id })).fields;
-  assert.deepEqual(fields.filter(f => f.role === 'priority').map(f => f.id), [other.id]); // приоритет в юните один
+  const prio = fields.find(f => f.role === 'priority');
+  assert.ok(prio.global && prio.staffOnly);
+  assert.deepEqual(fields.filter(f => f.role === 'priority').map(f => f.id), [prio.id]);
   await api.as(designer, async () => {
-    await assert.rejects(() => api('updateTask', { id: t1.id, patch: { fields: { [prio.id]: 'hi' } } }), forbidden);
+    assert.ok((await api('getBoard', { unitId: A.id })).fields.some(f => f.id === prio.id)); // участник видит общее поле
+    await assert.rejects(() => api('updateTask', { id: t1.id, patch: { fields: { [prio.id]: 'o_high' } } }), forbidden);
   });
-  await api.as(mod, () => api('updateTask', { id: t1.id, patch: { fields: { [prio.id]: 'hi' } } }));
+  await api.as(mod, () => api('updateTask', { id: t1.id, patch: { fields: { [prio.id]: 'o_high' } } }));
+  // общее обязательное поле «с типа колонки»: в «в работе» можно, в «готово» — только заполнив
+  const ch = await api('createField', { global: true, name: 'Канал', type: 'text', required: true, requiredFrom: 'done' });
+  await api.as(designer, async () => {
+    await api('updateTask', { id: t1.id, patch: { fields: { [link.id]: 'https://figma.com/x' } } });
+    await api('updateTask', { id: t1.id, patch: { status: 'in_progress' } });
+    await assert.rejects(() => api('updateTask', { id: t1.id, patch: { status: 'done' } }), /Канал/);
+    await api('updateTask', { id: t1.id, patch: { fields: { [ch.id]: 'tg' } } });
+    await api('updateTask', { id: t1.id, patch: { status: 'done' } });
+  });
+  await api('deleteField', { id: ch.id });
 
   // удаление человека: только супер-админ, задачи остаются без исполнителя
   await api.as(mod, async () => {

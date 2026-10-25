@@ -56,6 +56,8 @@ alter table fields add column if not exists role text not null default '';
 alter table fields add column if not exists required_from text not null default '';
 -- Поле нужно уже при создании задачи (для всех, включая администраторов)
 alter table fields add column if not exists required_on_create boolean not null default false;
+-- Общие поля — на все юниты (unit_id пустой); у юнита ещё могут быть свои. Приоритет — одно общее поле.
+alter table fields alter column unit_id drop not null;
 
 create table if not exists people (
   id               text primary key,
@@ -356,6 +358,29 @@ begin
   return query select * from people where id = v_id;
 end $$;
 
+-- Однократно: общий «Приоритет» на все юниты; старые приоритеты юнитов сливаются в него.
+do $$
+declare
+  g text := 'f_priority';
+  opts jsonb := '[{"id":"o_low","name":"Low","color":"#64748b"},{"id":"o_medium","name":"Medium","color":"#f59e0b"},{"id":"o_high","name":"High","color":"#ef4444"},{"id":"o_critical","name":"Critical","color":"#b91c1c"}]';
+begin
+  if not exists (select 1 from fields where unit_id is null and role = 'priority') then
+    perform set_config('app.system', 'on', true);
+    insert into fields (id, unit_id, name, type, options, show_on_card, required, ord, archived, staff_only, role)
+    values (g, null, 'Приоритет', 'select', opts, true, false, 0, false, true, 'priority')
+    on conflict (id) do nothing;
+    -- значения старых приоритетов юнитов → общий: по названию варианта, иначе по тому же id
+    update tasks t set fields = (t.fields - f.id) || jsonb_strip_nulls(jsonb_build_object(g, coalesce(
+        (select n ->> 'id' from jsonb_array_elements(opts) n
+          where lower(n ->> 'name') = lower((select o ->> 'name' from jsonb_array_elements(f.options) o where o ->> 'id' = t.fields ->> f.id))),
+        (select n ->> 'id' from jsonb_array_elements(opts) n where n ->> 'id' = t.fields ->> f.id))))
+      from fields f
+     where f.unit_id = t.unit_id and f.role = 'priority' and t.fields ? f.id;
+    delete from fields where unit_id is not null and role = 'priority';
+    perform set_config('app.system', 'off', true);
+  end if;
+end $$;
+
 -- ---------- проверки на уровне строк ----------
 
 create or replace function guard_tasks() returns trigger language plpgsql set search_path = public as $$
@@ -365,7 +390,7 @@ begin
   if tg_op = 'INSERT' then
     new.created_by := coalesce(my_person_id(), '');
     select string_agg(f.name, ', ' order by f.ord) into missing from fields f
-     where f.unit_id = new.unit_id and f.required_on_create and not f.archived
+     where (f.unit_id = new.unit_id or f.unit_id is null) and f.required_on_create and not f.archived
        and coalesce(new.fields -> f.id, 'null'::jsonb) in ('null'::jsonb, '""'::jsonb, '[]'::jsonb, 'false'::jsonb);
     if missing is not null then
       raise exception 'Заполните при создании: %', missing using errcode = 'P0001';
@@ -381,19 +406,24 @@ begin
       raise exception 'Недостаточно прав: участник меняет только статус, описание, поля и чеклист своей задачи' using errcode = '42501';
     end if;
     select string_agg(f.name, ', ') into missing from fields f
-     where f.unit_id = new.unit_id and f.staff_only and (new.fields -> f.id) is distinct from (old.fields -> f.id);
+     where (f.unit_id = new.unit_id or f.unit_id is null) and f.staff_only and (new.fields -> f.id) is distinct from (old.fields -> f.id);
     if missing is not null then
       raise exception 'Недостаточно прав: «%» меняют только администратор и модератор', missing using errcode = '42501';
     end if;
     if new.status is distinct from old.status then
-      -- поле с колонкой required_from нужно при переносе в неё и в колонки правее
+      -- поле юнита с колонкой required_from нужно при переносе в неё и правее;
+      -- у общего поля required_from — тип колонки (progress / done): с этого типа и дальше
       with cols as (
-        select c.v ->> 'id' as id, c.i from units u, jsonb_array_elements(u.settings -> 'columns') with ordinality c(v, i)
+        select c.v ->> 'id' as id, c.v ->> 'kind' as kind, c.i from units u, jsonb_array_elements(u.settings -> 'columns') with ordinality c(v, i)
          where u.id = new.unit_id)
       select string_agg(f.name, ', ' order by f.ord) into missing from fields f
-       where f.unit_id = new.unit_id and f.required and not f.archived
+       where (f.unit_id = new.unit_id or f.unit_id is null) and f.required and not f.archived
          and (f.required_from = ''
-              or coalesce((select i from cols where id = new.status), 0) >= coalesce((select i from cols where id = f.required_from), 0))
+              or (f.unit_id is not null
+                  and coalesce((select i from cols where id = new.status), 0) >= coalesce((select i from cols where id = f.required_from), 0))
+              or (f.unit_id is null
+                  and array_position(array['todo', 'progress', 'done'], (select kind from cols where id = new.status))
+                      >= coalesce(array_position(array['todo', 'progress', 'done'], f.required_from), 1)))
          and coalesce(new.fields -> f.id, 'null'::jsonb) in ('null'::jsonb, '""'::jsonb, '[]'::jsonb, 'false'::jsonb);
       if missing is not null then
         raise exception 'Сначала заполните обязательные поля: %', missing using errcode = 'P0001';
@@ -687,8 +717,7 @@ language plpgsql security definer set search_path = public as $$
 begin
   if not app_system() and not is_staff() then raise exception 'Недостаточно прав' using errcode = '42501'; end if;
   perform set_config('app.system', 'on', true);
-  update tasks set fields = fields - p_field
-   where unit_id = (select unit_id from fields where id = p_field) and fields ? p_field;
+  update tasks set fields = fields - p_field where fields ? p_field;
   delete from fields where id = p_field;
   perform set_config('app.system', 'off', true);
 end $$;
@@ -736,7 +765,7 @@ drop policy if exists units_write on units;
 create policy units_write on units for all to authenticated using (is_staff()) with check (is_staff());
 
 drop policy if exists fields_read on fields;
-create policy fields_read on fields for select to authenticated using (is_staff() or is_unit_member(unit_id));
+create policy fields_read on fields for select to authenticated using (is_staff() or unit_id is null or is_unit_member(unit_id));
 drop policy if exists fields_write on fields;
 create policy fields_write on fields for all to authenticated using (is_staff()) with check (is_staff());
 

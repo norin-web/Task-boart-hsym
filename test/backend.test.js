@@ -231,6 +231,38 @@ test('корзина юнитов: восстановление и автоуд�
   assert.equal((await api('bootstrap', {})).units.length, 0);
 });
 
+test('общие поля: на все юниты, обязательность по типу колонки, слияние старых приоритетов', async () => {
+  const api = await setup();
+  const a = await api('createUnit', { name: 'A', key: 'AAA' });
+  const b = await api('createUnit', { name: 'B', key: 'BBB' });
+  // общее поле видно в обоих юнитах, в начале списка; свои поля юнита — только у него
+  const g = await api('createField', { global: true, name: 'Канал', type: 'text', required: true, requiredFrom: 'done' });
+  const own = await api('createField', { unitId: a.id, name: 'Своё', type: 'text' });
+  const fa = (await api('getBoard', { unitId: a.id })).fields.map(f => f.id);
+  const fb = (await api('getBoard', { unitId: b.id })).fields.map(f => f.id);
+  assert.ok(fa.includes(g.id) && fb.includes(g.id) && fa.includes(own.id) && !fb.includes(own.id));
+  assert.equal(fa[0], 'f_priority');
+  // копия юнита забирает только свои поля
+  const c = await api('createUnit', { name: 'C', key: 'CCC', copyFieldsFrom: a.id });
+  const fc = (await api('getBoard', { unitId: c.id })).fields;
+  assert.equal(fc.filter(f => f.name === 'Своё').length, 1);
+  assert.equal(fc.filter(f => f.global).length, 2);
+  await api('deleteField', { id: g.id });
+  assert.ok(!(await api('getBoard', { unitId: b.id })).fields.some(f => f.id === g.id));
+
+  // старая база: у юнита свой «Приоритет» → при обновлении схемы сливается в общий
+  const pg = api.pg;
+  await pg.query("delete from fields where id = 'f_priority'");
+  await pg.query(`insert into fields (id, unit_id, name, type, options, show_on_card, required, ord, archived, staff_only, role)
+    values ('f_old', $1, 'Приоритет', 'select', '[{"id":"o_x","name":"high","color":"#f00"}]', true, false, 1, false, true, 'priority')`, [a.id]);
+  const t = await api('createTask', { unitId: a.id, title: 'x' });
+  await pg.query(`update tasks set fields = '{"f_old":"o_x"}' where id = $1`, [t.id]);
+  await pg.exec(SCHEMA);
+  const board = await api('getBoard', { unitId: a.id });
+  assert.ok(!board.fields.some(f => f.id === 'f_old'));
+  assert.deepEqual(board.tasks.find(x => x.id === t.id).fields, { f_priority: 'o_high' });
+});
+
 test('неизвестный метод и внутренние ошибки не падают', async () => {
   const { call } = await setup();
   assert.equal((await call('dropTables', {})).ok, false);

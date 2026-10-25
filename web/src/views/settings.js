@@ -62,19 +62,24 @@ export function renderSettings() {
     }
   };
 
-  const active = b.fields.filter(f => !f.archived).sort(byOrder);
-  const archived = b.fields.filter(f => f.archived);
+  const own = b.fields.filter(f => !f.global);
+  const globals = b.fields.filter(f => f.global && !f.archived).sort(byOrder);
+  const active = own.filter(f => !f.archived).sort(byOrder);
+  const archived = own.filter(f => f.archived);
+  const editField = f => openFieldEditor(f, {
+    columns: u.settings.columns,
+    onSaved: (saved, isNew) => { if (isNew) b.fields.push(saved); else Object.assign(f, saved); renderSettings(); },
+  });
   const fieldList = h('div', { class: 'field-list' }, active.map(f => h('div', { class: 'field-row', dataset: { id: f.id } },
     h('span', { class: 'drag', title: 'Перетащите, чтобы изменить порядок' }, icon('grip', 16)),
     h('span', { class: 'name' }, f.name),
     h('span', { class: 'badge' }, TYPE_LABELS[f.type] || f.type),
     f.showOnCard && h('span', { class: 'badge' }, 'на карточке'),
     f.required && h('span', { class: 'badge' }, requiredLabel(f)),
-    f.role === 'priority' && h('span', { class: 'badge' }, 'приоритет'),
     f.staffOnly && h('span', { class: 'badge' }, 'меняют админы'),
     f.requiredOnCreate && h('span', { class: 'badge' }, 'при создании'),
     h('span', { class: 'spacer' }),
-    h('button', { class: 'btn sm', onclick: () => openFieldEditor(f) }, icon('edit', 13), 'Изменить'),
+    h('button', { class: 'btn sm', onclick: () => editField(f) }, icon('edit', 13), 'Изменить'),
     h('button', { class: 'btn ghost sm', title: 'Убрать с карточек (значения сохранятся)', onclick: () => setFieldArchived(f, true) }, 'Убрать'))));
 
   fill($('#main'),
@@ -107,8 +112,11 @@ export function renderSettings() {
       h('section', { class: 'card-box' },
         h('div', { class: 'section-head', style: { marginBottom: '4px' } },
           h('h2', null, 'Поля карточки'),
-          h('button', { class: 'btn primary sm', onclick: () => openFieldEditor(null) }, icon('plus', 14), 'Поле')),
-        h('p', { class: 'hint' }, 'Свои поля для задач этого юнита: списки, даты, числа, ссылки. Порядок меняется перетаскиванием.'),
+          h('button', { class: 'btn primary sm', onclick: () => editField(null) }, icon('plus', 14), 'Поле')),
+        globals.length > 0 && h('p', { class: 'hint global-fields-note' }, 'Общие для всех юнитов: ',
+          h('span', { class: 'gf-names' }, globals.map(f => f.name).join(', ')), ' — меняются в ',
+          link({ view: 'admin', tab: 'automations' }, null, 'Панели админа → Автоматизации'), '.'),
+        h('p', { class: 'hint' }, 'Свои поля для задач этого юнита: списки, даты, числа, ссылки. На карточке идут после общих. Порядок меняется перетаскиванием.'),
         active.length ? fieldList : h('p', { class: 'muted' }, 'Своих полей пока нет.'),
         archived.length > 0 && [
           h('div', { class: 'sub-title' }, 'Убранные поля'),
@@ -158,12 +166,18 @@ async function deleteFieldForever(f) {
   }).catch(showErr);
 }
 
-function requiredLabel(f) {
-  const c = f.requiredFrom && S.board.unit.settings.columns.find(x => x.id === f.requiredFrom);
+/** Подпись обязательности: у поля юнита — колонка, у общего — тип колонки. */
+export function requiredLabel(f, columns) {
+  if (f.global) return f.requiredFrom ? `обязательное с «${KIND_LABELS[f.requiredFrom] || f.requiredFrom}»` : 'обязательное';
+  const c = f.requiredFrom && (columns || S.board.unit.settings.columns).find(x => x.id === f.requiredFrom);
   return c ? `обязательное с «${c.name}»` : 'обязательное';
 }
 
-function openFieldEditor(f) {
+/**
+ * Окно поля карточки. opts: { global — общее на все юниты, columns — колонки юнита (для своего поля), onSaved(saved, isNew) }.
+ * Обязательность у своего поля — «с колонки X», у общего — «с типа колонки» (в работе / готово): колонки у юнитов разные.
+ */
+export function openFieldEditor(f, { global = !!(f && f.global), columns = [], onSaved } = {}) {
   const isNew = !f;
   const name = h('input', { class: 'inp', value: f ? f.name : '', maxlength: 60, placeholder: 'Например, Оценка или Канал' });
   const type = h('select', { class: 'inp', value: f ? f.type : 'select' },
@@ -171,13 +185,14 @@ function openFieldEditor(f) {
   const showOnCard = h('input', { type: 'checkbox', checked: f ? f.showOnCard : true });
   const staffOnly = h('input', { type: 'checkbox', checked: f ? f.staffOnly : false });
   const onCreate = h('input', { type: 'checkbox', checked: f ? f.requiredOnCreate : false });
-  const isPriority = h('input', { type: 'checkbox', checked: f ? f.role === 'priority' : false });
-  const prioRow = h('label', { class: 'chk' }, isPriority, 'Это приоритет: полоса на карточке и сортировка в колонке (варианты сверху вниз — от низкого к высокому)');
+  const isPriority = !!f && f.role === 'priority';
   // '' — не обязательное, '*' — для любого переноса, id колонки — с неё и правее
   const required = h('select', { class: 'inp', value: !f || !f.required ? '' : f.requiredFrom || '*' },
     h('option', { value: '' }, 'Не обязательное'),
     h('option', { value: '*' }, 'Для любого переноса'),
-    S.board.unit.settings.columns.slice(1).map(c => h('option', { value: c.id }, `Для переноса в «${c.name}» и дальше`)));
+    global
+      ? ['progress', 'done'].map(k => h('option', { value: k }, `Для переноса в «${KIND_LABELS[k]}» и дальше`))
+      : columns.slice(1).map(c => h('option', { value: c.id }, `Для переноса в «${c.name}» и дальше`)));
   const options = f ? structuredClone(f.options) : [];
 
   const optBox = h('div');
@@ -201,7 +216,6 @@ function openFieldEditor(f) {
   const typeNote = h('div', { class: 'hint' });
   const syncType = () => {
     optSection.hidden = !['select', 'multiselect'].includes(type.value);
-    prioRow.hidden = type.value !== 'select';
     typeNote.textContent = !isNew && type.value !== f.type ? 'Тип меняется: уже заполненные значения могут отображаться некорректно.' : '';
     if (!optSection.hidden && !options.length) {
       ['Вариант 1', 'Вариант 2'].forEach((n, i) => options.push({ id: 'o_' + Math.random().toString(36).slice(2, 10), name: n, color: PALETTE[i] }));
@@ -213,16 +227,16 @@ function openFieldEditor(f) {
   syncType();
 
   modal({
-    title: isNew ? 'Новое поле' : `Поле «${f.name}»`,
+    title: (isNew ? 'Новое поле' : `Поле «${f.name}»`) + (global ? ' · для всех юнитов' : ''),
     body: [
-      h('div', { class: 'grid2' }, field('Название', name), field('Тип', type, typeNote)),
+      isPriority && h('p', { class: 'hint', style: { marginTop: 0 } }, 'Приоритет — общий для всех юнитов: полоса на карточке и сортировка в колонке. Варианты сверху вниз — от низкого к высокому.'),
+      h('div', { class: 'grid2' }, field('Название', name), isPriority ? h('div') : field('Тип', type, typeNote)),
       optSection,
       h('div', { class: 'grid2', style: { alignItems: 'end' } },
         field('Обязательное для участников', required),
         h('label', { class: 'chk', style: { marginBottom: '10px' } }, showOnCard, 'Показывать на карточке')),
       h('label', { class: 'chk' }, onCreate, 'Нужно уже при создании задачи (без него задачу не создать)'),
       h('label', { class: 'chk' }, staffOnly, 'Меняют только администратор и модератор (участник видит, но не правит)'),
-      prioRow,
     ],
     wide: true,
     actions: [
@@ -232,15 +246,14 @@ function openFieldEditor(f) {
           if (!name.value.trim()) { name.focus(); return; }
           const payload = {
             name: name.value, type: type.value, showOnCard: showOnCard.checked, required: !!required.value, requiredFrom: required.value === '*' ? '' : required.value,
-            staffOnly: staffOnly.checked, requiredOnCreate: onCreate.checked, role: type.value === 'select' && isPriority.checked ? 'priority' : '',
+            staffOnly: staffOnly.checked, requiredOnCreate: onCreate.checked,
             options: ['select', 'multiselect'].includes(type.value) ? options.filter(o => o.name.trim()) : [],
           };
-          const saved = isNew ? await send('createField', { unitId: S.board.unit.id, ...payload }) : await send('updateField', { id: f.id, ...payload });
-          // приоритет в юните один — у прежнего флаг снят и на сервере
-          if (saved.role === 'priority') S.board.fields.forEach(x => { if (x.id !== saved.id && x.role === 'priority') x.role = ''; });
-          if (isNew) S.board.fields.push(saved); else Object.assign(f, saved);
+          const saved = isNew
+            ? await send('createField', global ? { global: true, ...payload } : { unitId: S.board.unit.id, ...payload })
+            : await send('updateField', { id: f.id, ...payload });
           close();
-          renderSettings();
+          if (onSaved) onSaved(saved, isNew);
         },
       },
     ],

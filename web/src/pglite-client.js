@@ -1,7 +1,7 @@
 /**
  * Минимальный клиент с интерфейсом supabase-js поверх PGlite (Postgres в WebAssembly) — для тестов.
  * Поддерживает ровно то, что использует web/src/backend.js:
- * from().select/insert/update/upsert/delete + eq/neq/lt/in/order/limit/range/maybeSingle, rpc().
+ * from().select/insert/update/upsert/delete + eq/neq/lt/in/is(null)/order/limit/range/maybeSingle, rpc().
  */
 const ident = c => '"' + String(c).replace(/"/g, '""') + '"';
 const cols = list => (list === '*' ? '*' : list.split(',').map(s => ident(s.trim())).join(', '));
@@ -35,6 +35,7 @@ class Query {
   lt(c, v) { this.filters.push([c, '<', v]); return this; }
   gt(c, v) { this.filters.push([c, '>', v]); return this; }
   in(c, list) { this.filters.push([c, 'in', list]); return this; }
+  is(c, v) { this.filters.push([c, 'is', v]); return this; } // только is null
   order(c, { ascending = true } = {}) { this.orders.push(`${ident(c)} ${ascending ? 'asc' : 'desc'}`); return this; }
   limit(n) { this.lim = n; return this; }
   range(a, b) { this.off = a; this.lim = b - a + 1; return this; }
@@ -47,6 +48,7 @@ class Query {
       if (!this.filters.length) return '';
       return ' where ' + this.filters.map(([c, op, v]) => {
         if (op === 'in') return v.length ? `${ident(c)} in (${v.map(p).join(', ')})` : 'false';
+        if (op === 'is') return `${ident(c)} is null`;
         return `${ident(c)} ${op} ${p(v)}`;
       }).join(' and ');
     };
