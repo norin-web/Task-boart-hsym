@@ -8,7 +8,7 @@ import { $, h, icon, avatar, topbar, menu, closeMenu, modal, field, confirmDlg, 
 import { call, send } from '../api.js';
 import { navigate, link } from '../router.js';
 import { updateSidebarCounts, renderUnread } from './sidebar.js';
-import { openTask, closePanel, openCreateTask, duplicateTask, deleteTaskUndoable, refreshPanel, openDecompose } from './task.js';
+import { openTask, closePanel, openCreateTask, duplicateTask, deleteTaskUndoable, refreshPanel, openDecompose, decomposeMenu } from './task.js';
 
 let sortables = [];
 let quickInput = null;
@@ -455,7 +455,7 @@ export function cardMenu(anchor, t) {
       class: 'menu-item', onclick: () => { closeMenu(); patchTask(t, { departmentId: d.id }); },
     }, h('span', { class: 'dot', style: { background: d.color, margin: '0 4px' } }), d.name)) : []),
     { sep: true },
-    { label: descendantUnits(S.board.unit.id).length ? 'Разбить на задачи' : 'Подзадача', icon: 'tree', action: () => openDecompose(t, '', () => reloadBoard()) },
+    descendantUnits(S.board.unit.id).length > 0 && { label: 'Разбить на задачи…', icon: 'tree', action: () => setTimeout(() => decomposeMenu(anchor, t, () => reloadBoard()), 0) },
     t.kind === 'app' && { label: 'Апдейт', icon: 'refresh', action: () => openDecompose(t, 'update', () => reloadBoard()) },
     t.kind === 'app' && { label: 'Реджект', icon: 'alert', action: () => openDecompose(t, 'reject', () => reloadBoard()) },
     { sep: true },

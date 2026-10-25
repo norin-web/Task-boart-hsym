@@ -73,6 +73,7 @@ async function boot() {
     if (d.teams) S.teams = d.teams;
     S.linkFields = d.linkFields || [];
     S.templates = d.templates || [];
+    S.taskSets = d.taskSets || [];
   } catch (e) {
     return fatal('Не удалось загрузить данные: ' + e.message);
   }

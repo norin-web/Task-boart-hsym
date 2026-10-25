@@ -1045,3 +1045,12 @@ button.kpi { font: inherit; text-align: left; cursor: pointer; color: inherit; }
 .st-chip { background: color-mix(in srgb, var(--sc) 15%, transparent); color: var(--sc); flex: none; }
 .news-kind.handoff { background: color-mix(in srgb, #6366f1 16%, transparent); color: #6366f1; }
 @container (max-width: 520px) { .tree-row .unit-chip, .tree-row .st-chip { display: none; } }
+.dm-units { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 8px 8px; max-width: 320px; }
+.dm-unit { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer; }
+.dm-unit:hover { border-color: var(--border-strong); }
+.dm-unit.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); font-weight: 600; }
+.set-rows { display: grid; gap: 6px; }
+.set-row { display: grid; grid-template-columns: auto minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, .9fr) auto; gap: 6px; align-items: center; }
+.set-row .drag { cursor: grab; color: var(--muted); display: flex; }
+@media (max-width: 720px) { .set-row { grid-template-columns: auto 1fr auto; } .set-row select { grid-column: 2; } }
+.set-row .inp { width: 100%; max-width: none; min-width: 0; }

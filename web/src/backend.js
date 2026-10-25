@@ -62,6 +62,7 @@ const uid = prefix => prefix + '_' + crypto.randomUUID().replace(/-/g, '').slice
 const str = (v, max = 500) => String(v ?? '').trim().slice(0, max);
 const color = (c, fallback) => (/^#[0-9a-fA-F]{6}$/.test(c || '') ? c : fallback);
 const date = v => { const s = String(v || '').slice(0, 10); return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : ''; };
+const addDaysIso = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 const today = d => (/^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : new Date().toISOString().slice(0, 10));
 const req = (v, label) => v || fail(`Поле «${label}» обязательно`);
 const json = (v, fallback) => {
@@ -242,6 +243,7 @@ const templateOut = r => ({
   dueDays: Number(r.due_days), checklist: json(r.checklist, []) || [], order: r.ord,
   assigneeId: r.assignee_id || '', links: json(r.links, {}) || {}, teamId: r.team_id || '',
 });
+const taskSetOut = r => ({ id: r.id, name: r.name, items: json(r.items, []) || [], order: r.ord });
 const commentOut = r => ({ id: r.id, taskId: r.task_id, text: r.text, authorId: r.author_id, at: r.at, editedAt: r.edited_at });
 
 /* ================= backend ================= */
@@ -356,6 +358,7 @@ export function createBackend(db, opts = {}) {
   }
 
   const unitFields = async unitId => [...await globalFields(), ...await ownFields(unitId)];
+  const taskSets = async () => (await all(() => T('task_sets').select('*').order('ord').order('id'))).map(taskSetOut);
   const templates = async () => (await all(() => T('task_templates').select('*').order('ord').order('id'))).map(templateOut);
   const linkFields = async () => (await all(() => T('link_fields').select('*').order('ord').order('id'))).map(linkFieldOut);
   const cleanPositions = async list => {
@@ -570,8 +573,8 @@ export function createBackend(db, opts = {}) {
     /* ---------- общие данные, главная, поиск ---------- */
 
     async bootstrap(p) {
-      const [units, ppl, depts, lf, tpl, tm] = await Promise.all([unitsWithCounts(today(p.today)), people(), departments(), linkFields(), templates(), teams()]);
-      return { units: units.map(({ doneWeek, ...u }) => u), people: ppl, departments: depts, linkFields: lf, templates: tpl, teams: tm };
+      const [units, ppl, depts, lf, tpl, tm, sets] = await Promise.all([unitsWithCounts(today(p.today)), people(), departments(), linkFields(), templates(), teams(), taskSets()]);
+      return { units: units.map(({ doneWeek, ...u }) => u), people: ppl, departments: depts, linkFields: lf, templates: tpl, teams: tm, taskSets: sets };
     },
 
     async getHome(p) {
@@ -1339,6 +1342,54 @@ export function createBackend(db, opts = {}) {
       const t = { id: uid('tp'), ...row, ord: (await maxOrd('task_templates')) + 1 };
       await run(T('task_templates').insert(t));
       return templateOut(t);
+    },
+
+    /* ---------- наборы задач (декомпозиция) ---------- */
+
+    async getTaskSets() {
+      return taskSets();
+    },
+
+    async saveTaskSet(p) {
+      const items = [];
+      for (const it of (Array.isArray(p.items) ? p.items : []).slice(0, 30)) {
+        const title = str(it && it.title, 200);
+        if (!title) continue;
+        items.push({
+          title, teamId: await validTeam(it.teamId), positionId: await validDept(it.positionId),
+          dueDays: [-1, 0, 1, 2, 3, 5, 7, 14, 30].includes(Number(it.dueDays)) ? Number(it.dueDays) : -1,
+          description: str(it.description, 5000),
+        });
+      }
+      if (!items.length) fail('Добавьте в набор хотя бы одну задачу');
+      const row = { name: req(str(p.name, 80), 'Название набора'), items };
+      if (p.id) {
+        await updateOne('task_sets', String(p.id), row);
+        return taskSetOut(await one('task_sets', p.id));
+      }
+      const s = { id: uid('ts'), ...row, ord: (await maxOrd('task_sets')) + 1 };
+      await run(T('task_sets').insert(s));
+      return taskSetOut(s);
+    },
+
+    async deleteTaskSet(p) {
+      const gone = await run(T('task_sets').delete().eq('id', String(p.id ?? '')).select('id'));
+      if (!gone.length) fail('Недостаточно прав для этого действия', 'FORBIDDEN');
+      return true;
+    },
+
+    /** Применить набор к карточке: все задачи набора — в выбранный юнит, дочерними к ней («Дизайн · New App»). */
+    async applyTaskSet(p, ctx) {
+      const set = (await one('task_sets', p.setId)) || fail('Набор не найден', 'NOT_FOUND');
+      const parent = await findTask(p.parentId);
+      const created = [];
+      for (const it of taskSetOut(set).items) {
+        created.push(await methods.createTask({
+          unitId: p.unitId, parentId: parent.id, title: `${it.title} · ${parent.title}`, description: it.description,
+          teamId: it.teamId, departmentId: it.positionId, dueDate: it.dueDays >= 0 ? addDaysIso(it.dueDays) : '',
+        }, ctx));
+      }
+      return created;
     },
 
     async deleteTemplate(p) {

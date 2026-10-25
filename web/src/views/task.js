@@ -1,5 +1,5 @@
 import {
-  S, LS, taskById, personById, activeFields, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDateTime, relTime, addDays,
+  S, LS, plural, taskById, personById, activeFields, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDateTime, relTime, addDays,
   unitById, safeUrl, visibleLinkFields, TASK_KINDS, KIND_COLORS, descendantUnits, whoName, teamById, activeTeams, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, fmtValue,
 } from '../state.js';
 import { $, h, append, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, fill } from '../ui.js';
@@ -129,7 +129,48 @@ export function openDecompose(t, kind, onCreated) {
   const below = descendantUnits(u.id);
   const parent = { id: t.id, title: t.title, key: taskKey(t) };
   if (kind) return openCreateTask({ unitId: u.id, kind, parent, title: t.kind === 'app' ? TASK_KINDS[kind].label + ' · ' + t.title : '', onCreated });
-  return openCreateTask({ unitId: below[0] ? below[0].id : u.id, unitIds: below.length ? [...below.map(x => x.id), u.id] : null, parent, onCreated });
+  return openCreateTask({ unitId: below[0] ? below[0].id : u.id, unitIds: below.length ? below.map(x => x.id) : null, parent, onCreated });
+}
+
+/**
+ * «Разбить на задачи»: меню — куда (юниты ниже) и набор задач (создаются сразу все) или одна задача вручную.
+ * Выбранный юнит запоминается.
+ */
+export function decomposeMenu(anchor, t, onCreated) {
+  const below = descendantUnits(S.board.unit.id);
+  if (!below.length) {
+    return toast(`Ниже «${S.board.unit.name}» нет юнитов. У команды: меню юнита → «Входит в…» → ${S.board.unit.name}`, { type: 'error' });
+  }
+  let unitId = below.some(u => u.id === LS.get('decompUnit', '')) ? LS.get('decompUnit', '') : below[0].id;
+  const parent = { id: t.id, title: t.title, key: taskKey(t) };
+  const units = h('div', { class: 'dm-units' });
+  const drawUnits = () => fill(units, below.map(u => h('button', {
+    class: 'dm-unit' + (u.id === unitId ? ' on' : ''),
+    onclick: e => { e.stopPropagation(); unitId = u.id; LS.set('decompUnit', unitId); drawUnits(); },
+  }, h('span', { class: 'unit-dot', style: { background: u.color, margin: 0 } }), u.name)));
+  drawUnits();
+  const apply = async set => {
+    try {
+      const made = await send('applyTaskSet', { setId: set.id, parentId: t.id, unitId });
+      const u = unitById(unitId);
+      toast(`Создано ${made.length} ${plural(made.length, ['задача', 'задачи', 'задач'])} в «${u ? u.name : ''}»`, {
+        action: { label: 'Отменить', run: () => Promise.all(made.map(x => send('deleteTask', { id: x.id }))).then(() => onCreated && onCreated()).catch(showErr) },
+      });
+      if (onCreated) onCreated();
+    } catch (e) { showErr(e); }
+  };
+  const sets = [...S.taskSets].sort((a, b) => (a.order || 0) - (b.order || 0));
+  menu(anchor, [
+    { title: 'Куда' },
+    units,
+    { sep: true },
+    { title: 'Набор задач' },
+    ...sets.map(s => ({ label: h('span', { class: 'fm-row' }, s.name, h('span', { class: 'muted' }, s.items.length + ' ' + plural(s.items.length, ['задача', 'задачи', 'задач']))), icon: 'layers', action: () => apply(s) })),
+    !sets.length && h('div', { class: 'muted', style: { padding: '4px 10px 6px', fontSize: '12.5px' } }, 'Наборов пока нет'),
+    { sep: true },
+    { label: 'Одна задача вручную…', icon: 'plus', action: () => openCreateTask({ unitId, unitIds: below.map(x => x.id), parent, onCreated }) },
+    { label: 'Настроить наборы', icon: 'settings', action: () => navigate({ view: 'admin', tab: 'automations' }) },
+  ]);
 }
 
 /**
@@ -144,7 +185,7 @@ function treeBlock(t, staff) {
   const actions = staff && h('div', { class: 'tree-actions' },
     t.kind === 'app' && h('button', { class: 'btn sm', onclick: () => openDecompose(t, 'update', reload) }, icon('refresh', 13), 'Апдейт'),
     t.kind === 'app' && h('button', { class: 'btn sm', onclick: () => openDecompose(t, 'reject', reload) }, icon('alert', 13), 'Реджект'),
-    h('button', { class: 'btn sm', onclick: () => openDecompose(t, '', reload) }, icon('tree', 13), below.length ? 'Разбить на задачи' : 'Подзадача'));
+    below.length > 0 && h('button', { class: 'btn sm', onclick: e => { e.stopPropagation(); decomposeMenu(e.currentTarget, t, reload); } }, icon('tree', 13), 'Разбить на задачи', icon('chevron', 12)));
 
   const kindTag = k => TASK_KINDS[k] && h('span', { class: 'kind-tag', style: { '--kc': TASK_KINDS[k].color } }, TASK_KINDS[k].short);
   const statusChip = n => h('span', { class: 'chip st-chip', style: { '--sc': n.statusColor || KIND_COLORS[n.statusKind] } }, n.statusName);

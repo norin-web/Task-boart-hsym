@@ -318,6 +318,27 @@ test('структура одним шагом: Компания → Модер�
   await assert.rejects(() => api('setupHierarchy', {}), /уже есть/);
 });
 
+test('наборы задач: «Новое приложение — полный цикл» раскладывает карточку на задачи команд', async () => {
+  const api = await setup();
+  const mod = await api('createUnit', { name: 'Модераторы', key: 'MOD' });
+  const mvp = await api('createUnit', { name: 'MVP', key: 'MVP' });
+  const sets = await api('getTaskSets', {});
+  assert.equal(sets[0].name, 'Новое приложение — полный цикл');
+  assert.equal(sets[0].items.length, 5);
+  const app = await api('createTask', { unitId: mod.id, title: 'New App', kind: 'app' });
+  const made = await api('applyTaskSet', { setId: sets[0].id, parentId: app.id, unitId: mvp.id });
+  assert.deepEqual(made.map(t => t.title), ['Дизайн · New App', 'Разработка iOS · New App', 'Тестирование · New App', 'ASO: стор и метаданные · New App', 'Релиз · New App']);
+  assert.ok(made.every(t => t.parentId === app.id && t.unitId === mvp.id && t.teamId));
+  assert.equal(made[0].departmentId, 'd_design');
+  // свой набор; пустой не сохранить; удалённый набор по умолчанию не возвращается
+  const own = await api('saveTaskSet', { name: 'Апдейт', items: [{ title: 'Скриншоты', positionId: 'd_aso', dueDays: 3 }, { title: '' }] });
+  assert.equal(own.items.length, 1);
+  await assert.rejects(() => api('saveTaskSet', { name: 'Пусто', items: [] }), /хотя бы одну/);
+  await api('deleteTaskSet', { id: sets[0].id });
+  await api.pg.exec(SCHEMA);
+  assert.deepEqual((await api('getTaskSets', {})).map(s => s.name), ['Апдейт']);
+});
+
 test('неизвестный метод и внутренние ошибки не падают', async () => {
   const { call } = await setup();
   assert.equal((await call('dropTables', {})).ok, false);

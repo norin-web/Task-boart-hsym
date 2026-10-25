@@ -206,6 +206,16 @@ alter table task_templates add column if not exists assignee_id text not null de
 alter table task_templates add column if not exists links jsonb not null default '{}';
 alter table task_templates add column if not exists team_id text not null default '';
 
+-- Наборы задач для декомпозиции («Новое приложение — полный цикл»): «Разбить на задачи» создаёт сразу все
+-- задачи набора в выбранном юните. Ведут администраторы и модераторы, видят все.
+-- items: [{ title, teamId, positionId, dueDays (-1 — без срока), description }]
+create table if not exists task_sets (
+  id    text primary key,
+  name  text not null,
+  items jsonb not null default '[]',
+  ord   double precision not null default 0
+);
+
 -- ---------- атомарные операции ----------
 
 -- Следующий номер задачи в юните (DEV-1, DEV-2…) без гонок.
@@ -364,6 +374,20 @@ begin
   end if;
   perform set_config('app.system', 'off', true);
   return query select * from people where id = v_id;
+end $$;
+
+-- Однократно: набор «Новое приложение — полный цикл» (если его удалят — не возвращается).
+do $$ begin
+  if not exists (select 1 from app_settings where key = 'taskSetsSeeded') then
+    insert into task_sets (id, name, items, ord) values ('ts_new_app', 'Новое приложение — полный цикл', '[
+      {"title": "Дизайн", "teamId": "t_design", "positionId": "d_design", "dueDays": -1, "description": ""},
+      {"title": "Разработка iOS", "teamId": "t_ios", "positionId": "d_ios", "dueDays": -1, "description": ""},
+      {"title": "Тестирование", "teamId": "t_qa", "positionId": "d_qa", "dueDays": -1, "description": ""},
+      {"title": "ASO: стор и метаданные", "teamId": "t_other", "positionId": "d_aso", "dueDays": -1, "description": ""},
+      {"title": "Релиз", "teamId": "t_release", "positionId": "d_release", "dueDays": -1, "description": ""}
+    ]'::jsonb, 1) on conflict (id) do nothing;
+    insert into app_settings (key, value, updated_at) values ('taskSetsSeeded', 'true'::jsonb, '') on conflict (key) do nothing;
+  end if;
 end $$;
 
 -- Однократно: общий «Приоритет» на все юниты; старые приоритеты юнитов сливаются в него.
@@ -889,6 +913,11 @@ begin
 end $$;
 
 -- Шаблоны: видят все вошедшие, ведут администраторы и модераторы.
+alter table task_sets enable row level security;
+drop policy if exists task_sets_read on task_sets;
+create policy task_sets_read on task_sets for select to authenticated using (true);
+drop policy if exists task_sets_write on task_sets;
+create policy task_sets_write on task_sets for all to authenticated using (is_staff()) with check (is_staff());
 drop policy if exists templates_read on task_templates;
 create policy templates_read on task_templates for select to authenticated using (true);
 drop policy if exists templates_write on task_templates;

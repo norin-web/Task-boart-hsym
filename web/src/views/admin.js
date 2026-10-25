@@ -449,6 +449,71 @@ function linkFieldsManager() {
 
 const DUE_DAYS = [[-1, 'Без срока'], [0, 'Сегодня'], [1, 'Завтра'], [2, 'Через 2 дня'], [3, 'Через 3 дня'], [5, 'Через 5 дней'], [7, 'Через неделю'], [14, 'Через 2 недели'], [30, 'Через месяц']];
 
+/** Наборы задач для «Разбить на задачи»: карточка раскладывается сразу на все задачи набора в выбранном юните. */
+function taskSetsManager() {
+  const list = h('div', { class: 'lf-list' });
+  const remove = async s => {
+    if (!(await confirmDlg(`Удалить набор «${s.name}»? Уже созданные по нему задачи останутся.`, { ok: 'Удалить', danger: true }))) return;
+    await send('deleteTaskSet', { id: s.id });
+    S.taskSets = S.taskSets.filter(x => x !== s);
+    draw();
+  };
+  const row = s => h('div', { class: 'lf-row' },
+    h('button', { class: 'tpl-open', onclick: () => editTaskSet(s, draw) },
+      h('span', { class: 'tpl-name' }, s.name),
+      h('span', { class: 'tpl-meta' }, s.items.map(it => {
+        const tm = S.teams.find(x => x.id === it.teamId);
+        return h('span', { class: 'chip', title: tm ? tm.name : '', style: tm ? { background: `color-mix(in srgb, ${tm.color} 16%, transparent)`, color: tm.color } : null }, it.title);
+      }))),
+    h('button', { class: 'icon-btn sm', title: 'Изменить', onclick: () => editTaskSet(s, draw) }, icon('edit', 14)),
+    h('button', { class: 'icon-btn sm', title: 'Удалить', onclick: () => remove(s).catch(showErr) }, icon('trash', 15)));
+  const draw = () => fill(list, S.taskSets.length ? [...S.taskSets].sort(byOrder).map(row) : h('p', { class: 'muted', style: { padding: '12px 14px', margin: 0 } }, 'Наборов пока нет'));
+  draw();
+  return h('div', null,
+    h('div', { class: 'section-head' }, h('h2', { style: { margin: 0, fontSize: '16px' } }, 'Наборы задач'),
+      h('button', { class: 'btn primary sm', onclick: () => editTaskSet(null, draw) }, icon('plus', 14), 'Набор')),
+    h('p', { class: 'hint', style: { marginTop: 0 } }, '«Разбить на задачи» в карточке: выбираете юнит и набор — создаются сразу все задачи набора, каждая со своей командой и позицией. Исполнителей назначают в юните.'),
+    list);
+}
+
+function editTaskSet(s, onSaved) {
+  const name = h('input', { class: 'inp', value: s ? s.name : '', maxlength: 80, placeholder: 'Например, Новое приложение — полный цикл' });
+  const items = s ? s.items.map(it => ({ ...it })) : [{ title: '', teamId: '', positionId: '', dueDays: -1, description: '' }];
+  const rows = h('div', { class: 'set-rows' });
+  const select = (value, options, onChange, empty) => h('select', { class: 'inp sm', value, onchange: e => onChange(e.target.value) },
+    h('option', { value: '' }, empty), options.map(([v, t]) => h('option', { value: String(v) }, t)));
+  const draw = () => fill(rows, items.map((it, i) => h('div', { class: 'set-row', dataset: { i } },
+    h('span', { class: 'drag', title: 'Перетащите, чтобы изменить порядок' }, icon('grip', 15)),
+    h('input', { class: 'inp sm', value: it.title, maxlength: 200, placeholder: 'Задача, например Дизайн', oninput: e => { it.title = e.target.value; } }),
+    select(it.teamId, activeTeams().map(t => [t.id, t.name]), v => { it.teamId = v; }, 'Команда'),
+    select(it.positionId, activeDepts().map(d => [d.id, d.name]), v => { it.positionId = v; }, 'Позиция'),
+    h('select', { class: 'inp sm', value: String(it.dueDays), onchange: e => { it.dueDays = Number(e.target.value); } }, DUE_DAYS.map(([v, t]) => h('option', { value: String(v) }, t))),
+    h('button', { class: 'icon-btn sm', title: 'Убрать', onclick: () => { items.splice(i, 1); draw(); } }, icon('x', 14)))));
+  draw();
+  Sortable.create(rows, {
+    handle: '.drag', animation: 150, forceFallback: true, fallbackTolerance: 4,
+    onEnd: e => { items.splice(e.newIndex, 0, items.splice(e.oldIndex, 1)[0]); draw(); },
+  });
+  modal({
+    title: s ? `Набор «${s.name}»` : 'Новый набор задач', wide: true,
+    body: [
+      field('Название', name),
+      h('div', { class: 'sub-title' }, 'Задачи набора'),
+      h('p', { class: 'hint', style: { marginTop: '-4px' } }, 'К названию добавится название карточки: «Дизайн · New App». Команда и позиция — кому видна задача в юните.'),
+      rows,
+      h('button', { class: 'btn sm', style: { marginTop: '8px' }, onclick: () => { items.push({ title: '', teamId: '', positionId: '', dueDays: -1, description: '' }); draw(); rows.lastChild.querySelector('input').focus(); } }, icon('plus', 13), 'Задача'),
+    ],
+    actions: [{ label: 'Отмена' }, {
+      label: s ? 'Сохранить' : 'Создать набор', primary: true, action: async close => {
+        const saved = await send('saveTaskSet', { id: s ? s.id : '', name: name.value, items: items.filter(it => it.title.trim()) });
+        if (s) Object.assign(s, saved); else S.taskSets.push(saved);
+        close();
+        onSaved();
+      },
+    }],
+  });
+}
+
 /** Шаблоны задач: общие для всех юнитов. Порядок — перетаскиванием, правка — в окне. */
 function templatesManager() {
   const list = h('div', { class: 'lf-list' });
@@ -586,6 +651,7 @@ function automationsTab() {
   return h('div', { class: 'auto-page' },
     h('div', { class: 'card-box' }, globalFieldsManager()),
     isSuper() && h('div', { class: 'card-box' }, linkFieldsManager()),
+    h('div', { class: 'card-box' }, taskSetsManager()),
     h('div', { class: 'card-box' }, templatesManager()),
     h('div', { class: 'card-box' }, unitRules()),
     h('div', { class: 'card-box' }, autoNotes()));
