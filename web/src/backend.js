@@ -20,7 +20,7 @@ export function defaultSettings() {
       title:       { label: 'Название',    hideable: false, hidden: false },
       status:      { label: 'Статус',      hideable: false, hidden: false },
       assignee:    { label: 'Исполнитель', hideable: true,  hidden: false },
-      department:  { label: 'Отдел',       hideable: true,  hidden: false },
+      department:  { label: 'Позиция',     hideable: true,  hidden: false },
       dueDate:     { label: 'Срок',        hideable: true,  hidden: false },
       description: { label: 'Описание',    hideable: true,  hidden: false },
     },
@@ -182,14 +182,23 @@ const fieldOut = r => ({
   showOnCard: !!r.show_on_card, required: !!r.required, order: r.ord, archived: !!r.archived,
 });
 
-const personOut = r => ({ id: r.id, name: r.name, email: r.email, role: r.role || '', color: r.color || '', active: !!r.active });
+export const ACCESS = ['superadmin', 'moderator', 'member'];
+const personOut = r => ({
+  id: r.id, name: r.name, email: r.email, role: r.role || '', color: r.color || '', active: !!r.active,
+  access: r.access || 'member', positionId: r.position_id || '', linked: !!r.user_id,
+});
 const deptOut = r => ({ id: r.id, name: r.name, color: r.color, order: r.ord, archived: !!r.archived });
 const commentOut = r => ({ id: r.id, taskId: r.task_id, text: r.text, authorId: r.author_id, at: r.at, editedAt: r.edited_at });
 
 /* ================= backend ================= */
 
-export function createBackend(db) {
+/**
+ * db — клиент supabase-js (или совместимый). opts.invoke(name, body) — вызов серверной функции Supabase
+ * (управление аккаунтами); без неё (локальный режим) профили создаются напрямую.
+ */
+export function createBackend(db, opts = {}) {
   const T = name => db.from(name);
+  const invoke = opts.invoke || null;
 
   async function run(query) {
     // Сразу после входа часы сервера базы могут отставать от сервера входа на пару секунд —
@@ -201,8 +210,25 @@ export function createBackend(db) {
         await new Promise(r => setTimeout(r, 1000));
         continue;
       }
-      throw new ApiError(error.message || 'Ошибка базы данных', 'DB');
+      throw dbError(error);
     }
+  }
+
+  /** Ошибки прав и проверок базы — понятным текстом. */
+  function dbError(error) {
+    const m = error.message || 'Ошибка базы данных';
+    if (error.code === '42501' || /row-level security|permission denied/i.test(m)) {
+      return new ApiError(/^Недостаточно|^Роли|^Роль|^Email|^Профиль|^Привязку|^Нельзя/.test(m) ? m : 'Недостаточно прав для этого действия', 'FORBIDDEN');
+    }
+    if (error.code === 'P0001') return new ApiError(m, 'RULE');
+    return new ApiError(m, 'DB');
+  }
+
+  /** Обновить одну строку; если её не видно или нет прав — ошибка, а не тихое «ничего не произошло». */
+  async function updateOne(table, id, upd) {
+    if (!Object.keys(upd).length) return;
+    const rows = await run(T(table).update(upd).eq('id', id).select('id'));
+    if (!rows.length) fail('Недостаточно прав для этого действия', 'FORBIDDEN');
   }
   const rpc = (fn, args) => run(db.rpc(fn, args));
 
@@ -253,9 +279,11 @@ export function createBackend(db) {
     return (await one('departments', id)) ? String(id) : '';
   }
 
-  /** Отдел человека в этой команде — подставляется в задачу, если отдел не выбран. */
+  /** Отдел (позиция) исполнителя — подставляется в задачу, если отдел не выбран. Сначала позиция из профиля. */
   async function memberDept(unitId, personId) {
     if (!personId) return '';
+    const person = await run(T('people').select('position_id').eq('id', personId).maybeSingle());
+    if (person && person.position_id) return person.position_id;
     const m = await run(T('unit_members').select('department_id').eq('unit_id', unitId).eq('person_id', personId).maybeSingle());
     return m ? m.department_id : '';
   }
@@ -522,7 +550,7 @@ export function createBackend(db) {
       if ('settings' in p) upd.settings = storedSettings(p.settings);
       if ('archived' in p) upd.archived = !!p.archived;
       upd.updated_at = now();
-      await run(T('units').update(upd).eq('id', u.id));
+      await updateOne('units', u.id, upd);
       if (upd.settings) await remapStatuses(u.id, unitSettings(u.settings), unitSettings(upd.settings), p.statusRemap || {});
       return unitOut(await findUnit(u.id));
     },
@@ -561,7 +589,7 @@ export function createBackend(db) {
       const assignee = str(p.assigneeId, 40);
       const ts = now();
       const task = {
-        id: uid('t'), unit_id: unit.id, num: await rpc('next_task_num', { p_unit: unit.id }),
+        id: uid('t'), unit_id: unit.id, num: (await rpc('next_task_num', { p_unit: unit.id })) ?? fail('Создавать задачи могут модераторы и администраторы', 'FORBIDDEN'),
         title: req(str(p.title, 500), 'Название задачи'), description: str(p.description, 20000), status,
         assignee_id: assignee, department_id: (await validDept(p.departmentId)) || (await memberDept(unit.id, assignee)),
         due_date: date(p.dueDate), ord: (await maxOrd('tasks', { unit_id: unit.id, status })) + 1,
@@ -664,7 +692,11 @@ export function createBackend(db) {
           due_date: t.due_date, ord: t.ord, fields: t.fields, checklist: t.checklist, archived: t.archived,
           done_at: t.done_at, updated_at: t.updated_at,
         }).eq('id', t.id).eq('updated_at', r.updated_at).select('id'));
-        if (!saved.length) fail('Задачу уже изменил кто-то другой', 'CONFLICT', taskOut(await findTask(t.id)));
+        if (!saved.length) {
+          const fresh = await one('tasks', t.id);
+          if (fresh && fresh.updated_at !== r.updated_at) fail('Задачу уже изменил кто-то другой', 'CONFLICT', taskOut(fresh));
+          fail('Недостаточно прав: менять можно только свои задачи', 'FORBIDDEN');
+        }
         await log(logs, ctx);
       }
       return taskOut(t);
@@ -702,7 +734,8 @@ export function createBackend(db) {
 
     async deleteTask(p, ctx) {
       const t = await findTask(p.id);
-      await run(T('tasks').delete().eq('id', t.id));
+      const gone = await run(T('tasks').delete().eq('id', t.id).select('id'));
+      if (!gone.length) fail('Недостаточно прав для этого действия', 'FORBIDDEN');
       await log([{ unitId: t.unit_id, taskId: t.id, action: 'delete', from: t.title }], ctx);
       return true;
     },
@@ -730,12 +763,13 @@ export function createBackend(db) {
     async updateComment(p) {
       const c = (await one('comments', p.id)) || fail('Комментарий не найден', 'NOT_FOUND');
       const upd = { text: req(str(p.text, 5000), 'Комментарий'), edited_at: now() };
-      await run(T('comments').update(upd).eq('id', c.id));
+      await updateOne('comments', c.id, upd);
       return commentOut({ ...c, ...upd });
     },
 
     async deleteComment(p) {
-      await run(T('comments').delete().eq('id', String(p.id ?? '')));
+      const gone = await run(T('comments').delete().eq('id', String(p.id ?? '')).select('id'));
+      if (!gone.length) fail('Удалить можно только свой комментарий', 'FORBIDDEN');
       return true;
     },
 
@@ -757,7 +791,7 @@ export function createBackend(db) {
       if ('showOnCard' in p) upd.show_on_card = !!p.showOnCard;
       if ('required' in p) upd.required = !!p.required;
       if ('archived' in p) upd.archived = !!p.archived;
-      if (Object.keys(upd).length) await run(T('fields').update(upd).eq('id', f.id));
+      await updateOne('fields', f.id, upd);
       return fieldOut({ ...f, ...upd });
     },
 
@@ -788,7 +822,7 @@ export function createBackend(db) {
       if ('name' in p) upd.name = req(str(p.name, 40), 'Название отдела');
       if ('color' in p) upd.color = color(p.color, d.color);
       if ('archived' in p) upd.archived = !!p.archived;
-      if (Object.keys(upd).length) await run(T('departments').update(upd).eq('id', d.id));
+      await updateOne('departments', d.id, upd);
       return deptOut({ ...d, ...upd });
     },
 
@@ -826,13 +860,52 @@ export function createBackend(db) {
 
     /* ---------- люди ---------- */
 
+    /** Кто я: профиль вошедшего (привязка по email при первом входе). null — доступа нет. */
+    async whoami() {
+      const rows = await rpc('whoami', {});
+      const me = Array.isArray(rows) ? rows[0] : rows;
+      return me && me.id ? personOut(me) : null;
+    },
+
+    /** Профиль без аккаунта (например, чтобы заранее назначать задачи). Аккаунт — createAccount. */
     async createPerson(p) {
       const person = {
         id: uid('p'), name: req(str(p.name, 80), 'Имя'), email: str(p.email, 120).toLowerCase(),
         role: str(p.role, 80), color: color(p.color, ''), telegram_chat_id: '', active: true, created_at: now(),
+        access: ACCESS.includes(p.access) ? p.access : 'member', position_id: await validDept(p.positionId),
       };
       await run(T('people').insert(person));
       return personOut(person);
+    },
+
+    /**
+     * Аккаунт для входа: email + временный пароль. Создаёт профиль или привязывает существующий (personId).
+     * В Supabase — через серверную функцию admin-users (нужны права администратора), локально — сразу профиль.
+     */
+    async createAccount(p) {
+      const email = str(p.email, 120).toLowerCase();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) fail('Укажите корректный email');
+      const password = str(p.password, 72);
+      if (password.length < 8) fail('Временный пароль — от 8 символов');
+      if (!invoke) {
+        // Локальный режим: аккаунтов нет, вход — переключателем «Войти как»
+        if (p.personId) return methods.updatePerson({ id: p.personId, email });
+        return methods.createPerson({ ...p, email });
+      }
+      const res = await invoke('admin-users', {
+        action: 'create', email, password, personId: p.personId || null, name: str(p.name, 80),
+        role: str(p.role, 80), access: ACCESS.includes(p.access) ? p.access : 'member', positionId: str(p.positionId, 40),
+      });
+      return personOut(res.person);
+    },
+
+    /** Новый временный пароль для человека (администратор). */
+    async resetPassword(p) {
+      const password = str(p.password, 72);
+      if (password.length < 8) fail('Временный пароль — от 8 символов');
+      if (!invoke) return true;
+      await invoke('admin-users', { action: 'password', personId: String(p.personId ?? ''), password });
+      return true;
     },
 
     async updatePerson(p) {
@@ -843,7 +916,13 @@ export function createBackend(db) {
       if ('role' in p) upd.role = str(p.role, 80);
       if ('color' in p) upd.color = color(p.color, '');
       if ('active' in p) upd.active = !!p.active;
-      if (Object.keys(upd).length) await run(T('people').update(upd).eq('id', person.id));
+      if ('access' in p) upd.access = ACCESS.includes(p.access) ? p.access : fail('Неизвестная роль');
+      if ('positionId' in p) upd.position_id = await validDept(p.positionId);
+      await updateOne('people', person.id, upd);
+      // Отключённый человек не должен входить: блокируем аккаунт на сервере
+      if ('active' in p && invoke && person.user_id && !!p.active !== !!person.active) {
+        await invoke('admin-users', { action: 'active', personId: person.id, active: !!p.active });
+      }
       return personOut({ ...person, ...upd });
     },
   };

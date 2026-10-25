@@ -2,11 +2,12 @@ import './styles.css';
 import { S, me, setMe } from './state.js';
 import { $, h, icon, fill, closeMenu, closeNav, isMenuOpen, isModalOpen } from './ui.js';
 import { call } from './api.js';
-import { initBackend, mode, supabase } from './data.js';
+import { initBackend, mode, supabase, localLogin } from './data.js';
+import { LS, isStaff } from './state.js';
 import { parseLocation, render } from './router.js';
 import { openPalette, isPaletteOpen } from './views/palette.js';
 import { openCreateTask, closeTask } from './views/task.js';
-import { openWhoAmI, openShortcuts } from './views/people.js';
+import { openShortcuts } from './views/people.js';
 
 const fatal = text => fill($('#shell'), h('div', { class: 'boot error', style: { gridColumn: '1 / -1', flexDirection: 'column' } },
   h('div', null, text),
@@ -40,6 +41,15 @@ async function boot() {
   // После входа по ссылке в адресе остаётся ?code=… — убираем
   if (location.search) history.replaceState(null, '', location.pathname + location.hash);
   try {
+    // Кто я: в Supabase — профиль вошедшего (привязка по email); локально — выбранный в «Войти как»
+    if (mode === 'supabase') {
+      const person = await call('whoami', {});
+      if (!person || !person.active) return renderNoAccess();
+      setMe(person.id);
+    } else {
+      setMe(await localLogin(LS.get('localActor', '')).catch(() => localLogin('')));
+      LS.set('localActor', S.meId);
+    }
     const d = await call('bootstrap', { today: new Date().toISOString().slice(0, 10) });
     S.units = d.units;
     S.people = d.people;
@@ -47,12 +57,20 @@ async function boot() {
   } catch (e) {
     return fatal('Не удалось загрузить данные: ' + e.message);
   }
-  // Кто я: при входе через Supabase — профиль с тем же email; в локальном режиме — выбор в браузере
-  const email = S.session && S.session.user.email ? S.session.user.email.toLowerCase() : '';
-  if (email) setMe((S.people.find(p => p.email === email) || {}).id || '');
   S.route = parseLocation();
   render();
-  if (!me()) openWhoAmI({ welcome: true, email });
+}
+
+/** Вошёл, но в команде его нет (или отключён администратором). */
+function renderNoAccess() {
+  const email = S.session && S.session.user.email;
+  document.body.classList.add('login-page');
+  fill($('#shell'), h('div', { class: 'login' },
+    h('div', { class: 'login-card', style: { textAlign: 'center' } },
+      h('div', { class: 'brand', style: { justifyContent: 'center', padding: '0 0 18px' } }, h('div', { class: 'brand-logo' }, icon('check', 16)), h('span', null, 'Tasks')),
+      h('h1', null, 'Нет доступа'),
+      h('p', { class: 'hint', style: { margin: '10px 0 20px' } }, 'Аккаунт ', h('b', null, email || ''), ' не добавлен в команду или отключён. Попросите администратора выдать доступ.'),
+      h('button', { class: 'btn', onclick: () => supabase.auth.signOut() }, 'Выйти'))));
 }
 
 /** Понятный текст для ошибок Supabase Auth. */
@@ -146,7 +164,7 @@ document.addEventListener('keydown', e => {
   }
   if (typing || e.metaKey || e.ctrlKey || e.altKey || isModalOpen() || isPaletteOpen()) return;
   const k = e.key.toLowerCase();
-  if ((k === 'c' || k === 'с') && !S.panelTaskId) { e.preventDefault(); openCreateTask(); }
+  if ((k === 'c' || k === 'с') && !S.panelTaskId && isStaff()) { e.preventDefault(); openCreateTask(); }
   else if (k === '/') { const s = $('#board-search'); if (s) { e.preventDefault(); s.focus(); } else { e.preventDefault(); openPalette(); } }
   else if (k === '?') { e.preventDefault(); openShortcuts(); }
 });

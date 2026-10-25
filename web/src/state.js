@@ -42,6 +42,16 @@ export const taskById = id => (S.board ? S.board.tasks.find(t => t.id === id) : 
 export const personById = id => (id ? S.people.find(p => p.id === id) : null);
 export const activePeople = () => S.people.filter(p => p.active);
 export const me = () => personById(S.meId);
+
+/* ---------- роли ---------- */
+export const ACCESS_LABELS = { superadmin: 'Супер-админ', moderator: 'Модератор', member: 'Участник' };
+export const myAccess = () => (me() || {}).access || 'member';
+/** Модератор или супер-админ: управляет юнитами, задачами и людьми. */
+export const isStaff = () => ['superadmin', 'moderator'].includes(myAccess());
+/** Только супер-админ: роли и доступы. */
+export const isSuper = () => myAccess() === 'superadmin';
+/** Может ли текущий человек работать с задачей (свои задачи у участника). */
+export const canEditTask = t => isStaff() || (!!S.meId && t.assigneeId === S.meId);
 export const activeFields = () => (S.board ? S.board.fields.filter(f => !f.archived).sort(byOrder) : []);
 export const columns = () => (S.board ? S.board.unit.settings.columns : []);
 /** Колонка по id; неизвестный статус = первая колонка (как на сервере). */

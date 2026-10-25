@@ -4,7 +4,7 @@
  *   #/my                     мои задачи
  *   #/u/:unit[/list|/settings][?task=:id]
  */
-import { S, freshFilters } from './state.js';
+import { S, freshFilters, isStaff } from './state.js';
 import { $, h, fill, closeMenu, closeNav, showErr } from './ui.js';
 import { renderSidebar } from './views/sidebar.js';
 import { renderHome } from './views/home.js';
@@ -91,6 +91,7 @@ export async function render() {
     renderSidebar();
   }
 
+  if (r.mode === 'settings' && !isStaff()) return navigate({ unit: r.unit, mode: 'board' }, { replace: true });
   const key = r.mode + ':' + r.unit;
   if (rendered !== key) {
     rendered = key;

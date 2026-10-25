@@ -2,7 +2,7 @@ import Sortable from 'sortablejs';
 import {
   S, LS, taskById, personById, activeFields, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder,
   between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, relTime, unitById, emptyCounts, freshFilters,
-  activeDepts, deptById, KINDS, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE,
+  activeDepts, deptById, KINDS, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask,
 } from '../state.js';
 import { $, h, icon, avatar, topbar, menu, closeMenu, modal, field, confirmDlg, promptDlg, toast, showErr, statusDot, fill } from '../ui.js';
 import { call, send } from '../api.js';
@@ -40,8 +40,8 @@ export function renderBoardView() {
       h('div', { class: 'seg', role: 'tablist' },
         link({ unit: u.id, mode: 'board' }, { class: mode === 'board' ? 'on' : '', title: 'Доска' }, icon('board', 15), h('span', { class: 'btn-label' }, 'Доска')),
         link({ unit: u.id, mode: 'list' }, { class: mode === 'list' ? 'on' : '', title: 'Список' }, icon('list', 15), h('span', { class: 'btn-label' }, 'Список'))),
-      link({ unit: u.id, mode: 'settings' }, { class: 'icon-btn', title: 'Настройки юнита' }, icon('settings', 17)),
-      h('button', { class: 'btn primary', onclick: () => openCreateTask(), title: 'Новая задача (C)' }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Задача')),
+      isStaff() && link({ unit: u.id, mode: 'settings' }, { class: 'icon-btn', title: 'Настройки юнита' }, icon('settings', 17)),
+      isStaff() && h('button', { class: 'btn primary', onclick: () => openCreateTask(), title: 'Новая задача (C)' }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Задача')),
     ]),
     filterBar(),
     h('div', { id: 'tasks', class: mode === 'list' ? 'view-body' : 'board' }));
@@ -51,7 +51,9 @@ export function renderBoardView() {
 /** Аватары команды в шапке — клик ведёт в настройки состава. */
 function teamStack() {
   const list = S.board.members.map(m => personById(m.personId)).filter(Boolean);
-  return link({ unit: S.board.unit.id, mode: 'settings' }, { class: 'team-stack', title: 'Команда: ' + (list.map(p => p.name).join(', ') || 'пока никого') },
+  const attrs = { class: 'team-stack', title: 'Команда: ' + (list.map(p => p.name).join(', ') || 'пока никого') };
+  if (!isStaff()) return h('span', attrs, list.slice(0, 5).map(p => avatar(p, 'sm')), list.length > 5 && h('span', { class: 'avatar sm more' }, '+' + (list.length - 5)));
+  return link({ unit: S.board.unit.id, mode: 'settings' }, attrs,
     list.slice(0, 5).map(p => avatar(p, 'sm')),
     list.length > 5 && h('span', { class: 'avatar sm more' }, '+' + (list.length - 5)),
     !list.length && h('span', { class: 'hint' }, '+ команда'));
@@ -62,7 +64,7 @@ export function renderTasks() {
   const el = $('#tasks');
   if (!el || !S.board) return;
   if (S.route.mode === 'list') renderList(el);
-  else if (S.lanes) renderLanes(el);
+  else if (S.lanes && isStaff()) renderLanes(el);
   else renderColumns(el);
   syncCounts();
 }
@@ -113,7 +115,7 @@ function filterRest() {
     people.map(p => h('button', { class: 'av-btn' + (f.assignees.includes(p.id) ? ' on' : ''), title: p.name, onclick: () => set('assignees', toggleIn(f.assignees, p.id)) }, avatar(p))),
     h('button', { class: 'av-btn' + (f.assignees.includes(NO_DEPT) ? ' on' : ''), title: 'Без исполнителя', onclick: () => set('assignees', toggleIn(f.assignees, NO_DEPT)) }, avatar(null)));
 
-  const depts = !B.department.hidden && activeDepts().length > 0 && h('div', { class: 'row dept-chips', style: { gap: '4px' } },
+  const depts = isStaff() && !B.department.hidden && activeDepts().length > 0 && h('div', { class: 'row dept-chips', style: { gap: '4px' } },
     activeDepts().map(d => h('button', {
       class: 'fchip dept' + (f.depts.includes(d.id) ? ' on' : ''), style: { '--dc': d.color },
       onclick: () => set('depts', toggleIn(f.depts, d.id)),
@@ -132,7 +134,7 @@ function filterRest() {
     }, icon('filter', 13), 'Поля', optCount > 0 && h('span', { class: 'n' }, optCount)),
     !B.dueDate.hidden && h('button', { class: 'fchip' + (f.overdue ? ' on' : ''), onclick: () => set('overdue', !f.overdue) }, icon('alert', 13), 'Просроченные'),
     h('button', { class: 'fchip' + (f.archived ? ' on' : ''), onclick: () => set('archived', !f.archived) }, icon('archive', 13), 'Архив'),
-    S.route.mode === 'board' && !B.department.hidden && h('button', {
+    S.route.mode === 'board' && isStaff() && !B.department.hidden && h('button', {
       class: 'fchip' + (S.lanes ? ' on' : ''), title: 'Разложить задачи по отделам',
       onclick: () => { S.lanes = !S.lanes; LS.set('lanes', S.lanes); renderTasks(); drawFilterRest(); },
     }, icon('rows', 13), 'По отделам'),
@@ -212,7 +214,7 @@ function makeList(items, status, dept, emptyText) {
     !items.length && emptyText && h('div', { class: 'col-empty' }, emptyText));
   sortables.push(Sortable.create(list, {
     group: 'tasks', animation: 150, delay: 120, delayOnTouchOnly: true,
-    draggable: '.card:not(.temp)', ghostClass: 'sortable-ghost', fallbackClass: 'sortable-drag', forceFallback: true, fallbackTolerance: 4,
+    draggable: '.card:not(.temp):not(.locked)', ghostClass: 'sortable-ghost', fallbackClass: 'sortable-drag', forceFallback: true, fallbackTolerance: 4,
     onEnd: onDragEnd,
   }));
   return list;
@@ -224,11 +226,11 @@ function colHead(col, count) {
     h('span', { class: 'col-name', title: KIND_LABELS[col.kind] }, col.name),
     h('span', { class: 'col-count' }, count),
     h('span', { class: 'spacer' }),
-    h('button', { class: 'icon-btn sm', title: 'Добавить задачу', onclick: () => openQuickAdd(col.id, null) }, icon('plus', 15)),
-    h('button', { class: 'icon-btn sm col-menu-btn', title: 'Настроить колонку', onclick: e => { e.stopPropagation(); columnMenu(e.currentTarget, col); } }, icon('more', 15)));
+    isStaff() && h('button', { class: 'icon-btn sm', title: 'Добавить задачу', onclick: () => openQuickAdd(col.id, null) }, icon('plus', 15)),
+    isStaff() && h('button', { class: 'icon-btn sm col-menu-btn', title: 'Настроить колонку', onclick: e => { e.stopPropagation(); columnMenu(e.currentTarget, col); } }, icon('more', 15)));
 }
 
-const addColumnBtn = () => h('button', { class: 'col-add', title: 'Добавить колонку', onclick: addColumn }, icon('plus', 18), h('span', null, 'Колонка'));
+const addColumnBtn = () => isStaff() && h('button', { class: 'col-add', title: 'Добавить колонку', onclick: addColumn }, icon('plus', 18), h('span', null, 'Колонка'));
 
 function renderColumns(board) {
   const done = beginRender();
@@ -240,7 +242,7 @@ function renderColumns(board) {
     const quickHere = S.quick.status === col.id && S.quick.dept == null;
     return h('section', { class: 'col', style: { '--cc': colColor(col) } },
       colHead(col, items.length),
-      makeList(items, col.id, null, !quickHere && (filtered ? 'Нет задач по фильтру' : 'Перетащите задачу сюда')),
+      makeList(items, col.id, null, !quickHere && (filtered ? 'Нет задач по фильтру' : isStaff() ? 'Перетащите задачу сюда' : 'Пусто')),
       quickAddEl(col.id, null));
   }), addColumnBtn());
   done();
@@ -257,7 +259,7 @@ function renderLanes(board) {
   const orphan = tasks.filter(t => !deptById(t.departmentId) || deptById(t.departmentId).archived);
   if (orphan.length && !S.filters.depts.length) lanes.push({ id: '', name: 'Без отдела', color: 'var(--border-strong)' });
 
-  const grid = h('div', { class: 'lanes-grid', style: { gridTemplateColumns: `repeat(${cols.length}, minmax(272px, 1fr)) 44px` } },
+  const grid = h('div', { class: 'lanes-grid', style: { gridTemplateColumns: `repeat(${cols.length}, minmax(216px, 1fr)) 40px` } },
     cols.map(col => h('div', { class: 'lane-col-head', style: { '--cc': colColor(col) } },
       colHead(col, tasks.filter(t => colById(t.status).id === col.id).length))),
     h('div', { class: 'lane-col-head add' }, addColumnBtn()));
@@ -292,6 +294,16 @@ function onDragEnd(evt) {
   const patch = { order: between(prev && prev.order, next && next.order) };
   if (evt.to.dataset.status !== t.status) patch.status = evt.to.dataset.status;
   if (evt.to.dataset.lane && evt.to.dataset.dept !== (t.departmentId || '')) patch.departmentId = evt.to.dataset.dept;
+  // Участник не может сменить статус, пока не заполнены обязательные поля — возвращаем и открываем карточку
+  const missing = patch.status && !isStaff() && activeFields().filter(f => f.required && isEmpty(t.fields[f.id]));
+  if (missing && missing.length) {
+    setTimeout(() => {
+      renderTasks();
+      toast('Сначала заполните: ' + missing.map(f => f.name).join(', '), { type: 'error' });
+      navigate({ unit: S.board.unit.id, mode: S.route.mode, task: t.id });
+    }, 0);
+    return;
+  }
   setTimeout(() => patchTask(t, patch, { noCheck: true }), 0); // перерисовка после того, как Sortable закончит
 }
 
@@ -319,7 +331,7 @@ function taskCard(t, inLane) {
   ].filter(Boolean);
 
   return h('article', {
-    class: 'card' + (t.archived ? ' archived' : '') + (t._temp ? ' temp' : ''), dataset: { id: t.id }, tabindex: '0',
+    class: 'card' + (t.archived ? ' archived' : '') + (t._temp ? ' temp' : '') + (canEditTask(t) ? '' : ' locked'), dataset: { id: t.id }, tabindex: '0',
     onclick: () => { if (!t._temp) navigate({ unit: S.board.unit.id, mode: S.route.mode, task: t.id }); },
     onkeydown: e => { if (e.key === 'Enter' && !t._temp) navigate({ unit: S.board.unit.id, mode: S.route.mode, task: t.id }); },
     oncontextmenu: e => { if (t._temp) return; e.preventDefault(); cardMenu({ x: e.clientX, y: e.clientY }, t); },
@@ -356,6 +368,12 @@ export function fieldChip(f, t) {
 export function cardMenu(anchor, t) {
   const cols = columns().filter(c => c.id !== t.status);
   const B = S.board.unit.settings.builtins;
+  const open = { label: 'Открыть', icon: 'arrow', action: () => navigate({ unit: S.board.unit.id, mode: S.route.mode, task: t.id }) };
+  if (!isStaff()) {
+    // Участник: открыть и (в своей задаче) перенести в колонку
+    return menu(anchor, [open, ...(canEditTask(t) ? [{ sep: true }, { title: 'Переместить' },
+      ...cols.map(c => ({ label: c.name, icon: KIND_ICONS[c.kind], action: () => patchTask(t, { status: c.id }) }))] : [])]);
+  }
   menu(anchor, [
     { label: 'Открыть', icon: 'arrow', action: () => navigate({ unit: S.board.unit.id, mode: S.route.mode, task: t.id }) },
     { sep: true },
@@ -459,6 +477,7 @@ function openQuickAdd(status, dept) {
 }
 
 function quickAddEl(status, dept, compact) {
+  if (!isStaff()) return null;
   if (S.quick.status !== status || S.quick.dept !== dept) {
     return h('button', { class: 'quick-btn' + (compact ? ' compact' : ''), onclick: () => openQuickAdd(status, dept) }, icon('plus', 14), compact ? '' : 'Задача');
   }

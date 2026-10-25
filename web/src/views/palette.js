@@ -1,10 +1,12 @@
-import { S, byOrder } from '../state.js';
+import { S, byOrder, isStaff } from '../state.js';
 import { $, h, icon, fill } from '../ui.js';
 import { call } from '../api.js';
 import { navigate } from '../router.js';
 import { openCreateTask } from './task.js';
 import { openCreateUnit } from './units.js';
 import { openPeople, openShortcuts, openDepartments } from './people.js';
+import { mode } from '../data.js';
+import { fillDemo } from './home.js';
 
 export const isPaletteOpen = () => $('#palette-root').children.length > 0;
 
@@ -12,14 +14,15 @@ export const isPaletteOpen = () => $('#palette-root').children.length > 0;
 export function openPalette() {
   if (isPaletteOpen()) return;
   const actions = [
-    { label: 'Создать задачу', icon: 'plus', hint: 'C', run: () => openCreateTask() },
-    { label: 'Новый юнит', icon: 'folder', run: openCreateUnit },
+    isStaff() && { label: 'Создать задачу', icon: 'plus', hint: 'C', run: () => openCreateTask() },
+    isStaff() && { label: 'Новый юнит', icon: 'folder', run: openCreateUnit },
     { label: 'Главная', icon: 'home', run: () => navigate({ view: 'home' }) },
-    { label: 'Мои задачи', icon: 'user', run: () => navigate({ view: 'my' }) },
-    { label: 'Люди', icon: 'users', run: openPeople },
-    { label: 'Отделы', icon: 'layers', run: openDepartments },
+    isStaff() && { label: 'Мои задачи', icon: 'user', run: () => navigate({ view: 'my' }) },
+    isStaff() && { label: 'Люди и доступы', icon: 'users', run: openPeople },
+    isStaff() && { label: 'Позиции', icon: 'layers', run: openDepartments },
     { label: 'Горячие клавиши', icon: 'keyboard', hint: '?', run: openShortcuts },
-  ];
+    mode === 'local' && isStaff() && !S.units.length && { label: 'Заполнить демо-данными', icon: 'layers', run: () => fillDemo() },
+  ].filter(Boolean);
   let items = [];
   let sel = 0;
   let tasks = [];

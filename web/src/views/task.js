@@ -1,12 +1,12 @@
 import {
   S, taskById, personById, activeFields, taskKey, isEmpty, optById, dueInfo, fmtDateTime, relTime, addDays,
-  unitById, safeUrl, colById, colColor, taskDone, activeDepts, deptById,
+  unitById, safeUrl, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, fmtValue,
 } from '../state.js';
-import { $, h, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, fill } from '../ui.js';
+import { $, h, append, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, fill } from '../ui.js';
 import { call, send } from '../api.js';
 import { navigate } from '../router.js';
 import { renderTasks, patchTask, reloadBoard } from './board.js';
-import { quickCreatePerson, addMemberDialog } from './people.js';
+import { addMemberDialog } from './people.js';
 import { openCreateUnit } from './units.js';
 import { activityText } from './home.js';
 
@@ -48,8 +48,10 @@ function buildPanel(t) {
   const u = S.board.unit;
   const B = u.settings.builtins;
 
+  const staff = isStaff();
+  const editable = canEditTask(t);
   const title = autosize(h('textarea', {
-    class: 'title-inp', rows: 1, value: t.title, maxlength: 500, 'aria-label': B.title.label,
+    class: 'title-inp', rows: 1, value: t.title, maxlength: 500, 'aria-label': B.title.label, readonly: !staff,
     onkeydown: e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } },
     onchange: e => {
       const v = e.target.value.trim();
@@ -60,9 +62,10 @@ function buildPanel(t) {
 
   const main = h('div', { class: 'panel-main' },
     title,
-    !B.description.hidden && descriptionBlock(t, B.description.label),
-    checklistBlock(t),
-    discussionBlock(t));
+    !editable && h('div', { class: 'readonly-note' }, icon('alert', 14), 'Только просмотр: менять можно свои задачи'),
+    !B.description.hidden && descriptionBlock(t, B.description.label, editable),
+    checklistBlock(t, editable),
+    discussionBlock(t, editable));
 
   const head = h('div', { class: 'panel-head' },
     h('div', { class: 'crumbs' },
@@ -72,12 +75,12 @@ function buildPanel(t) {
       t.archived && h('span', { class: 'badge' }, 'в архиве')),
     h('span', { class: 'spacer' }),
     h('button', { class: 'icon-btn', title: 'Скопировать ссылку', onclick: () => copyLink(t) }, icon('copy', 16)),
-    h('button', { class: 'icon-btn', title: 'Действия', onclick: e => panelMenu(e.currentTarget, t) }, icon('more', 18)),
+    staff && h('button', { class: 'icon-btn', title: 'Действия', onclick: e => panelMenu(e.currentTarget, t) }, icon('more', 18)),
     h('button', { class: 'icon-btn', title: 'Закрыть (Esc)', onclick: closeTask }, icon('x', 18)));
 
   return h('aside', { class: 'panel', role: 'dialog', 'aria-label': taskKey(t) },
     head,
-    h('div', { class: 'panel-body' }, main, sideBlock(t)));
+    h('div', { class: 'panel-body' }, main, sideBlock(t, { staff, editable })));
 }
 
 function panelMenu(anchor, t) {
@@ -99,14 +102,14 @@ function copyLink(t) {
 
 /* ---------- описание ---------- */
 
-function descriptionBlock(t, label) {
+function descriptionBlock(t, label, editable) {
   const box = h('div', { class: 'block' });
-  const view = () => fill(box, 
+  const view = () => fill(box,
     h('div', { class: 'block-title' }, label, h('span', { class: 'spacer' }),
-      t.description && h('button', { class: 'link-btn', onclick: edit }, 'Изменить')),
+      editable && t.description && h('button', { class: 'link-btn', onclick: edit }, 'Изменить')),
     t.description
-      ? h('div', { class: 'desc-view', title: 'Нажмите, чтобы изменить', onclick: e => { if (!e.target.closest('a') && !getSelection().toString()) edit(); } }, linkify(t.description))
-      : h('button', { class: 'desc-empty', onclick: edit }, 'Добавьте описание: контекст, ссылки, критерии готовности…'));
+      ? h('div', { class: 'desc-view' + (editable ? '' : ' readonly'), title: editable ? 'Нажмите, чтобы изменить' : '', onclick: e => { if (editable && !e.target.closest('a') && !getSelection().toString()) edit(); } }, linkify(t.description))
+      : editable ? h('button', { class: 'desc-empty', onclick: edit }, 'Добавьте описание: контекст, ссылки, критерии готовности…') : h('p', { class: 'muted' }, 'Описания нет'));
   const edit = () => {
     const ta = autosize(h('textarea', { class: 'inp desc-edit', value: t.description, maxlength: 20000 }));
     const save = () => { if (ta.value.trim() !== t.description) patchTask(t, { description: ta.value.trim() }); view(); };
@@ -129,8 +132,15 @@ function descriptionBlock(t, label) {
 
 /* ---------- чеклист ---------- */
 
-function checklistBlock(t) {
+function checklistBlock(t, editable) {
   const box = h('div', { class: 'block' });
+  if (!editable) {
+    const items = t.checklist || [];
+    if (!items.length) return null;
+    return append(box, h('div', { class: 'block-title' }, 'Чеклист', h('span', { class: 'muted', style: { fontWeight: 400 } }, items.filter(i => i.done).length + ' из ' + items.length)),
+      h('div', { class: 'cl-list' }, items.map(it => h('div', { class: 'cl-item' + (it.done ? ' done' : '') },
+        h('input', { type: 'checkbox', checked: it.done, disabled: true }), h('span', { class: 'cl-text' }, it.text)))));
+  }
   const update = (next, focusAdd) => { patchTask(t, { checklist: next }); draw(focusAdd); };
   const draw = focusAdd => {
     const items = t.checklist || [];
@@ -170,7 +180,7 @@ function checklistBlock(t) {
 
 /* ---------- комментарии и история ---------- */
 
-function discussionBlock(t) {
+function discussionBlock(t, editable) {
   let tab = 'comments';
   let data = null;
   let editing = null;
@@ -197,7 +207,7 @@ function discussionBlock(t) {
         h('div', { class: 'comment-head' },
           h('b', null, p ? p.name : 'Аноним'),
           h('span', { class: 'when', title: fmtDateTime(c.at) }, relTime(c.at) + (c.editedAt ? ' · изменено' : '')),
-          !isEditing && h('span', { class: 'actions' },
+          !isEditing && (isStaff() || c.authorId === S.meId) && h('span', { class: 'actions' },
             h('button', { class: 'link-btn', onclick: () => { editing = c.id; draw(); } }, 'Изменить'),
             h('button', { class: 'link-btn danger', onclick: () => removeComment(c) }, 'Удалить'))),
         isEditing
@@ -264,7 +274,7 @@ function discussionBlock(t) {
       !data
         ? h('div', { class: 'muted' }, 'Загрузка…')
         : tab === 'comments'
-          ? [data.comments.map(comment), composer()]
+          ? [data.comments.map(comment), editable ? composer() : !data.comments.length && h('p', { class: 'muted' }, 'Комментариев нет')]
           : history());
   };
   draw();
@@ -274,7 +284,10 @@ function discussionBlock(t) {
 
 /* ---------- свойства (правая колонка) ---------- */
 
-function sideBlock(t) {
+/** Значение только для чтения в правой колонке. */
+const ro = node => h('div', { class: 'ro-value' }, node || h('span', { class: 'muted' }, '—'));
+
+function sideBlock(t, { staff, editable }) {
   const u = S.board.unit;
   const B = u.settings.builtins;
   const props = h('div', { class: 'props' });
@@ -286,11 +299,14 @@ function sideBlock(t) {
   const dot = statusDot(colColor(colById(t.status)), 9);
   prop(B.status.label, h('div', { class: 'status-wrap' }, dot,
     h('select', {
-      class: 'inp', value: colById(t.status).id,
+      class: 'inp', value: colById(t.status).id, disabled: !editable,
       onchange: e => { dot.style.background = colColor(colById(e.target.value)); patchTask(t, { status: e.target.value }); },
     }, u.settings.columns.map(c => h('option', { value: c.id }, c.name)))));
 
-  if (!B.assignee.hidden) {
+  if (!B.assignee.hidden && !staff) {
+    const p = personById(t.assigneeId);
+    prop(B.assignee.label, ro(p && h('span', { class: 'row', style: { gap: '6px', flexWrap: 'nowrap' } }, avatar(p, 'sm'), p.name)));
+  } else if (!B.assignee.hidden) {
     prop(B.assignee.label, assigneeSelect(t.assigneeId, v => {
       const before = t.departmentId;
       patchTask(t, { assigneeId: v }).then(() => { if (!before && t.departmentId) refreshPanel(t); });
@@ -302,10 +318,15 @@ function sideBlock(t) {
   }
 
   if (!B.department.hidden) {
-    prop(B.department.label, deptSelect(t.departmentId, v => patchTask(t, { departmentId: v })));
+    const d = deptById(t.departmentId);
+    prop(B.department.label, staff ? deptSelect(t.departmentId, v => patchTask(t, { departmentId: v }))
+      : ro(d && h('span', { class: 'chip dept-chip', style: { background: `color-mix(in srgb, ${d.color} 16%, transparent)`, color: d.color } }, d.name)));
   }
 
-  if (!B.dueDate.hidden) {
+  if (!B.dueDate.hidden && !staff) {
+    const info = dueInfo(t.dueDate, taskDone(t));
+    prop(B.dueDate.label, ro(info && h('span', { class: 'due ' + info.cls, title: info.hint }, icon('calendar', 12), info.text)));
+  } else if (!B.dueDate.hidden) {
     const info = dueInfo(t.dueDate, taskDone(t));
     const setDue = v => { patchTask(t, { dueDate: v }); refreshPanel(t); };
     prop(B.dueDate.label, h('input', { class: 'inp', type: 'date', value: t.dueDate, onchange: e => setDue(e.target.value) }), {
@@ -321,8 +342,11 @@ function sideBlock(t) {
   }
 
   activeFields().forEach(f => {
-    prop(f.name, fieldInput(f, t.fields[f.id], v => patchTask(t, { fields: { [f.id]: isEmpty(v) ? null : v } })),
-      { required: f.required, empty: f.required && isEmpty(t.fields[f.id]) });
+    const v = t.fields[f.id];
+    prop(f.name, editable
+      ? fieldInput(f, v, val => patchTask(t, { fields: { [f.id]: isEmpty(val) ? null : val } }))
+      : ro(isEmpty(v) ? null : f.type === 'url' && safeUrl(v) ? h('a', { href: safeUrl(v), target: '_blank', rel: 'noopener noreferrer' }, v) : fmtValue(f, v)),
+    { required: f.required, empty: editable && f.required && isEmpty(v) });
   });
 
   return h('div', { class: 'panel-side' }, props, h('div', { class: 'side-meta', id: 'task-meta' }, metaLines(t)));
@@ -356,7 +380,7 @@ export function deptSelect(value, onChange) {
  */
 export function assigneeSelect(value, onChange, { ids, unitId } = {}) {
   const team = ids || S.board.members.map(m => m.personId);
-  const deptOf = id => { const m = S.board && S.board.members.find(x => x.personId === id); const d = m && deptById(m.departmentId); return d ? ' · ' + d.name : ''; };
+  const deptOf = id => { const p = personById(id); const d = p && deptById(p.positionId); return d ? ' · ' + d.name : ''; };
   const people = team.map(personById).filter(p => p && (p.active || p.id === value));
   const outsider = value && !team.includes(value) && personById(value);
   const sel = h('select', {
@@ -384,31 +408,12 @@ export function assigneeSelect(value, onChange, { ids, unitId } = {}) {
   return sel;
 }
 
+/** Человек для поля типа «Человек»: активные люди (и текущее значение, даже если отключён). */
 export function personSelect(value, onChange) {
   const people = S.people.filter(p => p.active || p.id === value);
-  return h('select', {
-    class: 'inp', value: value || '',
-    onchange: async e => {
-      if (e.target.value === '__new') {
-        e.target.value = value || '';
-        try {
-          const p = await quickCreatePerson();
-          if (p) {
-            value = p.id;
-            e.target.insertBefore(h('option', { value: p.id }, p.name), e.target.lastElementChild);
-            e.target.value = p.id;
-            onChange(p.id);
-          }
-        } catch (err) { showErr(err); }
-        return;
-      }
-      value = e.target.value;
-      onChange(value);
-    },
-  },
-  h('option', { value: '' }, '— не назначен —'),
-  people.map(p => h('option', { value: p.id }, p.name + (p.active ? '' : ' (неактивен)'))),
-  h('option', { value: '__new' }, '＋ Новый человек…'));
+  return h('select', { class: 'inp', value: value || '', onchange: e => onChange(e.target.value) },
+    h('option', { value: '' }, '— не выбран —'),
+    people.map(p => h('option', { value: p.id }, p.name + (p.active ? '' : ' (неактивен)'))));
 }
 
 /** Контрол для кастомного поля. onChange(value) — пустое значение означает «очистить». */
@@ -465,6 +470,7 @@ export function fieldInput(f, v, onChange) {
 /* ================= Создание задачи ================= */
 
 export function openCreateTask(opts = {}) {
+  if (!isStaff()) return toast('Создавать задачи могут модераторы и администраторы');
   const units = S.units.filter(u => !u.archived);
   if (!units.length) {
     toast('Сначала создайте юнит');

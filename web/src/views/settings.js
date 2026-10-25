@@ -263,8 +263,9 @@ function columnsEditor(initial) {
 function teamSection() {
   const b = S.board;
   const box = h('section', { class: 'card-box' });
-  const setDept = (m, departmentId) => send('setMember', { unitId: b.unit.id, personId: m.personId, departmentId })
-    .then(list => { applyMembers(b.unit.id, list); toast('Отдел обновлён'); }).catch(showErr);
+  // Позиция хранится в профиле человека — меняется для всех его юнитов
+  const setPosition = (p, positionId) => send('updatePerson', { id: p.id, positionId })
+    .then(saved => { Object.assign(p, saved); toast('Позиция обновлена'); }).catch(e => { showErr(e); draw(); });
   const remove = async m => {
     const p = personById(m.personId);
     if (!(await confirmDlg(`Убрать ${p ? p.name : 'участника'} из команды? Задачи, где он исполнитель, останутся за ним.`, { ok: 'Убрать', danger: true }))) return;
@@ -278,19 +279,19 @@ function teamSection() {
       h('div', { class: 'section-head', style: { marginBottom: '4px' } },
         h('h2', null, 'Команда'),
         h('div', { class: 'row' },
-          h('button', { class: 'btn ghost sm', onclick: openDepartments }, icon('layers', 14), 'Отделы'),
+          h('button', { class: 'btn ghost sm', onclick: openDepartments }, icon('layers', 14), 'Позиции'),
           h('button', { class: 'btn primary sm', onclick: async () => { if (await addMemberDialog(b.unit.id)) draw(); } }, icon('plus', 14), 'Участник'))),
-      h('p', { class: 'hint' }, 'Кто работает в этом юните и в каком отделе. Исполнителя задачи выбирают из команды; отдел участника подставляется в задачу автоматически.'),
+      h('p', { class: 'hint' }, 'Участники юнита. Каждый видит здесь только задачи своей позиции и работает только в своих задачах. Модераторы и супер-админы видят все юниты без добавления в команду.'),
       b.members.length
         ? b.members.map(m => {
           const p = personById(m.personId);
           if (!p) return null;
-          const d = deptById(m.departmentId);
+          const d = deptById(p.positionId);
           return h('div', { class: 'member-row' },
             avatar(p),
             h('span', { class: 'person-text' }, h('span', { class: 'person-name' }, p.name), p.role && h('span', { class: 'person-sub' }, p.role)),
-            h('select', { class: 'inp', value: m.departmentId, onchange: e => setDept(m, e.target.value) },
-              h('option', { value: '' }, '— без отдела —'),
+            h('select', { class: 'inp' + (p.positionId ? '' : ' empty-req'), value: p.positionId, title: 'Позиция (общая для всех юнитов)', onchange: e => setPosition(p, e.target.value) },
+              h('option', { value: '' }, '— без позиции —'),
               depts.concat(d && d.archived ? [d] : []).map(x => h('option', { value: x.id }, x.name))),
             h('button', { class: 'icon-btn sm', title: 'Убрать из команды', onclick: () => remove(m).catch(showErr) }, icon('x', 15)));
         })

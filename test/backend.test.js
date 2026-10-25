@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 import { createBackend } from '../web/src/backend.js';
-import { pgliteClient } from '../web/src/pglite-client.js';
+import { pgliteClient, AUTH_STUB_SQL } from '../web/src/pglite-client.js';
 
 const SCHEMA = fs.readFileSync(new URL('../supabase/schema.sql', import.meta.url), 'utf8');
 
 /** Чистая база по схеме Supabase (роли anon/authenticated создаём сами — в Supabase они есть). */
 async function setup() {
   const pg = new PGlite();
-  await pg.exec('create role anon; create role authenticated;');
+  await pg.exec(AUTH_STUB_SQL);
   await pg.exec(SCHEMA);
   const backend = createBackend(pgliteClient(pg));
   const api = async (method, payload, ctx) => {
@@ -171,14 +171,14 @@ test('свои колонки, отделы, состав команды', async
 
   // отделы и команда
   const board = await api('getBoard', { unitId: u.id });
-  assert.deepEqual(board.departments.map(d => d.name), ['ASO', 'Design', 'iOS', 'Other']);
+  assert.deepEqual(board.departments.map(d => d.name), ['ASO', 'Design', 'iOS', 'Other', 'Тестировщик', 'Релиз-менеджер']);
   const p = await api('createPerson', { name: 'Ира' });
   const members = await api('setMember', { unitId: u.id, personId: p.id, departmentId: 'd_design' });
   assert.deepEqual(members, [{ personId: p.id, departmentId: 'd_design' }]);
   const t2 = await api('updateTask', { id: t.id, patch: { assigneeId: p.id } });
   assert.equal(t2.departmentId, 'd_design'); // отдел подставился из состава команды
   const ex = (await api('getTaskExtras', { taskId: t.id })).activity.map(a => `${a.label}:${a.toText}`);
-  assert.ok(ex.includes('Отдел:Design'), ex.join(' | '));
+  assert.ok(ex.includes('Позиция:Design'), ex.join(' | '));
   await api('deleteDepartment', { id: 'd_design' });
   assert.equal((await api('getBoard', { unitId: u.id })).tasks[0].departmentId, '');
   assert.equal((await api('bootstrap', {})).units[0].members[0], p.id);

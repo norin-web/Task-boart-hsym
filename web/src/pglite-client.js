@@ -91,7 +91,7 @@ class Query {
       const returns = this.op === 'select' || this.returning;
       return { data: returns ? r.rows : null, error: null };
     } catch (e) {
-      return { data: null, error: { message: e.message } };
+      return { data: null, error: { message: e.message, code: e.code } };
     }
   }
 
@@ -111,8 +111,35 @@ export function pgliteClient(pg) {
         if (names.length === 1 && r.rows.every(x => x[names[0]] === '')) return { data: null, error: null }; // void
         return { data: r.rows, error: null };
       } catch (e) {
-        return { data: null, error: { message: e.message } };
+        return { data: null, error: { message: e.message, code: e.code } };
       }
     },
   };
+}
+
+/**
+ * Заглушка Supabase Auth для PGlite: роли anon/authenticated и auth.uid()/auth.jwt() из настроек сессии.
+ * Выполнить до schema.sql. В Supabase всё это уже есть.
+ */
+export const AUTH_STUB_SQL = `
+  do $$ begin create role anon; exception when duplicate_object then null; end $$;
+  do $$ begin create role authenticated; exception when duplicate_object then null; end $$;
+  create schema if not exists auth;
+  create or replace function auth.uid() returns uuid language sql stable as
+    $f$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $f$;
+  create or replace function auth.jwt() returns jsonb language sql stable as
+    $f$ select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $f$;
+  grant usage on schema auth to authenticated, anon;
+  grant execute on all functions in schema auth to authenticated, anon;
+`;
+
+/** Выполнять следующие запросы как вошедший пользователь (userId = null — как система). */
+export async function actAs(pg, userId, email = '') {
+  if (!userId) {
+    await pg.exec(`reset role; select set_config('request.jwt.claim.sub', '', false), set_config('request.jwt.claims', '', false);`);
+    return;
+  }
+  await pg.query(`select set_config('request.jwt.claim.sub', $1, false), set_config('request.jwt.claims', $2, false)`,
+    [userId, JSON.stringify({ sub: userId, email, role: 'authenticated' })]);
+  await pg.exec('set role authenticated');
 }

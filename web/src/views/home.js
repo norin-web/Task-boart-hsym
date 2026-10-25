@@ -1,12 +1,29 @@
-import { S, greeting, me, personById, relTime, plural, emptyCounts } from '../state.js';
+import { S, greeting, me, personById, relTime, plural, emptyCounts, isStaff, deptById } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill } from '../ui.js';
 import { call } from '../api.js';
 import { currentView, link, navigate } from '../router.js';
 import { renderSidebar } from './sidebar.js';
 import { openCreateTask } from './task.js';
 import { openCreateUnit, unitMenu } from './units.js';
+import { mode } from '../data.js';
+import { taskGroups, loadMyTasks, personCaption } from './my.js';
+
+/** Локальный режим: заполнить пустую базу демо-командами и перезагрузить. */
+export async function fillDemo(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Заполняем…'; }
+  try {
+    const { seedDemo } = await import('../demo.js');
+    await seedDemo();
+    location.hash = '#/';
+    location.reload();
+  } catch (e) {
+    showErr(e);
+    if (btn) btn.disabled = false;
+  }
+}
 
 export async function renderHome() {
+  if (!isStaff()) return renderMemberHome();
   const page = h('div', { class: 'page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
   fill($('#main'),
     topbar([h('h1', null, 'Главная')], [
@@ -55,7 +72,9 @@ export async function renderHome() {
           : h('div', { class: 'card-box empty-state' },
             h('h2', null, 'Создайте первый юнит'),
             h('p', null, 'Юнит — это команда: своя доска и задачи, участники из разных отделов (ASO, Design, iOS…).'),
-            h('button', { class: 'btn primary', onclick: openCreateUnit }, icon('plus', 15), 'Создать юнит'))),
+            h('div', { class: 'row', style: { justifyContent: 'center' } },
+              h('button', { class: 'btn primary', onclick: openCreateUnit }, icon('plus', 15), 'Создать юнит'),
+              mode === 'local' && h('button', { class: 'btn', onclick: e => fillDemo(e.currentTarget) }, icon('layers', 15), 'Заполнить демо-данными')))),
       h('section', null,
         h('div', { class: 'section-head' }, h('h2', null, 'Последние события')),
         d.activity.length
@@ -83,7 +102,7 @@ function unitCard(u) {
     h('div', { class: 'uc-head' },
       h('div', { class: 'uc-icon', style: { background: u.color } }, u.key.slice(0, 2)),
       h('div', { class: 'uc-title' }, h('div', { class: 'uc-name' }, u.name), h('div', { class: 'uc-key' }, u.key)),
-      h('button', {
+      isStaff() && h('button', {
         class: 'icon-btn sm', title: 'Действия',
         onclick: e => { e.preventDefault(); e.stopPropagation(); unitMenu(e.currentTarget, u); },
       }, icon('more'))),
@@ -131,3 +150,49 @@ function feedItem(a) {
         h('span', { class: 'ft-title' }, a.task.title)),
       h('div', { class: 'feed-when' }, relTime(a.at))));
 }
+
+/** Дашборд участника: его юниты (доска и бэклог своей позиции) и его задачи. */
+async function renderMemberHome() {
+  const page = h('div', { class: 'page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
+  fill($('#main'), topbar([h('h1', null, 'Мой дашборд')], []), h('div', { class: 'view-body' }, page));
+  let d, tasks;
+  try {
+    [d, tasks] = await Promise.all([call('getHome', { today: new Date().toISOString().slice(0, 10) }), loadMyTasks()]);
+  } catch (e) {
+    showErr(e);
+    return;
+  }
+  if (currentView() !== 'home') return;
+  S.units = d.units;
+  S.people = d.people;
+  S.departments = d.departments;
+  renderSidebar();
+
+  const person = me();
+  const pos = person && deptById(person.positionId);
+  const units = d.units.filter(u => !u.archived);
+  const open = tasks.filter(t => t.statusKind !== 'done');
+  const overdue = open.filter(t => t.dueDate && t.dueDate < new Date().toISOString().slice(0, 10)).length;
+  const dateStr = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  fill(page,
+    h('div', { class: 'hero' },
+      h('div', null,
+        h('h1', null, greeting() + (person ? ', ' + person.name.split(' ')[0] : '')),
+        h('p', null, dateStr[0].toUpperCase() + dateStr.slice(1) + (pos ? ' · ' + pos.name : '')))),
+    h('div', { class: 'stats' },
+      stat('Мои открытые задачи', open.length, 'circle', 'var(--st-progress)'),
+      stat('Просрочено', overdue, 'alert', 'var(--danger)'),
+      stat('Мои юниты', units.length, 'board', 'var(--accent)'),
+      stat('Сделано', tasks.length - open.length, 'done', 'var(--st-done)')),
+    h('div', { class: 'home-grid' },
+      h('section', null,
+        h('div', { class: 'section-head' }, h('h2', null, 'Мои задачи')),
+        taskGroups(tasks)),
+      h('section', null,
+        h('div', { class: 'section-head' }, h('h2', null, 'Мои юниты')),
+        units.length
+          ? h('div', { class: 'unit-grid', style: { gridTemplateColumns: '1fr' } }, units.map(unitCard))
+          : h('div', { class: 'card-box empty-state' }, h('p', { style: { margin: 0 } }, 'Вас пока не добавили ни в один юнит. Обратитесь к модератору.')))));
+}
+

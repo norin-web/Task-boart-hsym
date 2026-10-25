@@ -2,8 +2,9 @@
  * Источник данных.
  *   supabase — если заданы VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY: общая база команды, вход по email.
  *   local    — иначе: та же схема Postgres (PGlite) прямо в браузере, данные только на этом устройстве.
+ *              Входа нет — «Войти как» переключает, от чьего имени работают правила доступа.
  */
-import { createBackend } from './backend.js';
+import { createBackend, ApiError } from './backend.js';
 
 const URL_ = import.meta.env.VITE_SUPABASE_URL;
 const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -11,25 +12,40 @@ const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 export const mode = URL_ && KEY ? 'supabase' : 'local';
 export let supabase = null;
 let backend = null;
+let pg = null;
+let actAsFn = null;
+let localActor = null;
+
+/** Вызов серверной функции Supabase с понятными ошибками. */
+async function invoke(name, body) {
+  const { data, error } = await supabase.functions.invoke(name, { body });
+  if (error) {
+    let msg = error.message || 'Ошибка серверной функции';
+    try { const j = await error.context.json(); if (j && j.error) msg = j.error; } catch { /* тело не JSON */ }
+    if (/Failed to send|not found|404/i.test(msg)) msg = `Серверная функция ${name} не развёрнута в Supabase — см. README, раздел «Аккаунты»`;
+    throw new ApiError(msg, 'FUNCTION');
+  }
+  if (data && data.error) throw new ApiError(data.error, 'FUNCTION');
+  return data;
+}
 
 export async function initBackend() {
   if (mode === 'supabase') {
     const { createClient } = await import('@supabase/supabase-js');
     supabase = createClient(URL_, KEY, { auth: { flowType: 'pkce', persistSession: true, detectSessionInUrl: true } });
-    backend = createBackend(supabase);
+    backend = createBackend(supabase, { invoke });
     return;
   }
-  const [{ PGlite }, { pgliteClient }, schema] = await Promise.all([
+  const [{ PGlite }, { pgliteClient, AUTH_STUB_SQL, actAs }, schema] = await Promise.all([
     import('@electric-sql/pglite'),
     import('./pglite-client.js'),
     import('../../supabase/schema.sql?raw'),
   ]);
-  const pg = new PGlite('idb://tasks-local');
+  pg = new PGlite('idb://tasks-local');
   await pg.waitReady;
-  // Роли, которые в Supabase есть из коробки; схема идемпотентна — применяем при каждом запуске
-  await pg.exec(`
-    do $$ begin create role anon; exception when duplicate_object then null; end $$;
-    do $$ begin create role authenticated; exception when duplicate_object then null; end $$;`);
+  actAsFn = actAs;
+  // Заглушка Supabase Auth + схема (идемпотентна — применяем при каждом запуске)
+  await pg.exec(AUTH_STUB_SQL);
   await pg.exec(schema.default);
   backend = createBackend(pgliteClient(pg));
 }
@@ -37,4 +53,43 @@ export async function initBackend() {
 export function getBackend() {
   if (!backend) throw new Error('Хранилище ещё не готово');
   return backend;
+}
+
+/* ---------- локальный режим: «Войти как» ---------- */
+
+/** Все люди (без учёта прав) — для выбора, от чьего имени работать. */
+export async function localPeople() {
+  await actAsFn(pg, null);
+  const r = await pg.query(`select id, name, email, access, position_id, active from people order by
+    case access when 'superadmin' then 0 when 'moderator' then 1 else 2 end, name`);
+  if (localActor) await actAsFn(pg, localActor.uid);
+  return r.rows;
+}
+
+/**
+ * Работать от имени человека: правила доступа (RLS) применяются как к нему.
+ * Без personId — создаётся (если людей нет) и выбирается супер-админ.
+ */
+export async function localLogin(personId) {
+  await actAsFn(pg, null);
+  if (!personId) {
+    const any = await pg.query(`select id from people where access = 'superadmin' and active limit 1`);
+    personId = any.rows[0] && any.rows[0].id;
+    if (!personId) {
+      personId = 'p_' + crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+      await pg.query(`insert into people (id, name, access, created_at) values ($1, 'Администратор', 'superadmin', $2)`, [personId, new Date().toISOString()]);
+    }
+  }
+  await pg.query('update people set user_id = gen_random_uuid() where id = $1 and user_id is null', [personId]);
+  const r = await pg.query('select id, user_id, email from people where id = $1', [personId]);
+  if (!r.rows[0]) throw new Error('Человек не найден');
+  localActor = { id: r.rows[0].id, uid: r.rows[0].user_id };
+  await actAsFn(pg, localActor.uid, r.rows[0].email);
+  return localActor.id;
+}
+
+/** Выполнить fn без ограничений прав (заполнение демо-данными), затем вернуться к текущему человеку. */
+export async function asSystem(fn) {
+  await actAsFn(pg, null);
+  try { return await fn(); } finally { if (localActor) await actAsFn(pg, localActor.uid); }
 }

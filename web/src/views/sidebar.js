@@ -1,11 +1,12 @@
 import Sortable from 'sortablejs';
-import { S, LS, byOrder, openCount, me, unitById } from '../state.js';
+import { S, LS, byOrder, openCount, me, unitById, isStaff, ACCESS_LABELS } from '../state.js';
 import { $, h, icon, avatar, menu, showErr, fill } from '../ui.js';
 import { send } from '../api.js';
 import { link } from '../router.js';
 import { openPalette } from './palette.js';
 import { openCreateUnit } from './units.js';
-import { openPeople, openWhoAmI, openDepartments, openMyProfile } from './people.js';
+import { openPeople, openActAs, openDepartments, openMyProfile } from './people.js';
+import { personCaption } from './my.js';
 import { mode, supabase } from '../data.js';
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -48,30 +49,34 @@ export function renderSidebar() {
   const person = me();
   const [themeLabel, themeIcon] = THEMES[LS.get('theme', 'auto')] || THEMES.auto;
   const list = h('div', { class: 'nav-units' }, units.map(u => unitItem(u, r)));
+  const staff = isStaff();
 
   fill($('#sidebar'),
     h('div', { class: 'brand' }, h('div', { class: 'brand-logo' }, icon('check', 16)), h('span', null, 'Tasks')),
     h('button', { class: 'search-btn', onclick: openPalette }, icon('search', 15), h('span', null, 'Поиск'), h('kbd', null, isMac ? '⌘K' : 'Ctrl K')),
-    link({ view: 'home' }, { class: 'nav-item' + (!r.unit && r.view !== 'my' ? ' active' : '') }, icon('home'), h('span', { class: 'nav-label' }, 'Главная')),
-    link({ view: 'my' }, { class: 'nav-item' + (r.view === 'my' ? ' active' : '') }, icon('user'), h('span', { class: 'nav-label' }, 'Мои задачи')),
+    link({ view: 'home' }, { class: 'nav-item' + (!r.unit && r.view !== 'my' ? ' active' : '') }, icon('home'), h('span', { class: 'nav-label' }, staff ? 'Главная' : 'Мой дашборд')),
+    staff && link({ view: 'my' }, { class: 'nav-item' + (r.view === 'my' ? ' active' : '') }, icon('user'), h('span', { class: 'nav-label' }, 'Мои задачи')),
     h('div', { class: 'nav-section' },
-      h('span', null, 'Юниты'),
-      h('button', { class: 'icon-btn sm', title: 'Новый юнит', onclick: openCreateUnit }, icon('plus', 14))),
+      h('span', null, staff ? 'Юниты' : 'Мои юниты'),
+      staff && h('button', { class: 'icon-btn sm', title: 'Новый юнит', onclick: openCreateUnit }, icon('plus', 14))),
     list,
-    !units.length && h('button', { class: 'nav-item', onclick: openCreateUnit }, icon('plus'), h('span', { class: 'nav-label muted' }, 'Создать юнит')),
-    archived.length > 0 && h('button', {
+    !units.length && staff && h('button', { class: 'nav-item', onclick: openCreateUnit }, icon('plus'), h('span', { class: 'nav-label muted' }, 'Создать юнит')),
+    !units.length && !staff && h('div', { class: 'nav-empty' }, 'Пока нет юнитов'),
+    staff && archived.length > 0 && h('button', {
       class: 'nav-item', onclick: () => { S.showArchivedUnits = !S.showArchivedUnits; renderSidebar(); },
     }, icon('archive'), h('span', { class: 'nav-label' }, 'Архив'), h('span', { class: 'nav-count' }, archived.length)),
-    S.showArchivedUnits && archived.map(u => unitItem(u, r)),
+    staff && S.showArchivedUnits && archived.map(u => unitItem(u, r)),
     h('div', { class: 'nav-spacer' }),
-    h('button', { class: 'nav-item', onclick: openPeople }, icon('users'), h('span', { class: 'nav-label' }, 'Люди')),
-    h('button', { class: 'nav-item', onclick: openDepartments }, icon('layers'), h('span', { class: 'nav-label' }, 'Отделы')),
+    staff && h('button', { class: 'nav-item', onclick: openPeople }, icon('users'), h('span', { class: 'nav-label' }, 'Люди и доступы')),
+    staff && h('button', { class: 'nav-item', onclick: openDepartments }, icon('layers'), h('span', { class: 'nav-label' }, 'Позиции')),
     h('button', { class: 'nav-item', onclick: cycleTheme, title: 'Переключить тему' }, icon(themeIcon), h('span', { class: 'nav-label' }, themeLabel)),
     mode === 'local' && h('div', { class: 'mode-badge', title: 'Supabase не подключён: данные хранятся в этом браузере. См. README.' }, 'Локальный режим: данные только в этом браузере'),
     h('button', { class: 'nav-item me', onclick: e => meMenu(e.currentTarget), title: 'Профиль' },
-      avatar(person, 'sm'), h('span', { class: 'nav-label' }, person ? person.name : 'Кто вы?')));
+      avatar(person, 'sm'),
+      h('span', { class: 'nav-label me-label' }, h('span', null, person ? person.name : '—'),
+        person && h('small', null, personCaption(person) || ACCESS_LABELS[person.access]))));
 
-  if (units.length > 1) {
+  if (staff && units.length > 1) {
     Sortable.create(list, {
       animation: 150, delay: 150, delayOnTouchOnly: true,
       onEnd: () => {
@@ -89,7 +94,7 @@ function meMenu(anchor) {
   menu(anchor, [
     email && { title: email },
     { label: 'Мой профиль', icon: 'user', action: openMyProfile },
-    mode === 'local' && { label: 'Сменить пользователя', icon: 'users', action: () => openWhoAmI() },
+    mode === 'local' && { label: 'Войти как…', icon: 'users', action: openActAs },
     mode === 'supabase' && { sep: true },
     mode === 'supabase' && { label: 'Выйти', icon: 'back', action: () => supabase.auth.signOut() },
   ]);
