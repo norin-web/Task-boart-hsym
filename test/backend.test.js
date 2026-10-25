@@ -193,6 +193,12 @@ test('свои колонки, отделы, состав команды', async
   assert.equal(t2.departmentId, 'd_design'); // отдел подставился из состава команды
   const ex = (await api('getTaskExtras', { taskId: t.id })).activity.map(a => `${a.label}:${a.toText}`);
   assert.ok(ex.includes('Позиция:Design'), ex.join(' | '));
+  // позиция следует за исполнителем: другой исполнитель с позицией iOS
+  const dev = await api('createPerson', { name: 'Дима', positionId: 'd_ios' });
+  assert.equal((await api('updateTask', { id: t.id, patch: { assigneeId: dev.id } })).departmentId, 'd_ios');
+  // явная позиция в том же изменении важнее
+  assert.equal((await api('updateTask', { id: t.id, patch: { assigneeId: p.id, departmentId: 'd_aso' } })).departmentId, 'd_aso');
+  await api('updateTask', { id: t.id, patch: { assigneeId: p.id, departmentId: 'd_design' } });
   await api('deleteDepartment', { id: 'd_design' });
   assert.equal((await api('getBoard', { unitId: u.id })).tasks[0].departmentId, '');
   assert.equal((await api('bootstrap', {})).units[0].members[0], p.id);

@@ -4,7 +4,7 @@ import { $, h, icon, avatar, topbar, showErr, fill } from '../ui.js';
 import { call } from '../api.js';
 import { currentView, link, navigate } from '../router.js';
 import { renderSidebar } from './sidebar.js';
-import { attentionBlock, workloadBlock, roleBadge } from './home.js';
+import { signalsBlock, workloadBlock, roleBadge } from './home.js';
 import { peopleManager, positionsManager } from './people.js';
 import { activityFeed } from './feed.js';
 import { openCreateUnit, unitMenu } from './units.js';
@@ -67,8 +67,9 @@ function overview(d, ov) {
       kpi('Юниты', units.length, { view: 'admin', tab: 'units' }),
       kpi('Открытых задач', d.stats.todo + d.stats.in_progress, { view: 'home' }),
       kpi('Просрочено', d.stats.overdue, { view: 'home' })),
+    signalsBlock(ov),
     h('div', { class: 'home-grid' },
-      h('div', { class: 'home-col' }, attentionBlock(ov), workloadBlock(ov, { all: true })),
+      h('div', { class: 'home-col' }, workloadBlock(ov, { all: true })),
       h('div', { class: 'home-col' },
         h('section', null,
           h('div', { class: 'section-head' }, h('h2', null, 'Быстрые действия')),

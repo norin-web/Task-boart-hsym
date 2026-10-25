@@ -341,7 +341,7 @@ function sideBlock(t, { staff, editable }) {
   } else if (!B.assignee.hidden) {
     prop(B.assignee.label, assigneeSelect(t.assigneeId, v => {
       const before = t.departmentId;
-      patchTask(t, { assigneeId: v }).then(() => { if (!before && t.departmentId) refreshPanel(t); });
+      patchTask(t, { assigneeId: v }).then(() => { if (t.departmentId !== before) refreshPanel(t); });
     }), {
       after: S.meId && t.assigneeId !== S.meId && h('button', {
         class: 'link-btn prop-hint', onclick: () => { patchTask(t, { assigneeId: S.meId }); refreshPanel(t); },
@@ -532,7 +532,12 @@ export function openCreateTask(opts = {}) {
       }, units.map(u => h('option', { value: u.id }, u.name + ' · ' + u.key)))),
       field(B.status.label, h('select', { class: 'inp', value: draft.status || unit.settings.columns[0].id, onchange: e => { draft.status = e.target.value; } },
         unit.settings.columns.map(c => h('option', { value: c.id }, c.name)))),
-      !B.assignee.hidden && field(B.assignee.label, assigneeSelect(draft.assigneeId, v => { draft.assigneeId = v; }, inBoard ? {} : { ids: unit.members || [], unitId: unit.id })),
+      !B.assignee.hidden && field(B.assignee.label, assigneeSelect(draft.assigneeId, v => {
+        draft.assigneeId = v;
+        // Позиция следует за исполнителем
+        const p = personById(v);
+        if (p && p.positionId) { draft.departmentId = p.positionId; drawProps(); }
+      }, inBoard ? {} : { ids: unit.members || [], unitId: unit.id })),
       !B.department.hidden && field(B.department.label, deptSelect(draft.departmentId, v => { draft.departmentId = v; })),
       !B.dueDate.hidden && field(B.dueDate.label, h('input', { class: 'inp', type: 'date', value: draft.dueDate, onchange: e => { draft.dueDate = e.target.value; } })),
       inBoard && activeFields().map(f => field(f.name + (f.required ? ' *' : ''),
@@ -541,9 +546,8 @@ export function openCreateTask(opts = {}) {
   };
   drawProps();
 
-  const forWho = opts.assigneeId && personById(opts.assigneeId);
   const close = modal({
-    title: 'Новая задача' + (forWho ? ' · ' + forWho.name : ''),
+    title: 'Новая задача',
     wide: true,
     body: [title, h('div', { style: { height: '10px' } }), desc, h('div', { style: { height: '14px' } }), props],
     footLeft: more,

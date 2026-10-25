@@ -104,7 +104,8 @@ export function unitSettings(raw) {
     columns,
     builtins: Object.fromEntries(Object.entries(d.builtins).map(([k, def]) => {
       const cur = builtins[k] || {};
-      return [k, { label: str(cur.label, 40) || def.label, hideable: def.hideable, hidden: def.hideable ? !!cur.hidden : false }];
+      const label = str(cur.label, 40);
+      return [k, { label: (k === 'department' && label === 'Отдел' ? '' : label) || def.label, hideable: def.hideable, hidden: def.hideable ? !!cur.hidden : false }];
     })),
     autoArchiveDays: Math.max(0, Math.min(365, parseInt(s.autoArchiveDays, 10) || 0)),
   };
@@ -722,8 +723,9 @@ export function createBackend(db, opts = {}) {
         if (v !== t.assignee_id) {
           change('assigneeId', t.assignee_id, v);
           t.assignee_id = v;
-          const d = !t.department_id && !('departmentId' in patch) && (await memberDept(t.unit_id, v));
-          if (d) { change('departmentId', '', d); t.department_id = d; }
+          // Позиция задачи следует за исполнителем (если её не задали явно в этом же изменении)
+          const d = !('departmentId' in patch) && (await memberDept(t.unit_id, v));
+          if (d && d !== t.department_id) { change('departmentId', t.department_id, d); t.department_id = d; }
         }
       }
       if ('dueDate' in patch) {
