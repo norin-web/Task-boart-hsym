@@ -686,3 +686,29 @@ body.login-page #shell { display: block; }
 @media (max-width: 1000px) { .lz-grid { grid-template-columns: 1fr; } .lz-bar { flex-wrap: wrap; } }
 .lb-preview .section-head h2 { display: none; }
 .lb-preview .section-head { justify-content: flex-end; }
+
+/* Блоки подстраиваются под ширину своей колонки (любой блок можно поставить в узкую) */
+.home-col, .lz-list { container-type: inline-size; }
+.home-col { grid-template-columns: minmax(0, 1fr); }
+.home-col .stats { margin-bottom: 0; }
+.stat > div:last-child { min-width: 0; }
+.stat-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@container (max-width: 640px) {
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .stat { padding: 12px; gap: 10px; }
+  .stat-ic { width: 30px; height: 30px; }
+  .stat-val { font-size: 19px; }
+  .load-row { grid-template-columns: auto minmax(0, 1fr) 28px auto; }
+  .load-bar { display: none; }
+  .att-task { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .att-task > .muted { display: none; }
+  .att-row { flex-wrap: wrap; }
+  .att-row .inp.sm { max-width: none; flex: 1; }
+  .section-head { flex-wrap: wrap; gap: 6px; }
+}
+@container (max-width: 420px) {
+  .unit-grid { grid-template-columns: 1fr; }
+  .stat-ic { display: none; }
+  .load-late { display: none; }
+  .load-row { grid-template-columns: auto minmax(0, 1fr) 28px; }
+}
