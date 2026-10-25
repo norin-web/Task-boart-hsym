@@ -6,6 +6,7 @@ import { rerender } from '../router.js';
 import { mode, supabase, localPeople, localLogin } from '../data.js';
 import { LS } from '../state.js';
 import { personCaption } from './my.js';
+import { columnsEditor } from './settings.js';
 import { renderSidebar } from './sidebar.js';
 
 const sortPeople = () => S.people.sort((a, b) => a.name.localeCompare(b.name));
@@ -449,6 +450,7 @@ function dictionaryManager(cfg) {
       }),
       d.archived && h('span', { class: 'badge' }, 'скрыта'),
       h('span', { class: 'pos-count', title: 'Людей' }, icon('users', 13), cfg.count(d)),
+      cfg.extra && cfg.extra(d, draw),
       h('button', {
         class: 'icon-btn sm', title: d.archived ? 'Показать в списках' : 'Скрыть из списков (у людей и задач останется)',
         onclick: () => save(d, { archived: !d.archived }).then(draw).catch(showErr),
@@ -511,7 +513,9 @@ export const teamsManager = () => dictionaryManager({
   count: d => S.people.filter(p => (p.teamIds || []).includes(d.id)).length,
   removeText: (d, n) => `Удалить команду «${d.name}»?${n ? ` Она пропадёт у ${n} чел.` : ''} Задачи этой команды останутся без неё. Если команда может понадобиться — лучше скрыть.`,
   afterRemove: d => S.people.forEach(p => { if (p.teamIds) p.teamIds = p.teamIds.filter(x => x !== d.id); }),
-  hint: 'Команды людей: Product Team, UX/UI Designers… У человека может быть несколько. Участник видит в своих юнитах задачи своих команд.',
+  extra: (d, redraw) => h('button', { class: 'btn ghost sm', title: 'Стартовые этапы личной доски для людей этой команды', onclick: () => editTeamStages(d, redraw) },
+    icon('board', 13), (d.boardTemplate || []).length + ' этап.'),
+  hint: 'Команды людей: Product Team, UX/UI Designers… У человека может быть несколько. Участник видит в своих юнитах задачи своих команд. «Этапы» — стартовая личная доска для людей команды.',
   placeholder: 'Например, Growth Team', addTitle: 'Добавить команду', emptyText: 'Команд нет',
 });
 
@@ -527,6 +531,23 @@ export function openShortcuts() {
       row(['Esc'], 'Закрыть карточку или окно'),
       row(['⌘/Ctrl', 'Enter'], 'Сохранить описание, отправить комментарий'),
       row(['?'], 'Эта подсказка'),
+    ],
+  });
+}
+
+/** Шаблон этапов личной доски команды: его получает человек команды, пока не настроит свою. */
+function editTeamStages(team, onDone) {
+  const ed = columnsEditor((team.boardTemplate || []).map(c => ({ ...c })));
+  modal({
+    title: `Этапы доски · ${team.name}`, wide: true,
+    body: [h('p', { class: 'hint', style: { marginTop: 0 } }, 'Стартовые этапы личной доски для людей этой команды. Кто уже настроил свою доску — у того она не изменится.'), ed.el],
+    actions: [
+      { label: 'Отмена' },
+      { label: 'Сохранить', primary: true, action: async close => {
+        Object.assign(team, await send('updateTeam', { id: team.id, boardTemplate: ed.value() }));
+        close();
+        onDone();
+      } },
     ],
   });
 }

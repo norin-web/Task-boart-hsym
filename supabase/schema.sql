@@ -218,6 +218,7 @@ create table if not exists task_sets (
   ord   double precision not null default 0
 );
 
+
 -- ---------- атомарные операции ----------
 
 -- Следующий номер задачи в юните (DEV-1, DEV-2…) без гонок.
@@ -827,13 +828,33 @@ end $$;
 alter function next_task_num(text) set search_path = public;
 alter function comment_counts(text) set search_path = public;
 
+-- Личная доска: у команды — стартовый шаблон этапов (колонки с типом todo / progress / done),
+-- человек получает его на свою доску и дальше меняет под себя (people.prefs.myBoard).
+alter table teams add column if not exists board_template jsonb not null default '[]';
+update teams set board_template = '[{"id": "s1", "name": "Идеи", "kind": "todo", "color": ""}, {"id": "s2", "name": "Проработка", "kind": "progress", "color": ""}, {"id": "s3", "name": "ТЗ", "kind": "progress", "color": ""}, {"id": "s4", "name": "На контроле", "kind": "progress", "color": ""}, {"id": "s5", "name": "Готово", "kind": "done", "color": ""}]'::jsonb where id = 't_product' and board_template = '[]'::jsonb;
+update teams set board_template = '[{"id": "s1", "name": "To do", "kind": "todo", "color": ""}, {"id": "s2", "name": "Design in Progress", "kind": "progress", "color": ""}, {"id": "s3", "name": "Review", "kind": "progress", "color": ""}, {"id": "s4", "name": "Text", "kind": "progress", "color": ""}, {"id": "s5", "name": "Google Drive", "kind": "progress", "color": ""}, {"id": "s6", "name": "Done", "kind": "done", "color": ""}]'::jsonb where id = 't_design' and board_template = '[]'::jsonb;
+update teams set board_template = '[{"id": "s1", "name": "Бэклог", "kind": "todo", "color": ""}, {"id": "s2", "name": "В разработке", "kind": "progress", "color": ""}, {"id": "s3", "name": "Код-ревью", "kind": "progress", "color": ""}, {"id": "s4", "name": "На тесте", "kind": "progress", "color": ""}, {"id": "s5", "name": "Готово", "kind": "done", "color": ""}]'::jsonb where id = 't_ios' and board_template = '[]'::jsonb;
+update teams set board_template = '[{"id": "s1", "name": "Очередь", "kind": "todo", "color": ""}, {"id": "s2", "name": "Тест-план", "kind": "progress", "color": ""}, {"id": "s3", "name": "Тестирую", "kind": "progress", "color": ""}, {"id": "s4", "name": "Баги", "kind": "progress", "color": ""}, {"id": "s5", "name": "Проверено", "kind": "done", "color": ""}]'::jsonb where id = 't_qa' and board_template = '[]'::jsonb;
+update teams set board_template = '[{"id": "s1", "name": "To Do", "kind": "todo", "color": ""}, {"id": "s2", "name": "Default info", "kind": "progress", "color": ""}, {"id": "s3", "name": "Send to Apple", "kind": "progress", "color": ""}, {"id": "s4", "name": "Rejected", "kind": "progress", "color": ""}, {"id": "s5", "name": "App Store", "kind": "done", "color": ""}]'::jsonb where id = 't_release' and board_template = '[]'::jsonb;
+update teams set board_template = '[{"id": "s1", "name": "Нужно сделать", "kind": "todo", "color": ""}, {"id": "s2", "name": "В работе", "kind": "progress", "color": ""}, {"id": "s3", "name": "Готово", "kind": "done", "color": ""}]'::jsonb where id = 't_aso' and board_template = '[]'::jsonb;
+update teams set board_template = '[{"id": "s1", "name": "Нужно сделать", "kind": "todo", "color": ""}, {"id": "s2", "name": "В работе", "kind": "progress", "color": ""}, {"id": "s3", "name": "Готово", "kind": "done", "color": ""}]'::jsonb where id = 't_other' and board_template = '[]'::jsonb;
+
+-- Где лежит задача на личной доске человека (этап и порядок). Видно и меняется только им самим.
+create table if not exists my_board (
+  person_id text not null references people(id) on delete cascade,
+  task_id   text not null references tasks(id) on delete cascade,
+  stage     text not null default '',
+  ord       double precision not null default 0,
+  primary key (person_id, task_id)
+);
+
 -- ---------- правила доступа (RLS) ----------
 -- Без входа — ничего. Регистрация закрыта в Supabase Auth; людей добавляет администратор.
 
 do $$
 declare t text;
 begin
-  foreach t in array array['teams', 'units', 'fields', 'people', 'departments', 'unit_members', 'tasks', 'comments', 'activity', 'link_fields', 'task_links', 'notifications', 'task_templates'] loop
+  foreach t in array array['teams', 'units', 'fields', 'people', 'departments', 'unit_members', 'tasks', 'comments', 'activity', 'link_fields', 'task_links', 'notifications', 'task_templates', 'my_board'] loop
     execute format('alter table %I enable row level security', t);
     execute format('drop policy if exists team_all on %I', t);
   end loop;
@@ -936,6 +957,11 @@ drop policy if exists templates_read on task_templates;
 create policy templates_read on task_templates for select to authenticated using (true);
 drop policy if exists templates_write on task_templates;
 create policy templates_write on task_templates for all to authenticated using (is_staff()) with check (is_staff());
+
+-- Личная доска: только своя.
+drop policy if exists my_board_own on my_board;
+create policy my_board_own on my_board for all to authenticated
+  using (person_id = my_person_id()) with check (person_id = my_person_id());
 
 -- Уведомления: только свои; создаёт их триггер.
 drop policy if exists notifications_own on notifications;

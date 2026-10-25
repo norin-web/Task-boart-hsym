@@ -271,11 +271,14 @@ export function openFieldEditor(f, { global = !!(f && f.global), columns = [], o
 /* ---------- колонки ---------- */
 
 /** Редактор набора колонок: название, тип, цвет, порядок, удаление. Возвращает { el, value() }. */
-function columnsEditor(initial) {
+export function columnsEditor(initial) {
   let cols = initial.map(c => ({ ...c }));
   const el = h('div');
-  const draw = () => fill(el,
-    cols.map((c, i) => h('div', { class: 'col-edit-row' },
+  const list = h('div', { class: 'col-edit-list' });
+  let sortable = null;
+  const draw = () => {
+    fill(list, cols.map((c, i) => h('div', { class: 'col-edit-row', dataset: { i } },
+      h('span', { class: 'drag', title: 'Перетащите, чтобы изменить порядок' }, icon('grip', 16)),
       h('button', {
         class: 'swatch', title: 'Цвет', style: { background: colColor(c) },
         onclick: e => {
@@ -287,17 +290,22 @@ function columnsEditor(initial) {
       }),
       h('input', { class: 'inp', value: c.name, maxlength: 40, placeholder: 'Название', oninput: e => { c.name = e.target.value; } }),
       h('select', { class: 'inp', value: c.kind, onchange: e => { c.kind = e.target.value; draw(); } }, KINDS.map(k => h('option', { value: k }, KIND_LABELS[k]))),
-      h('button', { class: 'icon-btn sm', title: 'Выше', disabled: i === 0, onclick: () => { cols.splice(i - 1, 0, cols.splice(i, 1)[0]); draw(); } }, '↑'),
-      h('button', { class: 'icon-btn sm', title: 'Ниже', disabled: i === cols.length - 1, onclick: () => { cols.splice(i + 1, 0, cols.splice(i, 1)[0]); draw(); } }, '↓'),
-      h('button', { class: 'icon-btn sm', title: 'Удалить колонку', disabled: cols.length === 1, onclick: () => { cols.splice(i, 1); draw(); } }, icon('x', 14)))),
-    h('button', {
-      class: 'btn sm', onclick: () => {
-        const at = cols.findIndex(c => c.kind === 'done');
-        cols.splice(at < 0 ? cols.length : at, 0, { id: 'c_' + Math.random().toString(36).slice(2, 10), name: '', kind: 'progress', color: '' });
-        draw();
-        el.querySelectorAll('.col-edit-row .inp')[(at < 0 ? cols.length - 1 : at) * 2].focus();
-      },
-    }, icon('plus', 13), 'Колонка'));
+      h('button', { class: 'icon-btn sm', title: 'Удалить колонку', disabled: cols.length === 1, onclick: () => { cols.splice(i, 1); draw(); } }, icon('x', 14)))));
+    if (sortable) sortable.destroy();
+    // порядок — перетаскиванием за ручку
+    sortable = Sortable.create(list, {
+      handle: '.drag', animation: 150, ghostClass: 'sortable-ghost', forceFallback: true, fallbackTolerance: 4,
+      onEnd: () => { cols = [...list.children].map(r => cols[Number(r.dataset.i)]); draw(); },
+    });
+  };
+  fill(el, list, h('button', {
+    class: 'btn sm', onclick: () => {
+      const at = cols.findIndex(c => c.kind === 'done');
+      cols.splice(at < 0 ? cols.length : at, 0, { id: 'c_' + Math.random().toString(36).slice(2, 10), name: '', kind: 'progress', color: '' });
+      draw();
+      list.querySelectorAll('.col-edit-row .inp')[(at < 0 ? cols.length - 1 : at) * 2].focus();
+    },
+  }, icon('plus', 13), 'Колонка'));
   draw();
   return { el, value: () => cols.map(c => ({ ...c, name: c.name.trim() || 'Колонка' })) };
 }

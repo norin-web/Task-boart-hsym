@@ -451,6 +451,35 @@ test('команды: у человека несколько, видимость
   });
 });
 
+test('личная доска: шаблоны этапов команд, только свои задачи и своё положение', async () => {
+  const api = await setup();
+  const { mod, designer, dev, A, t1, t2 } = await team(api);
+  const teams = (await api('bootstrap', {})).teams;
+  assert.deepEqual(teams.find(t => t.id === 't_design').boardTemplate.map(c => c.name),
+    ['To do', 'Design in Progress', 'Review', 'Text', 'Google Drive', 'Done']);
+  assert.deepEqual(teams.find(t => t.id === 't_release').boardTemplate.map(c => c.kind), ['todo', 'progress', 'progress', 'progress', 'done']);
+  // шаблон меняют админы; пустой — нельзя
+  await api.as(designer, async () => {
+    await assert.rejects(() => api('updateTeam', { id: 't_design', boardTemplate: [{ name: 'x', kind: 'todo' }] }), forbidden);
+  });
+  await assert.rejects(() => api('updateTeam', { id: 't_design', boardTemplate: [] }), /хотя бы один/);
+  const upd = await api.as(mod, () => api('updateTeam', { id: 't_qa', boardTemplate: [{ name: 'Очередь', kind: 'todo' }, { name: 'Ок', kind: 'done', id: 'BAD id' }] }));
+  assert.deepEqual(upd.boardTemplate.map(c => c.id), ['s1', 's2']);
+
+  await api.as(designer, async () => {
+    const b = await api('getMyBoard', { personId: designer.id });
+    assert.deepEqual(b.tasks.map(t => t.id), [t1.id]); // только свои
+    assert.equal(b.units[0].id, A.id);
+    await api('setMyBoardItem', { personId: designer.id, taskId: t1.id, stage: 's2', order: 3 });
+    assert.deepEqual((await api('getMyBoard', { personId: designer.id })).placement[t1.id], { stage: 's2', order: 3 });
+    await assert.rejects(() => api('setMyBoardItem', { personId: dev.id, taskId: t2.id, stage: 's1' }), forbidden); // чужая доска
+  });
+  await api.as(dev, async () => {
+    assert.deepEqual((await api('getMyBoard', { personId: dev.id })).placement, {}); // положение дизайнера не видно
+    assert.deepEqual((await api('getMyBoard', { personId: designer.id })).placement, {});
+  });
+});
+
 test('профили: свой профиль, роли меняет только супер-админ', async () => {
   const api = await setup();
   const { admin, mod, designer, dev } = await team(api);

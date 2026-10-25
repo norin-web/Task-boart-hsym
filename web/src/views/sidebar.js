@@ -75,6 +75,7 @@ export function renderSidebar() {
     h('button', { class: 'search-btn', onclick: openPalette }, icon('search', 15), h('span', null, 'Поиск'), h('kbd', null, isMac ? '⌘K' : 'Ctrl K')),
     link({ view: 'home' }, { class: 'nav-item' + (!r.unit && (!r.view || r.view === 'home') ? ' active' : '') }, icon('home'), h('span', { class: 'nav-label' }, staff ? 'Главная' : 'Мой дашборд'),
       h('span', { class: 'nav-badge', id: 'unread-badge', title: 'Новые задачи на вас', hidden: !S.unread }, S.unread || '')),
+    link({ view: 'myboard' }, { class: 'nav-item' + (r.view === 'myboard' ? ' active' : '') }, icon('board'), h('span', { class: 'nav-label' }, 'Моя доска')),
     staff && link({ view: 'my' }, { class: 'nav-item' + (r.view === 'my' ? ' active' : '') }, icon('user'), h('span', { class: 'nav-label' }, 'Мои задачи')),
     staff && link({ view: 'admin' }, { class: 'nav-item' + (r.view === 'admin' ? ' active' : '') }, icon('settings'), h('span', { class: 'nav-label' }, 'Панель админа')),
     h('div', { class: 'nav-section' },

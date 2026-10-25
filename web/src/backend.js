@@ -224,7 +224,19 @@ const personOut = r => ({
   teamIds: json(r.team_ids, []) || [],
   positionIds: [r.position_id || 'd_other', ...(json(r.extra_positions, []) || [])],
 });
-const teamOut = r => ({ id: r.id, name: r.name, color: r.color, order: r.ord, archived: !!r.archived });
+const teamOut = r => ({ id: r.id, name: r.name, color: r.color, order: r.ord, archived: !!r.archived, boardTemplate: cleanStages(json(r.board_template, [])) });
+
+/** Этапы личной доски: колонки { id, name, kind: todo|progress|done, color }, до 12, хотя бы одна. */
+function cleanStages(list) {
+  const seen = new Set();
+  const out = (Array.isArray(list) ? list : []).slice(0, 12).map((c, i) => {
+    let id = /^[a-z0-9_]{1,40}$/.test((c && c.id) || '') ? c.id : 's' + (i + 1);
+    while (seen.has(id)) id += '_';
+    seen.add(id);
+    return { id, name: str(c && c.name, 40) || 'Этап', kind: KINDS.includes(c && c.kind) ? c.kind : 'progress', color: color(c && c.color, '') };
+  });
+  return out;
+}
 const deptOut = r => ({ id: r.id, name: r.name, color: r.color, order: r.ord, archived: !!r.archived });
 export const LINK_KINDS = ['figma', 'github', 'drive', 'meta', 'link'];
 const linkFieldOut = r => ({
@@ -1208,6 +1220,35 @@ export function createBackend(db, opts = {}) {
 
     /* ---------- отделы (общий справочник) ---------- */
 
+    /* ---------- личная доска ---------- */
+
+    /**
+     * Моя доска: задачи, назначенные на человека (из всех юнитов), где лежит каждая на его доске,
+     * и юниты этих задач с колонками (для типа статуса). Этапы самой доски — в people.prefs.myBoard.
+     */
+    async getMyBoard(p) {
+      const me = str(p.personId, 40);
+      const rows = await all(() => T('tasks').select('*').eq('assignee_id', me).eq('archived', false).order('id'));
+      const unitIds = [...new Set(rows.map(t => t.unit_id))];
+      const [units, places] = await Promise.all([
+        unitIds.length ? run(T('units').select('id,name,key,color,settings,archived').in('id', unitIds)) : [],
+        all(() => T('my_board').select('task_id,stage,ord').eq('person_id', me).order('task_id')),
+      ]);
+      const live = new Set(units.filter(u => !u.archived).map(u => u.id));
+      return {
+        tasks: rows.filter(t => live.has(t.unit_id)).map(taskOut),
+        units: units.filter(u => !u.archived).map(u => ({ id: u.id, name: u.name, key: u.key, color: u.color, columns: unitSettings(u.settings).columns })),
+        placement: Object.fromEntries(places.map(r => [r.task_id, { stage: r.stage, order: Number(r.ord) }])),
+      };
+    },
+
+    /** Положить задачу в этап своей доски (порядок — order). Чужую доску база не даст тронуть. */
+    async setMyBoardItem(p) {
+      const row = { person_id: str(p.personId, 40), task_id: str(p.taskId, 40), stage: str(p.stage, 40), ord: Number(p.order) || 0 };
+      await run(T('my_board').upsert(row, { onConflict: 'person_id,task_id' }));
+      return true;
+    },
+
     /* ---------- команды (общий справочник) ---------- */
 
     async createTeam(p) {
@@ -1223,6 +1264,10 @@ export function createBackend(db, opts = {}) {
       if ('name' in p) upd.name = req(str(p.name, 40), 'Название команды');
       if ('color' in p) upd.color = color(p.color, t.color);
       if ('archived' in p) upd.archived = !!p.archived;
+      if ('boardTemplate' in p) {
+        upd.board_template = cleanStages(p.boardTemplate);
+        if (!upd.board_template.length) fail('Нужен хотя бы один этап');
+      }
       await updateOne('teams', t.id, upd);
       return teamOut({ ...t, ...upd });
     },
