@@ -222,7 +222,8 @@ function passwordBlock() {
 /* ================= Локальный режим: «Войти как» ================= */
 
 export async function openActAs() {
-  const people = await localPeople();
+  const rank = { superadmin: 0, moderator: 1, member: 2 };
+  const people = (await localPeople()).sort((a, b) => rank[a.access] - rank[b.access] || a.name.localeCompare(b.name));
   modal({
     title: 'Войти как…',
     body: [
@@ -241,8 +242,9 @@ export async function openActAs() {
       avatar({ id: p.id, name: p.name }),
       h('span', { class: 'person-text' },
         h('span', { class: 'person-name' }, p.name, S.meId === p.id && h('span', { class: 'badge' }, 'сейчас')),
-        h('span', { class: 'person-sub' }, personCaption({ access: p.access, positionId: p.position_id }) || ACCESS_LABELS[p.access])),
-      !p.active && h('span', { class: 'badge' }, 'отключён')))),
+        h('span', { class: 'person-sub' }, (deptById(p.position_id) || {}).name || 'без позиции')),
+      !p.active && h('span', { class: 'badge' }, 'отключён'),
+      h('span', { class: 'role-badge role-' + p.access }, ACCESS_LABELS[p.access])))),
     ],
   });
 }
