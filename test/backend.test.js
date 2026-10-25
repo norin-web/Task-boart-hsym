@@ -426,3 +426,44 @@ test('передача вниз как есть: копия с чеклисто�
   assert.equal((await api('getBoard', { unitId: ceoId })).tasks.find(t => t.id === app.id).status, 'go'); // ушло в работу
   assert.equal((await api('handoffTask', { id: app.id })).copyId, r.copyId); // повтор — та же копия
 });
+
+test('мастер структуры: собрать, изменить, повторить без дублей', async () => {
+  const api = await setup();
+  const masha = await api('createPerson', { name: 'Мария', positionId: 'd_design' });
+  const dima = await api('createPerson', { name: 'Дима', positionId: 'd_ios' });
+  const r = await api('applyStructure', {
+    app: { name: 'App' }, managers: { name: 'Managers' },
+    units: [{ name: 'MVP', teams: ['t_design', 't_ios'] }],
+    people: { [masha.id]: ['t_design'], [dima.id]: ['t_ios'] },
+  });
+  let units = (await api('bootstrap', {})).units;
+  const byId = id => units.find(u => u.id === id);
+  assert.equal(byId(r.managersId).parentId, r.appId);
+  assert.equal(byId(r.unitIds[0]).parentId, r.managersId);
+  assert.deepEqual(byId(r.appId).settings.columns.map(c => c.kind), ['todo', 'progress', 'live']);
+  assert.equal(byId(r.appId).settings.handoff.unitId, r.managersId);
+  const teamUnits = () => (units = null, api('bootstrap', {})).then(b => { units = b.units; return b.units.filter(u => u.parentId === r.unitIds[0] && !u.archived); });
+  let tus = await teamUnits();
+  assert.deepEqual(tus.map(u => u.teamId).sort(), ['t_design', 't_ios']);
+  assert.deepEqual(tus.find(u => u.teamId === 't_design').members, [masha.id]); // состав — из команды человека
+
+  // повтор с изменениями: убрали iOS, добавили QA и второй юнит, переименовали
+  const r2 = await api('applyStructure', {
+    app: { id: r.appId, name: 'Apps' }, managers: { id: r.managersId, name: 'Managers' },
+    units: [{ id: r.unitIds[0], name: 'MVP', teams: ['t_design', 't_qa'] }, { name: 'Sleep', teams: [] }],
+    people: { [masha.id]: ['t_design'], [dima.id]: ['t_ios'] },
+  });
+  assert.equal(r2.appId, r.appId);
+  tus = await teamUnits();
+  assert.deepEqual(tus.map(u => u.teamId).sort(), ['t_design', 't_qa']); // iOS — в корзину
+  assert.equal(units.filter(u => u.teamId === 't_ios' && u.parentId === r.unitIds[0]).length, 1); // не удалён, а в архиве
+  assert.equal(units.find(u => u.id === r.appId).name, 'Apps');
+  assert.equal(units.filter(u => !u.archived && u.parentId === r.managersId).length, 2);
+  // ещё раз то же — без дублей
+  await api('applyStructure', {
+    app: { id: r.appId, name: 'Apps' }, managers: { id: r.managersId, name: 'Managers' },
+    units: [{ id: r.unitIds[0], name: 'MVP', teams: ['t_design', 't_qa'] }, { id: r2.unitIds[1], name: 'Sleep', teams: [] }],
+  });
+  const all = (await api('bootstrap', {})).units;
+  assert.equal(all.length, units.length);
+});

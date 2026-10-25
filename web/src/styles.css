@@ -1098,3 +1098,29 @@ button.kpi { font: inherit; text-align: left; cursor: pointer; color: inherit; }
 .aa-open { color: var(--accent-text); }
 .aa-prog .progress { display: inline-block; width: 70px; height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
 .aa-prog .progress > span { display: block; height: 100%; background: var(--st-done); }
+
+/* мастер структуры */
+.sw { display: grid; gap: 14px; }
+.sw-steps { display: flex; gap: 4px; flex-wrap: wrap; }
+.sw-step { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; font: inherit; font-size: 13px; color: var(--muted); padding: 4px 8px 4px 4px; border-radius: 99px; cursor: pointer; }
+.sw-step.on { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
+.sw-step.done { color: var(--text-2); }
+.sw-num { display: inline-flex; width: 20px; height: 20px; border-radius: 50%; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; background: var(--surface-2); }
+.sw-step.on .sw-num { background: var(--accent); color: #fff; }
+.sw-step.done .sw-num { background: var(--st-done); color: #fff; }
+.sw-page { display: grid; gap: 10px; min-height: 220px; align-content: start; }
+.sw-page .hint { margin: 0; }
+.sw-level { display: grid; grid-template-columns: 18px 110px 1fr; gap: 10px; align-items: center; }
+.sw-level.sub { margin-left: 22px; }
+.sw-k { font-size: 12px; color: var(--muted); }
+.sw-list { display: grid; gap: 6px; }
+.sw-row { display: flex; align-items: center; gap: 8px; }
+.sw-row .inp { flex: 1; }
+.sw-block { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
+.sw-team { display: inline-flex; align-items: center; gap: 7px; }
+.sw-chip .avatar { margin-left: -4px; }
+.sw-tree { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.sw-node { display: flex; align-items: center; gap: 8px; padding-left: calc(var(--d) * 22px); font-size: 13px; min-height: 26px; }
+.sw-node > .i { color: var(--muted); }
+.sw-nav { display: flex; justify-content: space-between; border-top: 1px solid var(--border); padding-top: 12px; }
+.modal-foot:empty { display: none; }

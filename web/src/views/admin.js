@@ -11,6 +11,7 @@ import { renderSidebar } from './sidebar.js';
 import { attentionBlock, workloadBlock, roleBadge } from './home.js';
 import { peopleManager, positionsManager, teamsManager, addPersonDialog, teamChips, positionChips, addMemberDialog } from './people.js';
 import { openCreateTask } from './task.js';
+import { openStructureWizard } from './structure.js';
 import { activityFeed } from './feed.js';
 import { openCreateUnit, unitMenu, archiveUnit, deleteUnit } from './units.js';
 
@@ -169,19 +170,6 @@ function trashTable(settings) {
 }
 
 /** Юниты: простые строки с подписями; клик — карточка юнита справа, поверх страницы (никуда не уводит). */
-/** Иерархия одним нажатием: «Компания» → «Модераторы» → текущие юниты, передача вниз включена. */
-async function setupHierarchy() {
-  const names = S.units.filter(u => !u.archived).map(u => u.name).join(', ');
-  const ok = await confirmDlg(`Создать «Компания» (приложения) и «Модераторы» (жизненный цикл)${names ? ' и поставить под Модераторов: ' + names : ''}? Задача Компании в «В работу» будет сама появляться у Модераторов. Уровни потом меняются в настройках юнитов.`,
-    { ok: 'Собрать', title: 'Структура юнитов' });
-  if (!ok) return;
-  try {
-    await send('setupHierarchy', {});
-    toast('Структура готова: Компания → Модераторы → команды');
-    renderAdmin('units');
-  } catch (e) { showErr(e); }
-}
-
 function unitsTable(ov) {
   const units = S.units.filter(u => !u.archived).sort(byOrder);
   const noTeam = new Set(ov ? ov.unitsNoTeam : []);
@@ -206,7 +194,8 @@ function unitsTable(ov) {
   draw();
   return h('div', null,
     h('div', { class: 'section-head' }, unitsSwitch(false), h('div', { class: 'row', style: { gap: '6px' } },
-      !units.some(u => u.parentId) && h('button', { class: 'btn sm', title: 'Компания → Модераторы → ваши юниты, передача «В работу» → Модераторы', onclick: setupHierarchy }, icon('tree', 14), 'Собрать структуру'),
+      h('button', { class: 'btn sm', title: 'App → Managers → юниты → команды → люди, по шагам', onclick: () => openStructureWizard(() => location.reload()) },
+        icon('tree', 14), units.some(u => u.parentId) ? 'Структура' : 'Собрать структуру'),
       h('button', { class: 'btn primary sm', onclick: openCreateUnit }, icon('plus', 14), 'Юнит'))),
     list);
 }

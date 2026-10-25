@@ -841,6 +841,75 @@ export function createBackend(db, opts = {}) {
     },
 
     /**
+     * Мастер структуры: App (приложения) → Managers (жизненный цикл) → рабочие юниты → команды внутри → люди в командах.
+     * Создаёт недостающее и обновляет существующее; повторный вызов ничего не дублирует.
+     * p: { app: { id?, name }, managers: { id?, name }, units: [{ id?, name, teams: [teamId] }], removeUnits: [id], people: { personId: [teamId] } }
+     */
+    async applyStructure(p, ctx) {
+      const existing = id => id ? one('units', id) : null;
+      // люди по командам — сначала: юниты-команды берут состав из команд людей
+      for (const [personId, teamIds] of Object.entries(p.people || {})) {
+        const person = await one('people', personId);
+        if (!person) continue;
+        const next = await cleanTeams(teamIds);
+        if (JSON.stringify([...next].sort()) !== JSON.stringify([...(json(person.team_ids, []) || [])].sort())) {
+          await methods.updatePerson({ id: personId, teamIds: next });
+        }
+      }
+      // App
+      let ceo = await existing(p.app && p.app.id);
+      const appName = str(p.app && p.app.name, 80) || 'App';
+      if (!ceo) {
+        const made = await methods.createUnit({ name: appName, key: (await keyTaken('CEO')) ? '' : 'CEO', color: '#0f766e', description: 'Приложения: в работе → в сторе → снова в работу' }, ctx);
+        await methods.updateUnit({ id: made.id, settings: { ...made.settings, columns: [
+          { id: 'idea', name: 'To Do', kind: 'todo' }, { id: 'go', name: 'In Progress', kind: 'progress' }, { id: 'launched', name: 'In Store', kind: 'live' },
+        ] } });
+        ceo = await one('units', made.id);
+      } else if (ceo.name !== appName) await methods.updateUnit({ id: ceo.id, name: appName });
+      // Managers
+      let mod = await existing(p.managers && p.managers.id);
+      const modName = str(p.managers && p.managers.name, 80) || 'Managers';
+      if (!mod) {
+        const made = await methods.createUnit({ name: modName, key: (await keyTaken('MOD')) ? '' : 'MOD', color: '#7c3aed', description: 'Жизненный цикл приложений, апдейты и реджекты' }, ctx);
+        await methods.updateUnit({ id: made.id, settings: { ...made.settings, columns: [
+          { id: 'brief', name: 'Бриф', kind: 'todo' }, { id: 'design', name: 'Дизайн', kind: 'progress', color: '#ec4899' },
+          { id: 'dev', name: 'Разработка', kind: 'progress', color: '#3b82f6' }, { id: 'qa', name: 'Тест', kind: 'progress', color: '#f59e0b' },
+          { id: 'store', name: 'Ревью стора', kind: 'progress', color: '#8b5cf6' }, { id: 'live', name: 'В сторе', kind: 'live' },
+        ] } });
+        mod = await one('units', made.id);
+      }
+      await methods.updateUnit({ id: mod.id, name: modName, parentId: ceo.id });
+      // передача App → Managers: в первую рабочую колонку App
+      const ceoSt = unitSettings((await one('units', ceo.id)).settings);
+      const goCol = (ceoSt.handoff && ceoSt.handoff.column) || (ceoSt.columns.find(c => c.kind === 'progress') || ceoSt.columns[0]).id;
+      await methods.updateUnit({ id: ceo.id, settings: { ...ceoSt, handoff: { column: goCol, unitId: mod.id } } });
+      // рабочие юниты и команды внутри
+      const unitIds = [];
+      for (const def of p.units || []) {
+        const name = str(def.name, 80);
+        if (!name) continue;
+        let u = await existing(def.id);
+        if (!u) u = await one('units', (await methods.createUnit({ name, key: await uniqueKey(name) }, ctx)).id); // ключ — из названия (MVP → MVP)
+        await methods.updateUnit({ id: u.id, name, parentId: mod.id, ...(u.archived ? { archived: false } : {}) });
+        unitIds.push(u.id);
+        const want = new Set(await cleanTeams(def.teams || []));
+        const kids = await run(T('units').select('id,team_id,archived').eq('parent_id', u.id));
+        for (const k of kids.filter(k => k.team_id)) {
+          if (want.has(k.team_id) && k.archived) await methods.updateUnit({ id: k.id, archived: false });
+          if (!want.has(k.team_id) && !k.archived) await methods.updateUnit({ id: k.id, archived: true }); // в корзину, задачи сохраняются
+        }
+        const missing = [...want].filter(t => !kids.some(k => k.team_id === t));
+        if (missing.length) await methods.setupTeamUnits({ unitId: u.id, teamIds: missing }, ctx);
+      }
+      for (const id of p.removeUnits || []) {
+        const u = await existing(id);
+        if (u && !u.archived && u.parent_id === mod.id) await methods.updateUnit({ id: u.id, archived: true });
+      }
+      await methods.reorderUnits({ ids: [ceo.id, mod.id, ...unitIds] });
+      return { appId: ceo.id, managersId: mod.id, unitIds };
+    },
+
+    /**
      * Команды внутри юнита одним шагом: по юниту на каждую команду справочника (Design, iOS…), кто в команде — в состав.
      * Уже созданные (по команде) не дублирует.
      */
