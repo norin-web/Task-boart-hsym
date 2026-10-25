@@ -1,8 +1,8 @@
 /** Лента событий с фильтрами: главная администратора и «Журнал» в панели админа. */
 import { S, LS, personById, relTime, fmtDateTime, activeDepts, byOrder } from '../state.js';
-import { h, icon, avatar, fill, showErr, toast } from '../ui.js';
+import { h, icon, avatar, fill, showErr, toast, menu } from '../ui.js';
 import { call } from '../api.js';
-import { link } from '../router.js';
+import { taskLink } from '../router.js';
 
 const KINDS = [
   ['status', 'Смена статуса'], ['assign', 'Назначения'], ['comment', 'Комментарии'], ['create', 'Создание'],
@@ -30,7 +30,7 @@ export function feedItem(a) {
     avatar(p, 'sm'),
     h('div', { class: 'feed-body' },
       h('div', { class: 'feed-text' }, h('b', null, p ? p.name : 'Кто-то'), ' · ', activityText(a)),
-      a.task && a.unit && link({ unit: a.unit.id, mode: 'board', task: a.task.id }, { class: 'feed-task' },
+      a.task && a.unit && taskLink(a.unit.id, a.task.id, { class: 'feed-task' },
         h('span', { class: 'unit-dot', style: { background: a.unit.color, margin: 0 } }),
         h('span', { class: 'key-badge' }, a.task.key),
         h('span', { class: 'ft-title' }, a.task.title)),
@@ -38,11 +38,11 @@ export function feedItem(a) {
 }
 
 /**
- * Лента с фильтрами (человек, юнит, позиция, тип), «Очистить» (скрывает прошлые события только у вас),
- * «Показать ещё». Возвращает элемент.
+ * Лента с фильтрами в одной кнопке-меню (тип, человек, юнит, позиция) и чипами активных фильтров.
+ * «Скрыть текущие» прячет прошлые события только у вас. Возвращает элемент.
  */
 export function activityFeed({ limit = 15, title = 'Последние события' } = {}) {
-  const f = { actorId: '', unitId: '', departmentId: '', kind: '' };
+  const f = { kind: '', actorId: '', unitId: '', departmentId: '' };
   let items = [];
   let more = false;
   let seq = 0;
@@ -51,30 +51,49 @@ export function activityFeed({ limit = 15, title = 'Последние собы�
   const list = h('div', { class: 'feed' });
   const footer = h('div', { class: 'feed-footer' });
   const actions = h('div', { class: 'row', style: { gap: '6px' } });
-  const filters = h('div', { class: 'feed-filters' });
+  const chips = h('div', { class: 'feed-filters' });
   const box = h('section', { class: 'feed-wrap' },
     h('div', { class: 'section-head' }, h('h2', null, title), actions),
-    filters, list, footer);
+    chips, list, footer);
 
-  const select = (key, placeholder, options) => h('select', {
-    class: 'inp sm' + (f[key] ? ' on' : ''), value: f[key], title: placeholder,
-    onchange: e => { f[key] = e.target.value; drawFilters(); load(); },
-  }, h('option', { value: '' }, placeholder), options.map(([v, t]) => h('option', { value: v }, t)));
+  const GROUPS = [
+    ['kind', 'Тип события', 'Все события', () => KINDS],
+    ['actorId', 'Человек', 'Все люди', () => S.people.map(p => [p.id, p.name])],
+    ['unitId', 'Юнит', 'Все юниты', () => S.units.filter(u => !u.archived).sort(byOrder).map(u => [u.id, u.name])],
+    ['departmentId', 'Позиция', 'Все позиции', () => activeDepts().map(d => [d.id, d.name])],
+  ];
+  const valueText = (key, v) => { const g = GROUPS.find(x => x[0] === key); const o = g[3]().find(x => x[0] === v); return o ? o[1] : v; };
+  const set = (key, v) => { f[key] = v; drawFilters(); load(); };
+
+  const pickMenu = (anchor, [key, label, all, options]) => menu(anchor, [
+    { title: label },
+    { label: all, icon: f[key] ? null : 'check', action: () => set(key, '') },
+    ...options().map(([v, t]) => ({ label: t, icon: f[key] === v ? 'check' : null, action: () => set(key, v) })),
+  ]);
+
+  const filterMenu = anchor => menu(anchor, [
+    { title: 'Фильтр' },
+    ...GROUPS.map(g => ({
+      label: h('span', { class: 'fm-row' }, g[1], h('span', { class: 'muted' }, f[g[0]] ? valueText(g[0], f[g[0]]) : 'все')),
+      icon: g[0] === 'kind' ? 'layers' : g[0] === 'actorId' ? 'user' : g[0] === 'unitId' ? 'board' : 'filter',
+      action: () => setTimeout(() => pickMenu(anchor, g), 0),
+    })),
+    Object.values(f).some(Boolean) && { label: 'Сбросить фильтры', icon: 'x', action: () => { Object.keys(f).forEach(k => { f[k] = ''; }); drawFilters(); load(); } },
+    { sep: true },
+    { label: 'Скрыть текущие события', icon: 'x', action: () => { LS.set('feedClearedAt', new Date().toISOString()); load(); toast('Лента очищена — новые события появятся здесь'); } },
+    clearedAt() && { label: 'Показать скрытые', icon: 'clock', action: () => { LS.set('feedClearedAt', ''); load(); } },
+  ]);
 
   const drawFilters = () => {
-    const active = Object.values(f).some(Boolean);
-    fill(filters,
-      select('actorId', 'Все люди', S.people.map(p => [p.id, p.name])),
-      select('unitId', 'Все юниты', S.units.filter(u => !u.archived).sort(byOrder).map(u => [u.id, u.name])),
-      select('departmentId', 'Все позиции', activeDepts().map(d => [d.id, d.name])),
-      select('kind', 'Все события', KINDS),
-      active && h('button', { class: 'link-btn', onclick: () => { Object.keys(f).forEach(k => { f[k] = ''; }); drawFilters(); load(); } }, 'Сбросить'));
-    fill(actions,
-      clearedAt() && h('button', { class: 'btn ghost sm', title: 'Показать события до очистки', onclick: () => { LS.set('feedClearedAt', ''); load(); } }, 'Показать скрытые'),
-      h('button', {
-        class: 'btn ghost sm', title: 'Скрыть текущие события (только у вас; история не удаляется)',
-        onclick: () => { LS.set('feedClearedAt', new Date().toISOString()); load(); toast('Лента очищена — новые события появятся здесь'); },
-      }, icon('x', 13), 'Очистить'));
+    const n = Object.values(f).filter(Boolean).length;
+    fill(chips, Object.entries(f).filter(([, v]) => v).map(([k, v]) => h('span', { class: 'chip filter-chip' },
+      valueText(k, v), h('button', { class: 'chip-x', title: 'Убрать фильтр', onclick: () => set(k, '') }, icon('x', 11)))),
+    clearedAt() && h('span', { class: 'chip filter-chip muted' }, 'скрыты события до ' + fmtDateTime(clearedAt()),
+      h('button', { class: 'chip-x', title: 'Показать скрытые', onclick: () => { LS.set('feedClearedAt', ''); load(); } }, icon('x', 11))));
+    fill(actions, h('button', {
+      class: 'btn ghost sm' + (n ? ' on' : ''), title: 'Фильтр и очистка ленты',
+      onclick: e => { e.stopPropagation(); filterMenu(e.currentTarget); },
+    }, icon('filter', 13), 'Фильтр', n > 0 && h('span', { class: 'count-badge' }, n)));
   };
 
   const draw = () => {

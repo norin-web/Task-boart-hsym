@@ -1,7 +1,7 @@
 import { S, me, todayStr, dueInfo, KIND_COLORS, deptById, ACCESS_LABELS } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill } from '../ui.js';
 import { call } from '../api.js';
-import { currentView, link } from '../router.js';
+import { currentView, taskLink } from '../router.js';
 
 let showDone = false;
 
@@ -55,7 +55,7 @@ export function taskGroups(tasks) {
 function row(t) {
   const due = dueInfo(t.dueDate, t.statusKind === 'done');
   const d = deptById(t.departmentId);
-  return link({ unit: t.unit.id, mode: 'board', task: t.id }, { class: 'trow' },
+  return taskLink(t.unit.id, t.id, { class: 'trow' },
     h('span', { class: 'dot', title: t.statusName, style: { background: t.statusColor || KIND_COLORS[t.statusKind] } }),
     h('span', { class: 'key-badge' }, t.key),
     h('span', { class: 't-title' }, t.title),

@@ -4,8 +4,8 @@ import {
 } from '../state.js';
 import { $, h, append, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, fill } from '../ui.js';
 import { call, send } from '../api.js';
-import { navigate } from '../router.js';
-import { renderTasks, patchTask, reloadBoard } from './board.js';
+import { navigate, rerender } from '../router.js';
+import { renderTasks, patchTask, reloadBoard, loadBoard } from './board.js';
 import { addMemberDialog } from './people.js';
 import { openCreateUnit } from './units.js';
 import { activityText } from './feed.js';
@@ -14,11 +14,33 @@ import { activityText } from './feed.js';
 
 export function closePanel() {
   S.panelTaskId = null;
+  S.peek = false;
   fill($('#panel-root'));
 }
 
 export function closeTask() {
+  if (S.peek) {
+    // Карточка была открыта поверх страницы: закрываем; страницу под ней обновляем, только если задачу меняли
+    const t = taskById(S.panelTaskId);
+    const changed = !t || t.updatedAt !== S.peekStamp;
+    closePanel();
+    if (changed) rerender();
+    return;
+  }
   if (S.board) navigate({ unit: S.board.unit.id, mode: S.route.mode === 'settings' ? 'board' : S.route.mode });
+}
+
+/** Открыть задачу поверх текущей страницы (главная, панель админа, мои задачи). На доске этого юнита — как обычно. */
+export async function peekTask(unitId, taskId) {
+  if (S.route.unit === unitId) return navigate({ unit: unitId, mode: S.route.mode === 'settings' ? 'board' : S.route.mode, task: taskId });
+  try {
+    if (!S.board || S.board.unit.id !== unitId) await loadBoard(unitId);
+  } catch (e) {
+    return showErr(e);
+  }
+  S.peek = true;
+  S.peekStamp = (taskById(taskId) || {}).updatedAt;
+  openTask(taskId);
 }
 
 export function openTask(id) {
@@ -69,11 +91,12 @@ function buildPanel(t) {
 
   const head = h('div', { class: 'panel-head' },
     h('div', { class: 'crumbs' },
-      h('button', { class: 'unit-link', onclick: closeTask }, h('span', { class: 'unit-dot', style: { background: u.color, margin: 0 } }), u.name),
+      h('button', { class: 'unit-link', title: 'Открыть доску юнита', onclick: openUnitBoard }, h('span', { class: 'unit-dot', style: { background: u.color, margin: 0 } }), u.name),
       h('span', null, '/'),
       h('span', { class: 'key-badge' }, taskKey(t)),
       t.archived && h('span', { class: 'badge' }, 'в архиве')),
     h('span', { class: 'spacer' }),
+    S.peek && h('button', { class: 'btn ghost sm', title: 'Перейти на доску юнита с этой задачей', onclick: () => openUnitBoard(t) }, icon('board', 14), 'Открыть доску'),
     h('button', { class: 'icon-btn', title: 'Скопировать ссылку', onclick: () => copyLink(t) }, icon('copy', 16)),
     staff && h('button', { class: 'icon-btn', title: 'Действия', onclick: e => panelMenu(e.currentTarget, t) }, icon('more', 18)),
     h('button', { class: 'icon-btn', title: 'Закрыть (Esc)', onclick: closeTask }, icon('x', 18)));
@@ -81,6 +104,15 @@ function buildPanel(t) {
   return h('aside', { class: 'panel', role: 'dialog', 'aria-label': taskKey(t) },
     head,
     h('div', { class: 'panel-body' }, main, sideBlock(t, { staff, editable })));
+}
+
+/** Перейти на доску юнита (из карточки, открытой поверх дашборда — с этой же задачей). */
+function openUnitBoard(t) {
+  const unitId = S.board.unit.id;
+  const taskId = t && t.id ? t.id : null;
+  S.peek = false;
+  closePanel();
+  navigate({ unit: unitId, mode: 'board', task: taskId });
 }
 
 function panelMenu(anchor, t) {

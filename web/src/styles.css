@@ -579,3 +579,35 @@ body.login-page #shell { display: block; }
 .warn-text { color: var(--danger); font-weight: 500; }
 .admin-units td { white-space: nowrap; }
 .me-label small.role-superadmin, .me-label small.role-moderator { background: none; font-weight: 600; }
+
+/* Дашборд: быстрые действия на месте */
+.att-item > .att-head { width: 100%; border: 0; background: transparent; padding: 0; margin: 0; text-align: left; color: inherit; cursor: pointer; }
+.att-item > .att-head > span:nth-child(2) { flex: 1; }
+.att-warn > .att-head > .i:first-child { color: var(--warn); }
+.att-chev { display: inline-flex; color: var(--muted); transition: transform .15s; }
+.att-chev.on { transform: rotate(180deg); }
+.att-list { margin-top: 8px; }
+.att-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 13px; }
+.att-row + .att-row { border-top: 1px solid var(--border); }
+.att-row > :first-child { flex: 1; min-width: 0; }
+.att-row .inp.sm { max-width: 190px; }
+.att-ref { display: flex; align-items: center; gap: 8px; text-decoration: none; color: var(--text); min-width: 0; }
+.att-ref .ft-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.att-ref:hover .ft-title { text-decoration: underline; }
+.att-who { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+.att-more { font-size: 12px; padding-top: 6px; }
+.att-done { display: flex; align-items: center; gap: 8px; color: var(--ok); border-left: 3px solid var(--ok); }
+.load-item { border-radius: 8px; }
+.load-item + .load-item { margin-top: 2px; }
+.load-row { width: 100%; border: 0; background: transparent; padding: 4px 6px; border-radius: 8px; text-align: left; color: var(--text); cursor: pointer; }
+.load-row:hover, .load-item.open .load-row { background: var(--surface-2); }
+.load-tasks:not(:empty) { padding: 6px 0 10px 34px; }
+.load-tasks .group-head { font-size: 12px; }
+.fm-row { display: flex; justify-content: space-between; gap: 16px; flex: 1; }
+.btn.on { color: var(--accent); }
+.count-badge { background: var(--accent); color: #fff; border-radius: 9px; font-size: 10px; font-weight: 600; min-width: 16px; height: 16px; padding: 0 4px; display: inline-flex; align-items: center; justify-content: center; }
+.filter-chip { display: inline-flex; align-items: center; gap: 4px; background: var(--surface-2); color: var(--text); padding-right: 3px; }
+.chip-x { border: 0; background: transparent; padding: 2px; display: inline-flex; color: var(--muted); border-radius: 4px; cursor: pointer; }
+.chip-x:hover { color: var(--text); background: var(--border); }
+.feed-filters:empty { display: none; }
+@media (max-width: 640px) { .att-row { flex-wrap: wrap; } .att-row .inp.sm { max-width: none; flex: 1; } .load-tasks:not(:empty) { padding-left: 0; } }

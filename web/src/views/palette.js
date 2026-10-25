@@ -2,7 +2,7 @@ import { S, byOrder, isStaff } from '../state.js';
 import { $, h, icon, fill } from '../ui.js';
 import { call } from '../api.js';
 import { navigate } from '../router.js';
-import { openCreateTask } from './task.js';
+import { openCreateTask, peekTask } from './task.js';
 import { openCreateUnit } from './units.js';
 import { openPeople, openShortcuts, openDepartments } from './people.js';
 import { mode } from '../data.js';
@@ -50,7 +50,7 @@ export function openPalette() {
       .filter(u => !q || (u.name + ' ' + u.key).toLowerCase().includes(q)).slice(0, 6)
       .map(u => ({ group: 'Юниты', label: u.name, hint: u.key, dot: u.color, run: () => navigate({ unit: u.id, mode: 'board' }) }));
     const acts = actions.filter(a => !q || a.label.toLowerCase().includes(q)).map(a => ({ ...a, group: 'Действия' }));
-    const found = tasks.map(t => ({ group: 'Задачи', label: t.title, hint: t.key, dot: t.unit.color, run: () => navigate({ unit: t.unit.id, mode: 'board', task: t.id }) }));
+    const found = tasks.map(t => ({ group: 'Задачи', label: t.title, hint: t.key, dot: t.unit.color, run: () => peekTask(t.unit.id, t.id) }));
     items = [...found, ...units, ...acts];
     sel = Math.max(0, Math.min(sel, items.length - 1));
 

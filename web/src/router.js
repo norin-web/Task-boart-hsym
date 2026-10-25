@@ -13,7 +13,7 @@ import { renderMy } from './views/my.js';
 import { renderAdmin } from './views/admin.js';
 import { renderBoardView, loadBoard } from './views/board.js';
 import { renderSettings } from './views/settings.js';
-import { openTask, closePanel } from './views/task.js';
+import { openTask, closePanel, peekTask } from './views/task.js';
 
 let rendered = null;
 export const currentView = () => rendered;
@@ -52,6 +52,22 @@ export function link(route, attrs, ...kids) {
       e.preventDefault();
       if (attrs && attrs.onclick) attrs.onclick(e);
       navigate(route);
+    },
+  }, ...kids);
+}
+
+/**
+ * Ссылка на задачу: по клику открывает карточку поверх текущей страницы (без перехода на доску),
+ * ⌘/Ctrl-клик — в новой вкладке.
+ */
+export function taskLink(unitId, taskId, attrs, ...kids) {
+  return h('a', {
+    ...attrs,
+    href: routeUrl({ unit: unitId, mode: 'board', task: taskId }),
+    onclick: e => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button) return;
+      e.preventDefault();
+      peekTask(unitId, taskId);
     },
   }, ...kids);
 }
