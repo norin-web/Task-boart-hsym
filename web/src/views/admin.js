@@ -18,7 +18,7 @@ import { openCreateUnit, unitMenu, archiveUnit, deleteUnit } from './units.js';
 const TABS = [
   ['overview', 'Обзор', 'home'],
   ['people', 'Люди и доступы', 'users'],
-  ['units', 'Юниты', 'board'],
+  ['units', 'Структура', 'tree'],
   ['automations', 'Автоматизации', 'progress'],
   ['journal', 'Журнал', 'clock'],
 ];
@@ -190,12 +190,15 @@ function unitsTable(ov) {
       h('span', { class: 'un-col' }, h('span', { class: 'un-k' }, 'Ревьюер'),
         rv.length ? h('span', null, rv.map(p => p.name.split(' ')[0]).join(', ')) : h('span', { class: 'muted' }, '—')),
       icon('chevron', 15));
-  }) : h('p', { class: 'muted', style: { padding: '12px 14px', margin: 0 } }, 'Юнитов пока нет'));
+  }) : h('div', { class: 'card-box empty-state' },
+    h('h2', null, 'Структуры пока нет'),
+    h('p', { style: { margin: 0 } }, 'Соберите её по шагам: App → Managers → юниты → команды внутри → люди.'),
+    h('button', { class: 'btn primary', onclick: () => openStructureWizard(() => location.reload()) }, icon('tree', 15), 'Собрать структуру')));
   draw();
   return h('div', null,
     h('div', { class: 'section-head' }, unitsSwitch(false), h('div', { class: 'row', style: { gap: '6px' } },
-      h('button', { class: 'btn sm', title: 'App → Managers → юниты → команды → люди, по шагам', onclick: () => openStructureWizard(() => location.reload()) },
-        icon('tree', 14), units.some(u => u.parentId) ? 'Структура' : 'Собрать структуру'),
+      units.length > 0 && h('button', { class: 'btn sm', title: 'App → Managers → юниты → команды → люди, по шагам', onclick: () => openStructureWizard(() => location.reload()) },
+        icon('tree', 14), units.some(u => u.parentId) ? 'Изменить структуру' : 'Собрать структуру'),
       h('button', { class: 'btn primary sm', onclick: openCreateUnit }, icon('plus', 14), 'Юнит'))),
     list);
 }
