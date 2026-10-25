@@ -2,13 +2,13 @@
 import Sortable from 'sortablejs';
 import { AUTO_ARCHIVE, HIDE_DONE } from '../state.js';
 import { reviewSection } from './settings.js';
-import { S, LS, me, byOrder, emptyCounts, personById, todayStr, isSuper, ACCESS_LABELS, plural, LINK_KINDS, activeDepts, deptById, activeTeams } from '../state.js';
+import { S, LS, me, byOrder, unitById, emptyCounts, personById, todayStr, isSuper, ACCESS_LABELS, plural, LINK_KINDS, activeDepts, deptById, activeTeams } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, toast, confirmDlg, menu, modal, field } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView, link, navigate, rerender } from '../router.js';
 import { renderSidebar } from './sidebar.js';
 import { attentionBlock, workloadBlock, roleBadge } from './home.js';
-import { peopleManager, positionsManager, teamsManager, addPersonDialog, teamChips, positionChips } from './people.js';
+import { peopleManager, positionsManager, teamsManager, addPersonDialog, teamChips, positionChips, addMemberDialog } from './people.js';
 import { openCreateTask } from './task.js';
 import { activityFeed } from './feed.js';
 import { openCreateUnit, unitMenu, archiveUnit, deleteUnit } from './units.js';
@@ -17,14 +17,13 @@ const TABS = [
   ['overview', 'Обзор', 'home'],
   ['people', 'Люди и доступы', 'users'],
   ['units', 'Юниты', 'board'],
-  ['card', 'Карточка', 'link', 'super'],
   ['automations', 'Автоматизации', 'progress'],
   ['journal', 'Журнал', 'clock'],
 ];
 const tabs = () => TABS.filter(t => t[3] !== 'super' || isSuper());
 
 // Старые вкладки: позиции — внутри «Люди и доступы», шаблоны — в «Автоматизациях»
-const MOVED = { positions: ['people', 'positions'], teams: ['people', 'teams'], templates: ['automations'] };
+const MOVED = { positions: ['people', 'positions'], teams: ['people', 'teams'], templates: ['automations'], card: ['automations'] };
 
 export async function renderAdmin(tab) {
   if (MOVED[tab]) {
@@ -62,7 +61,6 @@ export async function renderAdmin(tab) {
   switch (tab) {
     case 'people': fill(page, peopleTab()); break;
     case 'automations': fill(page, automationsTab()); break;
-    case 'card': fill(page, h('div', { class: 'card-box', style: { maxWidth: '860px' } }, linkFieldsManager())); break;
     case 'units': fill(page, unitsTable(ov)); break;
     case 'trash': fill(page, trashTable(ov)); break;
     case 'journal': fill(page, h('div', { style: { maxWidth: '760px' } }, activityFeed({ limit: 40, title: 'Журнал событий' }))); break;
@@ -169,62 +167,93 @@ function trashTable(settings) {
       : h('div', { class: 'card-box empty-state' }, h('p', { style: { margin: 0 } }, 'Корзина пуста. Удалённые юниты хранятся здесь со всеми задачами и историей.')));
 }
 
-/**
- * Юниты: строка юнита (задачи, ревьюер, действия) и под ней — команды чипами «UX/UI Designers · 2» с аватарами.
- * Клик по чипу показывает людей этой команды прямо под строкой; клик по названию — доска юнита.
- */
+/** Юниты: простые строки с подписями; клик — карточка юнита справа, поверх страницы (никуда не уводит). */
 function unitsTable(ov) {
   const units = S.units.filter(u => !u.archived).sort(byOrder);
   const noTeam = new Set(ov ? ov.unitsNoTeam : []);
-  const open = {}; // юнит → раскрытая команда
   const list = h('div', { class: 'un-list' });
-
-  const teamsOf = u => {
-    const ppl = (u.members || []).map(personById).filter(p => p && p.active);
-    const groups = activeTeams().map(t => ({ t, people: ppl.filter(p => (p.teamIds || []).includes(t.id)) })).filter(g => g.people.length);
-    const loose = ppl.filter(p => !(p.teamIds || []).some(id => activeTeams().some(t => t.id === id)));
-    if (loose.length) groups.push({ t: { id: '', name: 'Без команды', color: 'var(--muted)' }, people: loose });
-    return groups;
-  };
-  const reviewers = u => {
-    const r = u.settings.review || {};
-    if (!r.column) return [];
-    return [...new Set([...Object.values(r.byPosition || {}), r.default].filter(Boolean))].map(personById).filter(Boolean);
-  };
-
-  const row = u => {
+  const draw = () => fill(list, units.length ? units.map(u => {
     const c = u.counts || emptyCounts();
-    const openTasks = c.todo + c.in_progress, total = c.todo + c.in_progress + c.done;
-    const groups = teamsOf(u);
-    const shown = groups.find(g => g.t.id === open[u.id]);
-    const rv = reviewers(u);
-    return h('div', { class: 'un-row' },
-      h('div', { class: 'un-main' },
-        link({ unit: u.id, mode: 'board' }, { class: 'un-name', title: 'Открыть доску' },
-          h('span', { class: 'uc-icon sm', style: { background: u.color } }, u.key.slice(0, 2)),
-          h('b', null, u.name), h('span', { class: 'muted' }, u.key)),
-        h('span', { class: 'un-stat', title: 'Открытые / всего' }, icon('checklist', 13), h('b', null, openTasks), h('span', { class: 'muted' }, ' / ' + total),
-          c.overdue > 0 && h('span', { class: 'warn-text', title: 'Просрочено' }, ' · ' + c.overdue + ' просроч.')),
-        h('span', { class: 'un-review', title: rv.length ? 'Ревьюеры: ' + rv.map(p => p.name).join(', ') : 'Ревью не настроено' },
-          icon('eye', 13), rv.length ? h('span', { class: 'avatars-stack' }, rv.slice(0, 3).map(p => avatar(p, 'sm'))) : h('span', { class: 'muted' }, 'нет')),
-        h('span', { class: 'un-actions' },
-          link({ unit: u.id, mode: 'settings' }, { class: 'icon-btn sm', title: 'Настройки юнита' }, icon('settings', 15)),
-          h('button', { class: 'icon-btn sm', title: 'Действия', onclick: e => { e.stopPropagation(); unitMenu(e.currentTarget, u); } }, icon('more')))),
-      h('div', { class: 'un-teams' },
-        groups.length ? groups.map(g => h('button', {
-          class: 'un-team' + (open[u.id] === g.t.id ? ' on' : ''), title: g.people.map(p => p.name).join(', '),
-          onclick: () => { open[u.id] = open[u.id] === g.t.id ? undefined : g.t.id; draw(); },
-        }, h('span', { class: 'dot', style: { background: g.t.color } }), g.t.name, h('span', { class: 'muted' }, '· ' + g.people.length),
-        h('span', { class: 'avatars-stack' }, g.people.slice(0, 4).map(p => avatar(p, 'sm')))))
-          : h('span', { class: noTeam.has(u.id) ? 'warn-text' : 'muted' }, 'В юните пока никого')),
-      shown && h('div', { class: 'un-people' }, shown.people.map(p => h('span', { class: 'un-person' }, avatar(p, 'sm'), p.name,
-        h('span', { class: 'muted' }, (p.positionIds || []).map(id => (deptById(id) || {}).name).filter(Boolean).join(', '))))));
-  };
-  const draw = () => fill(list, units.length ? units.map(row) : h('p', { class: 'muted', style: { padding: '12px 14px', margin: 0 } }, 'Юнитов пока нет'));
+    const people = (u.members || []).map(personById).filter(p => p && p.active);
+    const rv = unitReviewers(u);
+    return h('button', { class: 'un-row', onclick: () => openUnitPanel(u, draw) },
+      h('span', { class: 'un-name' }, h('span', { class: 'uc-icon sm', style: { background: u.color } }, u.key.slice(0, 2)),
+        h('b', null, u.name), h('span', { class: 'muted' }, u.key)),
+      h('span', { class: 'un-col' }, h('span', { class: 'un-k' }, 'Люди'),
+        people.length ? h('span', { class: 'avatars-stack' }, people.slice(0, 5).map(p => avatar(p, 'sm')))
+          : h('span', { class: noTeam.has(u.id) ? 'warn-text' : 'muted' }, 'никого')),
+      h('span', { class: 'un-col' }, h('span', { class: 'un-k' }, 'Задачи'),
+        h('span', null, h('b', null, c.todo + c.in_progress), ' открыто · ' + (c.todo + c.in_progress + c.done) + ' всего',
+          c.overdue > 0 && h('span', { class: 'warn-text' }, ' · ' + c.overdue + ' просроч.'))),
+      h('span', { class: 'un-col' }, h('span', { class: 'un-k' }, 'Ревьюер'),
+        rv.length ? h('span', null, rv.map(p => p.name.split(' ')[0]).join(', ')) : h('span', { class: 'muted' }, '—')),
+      icon('chevron', 15));
+  }) : h('p', { class: 'muted', style: { padding: '12px 14px', margin: 0 } }, 'Юнитов пока нет'));
   draw();
   return h('div', null,
     h('div', { class: 'section-head' }, unitsSwitch(false), h('button', { class: 'btn primary sm', onclick: openCreateUnit }, icon('plus', 14), 'Юнит')),
     list);
+}
+
+const unitReviewers = u => {
+  const r = u.settings.review || {};
+  if (!r.column) return [];
+  return [...new Set([...Object.values(r.byPosition || {}), r.default].filter(Boolean))].map(personById).filter(Boolean);
+};
+
+/** Карточка юнита справа: команды и люди (добавить/убрать), задачи, ревью; доска и настройки — кнопками. */
+function openUnitPanel(u, onChange) {
+  const root = $('#panel-root');
+  const close = () => { document.removeEventListener('keydown', onKey, true); fill(root); onChange(); };
+  const onKey = e => { if (e.key === 'Escape' && !document.querySelector('.modal') && !document.querySelector('.menu')) { e.stopPropagation(); close(); } };
+  document.addEventListener('keydown', onKey, true);
+  const body = h('div', { class: 'up-body' });
+  const remove = async p => {
+    if (!(await confirmDlg(`Убрать ${p.name} из «${u.name}»? Его задачи в юните останутся за ним.`, { ok: 'Убрать', danger: true }))) return;
+    const list = await send('removeMember', { unitId: u.id, personId: p.id });
+    u.members = list.map(m => m.personId);
+    draw();
+  };
+  const draw = () => {
+    const c = u.counts || emptyCounts();
+    const people = (u.members || []).map(personById).filter(p => p && p.active);
+    const groups = activeTeams().map(t => ({ t, people: people.filter(p => (p.teamIds || []).includes(t.id)) })).filter(g => g.people.length);
+    const loose = people.filter(p => !(p.teamIds || []).some(id => activeTeams().some(t => t.id === id)));
+    if (loose.length) groups.push({ t: { name: 'Без команды', color: 'var(--muted)' }, people: loose });
+    const rv = unitReviewers(u);
+    const r = u.settings.review || {};
+    const col = r.column && u.settings.columns.find(x => x.id === r.column);
+    const stat = (label, n, cls) => h('div', { class: 'up-stat' + (cls ? ' ' + cls : '') }, h('b', null, n), h('span', null, label));
+    fill(body,
+      h('section', null,
+        h('div', { class: 'up-head' }, h('h3', null, 'Задачи')),
+        h('div', { class: 'up-stats' }, stat('не начато', c.todo), stat('в работе', c.in_progress), stat('готово', c.done), stat('просрочено', c.overdue, c.overdue ? 'warn' : ''))),
+      h('section', null,
+        h('div', { class: 'up-head' }, h('h3', null, 'Команды и люди'),
+          h('button', { class: 'btn ghost sm', onclick: async () => { if (await addMemberDialog(u.id)) { u.members = unitById(u.id).members || u.members; draw(); } } }, icon('plus', 14), 'Добавить')),
+        groups.length ? groups.map(g => h('div', { class: 'up-team' },
+          h('div', { class: 'up-team-name' }, h('span', { class: 'dot', style: { background: g.t.color } }), g.t.name, h('span', { class: 'muted' }, g.people.length)),
+          g.people.map(p => h('div', { class: 'up-person' }, avatar(p, 'sm'), h('span', { class: 'up-pname' }, p.name),
+            h('span', { class: 'muted up-pos' }, (p.positionIds || []).map(id => (deptById(id) || {}).name).filter(Boolean).join(', ')),
+            h('button', { class: 'icon-btn sm', title: 'Убрать из юнита', onclick: () => remove(p).catch(showErr) }, icon('x', 14))))))
+          : h('p', { class: 'muted' }, 'В юните пока никого — добавьте участников.')),
+      h('section', null,
+        h('div', { class: 'up-head' }, h('h3', null, 'Ревью'),
+          h('button', { class: 'btn ghost sm', onclick: () => openReviewEditor(u, draw) }, icon('edit', 13), 'Настроить')),
+        col ? h('p', { class: 'up-line' }, 'Колонка «' + col.name + '» · ', rv.length ? rv.map(p => p.name).join(', ') : h('span', { class: 'warn-text' }, 'ревьюеры не выбраны'))
+          : h('p', { class: 'muted up-line' }, 'Выключено')));
+  };
+  draw();
+  fill(root,
+    h('div', { class: 'panel-backdrop', onclick: close }),
+    h('aside', { class: 'panel unit-panel', role: 'dialog', 'aria-label': u.name },
+      h('div', { class: 'panel-head' },
+        h('span', { class: 'uc-icon sm', style: { background: u.color } }, u.key.slice(0, 2)),
+        h('b', null, u.name), h('span', { class: 'muted' }, u.key), h('span', { class: 'spacer' }),
+        link({ unit: u.id, mode: 'board' }, { class: 'btn sm', onclick: () => fill(root) }, icon('board', 14), 'Доска'),
+        link({ unit: u.id, mode: 'settings' }, { class: 'btn ghost sm', onclick: () => fill(root) }, icon('settings', 14), 'Настройки'),
+        h('button', { class: 'icon-btn', title: 'Закрыть', onclick: close }, icon('x', 18))),
+      body));
 }
 
 /* ---------- карточка: поля-ссылки ---------- */
@@ -476,12 +505,23 @@ function peopleTab() {
 
 /* ---------- автоматизации ---------- */
 
-/** Всё, что происходит само: шаблоны, правила юнитов (ревью, чеклист, выполненные), уведомления. */
+/** Карточка и автоматика: ссылки в карточке (супер-админ), шаблоны, правила юнитов, уведомления. */
 function automationsTab() {
   return h('div', { class: 'auto-page' },
+    isSuper() && h('div', { class: 'card-box' }, linkFieldsManager()),
     h('div', { class: 'card-box' }, templatesManager()),
     h('div', { class: 'card-box' }, unitRules()),
     h('div', { class: 'card-box' }, autoNotes()));
+}
+
+/** Настройка ревью юнита окном (колонка, ревьюеры по позиции, по умолчанию). */
+function openReviewEditor(u, onDone) {
+  modal({
+    title: `Ревью · ${u.name}`, wide: true,
+    body: [reviewSection(u, { bare: true })],
+    actions: [{ label: 'Готово', primary: true, action: c => c() }],
+    onClose: onDone,
+  });
 }
 
 /** Правила по юнитам: одна строка на юнит, всё меняется на месте и сохраняется сразу. */
@@ -502,12 +542,7 @@ function unitRules() {
       who.length ? h('span', { class: 'avatars-stack', title: who.map(p => p.name).join(', ') }, who.slice(0, 4).map(p => avatar(p, 'sm')))
         : h('span', { class: 'warn-text', title: 'Выберите ревьюеров' }, icon('alert', 13), 'нет ревьюеров'));
   };
-  const editReview = u => modal({
-    title: `Ревью · ${u.name}`, wide: true,
-    body: [reviewSection(u, { bare: true })],
-    actions: [{ label: 'Готово', primary: true, action: c => { c(); draw(); } }],
-    onClose: draw,
-  });
+  const editReview = u => openReviewEditor(u, draw);
   const row = u => h('div', { class: 'ur-row' },
     h('div', { class: 'ur-unit' }, h('span', { class: 'uc-icon sm', style: { background: u.color } }, u.key.slice(0, 2)), h('b', null, u.name)),
     h('button', { class: 'ur-cell ur-review', title: 'Настроить ревью', onclick: () => editReview(u) }, reviewText(u), icon('edit', 13)),
