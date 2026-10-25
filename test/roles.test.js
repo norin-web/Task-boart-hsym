@@ -369,6 +369,11 @@ test('шаблоны задач: ведут администраторы, вид
     name: 'Релиз', title: 'Релиз X.Y', departmentId: 'd_release', dueDays: 7, checklist: [{ text: 'Сборка' }, { text: 'Скрины' }],
   }));
   assert.equal(tpl.dueDays, 7);
+  await assert.rejects(() => api('saveTemplate', { id: tpl.id, name: 'Релиз', links: { lf_github: 'javascript:1' } }), /https/);
+  const withLinks = await api('saveTemplate', { id: tpl.id, name: 'Релиз', assigneeId: designer.id,
+    links: { lf_figma: 'figma.com/file/x', lf_nope: 'https://a.b', lf_github: '' } });
+  assert.equal(withLinks.assigneeId, designer.id);
+  assert.deepEqual(withLinks.links, { lf_figma: 'https://figma.com/file/x' });
   assert.deepEqual(tpl.checklist.map(i => i.text), ['Сборка', 'Скрины']);
   await api.as(designer, async () => {
     assert.equal((await api('bootstrap', {})).templates[0].name, 'Релиз');

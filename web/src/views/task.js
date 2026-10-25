@@ -475,10 +475,12 @@ export function deptSelect(value, onChange) {
  * Исполнитель: только участники команды (юнита). Текущий исполнитель вне команды тоже показывается.
  * ids — состав, если не текущая доска (например, форма создания с главной).
  */
-export function assigneeSelect(value, onChange, { ids, unitId } = {}) {
+export function assigneeSelect(value, onChange, { ids, unitId, positionId } = {}) {
   const team = ids || S.board.members.map(m => m.personId);
   const deptOf = id => { const p = personById(id); const d = p && deptById(p.positionId); return d ? ' · ' + d.name : ''; };
-  const people = team.map(personById).filter(p => p && (p.active || p.id === value));
+  // positionId — показываем только людей этой команды (позиции); текущий исполнитель остаётся в списке
+  const ofTeam = p => !positionId || (p.positionIds || [p.positionId]).includes(positionId);
+  const people = team.map(personById).filter(p => p && ((p.active && ofTeam(p)) || p.id === value));
   const outsider = value && !team.includes(value) && personById(value);
   const sel = h('select', {
     class: 'inp', value: value || '',
@@ -578,7 +580,7 @@ export function openCreateTask(opts = {}) {
   const ownUnit = opts.assigneeId && units.find(u => (u.members || []).includes(opts.assigneeId));
   let unit = inBoard ? S.board.unit : unitById(opts.unitId) || ownUnit || units[0];
   const draft = {
-    status: opts.status || '', assigneeId: opts.assigneeId || '', dueDate: '', fields: {},
+    status: opts.status || '', assigneeId: opts.assigneeId || '', dueDate: '', fields: {}, links: {},
     departmentId: opts.departmentId || (S.filters.depts.length === 1 && inBoard ? S.filters.depts[0] : ''),
   };
 
@@ -595,16 +597,20 @@ export function openCreateTask(opts = {}) {
       title.value = tpl.title || tpl.name;
       desc.value = tpl.description;
       if (tpl.departmentId) draft.departmentId = tpl.departmentId;
+      if (tpl.assigneeId) draft.assigneeId = tpl.assigneeId;
+      draft.links = { ...tpl.links };
       draft.dueDate = tpl.dueDays >= 0 ? addDays(tpl.dueDays) : draft.dueDate;
       draft.checklist = tpl.checklist.map(i => ({ text: i.text }));
     } else {
       draft.checklist = [];
+      draft.links = {};
     }
     tplNote.textContent = draft.checklist && draft.checklist.length ? 'Чеклист из шаблона: ' + draft.checklist.length + ' п.' : '';
     tplRow.querySelectorAll('.quick-chip').forEach(b => b.classList.toggle('on', b.dataset.id === (used && used.id)));
     title.dispatchEvent(new Event('input'));
     desc.dispatchEvent(new Event('input'));
     drawProps();
+    drawLinks();
     title.focus();
   };
   const tplRow = S.templates.length > 0 && h('div', { class: 'quick-chips tpl-row' },
@@ -624,11 +630,17 @@ export function openCreateTask(opts = {}) {
         unit.settings.columns.map(c => h('option', { value: c.id }, c.name)))),
       !B.assignee.hidden && field(B.assignee.label, assigneeSelect(draft.assigneeId, v => {
         draft.assigneeId = v;
-        // Позиция следует за исполнителем
+        // Позиция следует за исполнителем (если выбранная команда — не его)
         const p = personById(v);
-        if (p && p.positionId) { draft.departmentId = p.positionId; drawProps(); }
-      }, inBoard ? {} : { ids: unit.members || [], unitId: unit.id })),
-      !B.department.hidden && field(B.department.label, deptSelect(draft.departmentId, v => { draft.departmentId = v; })),
+        if (p && !(p.positionIds || [p.positionId]).includes(draft.departmentId)) { draft.departmentId = p.positionId; drawProps(); }
+      }, { ...(inBoard ? {} : { ids: unit.members || [], unitId: unit.id }), positionId: draft.departmentId })),
+      !B.department.hidden && field(B.department.label, deptSelect(draft.departmentId, v => {
+        draft.departmentId = v;
+        // команда сменилась — в «Исполнителе» только её люди; чужой исполнитель снимается
+        const p = personById(draft.assigneeId);
+        if (p && v && !(p.positionIds || [p.positionId]).includes(v)) draft.assigneeId = '';
+        drawProps();
+      })),
       !B.dueDate.hidden && field(B.dueDate.label, h('input', { class: 'inp', type: 'date', value: draft.dueDate, onchange: e => { draft.dueDate = e.target.value; } })),
       inBoard && activeFields().map(f => field(f.name + (f.required || f.requiredOnCreate ? ' *' : ''),
         fieldInput(f, draft.fields[f.id], v => { if (isEmpty(v)) delete draft.fields[f.id]; else draft.fields[f.id] = v; }))),
@@ -636,10 +648,24 @@ export function openCreateTask(opts = {}) {
   };
   drawProps();
 
+  // Ссылки сразу при создании (то, что видно мне по позиции); шаблон подставляет свои
+  const linksBox = h('div');
+  const drawLinks = () => {
+    const fields = visibleLinkFields();
+    fill(linksBox, fields.length > 0 && h('div', { class: 'field', style: { marginTop: '14px' } }, h('label', null, 'Ссылки'),
+      h('div', { class: 'links' }, fields.map(f => h('div', { class: 'link-row' },
+        h('span', { class: 'lf-ic' }, icon(f.kind === 'link' ? 'link' : f.kind, 15)), h('span', { class: 'link-name' }, f.name),
+        h('input', {
+          class: 'inp sm', value: draft.links[f.id] || '', placeholder: 'https://…', maxlength: 2000,
+          oninput: e => { if (e.target.value.trim()) draft.links[f.id] = e.target.value.trim(); else delete draft.links[f.id]; },
+        }))))));
+  };
+  drawLinks();
+
   const close = modal({
     title: 'Новая задача',
     wide: true,
-    body: [tplRow, title, h('div', { style: { height: '10px' } }), desc, h('div', { style: { height: '14px' } }), props],
+    body: [tplRow, title, h('div', { style: { height: '10px' } }), desc, h('div', { style: { height: '14px' } }), props, linksBox],
     footLeft: more,
     actions: [
       { label: 'Отмена' },
@@ -647,7 +673,14 @@ export function openCreateTask(opts = {}) {
         label: 'Создать', primary: true, action: async () => {
           const text = title.value.trim();
           if (!text) { title.focus(); return; }
-          const task = await send('createTask', { unitId: unit.id, title: text, description: desc.value, ...draft });
+          const { links, ...rest } = draft;
+          const task = await send('createTask', { unitId: unit.id, title: text, description: desc.value, ...rest });
+          // ссылки — отдельной таблицей, после создания задачи
+          task.links = {};
+          for (const [fieldId, url] of Object.entries(links)) {
+            task.links[fieldId] = await send('setTaskLink', { taskId: task.id, fieldId, url }).catch(e => { showErr(e); return ''; });
+            if (!task.links[fieldId]) delete task.links[fieldId];
+          }
           const key = unit.key + '-' + task.num;
           if (S.board && S.board.unit.id === unit.id) {
             S.board.tasks.push(task);

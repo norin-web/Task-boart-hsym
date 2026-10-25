@@ -888,3 +888,5 @@ table.tasks tr.grp-more .old-done { width: auto; margin: 0; }
 
 .news-kind.approved { background: var(--ok-soft); color: var(--ok); }
 .news-dot.approved { background: var(--ok); }
+
+.tpl-links .link-row .inp { flex: 1; max-width: none; }

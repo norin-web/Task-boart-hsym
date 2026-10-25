@@ -309,7 +309,9 @@ function templatesManager() {
         h('span', { class: 'tpl-meta' },
           d && h('span', { class: 'chip', style: { background: `color-mix(in srgb, ${d.color} 16%, transparent)`, color: d.color } }, d.name),
           t.dueDays >= 0 && h('span', { class: 'chip' }, icon('calendar', 11), (DUE_DAYS.find(x => x[0] === t.dueDays) || [0, ''])[1]),
-          t.checklist.length > 0 && h('span', { class: 'chip' }, icon('checklist', 11), t.checklist.length + ' п.'))),
+          t.assigneeId && personById(t.assigneeId) && h('span', { class: 'chip' }, icon('user', 11), personById(t.assigneeId).name),
+          t.checklist.length > 0 && h('span', { class: 'chip' }, icon('checklist', 11), t.checklist.length + ' п.'),
+          Object.keys(t.links || {}).length > 0 && h('span', { class: 'chip' }, icon('link', 11), Object.keys(t.links).length))),
       h('button', { class: 'icon-btn sm', title: 'Изменить', onclick: () => editTemplate(t, draw) }, icon('edit', 14)),
       h('button', { class: 'icon-btn sm', title: 'Удалить', onclick: () => remove(t).catch(showErr) }, icon('trash', 15)));
   };
@@ -338,8 +340,26 @@ function editTemplate(t, onSaved) {
   const name = h('input', { class: 'inp', value: t ? t.name : '', maxlength: 60, placeholder: 'Например, Релиз или Баг' });
   const title = h('input', { class: 'inp', value: t ? t.title : '', maxlength: 500, placeholder: 'Название задачи (по умолчанию — как у шаблона)' });
   const desc = h('textarea', { class: 'inp', rows: 4, value: t ? t.description : '', maxlength: 20000, placeholder: 'Описание: контекст, критерии готовности…' });
-  const dept = h('select', { class: 'inp', value: t ? t.departmentId : '' },
-    h('option', { value: '' }, '— по исполнителю —'), activeDepts().map(d => h('option', { value: d.id }, d.name)));
+  // Команда = позиция (дизайнеры, девы…): в «Исполнителе» остаются только её люди
+  let assignee = t ? t.assigneeId : '';
+  const inTeam = (p, team) => !team || (p.positionIds || [p.positionId]).includes(team);
+  const assigneeBox = h('div');
+  const drawAssignee = () => fill(assigneeBox, h('select', { class: 'inp', value: assignee, onchange: e => { assignee = e.target.value; } },
+    h('option', { value: '' }, '— не назначать —'),
+    S.people.filter(p => p.active && (inTeam(p, dept.value) || p.id === assignee)).sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+      .map(p => h('option', { value: p.id }, p.name))));
+  const dept = h('select', {
+    class: 'inp', value: t ? t.departmentId : '',
+    onchange: () => {
+      const p = personById(assignee);
+      if (p && !inTeam(p, dept.value)) assignee = ''; // исполнитель не из этой команды — сбрасываем
+      drawAssignee();
+    },
+  }, h('option', { value: '' }, '— любая —'), activeDepts().map(d => h('option', { value: d.id }, d.name)));
+  drawAssignee();
+  const linkInputs = S.linkFields.filter(f => !f.archived).sort(byOrder).map(f => ({
+    f, el: h('input', { class: 'inp', value: (t && t.links[f.id]) || '', placeholder: 'https://…', maxlength: 2000 }),
+  }));
   const due = h('select', { class: 'inp', value: String(t ? t.dueDays : -1) }, DUE_DAYS.map(([v, l]) => h('option', { value: String(v) }, l)));
   const checklist = h('textarea', { class: 'inp', rows: 5, value: t ? t.checklist.map(i => i.text).join('\n') : '', placeholder: 'Пункты чеклиста — по одному на строку' });
   modal({
@@ -348,8 +368,12 @@ function editTemplate(t, onSaved) {
     body: [
       h('div', { class: 'grid2' }, field('Название шаблона', name), field('Название задачи', title)),
       field('Описание', desc),
-      h('div', { class: 'grid2' }, field('Позиция', dept), field('Срок', due, 'Считается от дня создания задачи')),
+      h('div', { class: 'grid2' }, field('Команда', dept, 'Позиция задачи'), field('Исполнитель', assigneeBox, 'Только люди выбранной команды')),
+      h('div', { class: 'grid2' }, field('Срок', due, 'Считается от дня создания задачи'), h('div')),
       field('Чеклист', checklist),
+      linkInputs.length > 0 && h('div', { class: 'field' }, h('label', null, 'Ссылки'),
+        h('div', { class: 'links tpl-links' }, linkInputs.map(({ f, el }) => h('div', { class: 'link-row' },
+          h('span', { class: 'lf-ic' }, icon(f.kind === 'link' ? 'link' : f.kind, 15)), h('span', { class: 'link-name' }, f.name), el)))),
     ],
     actions: [
       { label: 'Отмена' },
@@ -358,7 +382,9 @@ function editTemplate(t, onSaved) {
           if (!name.value.trim()) return name.focus();
           const saved = await send('saveTemplate', {
             id: t ? t.id : undefined, name: name.value, title: title.value, description: desc.value, departmentId: dept.value,
-            dueDays: Number(due.value), checklist: checklist.value.split('\n').map(x => x.trim()).filter(Boolean).map(text => ({ text })),
+            dueDays: Number(due.value), assigneeId: assignee,
+            links: Object.fromEntries(linkInputs.map(({ f, el }) => [f.id, el.value.trim()]).filter(([, v]) => v)),
+            checklist: checklist.value.split('\n').map(x => x.trim()).filter(Boolean).map(text => ({ text })),
           });
           if (t) Object.assign(t, saved); else S.templates.push(saved);
           close();

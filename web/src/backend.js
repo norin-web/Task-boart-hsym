@@ -232,6 +232,7 @@ const linkUrl = v => {
 const templateOut = r => ({
   id: r.id, name: r.name, title: r.title, description: r.description, departmentId: r.department_id,
   dueDays: Number(r.due_days), checklist: json(r.checklist, []) || [], order: r.ord,
+  assigneeId: r.assignee_id || '', links: json(r.links, {}) || {},
 });
 const commentOut = r => ({ id: r.id, taskId: r.task_id, text: r.text, authorId: r.author_id, at: r.at, editedAt: r.edited_at });
 
@@ -1137,7 +1138,15 @@ export function createBackend(db, opts = {}) {
         name: req(str(p.name, 60), 'Название шаблона'), title: str(p.title, 500), description: str(p.description, 20000),
         department_id: await validDept(p.departmentId), checklist: cleanChecklist(p.checklist),
         due_days: [-1, 0, 1, 2, 3, 5, 7, 14, 30].includes(Number(p.dueDays)) ? Number(p.dueDays) : -1,
+        assignee_id: p.assigneeId && (await one('people', p.assigneeId)) ? String(p.assigneeId) : '',
+        links: {},
       };
+      // ссылки шаблона: только существующие поля-ссылки и только http(s)
+      const known = new Set((await linkFields()).map(f => f.id));
+      for (const [k, v] of Object.entries(p.links || {})) {
+        const url = linkUrl(v);
+        if (known.has(k) && url) row.links[k] = url;
+      }
       if (p.id) {
         await updateOne('task_templates', String(p.id), row);
         return templateOut({ ...(await one('task_templates', p.id)) });

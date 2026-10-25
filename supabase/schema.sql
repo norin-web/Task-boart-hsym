@@ -191,6 +191,9 @@ create table if not exists task_templates (
   checklist     jsonb not null default '[]',
   ord           double precision not null default 0
 );
+-- Исполнитель по умолчанию (из выбранной команды-позиции) и ссылки { поле-ссылка → url }
+alter table task_templates add column if not exists assignee_id text not null default '';
+alter table task_templates add column if not exists links jsonb not null default '{}';
 
 -- ---------- атомарные операции ----------
 
