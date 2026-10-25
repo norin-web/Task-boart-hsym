@@ -198,7 +198,7 @@ const taskOut = r => ({
   id: r.id, unitId: r.unit_id, num: r.num, title: r.title, description: r.description, status: r.status,
   assigneeId: r.assignee_id, departmentId: r.department_id || '', dueDate: r.due_date, order: r.ord,
   fields: json(r.fields, {}), checklist: json(r.checklist, []), archived: !!r.archived, doneAt: r.done_at,
-  reviewFrom: r.review_from || '', reviewerId: r.reviewer_id || '',
+  reviewFrom: r.review_from || '', reviewerId: r.reviewer_id || '', teamId: r.team_id || '',
   createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at,
 });
 
@@ -214,8 +214,10 @@ const personOut = r => ({
   access: r.access || 'member', positionId: r.position_id || '', linked: !!r.user_id, prefs: json(r.prefs, {}) || {},
   lastSeenAt: r.last_seen_at || '',
   extraPositionIds: json(r.extra_positions, []) || [],
+  teamIds: json(r.team_ids, []) || [],
   positionIds: [r.position_id || 'd_other', ...(json(r.extra_positions, []) || [])],
 });
+const teamOut = r => ({ id: r.id, name: r.name, color: r.color, order: r.ord, archived: !!r.archived });
 const deptOut = r => ({ id: r.id, name: r.name, color: r.color, order: r.ord, archived: !!r.archived });
 export const LINK_KINDS = ['figma', 'github', 'drive', 'meta', 'link'];
 const linkFieldOut = r => ({
@@ -232,7 +234,7 @@ const linkUrl = v => {
 const templateOut = r => ({
   id: r.id, name: r.name, title: r.title, description: r.description, departmentId: r.department_id,
   dueDays: Number(r.due_days), checklist: json(r.checklist, []) || [], order: r.ord,
-  assigneeId: r.assignee_id || '', links: json(r.links, {}) || {},
+  assigneeId: r.assignee_id || '', links: json(r.links, {}) || {}, teamId: r.team_id || '',
 });
 const commentOut = r => ({ id: r.id, taskId: r.task_id, text: r.text, authorId: r.author_id, at: r.at, editedAt: r.edited_at });
 
@@ -293,6 +295,12 @@ export function createBackend(db, opts = {}) {
   const findTask = async id => (await one('tasks', id)) || fail('Задача не найдена', 'NOT_FOUND');
   const people = async () => (await all(() => T('people').select('*').order('name').order('id'))).map(personOut)
     .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  const teams = async () => (await all(() => T('teams').select('*').order('ord').order('id'))).map(teamOut);
+  const validTeam = async id => (id && (await one('teams', id)) ? String(id) : '');
+  const cleanTeams = async list => {
+    const ids = new Set((await teams()).map(t => t.id));
+    return [...new Set((Array.isArray(list) ? list : []).map(String))].filter(id => ids.has(id));
+  };
   const departments = async () => (await all(() => T('departments').select('*').order('ord').order('id'))).map(deptOut);
   const unitFields = async unitId => (await all(() => T('fields').select('*').eq('unit_id', unitId).order('ord').order('id'))).map(fieldOut);
   const templates = async () => (await all(() => T('task_templates').select('*').order('ord').order('id'))).map(templateOut);
@@ -407,14 +415,16 @@ export function createBackend(db, opts = {}) {
   async function enrichActivity(rows) {
     if (!rows.length) return [];
     const taskIds = [...new Set(rows.map(r => r.task_id).filter(Boolean))];
-    const [units, peopleRows, fields, depts, tasks, lfRows] = await Promise.all([
+    const [units, peopleRows, fields, depts, tasks, lfRows, teamRows] = await Promise.all([
       all(() => T('units').select('id,name,key,color,settings').order('id')),
       all(() => T('people').select('id,name').order('id')),
       all(() => T('fields').select('*').order('id')),
       all(() => T('departments').select('id,name').order('id')),
       taskIds.length ? run(T('tasks').select('id,unit_id,num,title,department_id').in('id', taskIds)) : [],
       all(() => T('link_fields').select('id,name').order('id')),
+      all(() => T('teams').select('id,name').order('id')),
     ]);
+    const TM = Object.fromEntries(teamRows.map(r => [r.id, r.name]));
     const LF = Object.fromEntries(lfRows.map(r => [r.id, r]));
     const index = list => Object.fromEntries(list.map(r => [r.id, r]));
     const U = index(units), P = index(peopleRows), F = index(fields), D = index(depts), TT = index(tasks);
@@ -439,6 +449,7 @@ export function createBackend(db, opts = {}) {
         case 'dueDate': label = B.dueDate.label; fromText = fmtDate(from); toText = fmtDate(to); break;
         case 'checklist': label = 'Чеклист'; break;
         case 'unit': label = 'Юнит'; break;
+        case 'teamId': label = 'Команда'; fromText = TM[from] || ''; toText = TM[to] || ''; break;
         default:
           // ссылки: в истории только факт изменения, без адреса — история видна шире, чем само поле
           if (/^link:/.test(a.field)) {
@@ -506,8 +517,8 @@ export function createBackend(db, opts = {}) {
     /* ---------- общие данные, главная, поиск ---------- */
 
     async bootstrap(p) {
-      const [units, ppl, depts, lf, tpl] = await Promise.all([unitsWithCounts(today(p.today)), people(), departments(), linkFields(), templates()]);
-      return { units: units.map(({ doneWeek, ...u }) => u), people: ppl, departments: depts, linkFields: lf, templates: tpl };
+      const [units, ppl, depts, lf, tpl, tm] = await Promise.all([unitsWithCounts(today(p.today)), people(), departments(), linkFields(), templates(), teams()]);
+      return { units: units.map(({ doneWeek, ...u }) => u), people: ppl, departments: depts, linkFields: lf, templates: tpl, teams: tm };
     },
 
     async getHome(p) {
@@ -527,7 +538,7 @@ export function createBackend(db, opts = {}) {
         stats.overdue += u.counts.overdue;
         stats.doneWeek += u.doneWeek;
       }
-      return { units: units.map(({ doneWeek, ...u }) => u), people: ppl, departments: depts, stats, activity: await enrichActivity(log) };
+      return { units: units.map(({ doneWeek, ...u }) => u), people: ppl, departments: depts, teams: await teams(), stats, activity: await enrichActivity(log) };
     },
 
     /**
@@ -760,6 +771,7 @@ export function createBackend(db, opts = {}) {
         id: uid('t'), unit_id: unit.id, num: (await rpc('next_task_num', { p_unit: unit.id })) ?? fail('Создавать задачи могут модераторы и администраторы', 'FORBIDDEN'),
         title: req(str(p.title, 500), 'Название задачи'), description: str(p.description, 20000), status,
         assignee_id: assignee, department_id: (await validDept(p.departmentId)) || (await memberDept(unit.id, assignee)),
+        team_id: await validTeam(p.teamId),
         due_date: date(p.dueDate), ord: (await maxOrd('tasks', { unit_id: unit.id, status })) + 1,
         fields: cleanFieldValues(p.fields, false), checklist: cleanChecklist(p.checklist),
         archived: false, done_at: kindOf(st, status) === 'done' ? ts : '', created_by: actor(ctx), created_at: ts, updated_at: ts,
@@ -802,6 +814,10 @@ export function createBackend(db, opts = {}) {
           if (!nowDone) t.done_at = '';
           t.status = patch.status;
         }
+      }
+      if ('teamId' in patch) {
+        const v = await validTeam(patch.teamId);
+        if (v !== (t.team_id || '')) { change('teamId', t.team_id || '', v); t.team_id = v; }
       }
       if ('departmentId' in patch) {
         const v = await validDept(patch.departmentId);
@@ -857,7 +873,7 @@ export function createBackend(db, opts = {}) {
         t.updated_at = now();
         // Условие по updated_at: если между чтением и записью задачу успели изменить — конфликт
         const saved = await run(T('tasks').update({
-          title: t.title, description: t.description, status: t.status, assignee_id: t.assignee_id, department_id: t.department_id,
+          title: t.title, description: t.description, status: t.status, assignee_id: t.assignee_id, department_id: t.department_id, team_id: t.team_id || '',
           due_date: t.due_date, ord: t.ord, fields: t.fields, checklist: t.checklist, archived: t.archived,
           done_at: t.done_at, updated_at: t.updated_at,
         }).eq('id', t.id).eq('updated_at', r.updated_at).select('*'));
@@ -993,6 +1009,36 @@ export function createBackend(db, opts = {}) {
 
     /* ---------- отделы (общий справочник) ---------- */
 
+    /* ---------- команды (общий справочник) ---------- */
+
+    async createTeam(p) {
+      const n = (await teams()).length;
+      const t = { id: uid('t'), name: req(str(p.name, 40), 'Название команды'), color: color(p.color, PALETTE[n % PALETTE.length]), ord: (await maxOrd('teams')) + 1, archived: false };
+      await run(T('teams').insert(t));
+      return teamOut(t);
+    },
+
+    async updateTeam(p) {
+      const t = (await one('teams', p.id)) || fail('Команда не найдена', 'NOT_FOUND');
+      const upd = {};
+      if ('name' in p) upd.name = req(str(p.name, 40), 'Название команды');
+      if ('color' in p) upd.color = color(p.color, t.color);
+      if ('archived' in p) upd.archived = !!p.archived;
+      await updateOne('teams', t.id, upd);
+      return teamOut({ ...t, ...upd });
+    },
+
+    async reorderTeams(p) {
+      await Promise.all((p.ids || []).map((id, i) => run(T('teams').update({ ord: i + 1 }).eq('id', String(id)))));
+      return teams();
+    },
+
+    async deleteTeam(p) {
+      const t = (await one('teams', p.id)) || fail('Команда не найдена', 'NOT_FOUND');
+      await rpc('delete_team', { p_team: t.id });
+      return true;
+    },
+
     async createDepartment(p) {
       const count = (await run(T('departments').select('id'))).length;
       const d = { id: uid('d'), name: req(str(p.name, 40), 'Название отдела'), color: color(p.color, PALETTE[count % PALETTE.length]), ord: (await maxOrd('departments')) + 1, archived: false };
@@ -1059,6 +1105,8 @@ export function createBackend(db, opts = {}) {
         access: ACCESS.includes(p.access) ? p.access : 'member', position_id: (await validDept(p.positionId)) || 'd_other',
       };
       person.extra_positions = (await cleanPositions(p.extraPositionIds)).filter(id => id !== person.position_id);
+      // команды: указанные или Other (если такая есть)
+      person.team_ids = 'teamIds' in p ? await cleanTeams(p.teamIds) : (await validTeam('t_other')) ? ['t_other'] : [];
       await run(T('people').insert(person));
       return personOut(person);
     },
@@ -1080,7 +1128,7 @@ export function createBackend(db, opts = {}) {
       const res = await invoke('admin-users', {
         action: 'create', email, password, personId: p.personId || null, name: str(p.name, 80),
         role: str(p.role, 80), access: ACCESS.includes(p.access) ? p.access : 'member', positionId: str(p.positionId, 40),
-        extraPositionIds: await cleanPositions(p.extraPositionIds),
+        extraPositionIds: await cleanPositions(p.extraPositionIds), teamIds: await cleanTeams(p.teamIds),
       });
       return personOut(res.person);
     },
@@ -1139,6 +1187,7 @@ export function createBackend(db, opts = {}) {
         department_id: await validDept(p.departmentId), checklist: cleanChecklist(p.checklist),
         due_days: [-1, 0, 1, 2, 3, 5, 7, 14, 30].includes(Number(p.dueDays)) ? Number(p.dueDays) : -1,
         assignee_id: p.assigneeId && (await one('people', p.assigneeId)) ? String(p.assigneeId) : '',
+        team_id: await validTeam(p.teamId),
         links: {},
       };
       // ссылки шаблона: только существующие поля-ссылки и только http(s)
@@ -1248,6 +1297,7 @@ export function createBackend(db, opts = {}) {
       if ('access' in p) upd.access = ACCESS.includes(p.access) ? p.access : fail('Неизвестная роль');
       if ('positionId' in p) upd.position_id = (await validDept(p.positionId)) || 'd_other';
       const main = upd.position_id || person.position_id;
+      if ('teamIds' in p) upd.team_ids = await cleanTeams(p.teamIds);
       if ('extraPositionIds' in p) upd.extra_positions = (await cleanPositions(p.extraPositionIds)).filter(id => id !== main);
       else if (upd.position_id) upd.extra_positions = (json(person.extra_positions, []) || []).filter(id => id !== main);
       await updateOne('people', person.id, upd);

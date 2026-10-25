@@ -389,6 +389,43 @@ test('шаблоны задач: ведут администраторы, вид
   assert.equal((await api('bootstrap', {})).templates.length, 0);
 });
 
+test('команды: у человека несколько, видимость задач команды', async () => {
+  const api = await setup();
+  const { mod, designer, dev, A, t2 } = await team(api);
+  assert.deepEqual((await api('bootstrap', {})).teams.map(t => t.name),
+    ['Product Team', 'UX/UI Designers', 'iOS Development', 'QA Team', 'Release Managers', 'Other']);
+  assert.deepEqual(designer.teamIds, ['t_other']); // по умолчанию — Other
+  // задача iOS-команды с позицией QA: дизайнер её не видит, пока не в iOS Development
+  const t = await api('createTask', { unitId: A.id, title: 'Сборка', departmentId: 'd_qa', teamId: 't_ios' });
+  assert.equal(t.teamId, 't_ios');
+  await api.as(designer, async () => {
+    assert.ok(!(await api('getBoard', { unitId: A.id })).tasks.some(x => x.id === t.id));
+    await assert.rejects(() => api('updatePerson', { id: designer.id, teamIds: ['t_ios'] }), forbidden);
+  });
+  const p = await api('updatePerson', { id: designer.id, teamIds: ['t_design', 't_ios', 'нет'] });
+  assert.deepEqual(p.teamIds, ['t_design', 't_ios']);
+  await api.as(designer, async () => {
+    assert.ok((await api('getBoard', { unitId: A.id })).tasks.some(x => x.id === t.id));
+  });
+  // команду задачи меняет администратор, участник — нет
+  await api.as(dev, async () => {
+    await assert.rejects(() => api('updateTask', { id: t2.id, patch: { teamId: 't_qa' } }), forbidden);
+  });
+  await api.as(mod, () => api('updateTask', { id: t2.id, patch: { teamId: 't_qa' } }));
+  const hist = (await api('getTaskExtras', { taskId: t2.id })).activity.find(a => a.field === 'teamId');
+  assert.equal(hist.toText, 'QA Team');
+  // свои команды: создать, удалить — у людей и задач пропадает
+  const growth = await api('createTeam', { name: 'Growth' });
+  await api('updatePerson', { id: dev.id, teamIds: [growth.id] });
+  await api('deleteTeam', { id: 't_ios' });
+  const ppl = (await api('bootstrap', {})).people;
+  assert.deepEqual(ppl.find(x => x.id === designer.id).teamIds, ['t_design']);
+  assert.equal((await api('getBoard', { unitId: A.id })).tasks.find(x => x.id === t.id).teamId, '');
+  await api.as(designer, async () => {
+    await assert.rejects(() => api('createTeam', { name: 'x' }), forbidden);
+  });
+});
+
 test('профили: свой профиль, роли меняет только супер-админ', async () => {
   const api = await setup();
   const { admin, mod, designer, dev } = await team(api);

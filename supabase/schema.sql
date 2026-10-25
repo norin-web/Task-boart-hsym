@@ -194,6 +194,7 @@ create table if not exists task_templates (
 -- Исполнитель по умолчанию (из выбранной команды-позиции) и ссылки { поле-ссылка → url }
 alter table task_templates add column if not exists assignee_id text not null default '';
 alter table task_templates add column if not exists links jsonb not null default '{}';
+alter table task_templates add column if not exists team_id text not null default '';
 
 -- ---------- атомарные операции ----------
 
@@ -245,6 +246,31 @@ update departments set ord = 9 where id = 'd_other' and ord = 4;
 -- Дополнительные позиции человека (основная — position_id; например, Product owner + UX/UI Designer)
 alter table people add column if not exists extra_positions jsonb not null default '[]';
 
+-- Команды людей (Product Team, UX/UI Designers…): у человека может быть несколько; у задачи — одна (необязательно).
+-- Участник видит в своих юнитах задачи своих позиций И своих команд.
+create table if not exists teams (
+  id       text primary key,
+  name     text not null,
+  color    text not null,
+  ord      double precision not null default 0,
+  archived boolean not null default false
+);
+insert into teams (id, name, color, ord) values
+  ('t_product', 'Product Team', '#0ea5e9', 1), ('t_design', 'UX/UI Designers', '#ec4899', 2),
+  ('t_ios', 'iOS Development', '#6366f1', 3), ('t_qa', 'QA Team', '#14b8a6', 4),
+  ('t_release', 'Release Managers', '#8b5cf6', 5), ('t_other', 'Other', '#64748b', 9)
+on conflict (id) do nothing;
+-- Однократно: команды по позициям (Product owner → Product Team, …; остальные — Other)
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_name = 'people' and column_name = 'team_ids') then
+    alter table people add column team_ids jsonb not null default '[]';
+    update people set team_ids = jsonb_build_array(case position_id
+      when 'd_po' then 't_product' when 'd_design' then 't_design' when 'd_ios' then 't_ios'
+      when 'd_qa' then 't_qa' when 'd_release' then 't_release' else 't_other' end);
+  end if;
+end $$;
+alter table tasks add column if not exists team_id text not null default '';
+
 -- Позиция по умолчанию — первый «отдел в команде» человека (однократно, если позиции ещё нет)
 update people p set position_id = m.department_id
   from (select distinct on (person_id) person_id, department_id from unit_members
@@ -270,6 +296,11 @@ $$;
 create or replace function my_position() returns text
 language sql stable security definer set search_path = public as $$
   select coalesce((select position_id from people where user_id = auth.uid() and active limit 1), '');
+$$;
+-- Команды вошедшего
+create or replace function my_teams() returns text[]
+language sql stable security definer set search_path = public as $$
+  select coalesce((select array(select jsonb_array_elements_text(team_ids)) from people where user_id = auth.uid() and active limit 1), '{}');
 $$;
 -- Все позиции вошедшего: основная + дополнительные
 create or replace function my_positions() returns text[]
@@ -345,7 +376,8 @@ begin
     if new.title is distinct from old.title or new.assignee_id is distinct from old.assignee_id
        or new.due_date is distinct from old.due_date or new.unit_id is distinct from old.unit_id
        or new.department_id is distinct from old.department_id or new.archived is distinct from old.archived
-       or new.num is distinct from old.num or new.created_by is distinct from old.created_by then
+       or new.num is distinct from old.num or new.created_by is distinct from old.created_by
+       or new.team_id is distinct from old.team_id then
       raise exception 'Недостаточно прав: участник меняет только статус, описание, поля и чеклист своей задачи' using errcode = '42501';
     end if;
     select string_agg(f.name, ', ') into missing from fields f
@@ -560,6 +592,7 @@ begin
   if coalesce(new.position_id, '') = '' then new.position_id := 'd_other'; end if;
   new.extra_positions := coalesce((select jsonb_agg(distinct x) from jsonb_array_elements_text(new.extra_positions) x
                                     where x <> new.position_id and x <> ''), '[]'::jsonb);
+  new.team_ids := coalesce((select jsonb_agg(distinct x) from jsonb_array_elements_text(new.team_ids) x where x <> ''), '[]'::jsonb);
   if app_system() then return new; end if;
   if tg_op = 'INSERT' then
     if new.access <> 'member' and not is_superadmin() then
@@ -575,7 +608,7 @@ begin
     raise exception 'Роли меняет только супер-админ' using errcode = '42501';
   end if;
   if not is_staff() and (new.email is distinct from old.email or new.position_id is distinct from old.position_id
-                         or new.extra_positions is distinct from old.extra_positions
+                         or new.extra_positions is distinct from old.extra_positions or new.team_ids is distinct from old.team_ids
                          or new.active is distinct from old.active) then
     raise exception 'Email, позицию и доступ меняет администратор' using errcode = '42501';
   end if;
@@ -684,7 +717,7 @@ alter function comment_counts(text) set search_path = public;
 do $$
 declare t text;
 begin
-  foreach t in array array['units', 'fields', 'people', 'departments', 'unit_members', 'tasks', 'comments', 'activity', 'link_fields', 'task_links', 'notifications', 'task_templates'] loop
+  foreach t in array array['teams', 'units', 'fields', 'people', 'departments', 'unit_members', 'tasks', 'comments', 'activity', 'link_fields', 'task_links', 'notifications', 'task_templates'] loop
     execute format('alter table %I enable row level security', t);
     execute format('drop policy if exists team_all on %I', t);
   end loop;
@@ -730,7 +763,8 @@ create policy people_update on people for update to authenticated
 drop policy if exists tasks_read on tasks;
 create policy tasks_read on tasks for select to authenticated using (
   is_staff() or assignee_id = my_person_id() or review_from = my_person_id() or reviewer_id = my_person_id()
-  or (is_unit_member(unit_id) and department_id <> '' and department_id = any(my_positions())));
+  or (is_unit_member(unit_id) and ((department_id <> '' and department_id = any(my_positions()))
+                                     or (team_id <> '' and team_id = any(my_teams())))));
 drop policy if exists tasks_insert on tasks;
 create policy tasks_insert on tasks for insert to authenticated with check (is_staff());
 drop policy if exists tasks_delete on tasks;
@@ -756,6 +790,25 @@ create policy task_links_write on task_links for all to authenticated
   using (can_see_link(field_id) and exists (select 1 from tasks t where t.id = task_id and (is_staff() or t.assignee_id = my_person_id())))
   with check (can_see_link(field_id) and exists (select 1 from tasks t where t.id = task_id and t.unit_id = task_links.unit_id
     and (is_staff() or t.assignee_id = my_person_id())));
+
+-- Команды: видят все, ведут администраторы и модераторы (как позиции).
+drop policy if exists teams_read on teams;
+create policy teams_read on teams for select to authenticated using (true);
+drop policy if exists teams_write on teams;
+create policy teams_write on teams for all to authenticated using (is_staff()) with check (is_staff());
+
+-- Удалить команду: у людей и задач она просто пропадает.
+create or replace function delete_team(p_team text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not app_system() and not is_staff() then raise exception 'Недостаточно прав' using errcode = '42501'; end if;
+  perform set_config('app.system', 'on', true);
+  update people set team_ids = team_ids - p_team where team_ids ? p_team;
+  update tasks set team_id = '' where team_id = p_team;
+  update task_templates set team_id = '' where team_id = p_team;
+  delete from teams where id = p_team;
+  perform set_config('app.system', 'off', true);
+end $$;
 
 -- Шаблоны: видят все вошедшие, ведут администраторы и модераторы.
 drop policy if exists templates_read on task_templates;

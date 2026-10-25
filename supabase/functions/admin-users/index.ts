@@ -91,6 +91,7 @@ Deno.serve(async req => {
           id: personId, name: String(body.name || email.split('@')[0]).slice(0, 80), role: String(body.role || '').slice(0, 80),
           access, position_id: String(body.positionId || '') || 'd_other',
           extra_positions: Array.isArray(body.extraPositionIds) ? body.extraPositionIds.map(String).slice(0, 10) : [],
+          team_ids: Array.isArray(body.teamIds) && body.teamIds.length ? body.teamIds.map(String).slice(0, 10) : ['t_other'],
           created_at: nowIso(), ...fields,
         });
         if (error) return json({ error: error.message }, 400);
