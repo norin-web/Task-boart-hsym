@@ -1,6 +1,7 @@
-/** Панель админа (#/admin): обзор, люди и доступы, юниты, позиции, журнал. Для модераторов и супер-админов. */
+/** Панель админа (#/admin): обзор, люди и доступы, юниты, позиции, карточка, журнал. Для модераторов и супер-админов. */
+import Sortable from 'sortablejs';
 import { S, me, byOrder, emptyCounts, personById, todayStr, isSuper, ACCESS_LABELS, plural, LINK_KINDS, activeDepts } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill, toast, confirmDlg } from '../ui.js';
+import { $, h, icon, avatar, topbar, showErr, fill, toast, confirmDlg, menu } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView, link, navigate } from '../router.js';
 import { renderSidebar } from './sidebar.js';
@@ -172,58 +173,104 @@ function unitsTable(ov) {
 
 /* ---------- карточка: поля-ссылки ---------- */
 
+const kindIcon = k => icon(k === 'link' || !k ? 'link' : k, 16);
+/** Иконка по названию нового поля: «Figma» → figma, «GitHub» → github… */
+const guessKind = name => {
+  const n = name.toLowerCase();
+  return /figma/.test(n) ? 'figma' : /git/.test(n) ? 'github' : /drive|диск/.test(n) ? 'drive' : /meta|мета/.test(n) ? 'meta' : 'link';
+};
+
 /** Ссылки в карточке задачи (Figma, GitHub…): общий набор для всех юнитов и кому из позиций их видно. Только супер-админ. */
 function linkFieldsManager() {
-  const box = h('div', { class: 'rows people-list' });
+  const list = h('div', { class: 'lf-list' });
   const sorted = () => [...S.linkFields].sort(byOrder);
-  const draw = () => fill(box, S.linkFields.length ? sorted().map(row) : h('p', { class: 'muted', style: { padding: '12px 14px', margin: 0 } }, 'Полей нет'));
-  const save = (f, patch) => send('updateLinkField', { id: f.id, ...patch }).then(saved => { Object.assign(f, saved); draw(); }).catch(showErr);
-  const move = (f, dir) => {
-    const list = sorted();
-    const i = list.indexOf(f);
-    list.splice(i + dir, 0, list.splice(i, 1)[0]);
-    list.forEach((x, k) => { x.order = k + 1; });
-    draw();
-    send('reorderLinkFields', { ids: list.map(x => x.id) }).catch(showErr);
-  };
+  const save = (f, patch) => send('updateLinkField', { id: f.id, ...patch }).then(saved => { Object.assign(f, saved); return f; });
   const remove = async f => {
     if (!(await confirmDlg(`Удалить поле «${f.name}» навсегда? Ссылки этого поля пропадут из всех задач. Если поле может понадобиться — лучше скрыть.`, { ok: 'Удалить', danger: true }))) return;
     await send('deleteLinkField', { id: f.id });
     S.linkFields = S.linkFields.filter(x => x !== f);
     draw();
   };
-  // Кому видно: «Всем» или выбранные позиции; клик по позиции включает/выключает её
-  const audience = f => {
-    const all = !f.positions.length;
-    const toggle = id => save(f, { positions: f.positions.includes(id) ? f.positions.filter(x => x !== id) : [...f.positions, id] });
-    return h('div', { class: 'aud' },
-      h('button', { class: 'aud-chip' + (all ? ' on' : ''), title: 'Видно всем позициям', onclick: () => { if (!all) save(f, { positions: [] }); } }, 'Всем'),
+
+  // «Кому видно»: кнопка с текущим выбором → меню с галочками; меню не закрывается, пока отмечаешь
+  const audienceLabel = f => {
+    const ds = activeDepts().filter(d => f.positions.includes(d.id));
+    if (!ds.length) return [icon('users', 14), h('span', null, 'Всем')];
+    return [h('span', { class: 'aud-dots' }, ds.slice(0, 4).map(d => h('span', { class: 'dot', style: { background: d.color } }))),
+      h('span', { class: 'aud-text' }, ds.length <= 2 ? ds.map(d => d.name).join(', ') : `${ds.length} ${plural(ds.length, ['позиция', 'позиции', 'позиций'])}`)];
+  };
+  const audienceMenu = (btn, f) => {
+    const box = h('div');
+    const set = positions => save(f, { positions }).then(() => { fill(btn, ...audienceLabel(f), icon('chevron', 14)); paint(); }).catch(showErr);
+    const item = (on, label, dot, onclick) => h('button', { class: 'menu-item aud-item' + (on ? ' on' : ''), role: 'menuitemcheckbox', 'aria-checked': String(on), onclick },
+      h('span', { class: 'aud-check' }, on && icon('check', 13)), dot, label);
+    const paint = () => fill(box,
+      item(!f.positions.length, 'Всем позициям', h('span', { class: 'dot', style: { background: 'var(--muted)' } }), () => { if (f.positions.length) set([]); }),
+      h('div', { class: 'menu-sep' }),
       activeDepts().map(d => {
         const on = f.positions.includes(d.id);
-        return h('button', {
-          class: 'aud-chip' + (on ? ' on' : ''), title: on ? 'Скрыть от позиции' : 'Показать позиции',
-          style: on ? { background: `color-mix(in srgb, ${d.color} 16%, transparent)`, color: d.color, borderColor: 'transparent' } : null,
-          onclick: () => toggle(d.id),
-        }, h('span', { class: 'dot', style: { background: d.color } }), d.name);
-      }));
+        return item(on, d.name, h('span', { class: 'dot', style: { background: d.color } }),
+          () => set(on ? f.positions.filter(x => x !== d.id) : [...f.positions, d.id]));
+      }),
+      h('div', { class: 'menu-sep' }),
+      h('div', { class: 'hint aud-note' }, 'Администраторы видят все поля'));
+    paint();
+    menu(btn, [{ title: 'Кому видно' }, box]);
   };
-  const kindSelect = f => h('select', { class: 'inp sm', value: f.kind, title: 'Иконка', style: { width: 'auto' }, onchange: e => save(f, { kind: e.target.value }) },
-    Object.entries(LINK_KINDS).map(([k, v]) => h('option', { value: k }, v)));
-  const row = (f, i, arr) => h('div', { class: 'lf-row' + (f.archived ? ' inactive' : '') },
-    h('div', { class: 'lf-top' },
-      h('span', { class: 'lf-ic' }, icon(f.kind === 'link' ? 'link' : f.kind, 16)),
-      h('input', { class: 'inp', value: f.name, maxlength: 40, style: { flex: 1 }, onchange: e => { if (e.target.value.trim()) save(f, { name: e.target.value }); } }),
-      kindSelect(f),
-      h('button', { class: 'icon-btn sm', title: 'Выше', disabled: i === 0, onclick: () => move(f, -1) }, '↑'),
-      h('button', { class: 'icon-btn sm', title: 'Ниже', disabled: i === arr.length - 1, onclick: () => move(f, 1) }, '↓'),
-      h('button', { class: 'btn ghost sm', onclick: () => save(f, { archived: !f.archived }) }, f.archived ? 'Показать' : 'Скрыть'),
-      h('button', { class: 'icon-btn sm', title: 'Удалить', onclick: () => remove(f).catch(showErr) }, icon('trash', 14))),
-    h('div', { class: 'lf-aud' }, h('span', { class: 'hint' }, 'Кому видно:'), audience(f)));
-  const name = h('input', { class: 'inp', placeholder: 'Например, Jira или Notion', maxlength: 40 });
+
+  const row = f => {
+    const name = h('input', {
+      class: 'lf-name', value: f.name, maxlength: 40, 'aria-label': 'Название',
+      onchange: e => { const v = e.target.value.trim(); if (!v) { e.target.value = f.name; return; } save(f, { name: v }).catch(showErr); },
+      onkeydown: e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') { e.target.value = f.name; e.target.blur(); } },
+    });
+    const aud = h('button', { class: 'aud-btn', title: 'Кому видно', onclick: e => { e.stopPropagation(); audienceMenu(aud, f); } }, ...audienceLabel(f), icon('chevron', 14));
+    return h('div', { class: 'lf-row' + (f.archived ? ' off' : ''), dataset: { id: f.id } },
+      h('span', { class: 'drag', title: 'Перетащите, чтобы изменить порядок' }, icon('grip', 16)),
+      h('span', { class: 'lf-ic' }, kindIcon(f.kind)),
+      name,
+      f.archived && h('span', { class: 'badge' }, 'скрыто'),
+      aud,
+      h('button', {
+        class: 'icon-btn sm', title: f.archived ? 'Показать в карточках' : 'Скрыть из карточек (ссылки сохранятся)',
+        onclick: () => save(f, { archived: !f.archived }).then(draw).catch(showErr),
+      }, icon(f.archived ? 'eyeOff' : 'eye', 15)),
+      h('button', { class: 'icon-btn sm', title: 'Удалить навсегда', onclick: () => remove(f).catch(showErr) }, icon('trash', 15)));
+  };
+
+  let sortable = null;
+  const draw = () => {
+    fill(list, S.linkFields.length ? sorted().map(row) : h('p', { class: 'muted', style: { padding: '12px 14px', margin: 0 } }, 'Полей нет'));
+    if (sortable) sortable.destroy();
+    sortable = Sortable.create(list, {
+      handle: '.drag', animation: 150, ghostClass: 'sortable-ghost', forceFallback: true, fallbackTolerance: 4,
+      onEnd: () => {
+        const ids = [...list.children].map(el => el.dataset.id).filter(Boolean);
+        ids.forEach((id, i) => { const f = S.linkFields.find(x => x.id === id); if (f) f.order = i + 1; });
+        send('reorderLinkFields', { ids }).catch(showErr);
+      },
+    });
+  };
+
+  // Новое поле: иконку угадываем по названию, пока её не выбрали вручную
+  let kind = 'link', picked = false;
+  const kindBtn = h('button', { class: 'kind-btn', title: 'Иконка поля', onclick: e => {
+    e.stopPropagation();
+    menu(kindBtn, [{ title: 'Иконка' }, ...Object.entries(LINK_KINDS).map(([k, v]) => ({
+      label: v, icon: k === 'link' ? 'link' : k, action: () => { kind = k; picked = true; fill(kindBtn, kindIcon(kind), icon('chevron', 12)); },
+    }))]);
+  } }, kindIcon(kind), icon('chevron', 12));
+  const name = h('input', { class: 'inp', placeholder: 'Например, Jira или Notion', maxlength: 40, oninput: () => {
+    if (picked) return;
+    kind = guessKind(name.value);
+    fill(kindBtn, kindIcon(kind), icon('chevron', 12));
+  } });
   const add = async () => {
     if (!name.value.trim()) return name.focus();
-    S.linkFields.push(await send('createLinkField', { name: name.value, kind: 'link' }));
+    S.linkFields.push(await send('createLinkField', { name: name.value, kind }));
     name.value = '';
+    kind = 'link'; picked = false;
+    fill(kindBtn, kindIcon(kind), icon('chevron', 12));
     draw();
     name.focus();
   };
@@ -231,8 +278,8 @@ function linkFieldsManager() {
   draw();
   return h('div', null,
     h('h2', { style: { marginTop: 0, fontSize: '16px' } }, 'Ссылки в карточке задачи'),
-    h('p', { class: 'hint', style: { marginTop: 0 } }, 'Общие для всех юнитов. Участник видит поле, только если оно открыто его позиции; администраторы видят всё. Скрытые от позиции ссылки не уходят ей даже в браузер.'),
-    box,
+    h('p', { class: 'hint', style: { marginTop: 0 } }, 'Общие для всех юнитов. Участник видит поле, только если оно открыто его позиции. Скрытые ссылки не уходят ему даже в браузер.'),
+    list,
     h('div', { class: 'sub-title' }, 'Добавить поле'),
-    h('div', { class: 'row', style: { flexWrap: 'nowrap' } }, name, h('button', { class: 'btn primary', onclick: () => add().catch(showErr) }, icon('plus', 14), 'Добавить')));
+    h('div', { class: 'lf-add' }, kindBtn, name, h('button', { class: 'btn primary', onclick: () => add().catch(showErr) }, icon('plus', 14), 'Добавить')));
 }
