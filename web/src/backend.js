@@ -4,8 +4,9 @@
  * Все методы асинхронные: (payload, ctx) → данные; ctx.actorId — id человека, от чьего имени действие.
  */
 
-export const KINDS = ['todo', 'progress', 'done'];
-const KIND_COUNT_KEY = { todo: 'todo', progress: 'in_progress', done: 'done' };
+// live — «в сторе»: живое, но работа не ведётся (не открыто, не сделано, не просрочено, не архивируется)
+export const KINDS = ['todo', 'progress', 'done', 'live'];
+const KIND_COUNT_KEY = { todo: 'todo', progress: 'in_progress', done: 'done', live: 'live' };
 export const FIELD_TYPES = ['text', 'longtext', 'number', 'date', 'select', 'multiselect', 'person', 'checkbox', 'url'];
 /** Тип карточки: '' — задача, app — приложение, update — апдейт, reject — реджект. */
 export const TASK_KINDS = ['', 'app', 'update', 'reject'];
@@ -70,7 +71,7 @@ const json = (v, fallback) => {
   try { return v ? JSON.parse(v) : fallback; } catch { return fallback; }
 };
 const fmtDate = d => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d || ''); return m ? `${m[3]}.${m[2]}.${m[1]}` : ''; };
-const emptyCounts = () => ({ todo: 0, in_progress: 0, done: 0, overdue: 0 });
+const emptyCounts = () => ({ todo: 0, in_progress: 0, done: 0, live: 0, overdue: 0 });
 
 /** Колонка задачи; неизвестный статус (колонку удалили) считается первой колонкой. */
 const columnOf = (settings, status) => settings.columns.find(c => c.id === status) || settings.columns[0];
@@ -354,7 +355,8 @@ export function createBackend(db, opts = {}) {
         stack.push(...(kids[r.id] || []));
         if (r.archived || !U[r.unit_id]) continue;
         s.total++;
-        if (kindOf(U[r.unit_id].st, r.status) === 'done') s.done++; else if (r.due_date && r.due_date < day) s.overdue++;
+        const k = kindOf(U[r.unit_id].st, r.status);
+        if (k === 'done') s.done++; else if (k !== 'live' && r.due_date && r.due_date < day) s.overdue++;
       }
       if (s.total) stats[root] = s;
     }
@@ -461,7 +463,7 @@ export function createBackend(db, opts = {}) {
       const kind = kindOf(st, t.status);
       const c = counts[t.unit_id] || (counts[t.unit_id] = { ...emptyCounts(), doneWeek: 0 });
       c[KIND_COUNT_KEY[kind]]++;
-      if (kind !== 'done' && t.due_date && t.due_date < day) c.overdue++;
+      if (kind !== 'done' && kind !== 'live' && t.due_date && t.due_date < day) c.overdue++;
       if (kind === 'done' && weekAgo && t.done_at >= weekAgo) c.doneWeek++;
     }
     return counts;
@@ -674,7 +676,7 @@ export function createBackend(db, opts = {}) {
         const u = U[t.unit_id];
         if (!u) continue;
         const kind = kindOf(u.st, t.status);
-        if (kind === 'done') continue;
+        if (kind === 'done' || kind === 'live') continue;
         const late = !!t.due_date && t.due_date < day;
         const bump = (map, key) => {
           const c = map[key] || (map[key] = { open: 0, inProgress: 0, overdue: 0 });
@@ -827,7 +829,8 @@ export function createBackend(db, opts = {}) {
         { id: 'store', name: 'Ревью стора', kind: 'progress', color: '#8b5cf6' }, { id: 'live', name: 'Релиз', kind: 'done' },
       ] } });
       await methods.updateUnit({ id: ceo.id, settings: { ...ceo.settings,
-        columns: [{ id: 'idea', name: 'Идея', kind: 'todo' }, { id: 'go', name: 'В работу', kind: 'progress' }, { id: 'launched', name: 'Запущено', kind: 'done' }],
+        // приложения в круговороте: колонки «готово» нет — In Store («в сторе»), пришёл апдейт — снова в работу
+        columns: [{ id: 'idea', name: 'To Do', kind: 'todo' }, { id: 'go', name: 'In Progress', kind: 'progress' }, { id: 'launched', name: 'In Store', kind: 'live' }],
         handoff: { column: 'go', unitId: mod.id } } });
       for (const u of top) await methods.updateUnit({ id: u.id, parentId: mod.id });
       // Компания и Модераторы — первыми в меню
@@ -857,6 +860,62 @@ export function createBackend(db, opts = {}) {
         made.push(nu.id);
       }
       return made;
+    },
+
+    /**
+     * Передать задачу вниз как есть (юнит приложений → Managers): копия-приложение без разбивки.
+     * Если в юните есть колонка передачи — задача переходит в неё (как при переносе), иначе копия создаётся сразу.
+     */
+    async handoffTask(p, ctx) {
+      const t = await findTask(p.id);
+      const unit = await findUnit(t.unit_id);
+      const ho = unitSettings(unit.settings).handoff || (json(unit.settings, {}) || {}).handoff;
+      if (!ho || !ho.unitId) fail('У этого юнита нет передачи вниз');
+      if (ho.column && t.status !== ho.column) await methods.updateTask({ id: t.id, patch: { status: ho.column } }, ctx);
+      const copyId = await rpc('do_handoff', { p_task: t.id });
+      if (!copyId) fail('Не удалось передать — проверьте юнит передачи');
+      return { copyId, unitId: ho.unitId };
+    },
+
+    /**
+     * All Apps: приложения юнита (его задачи) — где каждое сейчас (колонка здесь), на каком этапе у модераторов
+     * (копия-приложение уровнем ниже), сколько апдейтов и реджектов, прогресс задач команд под ним.
+     */
+    async getApps(p) {
+      const unit = await findUnit(p.unitId);
+      const apps = await all(() => T('tasks').select('*').eq('unit_id', unit.id).eq('archived', false).order('ord').order('id'));
+      // всё дерево под приложениями (до 5 уровней): копии у модераторов, апдейты/реджекты, задачи команд
+      const below = [];
+      let level = apps.map(t => t.id);
+      for (let d = 0; d < 5 && level.length; d++) {
+        const rows = await run(T('tasks').select('id,unit_id,num,title,status,kind,parent_id,archived,updated_at').in('parent_id', level));
+        below.push(...rows.filter(r => !r.archived));
+        level = rows.map(r => r.id);
+      }
+      const unitIds = [...new Set([unit.id, ...below.map(r => r.unit_id)])];
+      const units = await run(T('units').select('id,name,key,color,settings').in('id', unitIds));
+      const U = Object.fromEntries(units.map(u => [u.id, { ...u, st: unitSettings(u.settings) }]));
+      const col = (r) => { const u = U[r.unit_id]; const c = u && (u.st.columns.find(x => x.id === r.status) || u.st.columns[0]); return c || { name: r.status, kind: 'todo', color: '' }; };
+      const kidsOf = id => below.filter(r => r.parent_id === id);
+      const subtree = id => { const out = []; const walk = x => kidsOf(x).forEach(k => { out.push(k); walk(k.id); }); walk(id); return out; };
+      return apps.map(t => {
+        const c = col(t);
+        const all = subtree(t.id);
+        const copy = all.find(r => r.kind === 'app' && r.parent_id === t.id);
+        const cc = copy && col(copy);
+        const work = all.filter(r => !r.kind);
+        const doneKinds = new Set(['done', 'live']);
+        return {
+          id: t.id, unitId: unit.id, key: `${unit.key}-${t.num}`, title: t.title, updatedAt: t.updated_at, dueDate: t.due_date,
+          status: { name: c.name, kind: c.kind, color: c.color },
+          stage: copy ? { taskId: copy.id, unitId: copy.unit_id, unit: U[copy.unit_id] ? U[copy.unit_id].name : '', name: cc.name, kind: cc.kind, color: cc.color } : null,
+          updates: all.filter(r => r.kind === 'update').length,
+          updatesOpen: all.filter(r => r.kind === 'update' && !doneKinds.has(col(r).kind)).length,
+          rejects: all.filter(r => r.kind === 'reject').length,
+          rejectsOpen: all.filter(r => r.kind === 'reject' && !doneKinds.has(col(r).kind)).length,
+          progress: { done: work.filter(r => doneKinds.has(col(r).kind)).length, total: work.length },
+        };
+      });
     },
 
     /** Сводка юнита с командами внутри: по каждой команде — её задачи с этапом (давние готовые не показываем). */

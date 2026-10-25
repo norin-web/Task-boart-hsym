@@ -136,6 +136,19 @@ export function openDecompose(t, kind, onCreated) {
  * «Разбить на задачи»: меню — куда (юниты ниже) и набор задач (создаются сразу все) или одна задача вручную.
  * Выбранный юнит запоминается.
  */
+/** Юнит, куда этот юнит передаёт задачи вниз как есть (App → Managers), или null. */
+export const handoffUnit = u => (u && u.settings && u.settings.handoff && u.settings.handoff.unitId && unitById(u.settings.handoff.unitId)) || null;
+
+/** Передать задачу вниз копией как есть (без разбивки на задачи). */
+export async function handOff(t, onDone) {
+  try {
+    const r = await send('handoffTask', { id: t.id });
+    const u = unitById(r.unitId);
+    toast('Передано в «' + (u ? u.name : '') + '»', { action: { label: 'Открыть', run: () => peekTask(r.unitId, r.copyId) } });
+    if (onDone) onDone();
+  } catch (e) { showErr(e); }
+}
+
 export function decomposeMenu(anchor, t, onCreated) {
   // «Куда» — юниты уровнем ниже (MVP, а не команды внутри него: набор сам раскладывает задачи по командам)
   const direct = childUnits(S.board.unit.id);
@@ -187,7 +200,9 @@ function treeBlock(t, staff) {
   const actions = staff && h('div', { class: 'tree-actions' },
     t.kind === 'app' && h('button', { class: 'btn sm', onclick: () => openDecompose(t, 'update', reload) }, icon('refresh', 13), 'Апдейт'),
     t.kind === 'app' && h('button', { class: 'btn sm', onclick: () => openDecompose(t, 'reject', reload) }, icon('alert', 13), 'Реджект'),
-    below.length > 0 && h('button', { class: 'btn sm', onclick: e => { e.stopPropagation(); decomposeMenu(e.currentTarget, t, reload); } }, icon('tree', 13), 'Разбить на задачи', icon('chevron', 12)));
+    // из юнита приложений (App) — передача вниз копией как есть, разбивка — уже у Managers в юниты ниже
+    handoffUnit(u) ? h('button', { class: 'btn sm', onclick: () => handOff(t, reload) }, icon('arrow', 13), 'Передать в «' + handoffUnit(u).name + '»')
+      : below.length > 0 && h('button', { class: 'btn sm', onclick: e => { e.stopPropagation(); decomposeMenu(e.currentTarget, t, reload); } }, icon('tree', 13), 'Разбить на задачи', icon('chevron', 12)));
 
   const kindTag = k => TASK_KINDS[k] && h('span', { class: 'kind-tag', style: { '--kc': TASK_KINDS[k].color } }, TASK_KINDS[k].short);
   const statusChip = n => h('span', { class: 'chip st-chip', style: { '--sc': n.statusColor || KIND_COLORS[n.statusKind] } }, n.statusName);

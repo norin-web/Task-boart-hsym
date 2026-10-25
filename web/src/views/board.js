@@ -8,7 +8,7 @@ import { $, h, icon, avatar, topbar, menu, closeMenu, modal, field, confirmDlg, 
 import { call, send } from '../api.js';
 import { navigate, link } from '../router.js';
 import { updateSidebarCounts, renderUnread } from './sidebar.js';
-import { openTask, closePanel, openCreateTask, duplicateTask, deleteTaskUndoable, refreshPanel, openDecompose, decomposeMenu, peekTask } from './task.js';
+import { openTask, closePanel, openCreateTask, duplicateTask, deleteTaskUndoable, refreshPanel, openDecompose, decomposeMenu, peekTask, handoffUnit, handOff } from './task.js';
 
 let sortables = [];
 let quickInput = null;
@@ -42,6 +42,8 @@ export function renderBoardView() {
         childUnits(u.id).length > 0 && link({ unit: u.id, mode: 'overview' }, { class: mode === 'overview' ? 'on' : '', title: 'Задачи команд внутри юнита' }, icon('layers', 15), h('span', { class: 'btn-label' }, 'Сводка')),
         link({ unit: u.id, mode: 'board' }, { class: mode === 'board' ? 'on' : '', title: 'Доска' }, icon('board', 15), h('span', { class: 'btn-label' }, 'Доска')),
         link({ unit: u.id, mode: 'list' }, { class: mode === 'list' ? 'on' : '', title: 'Список' }, icon('list', 15), h('span', { class: 'btn-label' }, 'Список'))),
+      // юнит приложений (с передачей вниз): список всех приложений с этапом, апдейтами и прогрессом
+      isStaff() && u.settings.handoff && u.settings.handoff.unitId && h('button', { class: 'btn', onclick: () => openAllApps(u) }, icon('app', 15), h('span', { class: 'btn-label' }, 'All Apps')),
       isStaff() && link({ unit: u.id, mode: 'settings' }, { class: 'icon-btn', title: 'Настройки юнита' }, icon('settings', 17)),
       isStaff() && h('button', { class: 'btn primary', onclick: () => openCreateTask(), title: 'Новая задача (C)' }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Задача')),
     ]),
@@ -492,7 +494,8 @@ export function cardMenu(anchor, t) {
       class: 'menu-item', onclick: () => { closeMenu(); patchTask(t, { departmentId: d.id }); },
     }, h('span', { class: 'dot', style: { background: d.color, margin: '0 4px' } }), d.name)) : []),
     { sep: true },
-    descendantUnits(S.board.unit.id).length > 0 && { label: 'Разбить на задачи…', icon: 'tree', action: () => setTimeout(() => decomposeMenu(anchor, t, () => reloadBoard()), 0) },
+    handoffUnit(S.board.unit) ? { label: 'Передать в «' + handoffUnit(S.board.unit).name + '»', icon: 'arrow', action: () => handOff(t, () => reloadBoard()) }
+      : descendantUnits(S.board.unit.id).length > 0 && { label: 'Разбить на задачи…', icon: 'tree', action: () => setTimeout(() => decomposeMenu(anchor, t, () => reloadBoard()), 0) },
     t.kind === 'app' && { label: 'Апдейт', icon: 'refresh', action: () => openDecompose(t, 'update', () => reloadBoard()) },
     t.kind === 'app' && { label: 'Реджект', icon: 'alert', action: () => openDecompose(t, 'reject', () => reloadBoard()) },
     { sep: true },
@@ -761,4 +764,52 @@ export async function reloadBoard() {
   } catch (e) {
     showErr(e);
   }
+}
+
+/* ================= All Apps ================= */
+
+/**
+ * Все приложения юнита — панелью справа: поиск, фильтр по колонке, где сейчас (здесь и у модераторов),
+ * апдейты/реджекты, прогресс задач команд. Клик — карточка приложения (жизненный цикл) поверх.
+ */
+async function openAllApps(u) {
+  const root = $('#panel-root');
+  let q = '', status = '';
+  const body = h('div', { class: 'up-body aa-body' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' })));
+  const close = () => { document.removeEventListener('keydown', onKey, true); fill(root); };
+  const onKey = e => { if (e.key === 'Escape' && !document.querySelector('.modal')) { e.stopPropagation(); close(); } };
+  document.addEventListener('keydown', onKey, true);
+  fill(root,
+    h('div', { class: 'panel-backdrop', onclick: close }),
+    h('aside', { class: 'panel unit-panel aa-panel', role: 'dialog', 'aria-label': 'All Apps' },
+      h('div', { class: 'panel-head' }, icon('app', 18), h('b', null, 'All Apps'), h('span', { class: 'muted' }, u.name), h('span', { class: 'spacer' }),
+        h('button', { class: 'icon-btn', title: 'Закрыть (Esc)', onclick: close }, icon('x', 18))),
+      body));
+  let apps;
+  try { apps = await call('getApps', { unitId: u.id }); } catch (e) { close(); return showErr(e); }
+  const search = h('input', { class: 'inp', type: 'search', placeholder: 'Найти приложение', oninput: e => { q = e.target.value.trim().toLowerCase(); draw(); } });
+  const list = h('div', { class: 'aa-list' });
+  const chips = h('div', { class: 'quick-chips' });
+  const row = a => h('button', { class: 'aa-row', onclick: () => { close(); peekTask(a.unitId, a.id); } },
+    h('div', { class: 'aa-top' },
+      h('b', { class: 'aa-title' }, a.title),
+      h('span', { class: 'chip st-chip', style: { '--sc': a.status.color || KIND_COLORS[a.status.kind] } }, a.status.name)),
+    h('div', { class: 'aa-meta' },
+      a.stage ? h('span', { title: 'Этап у ' + a.stage.unit }, icon('layers', 12), a.stage.unit + ': ', h('b', null, a.stage.name)) : h('span', { class: 'muted' }, 'ещё не в работе'),
+      a.updates > 0 && h('span', { class: a.updatesOpen ? 'aa-open' : 'muted', title: 'Апдейты (открыто ' + a.updatesOpen + ')' }, icon('refresh', 12), a.updates),
+      a.rejects > 0 && h('span', { class: a.rejectsOpen ? 'warn-text' : 'muted', title: 'Реджекты (открыто ' + a.rejectsOpen + ')' }, icon('alert', 12), a.rejects),
+      a.progress.total > 0 && h('span', { class: 'aa-prog', title: 'Задачи команд: ' + a.progress.done + ' из ' + a.progress.total },
+        h('span', { class: 'progress' }, h('span', { style: { width: Math.round(a.progress.done / a.progress.total * 100) + '%' } })),
+        a.progress.done + '/' + a.progress.total)));
+  const draw = () => {
+    const names = [...new Map(apps.map(a => [a.status.name, a.status])).values()];
+    fill(chips, h('button', { class: 'quick-chip' + (!status ? ' on' : ''), onclick: () => { status = ''; draw(); } }, 'Все · ' + apps.length),
+      names.map(st => h('button', { class: 'quick-chip' + (status === st.name ? ' on' : ''), onclick: () => { status = status === st.name ? '' : st.name; draw(); } },
+        h('span', { class: 'dot', style: { background: st.color || KIND_COLORS[st.kind] } }), st.name + ' · ' + apps.filter(a => a.status.name === st.name).length)));
+    const shown = apps.filter(a => (!status || a.status.name === status) && (!q || a.title.toLowerCase().includes(q)));
+    fill(list, shown.length ? shown.map(row) : h('p', { class: 'muted' }, apps.length ? 'Ничего не найдено' : 'Приложений пока нет'));
+  };
+  draw();
+  fill(body, search, chips, list);
+  search.focus();
 }

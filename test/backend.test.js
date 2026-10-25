@@ -371,3 +371,54 @@ test('неизвестный метод и внутренние ошибки н�
   assert.equal((await call('toString', {})).ok, false);
   assert.equal((await call('getBoard', null)).code, 'NOT_FOUND');
 });
+
+test('All Apps: приложения, этап у модераторов, апдейты и прогресс; колонка «в сторе»', async () => {
+  const api = await setup();
+  await api('createUnit', { name: 'Команда', key: 'TM' });
+  const { ceoId, modId } = await api('setupHierarchy', {});
+  const ceo = (await api('getBoard', { unitId: ceoId })).unit;
+  assert.deepEqual(ceo.settings.columns.map(c => c.kind), ['todo', 'progress', 'live']); // без «готово»
+  const app = await api('createTask', { unitId: ceoId, title: 'Sleep Sounds' });
+  await api('updateTask', { id: app.id, patch: { status: 'go' } }); // передача вниз — копия у модераторов
+  const copy = (await api('getBoard', { unitId: modId })).tasks.find(t => t.parentId === app.id);
+  assert.equal(copy.kind, 'app');
+  await api('createTask', { unitId: modId, title: 'Апдейт · Sleep', kind: 'update', parentId: copy.id });
+  const work = await api('createTask', { unitId: modId, title: 'Иконка', parentId: copy.id });
+  await api('createTask', { unitId: modId, title: 'Скрины', parentId: copy.id, status: 'live' });
+  await api('updateTask', { id: work.id, patch: { status: 'live' } });
+  let [a] = await api('getApps', { unitId: ceoId });
+  assert.equal(a.title, 'Sleep Sounds');
+  assert.equal(a.status.name, 'In Progress');
+  assert.equal(a.stage.taskId, copy.id);
+  assert.equal(a.updates, 1);
+  assert.equal(a.updatesOpen, 1);
+  assert.deepEqual(a.progress, { done: 2, total: 2 });
+  // в сторе: не сделано и не просрочено, не скрывается автоархивом
+  await api('updateTask', { id: app.id, patch: { status: 'launched', dueDate: '2020-01-01' } });
+  [a] = await api('getApps', { unitId: ceoId });
+  assert.equal(a.status.kind, 'live');
+  const u = (await api('bootstrap', {})).units.find(x => x.id === ceoId);
+  assert.equal(u.counts.overdue, 0);
+  assert.equal(u.counts.done, 0);
+  assert.equal(u.counts.live, 1);
+});
+
+test('передача вниз как есть: копия с чеклистом и ссылками, повтор не дублирует', async () => {
+  const api = await setup();
+  await api('createUnit', { name: 'Команда', key: 'TM' });
+  const { ceoId, modId } = await api('setupHierarchy', {});
+  const app = await api('createTask', { unitId: ceoId, title: 'Meditate', description: 'Описание', checklist: [{ text: 'Иконка' }, { text: 'Скрины', done: true }] });
+  await api('setTaskLink', { taskId: app.id, fieldId: 'lf_figma', url: 'figma.com/x' });
+  const r = await api('handoffTask', { id: app.id });
+  assert.equal(r.unitId, modId);
+  const b = await api('getBoard', { unitId: modId });
+  const copy = b.tasks.find(t => t.id === r.copyId);
+  assert.equal(copy.title, 'Meditate');
+  assert.equal(copy.description, 'Описание');
+  assert.equal(copy.kind, 'app');
+  assert.deepEqual(copy.checklist.map(i => [i.text, i.done]), [['Иконка', false], ['Скрины', true]]);
+  assert.equal(copy.links.lf_figma, 'https://figma.com/x');
+  assert.equal(b.tasks.filter(t => t.parentId === app.id).length, 1); // только копия, без разбивки
+  assert.equal((await api('getBoard', { unitId: ceoId })).tasks.find(t => t.id === app.id).status, 'go'); // ушло в работу
+  assert.equal((await api('handoffTask', { id: app.id })).copyId, r.copyId); // повтор — та же копия
+});

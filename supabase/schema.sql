@@ -543,38 +543,52 @@ create trigger review_assign before update on tasks for each row execute functio
 -- Передача вниз (настройка юнита settings.handoff: {column, unitId}): задача пришла в колонку column —
 -- в юните unitId появляется дочерняя карточка-приложение (kind app) с тем же названием, описанием, сроком,
 -- общими полями и ссылками; модераторам — уведомление «handoff». Один раз на пару «задача — юнит».
-create or replace function handoff_task() returns trigger language plpgsql security definer set search_path = public as $$
+-- Передать задачу в юнит ниже (передача вниз юнита): копия как есть — название, описание, срок, чеклист,
+-- общие поля и ссылки; kind app, parent — эта задача. Один раз на пару «задача — юнит». Возвращает id копии.
+create or replace function do_handoff(p_task text) returns text language plpgsql security definer set search_path = public as $$
 declare
-  ho jsonb;
+  t tasks;
   target text;
   v_id text;
   v_status text;
   v_actor text := coalesce(my_person_id(), '');
   at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
 begin
-  if new.status is not distinct from old.status then return new; end if;
-  select settings -> 'handoff' into ho from units where id = new.unit_id;
-  target := coalesce(ho ->> 'unitId', '');
-  if coalesce(ho ->> 'column', '') = '' or target = '' or new.status <> ho ->> 'column' then return new; end if;
-  if not exists (select 1 from units where id = target and not archived) then return new; end if;
-  if exists (select 1 from tasks where parent_id = new.id and unit_id = target) then return new; end if;
+  select * into t from tasks where id = p_task;
+  if t.id is null then return null; end if;
+  if not app_system() and not is_staff() then raise exception 'Передавать вниз могут администраторы' using errcode = '42501'; end if;
+  select coalesce(settings -> 'handoff' ->> 'unitId', '') into target from units where id = t.unit_id;
+  if target = '' or not exists (select 1 from units where id = target and not archived) then return null; end if;
+  select id into v_id from tasks where parent_id = t.id and unit_id = target limit 1;
+  if v_id is not null then return v_id; end if;
   select settings -> 'columns' -> 0 ->> 'id' into v_status from units where id = target;
   v_id := 't_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12);
   perform set_config('app.system', 'on', true);
   insert into tasks (id, unit_id, num, title, description, status, assignee_id, department_id, due_date, ord,
                      fields, checklist, archived, done_at, created_by, created_at, updated_at, parent_id, kind)
-  values (v_id, target, next_task_num(target), new.title, new.description, coalesce(v_status, 'todo'), '', '', new.due_date, 0,
-          (select coalesce(jsonb_object_agg(e.key, e.value), '{}'::jsonb) from jsonb_each(new.fields) e
+  values (v_id, target, next_task_num(target), t.title, t.description, coalesce(v_status, 'todo'), '', '', t.due_date, 0,
+          (select coalesce(jsonb_object_agg(e.key, e.value), '{}'::jsonb) from jsonb_each(t.fields) e
             where exists (select 1 from fields f where f.id = e.key and f.unit_id is null)),
-          '[]'::jsonb, false, '', v_actor, at_, at_, new.id, 'app');
+          t.checklist, false, '', v_actor, at_, at_, t.id, 'app');
   insert into task_links (task_id, field_id, unit_id, url, updated_at)
-  select v_id, field_id, target, url, at_ from task_links where task_id = new.id;
+  select v_id, field_id, target, url, at_ from task_links where task_id = t.id;
   insert into activity (id, unit_id, task_id, action, field, from_val, to_val, at)
-  values ('a_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), target, v_id, 'create', '', '', to_jsonb(new.title)::text, at_);
+  values ('a_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), target, v_id, 'create', '', '', to_jsonb(t.title)::text, at_);
   insert into notifications (id, person_id, task_id, kind, actor_id, at)
   select 'n_' || substr(md5(random()::text || clock_timestamp()::text || p.id), 1, 12), p.id, v_id, 'handoff', v_actor, at_
     from people p where p.active and p.access = 'moderator' and p.id <> v_actor;
   perform set_config('app.system', 'off', true);
+  return v_id;
+end $$;
+
+-- Задача пришла в колонку передачи (settings.handoff.column) — передаём вниз.
+create or replace function handoff_task() returns trigger language plpgsql security definer set search_path = public as $$
+declare ho jsonb;
+begin
+  if new.status is not distinct from old.status then return new; end if;
+  select settings -> 'handoff' into ho from units where id = new.unit_id;
+  if coalesce(ho ->> 'column', '') = '' or new.status <> ho ->> 'column' then return new; end if;
+  perform do_handoff(new.id);
   return new;
 end $$;
 drop trigger if exists handoff_task on tasks;
@@ -664,7 +678,7 @@ begin
       from tasks t join units u on u.id = t.unit_id
      where t.assignee_id = v_me and not t.archived and not u.archived and t.due_date <> '' and t.due_date <= v_tomorrow
        and not exists (select 1 from jsonb_array_elements(u.settings -> 'columns') c
-                        where c ->> 'id' = t.status and c ->> 'kind' = 'done')
+                        where c ->> 'id' = t.status and c ->> 'kind' in ('done', 'live'))
   ), fresh as (
     select d.* from due d
      where not exists (select 1 from notifications n
@@ -847,6 +861,18 @@ create table if not exists my_board (
   ord       double precision not null default 0,
   primary key (person_id, task_id)
 );
+
+-- Однократно: у юнитов приложений (с передачей вниз) колонка «готово» становится «в сторе» (live) —
+-- приложения в круговороте, их не прячем, не архивируем и не считаем сделанными.
+do $$ begin
+  if not exists (select 1 from app_settings where key = 'appsLiveKind') then
+    update units set settings = jsonb_set(settings, '{columns}', (
+      select jsonb_agg(case when c ->> 'kind' = 'done' then jsonb_set(c, '{kind}', '"live"') else c end order by i)
+        from jsonb_array_elements(settings -> 'columns') with ordinality x(c, i)))
+     where coalesce(settings -> 'handoff' ->> 'unitId', '') <> '' and jsonb_typeof(settings -> 'columns') = 'array';
+    insert into app_settings (key, value, updated_at) values ('appsLiveKind', 'true'::jsonb, '') on conflict (key) do nothing;
+  end if;
+end $$;
 
 -- ---------- правила доступа (RLS) ----------
 -- Без входа — ничего. Регистрация закрыта в Supabase Auth; людей добавляет администратор.

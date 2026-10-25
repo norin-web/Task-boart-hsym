@@ -8,9 +8,9 @@ export const TYPE_LABELS = {
 export const AUTO_ARCHIVE = [0, 7, 14, 30, 60, 90];
 export const HIDE_DONE = [[0, 'Всегда показывать'], [1, 'Сутки'], [3, '3 дня'], [7, 'Неделю'], [14, '2 недели'], [30, 'Месяц']];
 /** Тип колонки: определяет цвет по умолчанию и смысл («готово» — для прогресса и просрочек). */
-export const KINDS = ['todo', 'progress', 'done'];
-export const KIND_LABELS = { todo: 'Не начато', progress: 'В работе', done: 'Готово' };
-export const KIND_COLORS = { todo: 'var(--st-todo)', progress: 'var(--st-progress)', done: 'var(--st-done)' };
+export const KINDS = ['todo', 'progress', 'done', 'live'];
+export const KIND_LABELS = { todo: 'Не начато', progress: 'В работе', done: 'Готово', live: 'В сторе' };
+export const KIND_COLORS = { todo: 'var(--st-todo)', progress: 'var(--st-progress)', done: 'var(--st-done)', live: 'var(--st-live)' };
 /** Тип карточки (иерархия): приложение, апдейт, реджект; '' — обычная задача. */
 export const TASK_KINDS = {
   app: { label: 'Приложение', plural: 'Приложения', short: 'App', color: '#6366f1', icon: 'app' },
@@ -24,7 +24,7 @@ export function descendantUnits(id) {
   for (let level = childUnits(id); level.length; level = level.flatMap(u => childUnits(u.id))) out.push(...level);
   return out;
 }
-export const KIND_ICONS = { todo: 'circle', progress: 'progress', done: 'done' };
+export const KIND_ICONS = { todo: 'circle', progress: 'progress', done: 'done', live: 'app' };
 
 /** localStorage с защитой от приватного режима и битых значений. */
 export const LS = {

@@ -165,7 +165,7 @@ export async function renderHome() {
     { id: 'stats', title: 'Статистика задач', col: 'full', render: () => h('div', { class: 'stats' },
       stat('К выполнению', st.todo, 'circle', 'var(--st-todo)', t => t.statusKind === 'todo'),
       stat('В работе', st.in_progress, 'progress', 'var(--st-progress)', t => t.statusKind === 'progress'),
-      stat('Просрочено', st.overdue, 'alert', 'var(--danger)', t => t.statusKind !== 'done' && t.dueDate && t.dueDate < todayStr()),
+      stat('Просрочено', st.overdue, 'alert', 'var(--danger)', t => t.statusKind !== 'done' && t.statusKind !== 'live' && t.dueDate && t.dueDate < todayStr()),
       stat('Сделано за 7 дней', st.doneWeek, 'done', 'var(--st-done)', t => t.statusKind === 'done' && t.doneAt && t.doneAt >= weekAgo())) },
     { id: 'attention', title: 'Требует внимания', col: 'left', render: () => attentionBlock(ov) },
     { id: 'workload', title: 'Загрузка команды', col: 'left', render: () => workloadBlock(ov) },
@@ -424,7 +424,7 @@ function stat(label, value, ic, color, pick) {
 
 function statRow(t) {
   const due = t.dueDate && fmtDate(t.dueDate);
-  const late = t.statusKind !== 'done' && t.dueDate && t.dueDate < todayStr();
+  const late = t.statusKind !== 'done' && t.statusKind !== 'live' && t.dueDate && t.dueDate < todayStr();
   const p = personById(t.assigneeId);
   return h('button', { class: 'menu-item st-row', onclick: () => { closeMenu(); peekTask(t.unit.id, t.id); } },
     h('span', { class: 'unit-dot', style: { background: t.unit.color, margin: 0 } }),
