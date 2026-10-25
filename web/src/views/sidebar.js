@@ -4,7 +4,7 @@ import { $, h, icon, avatar, menu, showErr, fill, confirmDlg } from '../ui.js';
 import { send } from '../api.js';
 import { link } from '../router.js';
 import { openPalette } from './palette.js';
-import { openCreateUnit } from './units.js';
+import { openCreateUnit, unitMenu } from './units.js';
 import { openPeople, openActAs, openDepartments, openMyProfile } from './people.js';
 import { personCaption } from './my.js';
 import { mode, supabase, resetLocalData } from '../data.js';
@@ -44,6 +44,8 @@ function unitItem(u, r, depth = 0) {
   return link({ unit: u.id, mode: 'board' }, {
     class: 'nav-item unit' + (r.unit === u.id ? ' active' : '') + (u.archived ? ' archived' : '') + (depth ? ' sub' : ''),
     dataset: { id: u.id }, style: depth ? { '--depth': Math.min(depth, 4) } : null,
+    // правый клик — меню юнита (в т. ч. «Входит в…» — место в дереве)
+    oncontextmenu: isStaff() ? e => { e.preventDefault(); unitMenu({ x: e.clientX, y: e.clientY }, u); } : null,
   },
   h('span', { class: 'unit-dot', style: { background: u.color } }),
   h('span', { class: 'nav-label' }, u.name),
