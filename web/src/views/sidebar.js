@@ -4,10 +4,14 @@ import { $, h, icon, avatar, menu, showErr, fill, confirmDlg, toast } from '../u
 import { send } from '../api.js';
 import { link } from '../router.js';
 import { openPalette } from './palette.js';
-import { openCreateUnit, unitMenu } from './units.js';
+import { unitMenu } from './units.js';
+import { openStructureWizard } from './structure.js';
 import { openPeople, openActAs, openDepartments, openMyProfile } from './people.js';
 import { personCaption } from './my.js';
 import { mode, supabase, resetLocalData } from '../data.js';
+
+// Воркспейсы создаются мастером структуры (App → Managers → юниты → команды → люди)
+const openStructure = () => openStructureWizard(() => location.reload());
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 
@@ -80,9 +84,9 @@ export function renderSidebar() {
     staff && link({ view: 'admin' }, { class: 'nav-item' + (r.view === 'admin' ? ' active' : '') }, icon('settings'), h('span', { class: 'nav-label' }, 'Панель админа')),
     h('div', { class: 'nav-section' },
       h('span', null, staff ? 'Воркспейсы' : 'Мои воркспейсы'),
-      staff && h('button', { class: 'icon-btn sm', title: 'Новый воркспейс', onclick: openCreateUnit }, icon('plus', 14))),
+      staff && h('button', { class: 'icon-btn sm', title: 'Структура: уровни, юниты, команды, люди', onclick: openStructure }, icon('plus', 14))),
     list,
-    !units.length && staff && h('button', { class: 'nav-item', onclick: openCreateUnit }, icon('plus'), h('span', { class: 'nav-label muted' }, 'Создать воркспейс')),
+    !units.length && staff && h('button', { class: 'nav-item', onclick: openStructure }, icon('plus'), h('span', { class: 'nav-label muted' }, 'Создать воркспейс')),
     !units.length && !staff && h('div', { class: 'nav-empty' }, 'Пока нет воркспейсов'),
     h('div', { class: 'nav-spacer' }),
 
