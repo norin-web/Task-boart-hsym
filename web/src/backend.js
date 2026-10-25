@@ -25,6 +25,7 @@ export function defaultSettings() {
       description: { label: 'Описание',    hideable: true,  hidden: false },
     },
     autoArchiveDays: 0,
+    hideDoneDays: 0, // сколько дней держать выполненные на доске и в списке (0 — всегда)
   };
 }
 
@@ -108,6 +109,7 @@ export function unitSettings(raw) {
       return [k, { label: (k === 'department' && label === 'Отдел' ? '' : label) || def.label, hideable: def.hideable, hidden: def.hideable ? !!cur.hidden : false }];
     })),
     autoArchiveDays: Math.max(0, Math.min(365, parseInt(s.autoArchiveDays, 10) || 0)),
+    hideDoneDays: Math.max(0, Math.min(365, parseInt(s.hideDoneDays, 10) || 0)),
   };
 }
 
@@ -117,6 +119,7 @@ function storedSettings(s) {
     columns: full.columns.map(({ id, name, kind, color: c }) => ({ id, name, kind, color: c })),
     builtins: Object.fromEntries(Object.entries(full.builtins).map(([k, v]) => [k, { label: v.label, hidden: v.hidden }])),
     autoArchiveDays: full.autoArchiveDays,
+    hideDoneDays: full.hideDoneDays,
   };
 }
 

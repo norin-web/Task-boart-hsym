@@ -1,5 +1,5 @@
 import Sortable from 'sortablejs';
-import { S, TYPE_LABELS, AUTO_ARCHIVE, PALETTE, unitById, byOrder, KINDS, KIND_LABELS, KIND_COLORS, colColor, personById, activeDepts, deptById } from '../state.js';
+import { S, TYPE_LABELS, AUTO_ARCHIVE, HIDE_DONE, PALETTE, unitById, byOrder, KINDS, KIND_LABELS, KIND_COLORS, colColor, personById, activeDepts, deptById } from '../state.js';
 import { $, h, icon, avatar, field, topbar, menu, closeMenu, modal, confirmDlg, toast, showErr, colorPicker, statusDot, fill } from '../ui.js';
 import { send } from '../api.js';
 import { link } from '../router.js';
@@ -18,6 +18,8 @@ export function renderSettings() {
   const desc = h('textarea', { class: 'inp', rows: 2, value: u.description, maxlength: 1000 });
   const autoArchive = h('select', { class: 'inp', value: String(st.autoArchiveDays) },
     AUTO_ARCHIVE.map(d => h('option', { value: String(d) }, d ? `Через ${d} дн. после выполнения` : 'Выключен')));
+  const hideDone = h('select', { class: 'inp', value: String(st.hideDoneDays || 0) },
+    HIDE_DONE.map(([d, label]) => h('option', { value: String(d) }, label)));
   const colEditor = columnsEditor(st.columns);
   const builtinRows = Object.entries(st.builtins).map(([k, bi]) => {
     const label = h('input', { class: 'inp', value: bi.label, maxlength: 40 });
@@ -33,6 +35,7 @@ export function renderSettings() {
     btn.disabled = true;
     try {
       st.autoArchiveDays = Number(autoArchive.value);
+      st.hideDoneDays = Number(hideDone.value);
       st.columns = colEditor.value();
       // Задачи из удалённых колонок — в первую оставшуюся (с подтверждением)
       const ids = new Set(st.columns.map(c => c.id));
@@ -88,7 +91,9 @@ export function renderSettings() {
         h('div', { class: 'grid2' }, field('Название', name), field('Ключ задач', key, 'Номера задач: ' + u.key + '-1, ' + u.key + '-2… При смене ключа номера обновятся.')),
         field('Цвет', color.el),
         field('Описание', desc),
-        field('Автоархив выполненных', autoArchive, 'Задачи из последней колонки уходят в архив. Архив можно показать фильтром на доске.'),
+        h('div', { class: 'grid2', style: { alignItems: 'start' } },
+          field('Выполненные на доске', hideDone, 'Сколько держать задачи в «Готово» на доске и в списке. Давние скрываются (внизу колонки — «показать»), но остаются в поиске и статистике.'),
+          field('Автоархив выполненных', autoArchive, 'Задачи из последней колонки уходят в архив. Архив можно показать фильтром на доске.')),
 
         h('div', { class: 'sub-title' }, 'Колонки доски'),
         h('p', { class: 'hint', style: { marginTop: '-4px' } }, 'Тип колонки влияет на статистику: «Готово» — задача выполнена (не просрочена, считается в прогрессе).'),

@@ -792,3 +792,10 @@ table.tasks tr.done td.t-title { text-decoration: line-through; text-decoration-
 .quick-chip .i { opacity: .8; }
 .quick-note { font-size: 12px; color: var(--muted); margin-right: 2px; }
 .quick-note.overdue { color: var(--danger); }
+
+/* давние выполненные: «показать / скрыть» */
+.old-done { display: inline-flex; align-items: center; gap: 6px; width: 100%; justify-content: center; margin-top: 6px; padding: 6px 8px; border: 1px dashed var(--border-strong); border-radius: 8px; background: transparent; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
+.old-done:hover { color: var(--accent-text); border-color: var(--accent); }
+.lane-col-head .old-done { margin: 4px 0 0; padding: 3px 6px; }
+table.tasks tr.grp-more td { padding: 6px 12px; cursor: default; }
+table.tasks tr.grp-more .old-done { width: auto; margin: 0; }

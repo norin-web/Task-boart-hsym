@@ -6,6 +6,7 @@ export const TYPE_LABELS = {
   multiselect: 'Мультисписок', person: 'Человек', checkbox: 'Флажок', url: 'Ссылка',
 };
 export const AUTO_ARCHIVE = [0, 7, 14, 30, 60, 90];
+export const HIDE_DONE = [[0, 'Всегда показывать'], [1, 'Сутки'], [3, '3 дня'], [7, 'Неделю'], [14, '2 недели'], [30, 'Месяц']];
 /** Тип колонки: определяет цвет по умолчанию и смысл («готово» — для прогресса и просрочек). */
 export const KINDS = ['todo', 'progress', 'done'];
 export const KIND_LABELS = { todo: 'Не начато', progress: 'В работе', done: 'Готово' };
@@ -34,6 +35,7 @@ export const S = {
   collapsedLanes: new Set(),
   panelTaskId: null,
   listSort: { key: 'status', dir: 1 },
+  showOldDone: '',          // юнит, где сейчас показаны давно выполненные
   showArchivedUnits: false,
   meId: LS.get('meId', ''),
 };

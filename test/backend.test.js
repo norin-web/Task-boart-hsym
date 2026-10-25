@@ -29,6 +29,7 @@ test('юниты: ключи, настройки, дублирование, уд
   assert.equal(u1.key, 'MKT');
   assert.equal(u1.settings.columns.length, 3);
   assert.ok(u1.settings.builtins.dueDate);
+  assert.equal(u1.settings.hideDoneDays, 0);
   assert.equal((await api('createUnit', { name: 'Без ключа' })).key, 'U');
   await assert.rejects(() => api('createUnit', { name: 'X', key: 'MKT' }), /уже занят/);
 
@@ -36,10 +37,12 @@ test('юниты: ключи, настройки, дублирование, уд
   s.columns[0].name = 'Бэклог';
   s.builtins.description.hidden = true;
   s.builtins.title.hidden = true; // нельзя скрыть
+  s.hideDoneDays = '3';
   const upd = await api('updateUnit', { id: u1.id, settings: s, key: 'MARK' });
   assert.equal(upd.settings.columns[0].name, 'Бэклог');
   assert.equal(upd.settings.builtins.description.hidden, true);
   assert.equal(upd.settings.builtins.title.hidden, false);
+  assert.equal(upd.settings.hideDoneDays, 3);
 
   const dup = await api('duplicateUnit', { id: u1.id });
   assert.equal(dup.key, 'MARK2');

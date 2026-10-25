@@ -167,7 +167,28 @@ function fieldFilterMenu(anchor, fields) {
   menu(anchor, items);
 }
 
-export function filterTasks() {
+/** Выполнена давно — дольше, чем юнит держит выполненные на доске. */
+const staleDone = t => {
+  const days = S.board.unit.settings.hideDoneDays;
+  return !!days && !t.archived && taskDone(t) && !!t.doneAt && t.doneAt < new Date(Date.now() - days * 864e5).toISOString();
+};
+/** Давние выполненные прячем, пока их не показали; поиск и фильтр «Архив» видят всё. */
+const hidingOld = () => !S.filters.archived && !S.filters.q.trim() && S.showOldDone !== S.board.unit.id;
+/** Сколько давних выполненных скрыто в колонке (с учётом остальных фильтров). */
+const hiddenOld = colId => (hidingOld() ? filterTasks({ withOld: true }).filter(t => staleDone(t) && colById(t.status).id === colId).length : 0);
+
+/** «Ещё N выполненных — показать» / «Скрыть давние» под колонкой «Готово». */
+function oldDoneToggle(col) {
+  if (col.kind !== 'done' || !S.board.unit.settings.hideDoneDays) return null;
+  const shown = S.showOldDone === S.board.unit.id;
+  const n = hiddenOld(col.id);
+  if (!shown && !n) return null;
+  if (shown && !S.board.tasks.some(t => staleDone(t) && colById(t.status).id === col.id)) return null;
+  return h('button', { class: 'old-done', onclick: () => { S.showOldDone = shown ? '' : S.board.unit.id; renderTasks(); } },
+    icon(shown ? 'eyeOff' : 'eye', 13), shown ? 'Скрыть давние' : `Показать давние выполненные · ${n}`);
+}
+
+export function filterTasks(opts = {}) {
   const f = S.filters;
   const q = f.q.trim().toLowerCase();
   const today = todayStr();
@@ -178,6 +199,7 @@ export function filterTasks() {
   }
   return S.board.tasks.filter(t => {
     if (t.archived && !f.archived) return false;
+    if (!opts.withOld && hidingOld() && staleDone(t)) return false;
     if (f.assignees.length && !f.assignees.includes(t.assigneeId || NO_DEPT)) return false;
     if (f.depts.length && !f.depts.includes(t.departmentId)) return false;
     if (f.overdue && !isOverdue(t, today)) return false;
@@ -236,13 +258,14 @@ function renderColumns(board) {
   const done = beginRender();
   board.classList.remove('lanes');
   const tasks = filterTasks();
-  const filtered = tasks.length !== S.board.tasks.filter(t => !t.archived).length || S.filters.archived;
+  const filtered = tasks.length !== S.board.tasks.filter(t => !t.archived && !(hidingOld() && staleDone(t))).length || S.filters.archived;
   fill(board, columns().map(col => {
     const items = tasks.filter(t => colById(t.status).id === col.id).sort((x, y) => x.order - y.order);
     const quickHere = S.quick.status === col.id && S.quick.dept == null;
     return h('section', { class: 'col', style: { '--cc': colColor(col) } },
       colHead(col, items.length),
       makeList(items, col.id, null, !quickHere && (filtered ? 'Нет задач по фильтру' : isStaff() ? 'Перетащите задачу сюда' : 'Пусто')),
+      oldDoneToggle(col),
       quickAddEl(col.id, null));
   }), addColumnBtn());
   done();
@@ -261,7 +284,7 @@ function renderLanes(board) {
 
   const grid = h('div', { class: 'lanes-grid', style: { gridTemplateColumns: `repeat(${cols.length}, minmax(216px, 1fr)) 40px` } },
     cols.map(col => h('div', { class: 'lane-col-head', style: { '--cc': colColor(col) } },
-      colHead(col, tasks.filter(t => colById(t.status).id === col.id).length))),
+      colHead(col, tasks.filter(t => colById(t.status).id === col.id).length), oldDoneToggle(col))),
     h('div', { class: 'lane-col-head add' }, addColumnBtn()));
 
   for (const lane of lanes) {
@@ -559,7 +582,7 @@ function renderList(container) {
     const x = col.val(a), y = col.val(b);
     return (x < y ? -1 : x > y ? 1 : 0) * sort.dir;
   });
-  const groups = columns().map(c => ({ c, list: tasks.filter(t => colById(t.status) === c) })).filter(g => g.list.length);
+  const groups = columns().map(c => ({ c, list: tasks.filter(t => colById(t.status) === c), more: oldDoneToggle(c) })).filter(g => g.list.length || g.more);
   const taskRow = t => h('tr', {
     class: (t.archived ? 'archived' : '') + (taskDone(t) ? ' done' : ''),
     onclick: () => { if (!t._temp) navigate({ unit: S.board.unit.id, mode: 'list', task: t.id }); },
@@ -572,10 +595,11 @@ function renderList(container) {
         h('thead', null, h('tr', null, cols.map(c => h('th', {
           onclick: () => { S.listSort = { key: c.key, dir: sort.key === c.key ? -sort.dir : 1 }; renderTasks(); },
         }, c.label, sort.key === c.key ? (sort.dir > 0 ? ' ↑' : ' ↓') : '')))),
-        groups.map(({ c, list }) => h('tbody', { class: 'grp' },
+        groups.map(({ c, list, more }) => h('tbody', { class: 'grp' },
           h('tr', { class: 'grp-head' }, h('td', { colspan: cols.length },
             h('span', { class: 'grp-name' }, statusDot(colColor(c), 8), c.name), h('span', { class: 'grp-count' }, list.length))),
-          list.map(taskRow)))))
+          list.map(taskRow),
+          more && h('tr', { class: 'grp-more' }, h('td', { colspan: cols.length }, more))))))
       : h('div', { class: 'card-box empty-state' },
         h('h2', null, S.board.tasks.length ? 'Ничего не найдено' : 'Задач пока нет'),
         h('p', null, S.board.tasks.length ? 'Попробуйте изменить фильтры.' : 'Создайте первую задачу в этом юните.'),
