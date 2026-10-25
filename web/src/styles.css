@@ -712,3 +712,17 @@ body.login-page #shell { display: block; }
   .load-late { display: none; }
   .load-row { grid-template-columns: auto minmax(0, 1fr) 28px; }
 }
+
+/* Сетки блоков не распираются содержимым (длинные строки задач в узкой колонке) */
+.load, .att, .att-list, .feed, .unit-groups { grid-template-columns: minmax(0, 1fr); }
+.load-tasks, .rows { min-width: 0; }
+.load-tasks .rows { overflow: hidden; }
+@container (max-width: 640px) {
+  .trow { gap: 8px; padding: 8px 10px; }
+  .trow .badge, .trow .dept-chip, .trow .unit-chip { display: none; }
+  .load-tasks:not(:empty) { padding-left: 10px; }
+}
+@container (max-width: 420px) {
+  .trow .key-badge { display: none; }
+  .trow .due { font-size: 11px; }
+}
