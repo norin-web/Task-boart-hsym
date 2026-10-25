@@ -143,6 +143,8 @@ $$;
 alter table people add column if not exists user_id uuid;
 alter table people add column if not exists access text not null default 'member';
 alter table people add column if not exists position_id text not null default '';
+-- Личные настройки интерфейса (раскладка главной и т.п.); человек меняет только свои
+alter table people add column if not exists prefs jsonb not null default '{}';
 do $$ begin
   alter table people add constraint people_access_check check (access in ('superadmin', 'moderator', 'member'));
 exception when duplicate_object then null; end $$;

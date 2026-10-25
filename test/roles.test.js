@@ -102,6 +102,10 @@ test('профили: свой профиль, роли меняет тольк�
     await assert.rejects(() => api('updatePerson', { id: designer.id, positionId: 'd_ios' }), forbidden);
     await assert.rejects(() => api('updatePerson', { id: dev.id, name: 'x' }), forbidden);
     await assert.rejects(() => api('createPerson', { name: 'x' }), forbidden);
+    // личная раскладка главной — только своя
+    const prefs = await api('setMyPrefs', { personId: designer.id, prefs: { memberHome: { hidden: ['units'] } } });
+    assert.deepEqual(prefs.memberHome.hidden, ['units']);
+    await assert.rejects(() => api('setMyPrefs', { personId: dev.id, prefs: { x: 1 } }), forbidden);
   });
   await api.as(mod, async () => {
     await api('updatePerson', { id: designer.id, positionId: 'd_qa' });

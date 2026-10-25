@@ -186,7 +186,7 @@ const fieldOut = r => ({
 export const ACCESS = ['superadmin', 'moderator', 'member'];
 const personOut = r => ({
   id: r.id, name: r.name, email: r.email, role: r.role || '', color: r.color || '', active: !!r.active,
-  access: r.access || 'member', positionId: r.position_id || '', linked: !!r.user_id,
+  access: r.access || 'member', positionId: r.position_id || '', linked: !!r.user_id, prefs: json(r.prefs, {}) || {},
 });
 const deptOut = r => ({ id: r.id, name: r.name, color: r.color, order: r.ord, archived: !!r.archived });
 const commentOut = r => ({ id: r.id, taskId: r.task_id, text: r.text, authorId: r.author_id, at: r.at, editedAt: r.edited_at });
@@ -1012,6 +1012,15 @@ export function createBackend(db, opts = {}) {
       if (!invoke) return true;
       await invoke('admin-users', { action: 'password', personId: String(p.personId ?? ''), password });
       return true;
+    },
+
+    /** Личные настройки интерфейса: сливаем переданные ключи с сохранёнными. */
+    async setMyPrefs(p) {
+      const person = (await one('people', p.personId)) || fail('Человек не найден', 'NOT_FOUND');
+      const prefs = { ...(json(person.prefs, {}) || {}), ...(p.prefs || {}) };
+      if (JSON.stringify(prefs).length > 20000) fail('Слишком большие настройки');
+      await updateOne('people', person.id, { prefs });
+      return prefs;
     },
 
     async updatePerson(p) {

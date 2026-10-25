@@ -6,8 +6,9 @@ import { renderSidebar } from './sidebar.js';
 import { openCreateTask, peekTask } from './task.js';
 import { openCreateUnit, unitMenu } from './units.js';
 import { mode } from '../data.js';
-import { taskGroups, loadMyTasks, personCaption } from './my.js';
+import { taskGroups, unitGroups, loadMyTasks, personCaption } from './my.js';
 import { activityFeed } from './feed.js';
+import { renderLayout, openLayoutEditor } from './layout.js';
 import { openPeople } from './people.js';
 
 /** Локальный режим: заполнить пустую базу демо-командами и перезагрузить. */
@@ -54,36 +55,41 @@ export async function renderHome() {
   const st = d.stats;
   const dateStr = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
 
-  fill(page,
+  const unitsBlock = () => h('section', null,
+    h('div', { class: 'section-head' }, h('h2', null, 'Юниты'),
+      h('button', { class: 'btn ghost sm', onclick: openCreateUnit }, icon('plus', 14), 'Новый')),
+    units.length
+      ? h('div', { class: 'unit-grid' }, units.map(unitCard), h('button', { class: 'unit-card add', onclick: openCreateUnit }, icon('plus', 18), 'Новый юнит'))
+      : h('div', { class: 'card-box empty-state' },
+        h('h2', null, 'Создайте первый юнит'),
+        h('p', null, 'Юнит — это команда: своя доска и задачи, участники из разных отделов (ASO, Design, iOS…).'),
+        h('div', { class: 'row', style: { justifyContent: 'center' } },
+          h('button', { class: 'btn primary', onclick: openCreateUnit }, icon('plus', 15), 'Создать юнит'),
+          mode === 'local' && h('button', { class: 'btn', onclick: e => fillDemo(e.currentTarget) }, icon('layers', 15), 'Заполнить демо-данными'))));
+
+  // Блоки главной: каждый может скрыть, переставить и поменять колонку (кнопка «Настроить»)
+  const BLOCKS = [
+    { id: 'stats', title: 'Статистика задач', col: 'full', render: () => h('div', { class: 'stats' },
+      stat('К выполнению', st.todo, 'circle', 'var(--st-todo)', t => t.statusKind === 'todo'),
+      stat('В работе', st.in_progress, 'progress', 'var(--st-progress)', t => t.statusKind === 'progress'),
+      stat('Просрочено', st.overdue, 'alert', 'var(--danger)', t => t.statusKind !== 'done' && t.dueDate && t.dueDate < todayStr()),
+      stat('Сделано за 7 дней', st.doneWeek, 'done', 'var(--st-done)', t => t.statusKind === 'done' && t.doneAt && t.doneAt >= weekAgo())) },
+    { id: 'attention', title: 'Требует внимания', col: 'left', render: () => attentionBlock(ov) },
+    { id: 'workload', title: 'Загрузка команды', col: 'left', render: () => workloadBlock(ov) },
+    { id: 'units', title: 'Юниты', col: 'left', render: unitsBlock },
+    { id: 'feed', title: 'Последние события', col: 'right', render: () => activityFeed({ limit: 15 }) },
+  ];
+
+  const draw = () => fill(page,
     h('div', { class: 'hero' },
       h('div', null,
         h('h1', { class: 'row', style: { gap: '10px' } }, greeting() + (person ? ', ' + person.name.split(' ')[0] : ''), roleBadge(person)),
         h('p', null, dateStr[0].toUpperCase() + dateStr.slice(1) + ' · ' + summary(st))),
       h('div', { class: 'row' },
+        h('button', { class: 'btn ghost', title: 'Настроить главную под себя', onclick: () => openLayoutEditor('home', BLOCKS, draw) }, icon('layers', 15), 'Настроить'),
         h('button', { class: 'btn', onclick: () => navigate({ view: 'my' }) }, icon('user', 15), 'Мои задачи'))),
-
-    h('div', { class: 'stats' },
-      stat('К выполнению', st.todo, 'circle', 'var(--st-todo)', t => t.statusKind === 'todo'),
-      stat('В работе', st.in_progress, 'progress', 'var(--st-progress)', t => t.statusKind === 'progress'),
-      stat('Просрочено', st.overdue, 'alert', 'var(--danger)', t => t.statusKind !== 'done' && t.dueDate && t.dueDate < todayStr()),
-      stat('Сделано за 7 дней', st.doneWeek, 'done', 'var(--st-done)', t => t.statusKind === 'done' && t.doneAt && t.doneAt >= weekAgo())),
-
-    h('div', { class: 'home-grid' },
-      h('div', { class: 'home-col' },
-        attentionBlock(ov),
-        workloadBlock(ov),
-        h('section', null,
-          h('div', { class: 'section-head' }, h('h2', null, 'Юниты'),
-            h('button', { class: 'btn ghost sm', onclick: openCreateUnit }, icon('plus', 14), 'Новый')),
-          units.length
-            ? h('div', { class: 'unit-grid' }, units.map(unitCard), h('button', { class: 'unit-card add', onclick: openCreateUnit }, icon('plus', 18), 'Новый юнит'))
-            : h('div', { class: 'card-box empty-state' },
-              h('h2', null, 'Создайте первый юнит'),
-              h('p', null, 'Юнит — это команда: своя доска и задачи, участники из разных отделов (ASO, Design, iOS…).'),
-              h('div', { class: 'row', style: { justifyContent: 'center' } },
-                h('button', { class: 'btn primary', onclick: openCreateUnit }, icon('plus', 15), 'Создать юнит'),
-                mode === 'local' && h('button', { class: 'btn', onclick: e => fillDemo(e.currentTarget) }, icon('layers', 15), 'Заполнить демо-данными'))))),
-      activityFeed({ limit: 15 })));
+    renderLayout('home', BLOCKS));
+  draw();
 }
 
 /** Бейдж роли текущего человека. */
@@ -400,24 +406,27 @@ async function renderMemberHome() {
   const overdue = open.filter(t => t.dueDate && t.dueDate < new Date().toISOString().slice(0, 10)).length;
   const dateStr = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
 
-  fill(page,
-    h('div', { class: 'hero' },
-      h('div', null,
-        h('h1', null, greeting() + (person ? ', ' + person.name.split(' ')[0] : '')),
-        h('p', null, dateStr[0].toUpperCase() + dateStr.slice(1) + (pos ? ' · ' + pos.name : '')))),
-    h('div', { class: 'stats' },
+  const BLOCKS = [
+    { id: 'stats', title: 'Статистика', col: 'full', render: () => h('div', { class: 'stats' },
       stat('Мои открытые задачи', open.length, 'circle', 'var(--st-progress)'),
       stat('Просрочено', overdue, 'alert', 'var(--danger)'),
       stat('Мои юниты', units.length, 'board', 'var(--accent)'),
-      stat('Сделано', tasks.length - open.length, 'done', 'var(--st-done)')),
-    h('div', { class: 'home-grid' },
-      h('section', null,
-        h('div', { class: 'section-head' }, h('h2', null, 'Мои задачи')),
-        taskGroups(tasks)),
-      h('section', null,
-        h('div', { class: 'section-head' }, h('h2', null, 'Мои юниты')),
-        units.length
-          ? h('div', { class: 'unit-grid', style: { gridTemplateColumns: '1fr' } }, units.map(unitCard))
-          : h('div', { class: 'card-box empty-state' }, h('p', { style: { margin: 0 } }, 'Вас пока не добавили ни в один юнит. Обратитесь к модератору.')))));
+      stat('Сделано', tasks.length - open.length, 'done', 'var(--st-done)')) },
+    { id: 'tasks', title: 'Мои задачи', col: 'left', render: () => h('section', null,
+      h('div', { class: 'section-head' }, h('h2', null, 'Мои задачи')), unitGroups(tasks)) },
+    { id: 'units', title: 'Мои юниты', col: 'right', render: () => h('section', null,
+      h('div', { class: 'section-head' }, h('h2', null, 'Мои юниты')),
+      units.length
+        ? h('div', { class: 'unit-grid', style: { gridTemplateColumns: '1fr' } }, units.map(unitCard))
+        : h('div', { class: 'card-box empty-state' }, h('p', { style: { margin: 0 } }, 'Вас пока не добавили ни в один юнит. Обратитесь к модератору.'))) },
+  ];
+  const draw = () => fill(page,
+    h('div', { class: 'hero' },
+      h('div', null,
+        h('h1', null, greeting() + (person ? ', ' + person.name.split(' ')[0] : '')),
+        h('p', null, dateStr[0].toUpperCase() + dateStr.slice(1) + (pos ? ' · ' + pos.name : ''))),
+      h('button', { class: 'btn ghost', title: 'Настроить дашборд под себя', onclick: () => openLayoutEditor('memberHome', BLOCKS, draw) }, icon('layers', 15), 'Настроить')),
+    renderLayout('memberHome', BLOCKS));
+  draw();
 }
 

@@ -650,3 +650,11 @@ body.login-page #shell { display: block; }
 .panel.center .panel-side { border-bottom-right-radius: 14px; }
 @keyframes pop-center { from { opacity: 0; transform: translate(-50%, -48%) scale(.98); } }
 @media (max-width: 720px) { .panel.center { width: 100vw; height: 100vh; border-radius: 0; } }
+.home-grid.one { grid-template-columns: minmax(0, 1fr); }
+.home-grid + .home-grid, .home-grid + .stats, .stats + .stats { margin-top: 24px; }
+.layout-list { display: grid; gap: 4px; }
+.layout-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.layout-row .chk { flex: 1; display: flex; align-items: center; gap: 8px; font-weight: 500; }
+.layout-row.off .chk { color: var(--muted); }
+.layout-row .inp.sm { width: 150px; }
+.rot-up { display: inline-flex; transform: rotate(180deg); }
