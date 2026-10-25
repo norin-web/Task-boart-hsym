@@ -862,6 +862,13 @@ export function createBackend(db, opts = {}) {
       return taskOut(t);
     },
 
+    /** Забрать задачу из ревью (тот, кто отправил): обратно в колонку перед ревью, исполнитель — снова он. */
+    async recallReview(p) {
+      const t = await findTask(p.id);
+      await rpc('recall_review', { p_task: t.id });
+      return taskOut((await one('tasks', t.id)) || t);
+    },
+
     /** Перенос в другой юнит: новый номер, колонка того же типа. Значения полей сохраняются. */
     async moveTask(p, ctx) {
       const t = await findTask(p.id);

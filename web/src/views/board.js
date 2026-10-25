@@ -403,14 +403,16 @@ export function cardMenu(anchor, t) {
   // Из «Готово» — быстро вернуть в работу (в последнюю колонку перед готовыми)
   const back = taskDone(t) && [...columns()].reverse().find(c => c.kind !== 'done');
   const reopen = back && canEditTask(t) && { label: `Вернуть в «${back.name}»`, icon: 'back', action: () => patchTask(t, { status: back.id }) };
+  const recall = canRecall(t) && { label: 'Забрать из ревью', icon: 'back', action: () => recallReview(t) };
   if (!isStaff()) {
     // Участник: открыть и (в своей задаче) перенести в колонку
-    return menu(anchor, [open, reopen, ...(canEditTask(t) ? [{ sep: true }, { title: 'Переместить' },
+    return menu(anchor, [open, reopen, recall, ...(canEditTask(t) ? [{ sep: true }, { title: 'Переместить' },
       ...cols.map(c => ({ label: c.name, icon: KIND_ICONS[c.kind], action: () => patchTask(t, { status: c.id }) }))] : [])]);
   }
   menu(anchor, [
     open,
     reopen,
+    recall,
     { sep: true },
     { title: 'Переместить' },
     ...cols.map(c => ({ label: c.name, icon: KIND_ICONS[c.kind], action: () => patchTask(t, { status: c.id }) })),
@@ -618,6 +620,18 @@ function renderList(container) {
 /* ================= Изменение задач ================= */
 
 /** Оптимистично применяет patch и отправляет на сервер. */
+/** Задача на ревью, и отправил её я — могу забрать обратно (что-то забыл). */
+export const canRecall = t => !!S.meId && t.reviewFrom === S.meId && t.status === (S.board.unit.settings.review || {}).column;
+
+export function recallReview(t) {
+  return send('recallReview', { id: t.id }).then(real => {
+    Object.assign(t, real);
+    renderTasks();
+    if (S.panelTaskId === t.id) refreshPanel(t);
+    toast('Задача снова у вас: «' + colName(t.status) + '»');
+  }).catch(showErr);
+}
+
 export function patchTask(t, patch, opts = {}) {
   if (patch.status && patch.status !== t.status && !('order' in patch)) {
     patch.order = maxOrder(S.board.tasks.filter(x => x.status === patch.status)) + 1;

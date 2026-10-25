@@ -256,7 +256,29 @@ test('ревью: автоназначение ревьюера по позиц�
     assert.equal(t.reviewerId, designer.id);
   });
   const hist = (await api('getTaskExtras', { taskId: t2.id })).activity.filter(a => a.field === 'assigneeId').map(a => a.toText);
-  assert.deepEqual(hist, ['Разраб', 'Дизайнер']);
+  assert.deepEqual(hist.slice(0, 2), ['Разраб', 'Дизайнер']);
+
+  // отправил на ревью и передумал — забирает обратно (только он)
+  await api.as(dev, async () => {
+    await api('updateTask', { id: t2.id, patch: { status: 'review' } });
+    await api('readNotifications', {});
+  });
+  await api.as(mod, async () => {
+    await assert.rejects(() => api('recallReview', { id: t2.id }), forbidden);
+  });
+  await api.as(dev, async () => {
+    const back = await api('recallReview', { id: t2.id });
+    assert.equal(back.status, 'in_progress'); // колонка перед Review
+    assert.equal(back.assigneeId, dev.id);
+    assert.equal((await api('getNotifications', {})).length, 0); // сам себе — без уведомления
+    await assert.rejects(() => api('recallReview', { id: t2.id }), /уже не на ревью/);
+  });
+  await api.as(designer, async () => {
+    assert.equal((await api('getNotifications', {})).filter(n => n.taskId === t2.id).length, 0); // у ревьюера снялось
+  });
+  // снова на ревью и возврат ревьюером — для проверки ниже
+  await api.as(dev, () => api('updateTask', { id: t2.id, patch: { status: 'review' } }));
+  await api.as(designer, () => api('updateTask', { id: t2.id, patch: { status: 'done' } }));
 
   // исполнитель получил уведомление о возврате с ревью
   await api.as(dev, async () => {

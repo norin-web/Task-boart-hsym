@@ -5,7 +5,7 @@ import {
 import { $, h, append, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, fill } from '../ui.js';
 import { call, send } from '../api.js';
 import { navigate, rerender } from '../router.js';
-import { renderTasks, patchTask, reloadBoard, loadBoard } from './board.js';
+import { renderTasks, patchTask, reloadBoard, loadBoard, canRecall, recallReview } from './board.js';
 import { addMemberDialog } from './people.js';
 import { openCreateUnit } from './units.js';
 import { activityText } from './feed.js';
@@ -89,7 +89,11 @@ function buildPanel(t) {
 
   const main = h('div', { class: 'panel-main' },
     title,
-    !editable && h('div', { class: 'readonly-note' }, icon('alert', 14), 'Только просмотр: менять можно свои задачи'),
+    canRecall(t)
+      ? h('div', { class: 'readonly-note recall' }, icon('eye', 14),
+        h('span', null, 'На ревью у ' + ((personById(t.assigneeId) || {}).name || 'ревьюера') + '. Что-то забыли?'),
+        h('button', { class: 'btn sm', onclick: () => recallReview(t) }, icon('back', 13), 'Забрать из ревью'))
+      : !editable && h('div', { class: 'readonly-note' }, icon('alert', 14), 'Только просмотр: менять можно свои задачи'),
     !B.description.hidden && descriptionBlock(t, B.description.label, editable),
     linksBlock(t, editable),
     checklistBlock(t, editable),

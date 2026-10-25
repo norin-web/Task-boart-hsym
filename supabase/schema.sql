@@ -397,6 +397,43 @@ end $$;
 drop trigger if exists review_assign on tasks;
 create trigger review_assign before update on tasks for each row execute function review_assign();
 
+-- «Забрать из ревью»: тот, кто отправил задачу на ревью, возвращает её себе в колонку перед ревью
+-- (что-то забыл). Исполнителем снова становится он — это делает review_assign при выходе из колонки ревью.
+create or replace function recall_review(p_task text) returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  t tasks;
+  rv jsonb;
+  cols jsonb;
+  i int;
+  target text := '';
+begin
+  select * into t from tasks where id = p_task;
+  if t.id is null then raise exception 'Задача не найдена' using errcode = 'P0001'; end if;
+  select settings -> 'review', settings -> 'columns' into rv, cols from units where id = t.unit_id;
+  if coalesce(rv ->> 'column', '') = '' or t.status <> rv ->> 'column' then
+    raise exception 'Задача уже не на ревью' using errcode = 'P0001';
+  end if;
+  if t.review_from = '' or t.review_from is distinct from my_person_id() then
+    raise exception 'Забрать из ревью может только тот, кто её отправил' using errcode = '42501';
+  end if;
+  -- колонка перед ревью (не «готово»); если такой нет — первая
+  for i in reverse jsonb_array_length(cols) - 1 .. 0 loop
+    if cols -> i ->> 'id' = t.status then
+      for j in reverse i - 1 .. 0 loop
+        if coalesce(cols -> j ->> 'kind', '') <> 'done' then target := cols -> j ->> 'id'; exit; end if;
+      end loop;
+      exit;
+    end if;
+  end loop;
+  if target = '' then target := cols -> 0 ->> 'id'; end if;
+  update tasks set status = target, done_at = '', updated_at = to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+   where id = t.id;
+  insert into activity (id, unit_id, task_id, action, field, from_val, to_val, at)
+  values ('a_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), t.unit_id, t.id, 'update', 'status',
+          to_jsonb(t.status)::text, to_jsonb(target)::text, to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'));
+end $$;
+
 -- Назначили задачу — уведомление новому исполнителю (кроме случая, когда назначил сам себя);
 -- у прежнего исполнителя непрочитанное уведомление по этой задаче снимается.
 -- Автоназначение ревью (kind 'review') и возврат с ревью ('returned') уведомляют всегда — даже если перенёс сам.
@@ -413,7 +450,7 @@ begin
     end if;
   end if;
   if v_old <> '' then delete from notifications where task_id = new.id and person_id = v_old and read_at = ''; end if;
-  if new.assignee_id <> '' and (new.assignee_id <> v_actor or v_kind <> 'assigned') then
+  if new.assignee_id <> '' and (new.assignee_id <> v_actor or v_kind = 'review') then
     delete from notifications where task_id = new.id and person_id = new.assignee_id and read_at = '';
     insert into notifications (id, person_id, task_id, kind, actor_id, at)
     values ('n_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), new.assignee_id, new.id, v_kind, v_actor,

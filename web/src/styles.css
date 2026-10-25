@@ -862,3 +862,13 @@ table.tasks tr.grp-more .old-done { width: auto; margin: 0; }
 .rv-row .inp { flex: 1; max-width: 320px; }
 .rv-default { background: var(--surface-2); }
 @media (max-width: 560px) { .rv-label { width: 120px; } }
+
+/* «Новое для вас»: тип уведомления */
+.news-kind { display: inline-flex; align-items: center; gap: 4px; flex: none; height: 20px; padding: 0 8px; border-radius: 99px; font-size: 11.5px; font-weight: 600; }
+.news-kind.review { background: color-mix(in srgb, var(--st-progress) 16%, transparent); color: var(--st-progress); }
+.news-kind.returned { background: var(--warn-soft); color: var(--warn); }
+.news-dot.review { background: var(--st-progress); }
+.news-dot.returned { background: var(--warn); }
+
+.readonly-note.recall { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.readonly-note.recall .btn { margin-left: auto; }

@@ -41,8 +41,9 @@ function fadeOut(el) {
 /** «на ревью от Дмитрия» / «вернул(а) с ревью Мария» / «назначил(а) Анна». */
 function noteText(kind, by) {
   const who = by && by.id !== S.meId ? by.name.split(' ')[0] : '';
-  if (kind === 'review') return who ? 'на ревью · отправил(а) ' + who : 'на ревью';
-  if (kind === 'returned') return who ? 'вернул(а) с ревью ' + who : 'вернули с ревью';
+  // тип (ревью / возврат) виден плашкой слева — здесь только кто
+  if (kind === 'review') return who ? 'отправил(а) ' + who : 'от вас';
+  if (kind === 'returned') return who ? 'вернул(а) ' + who : 'вернули';
   return who ? 'назначил(а) ' + who : 'назначено';
 }
 
@@ -70,7 +71,9 @@ function newsBlock() {
     return h('button', {
       class: 'news-row', dataset: { noteTask: n.taskId }, onclick: () => peekTask(n.unit.id, n.taskId),
     },
-    h('span', { class: 'news-dot' }),
+    h('span', { class: 'news-dot' + (n.kind !== 'assigned' ? ' ' + n.kind : '') }),
+    n.kind === 'review' && h('span', { class: 'news-kind review', title: 'Задача пришла вам на ревью' }, icon('eye', 12), 'Ревью'),
+    n.kind === 'returned' && h('span', { class: 'news-kind returned', title: 'Ревьюер вернул задачу вам' }, icon('back', 12), 'Вернули'),
     h('span', { class: 'key-badge' }, n.key),
     h('span', { class: 'news-title' }, n.title),
     due && h('span', { class: 'due ' + due.cls, title: due.hint }, icon('calendar', 12), due.text),
