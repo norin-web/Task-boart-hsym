@@ -14,16 +14,16 @@ function currentPlan() {
   const live = S.units.filter(u => !u.archived);
   const app = live.find(u => u.settings && u.settings.handoff && u.settings.handoff.unitId);
   const mod = app && unitById(app.settings.handoff.unitId);
-  const working = mod ? live.filter(u => u.parentId === mod.id && !u.teamId)
-    : live.filter(u => !u.parentId && !u.teamId); // структуры ещё нет — текущие верхние юниты встанут под Managers
+  // все юниты, которые можно взять в структуру (кроме App, Managers и юнитов-команд); отмечены — те, что уже в ней
+  const candidates = live.filter(u => !u.teamId && u !== app && u !== mod && !(u.settings && u.settings.handoff && u.settings.handoff.unitId));
+  const inside = u => (mod ? u.parentId === mod.id : !u.parentId); // структуры ещё нет — верхние юниты отмечены сразу
   return {
     app: { id: app ? app.id : '', name: app ? app.name : 'App' },
     managers: { id: mod ? mod.id : '', name: mod ? mod.name : 'Managers' },
-    units: working.sort(byOrder).map(u => ({
-      id: u.id, name: u.name,
+    units: candidates.sort(byOrder).map(u => ({
+      id: u.id, name: u.name, on: inside(u),
       teams: live.filter(c => c.parentId === u.id && c.teamId).map(c => c.teamId),
     })),
-    removeUnits: [],
     people: Object.fromEntries(S.people.filter(p => p.active).map(p => [p.id, [...(p.teamIds || [])]])),
   };
 }
@@ -46,37 +46,36 @@ export function openStructureWizard(onDone) {
       h('div', { class: 'sw-level sub' }, icon('layers', 16), h('span', { class: 'sw-k' }, 'Менеджмент'),
         h('input', { class: 'inp', value: plan.managers.name, maxlength: 80, oninput: e => { plan.managers.name = e.target.value; } })),
     ],
-    // 2. рабочие юниты
+    // 2. рабочие юниты: все юниты списком (галочка — входит в структуру) + новый
     () => {
-      const add = h('input', { class: 'inp', placeholder: 'Новый юнит, например MVP — Enter', maxlength: 80,
-        onkeydown: e => { if (e.key === 'Enter') { e.preventDefault(); const v = e.target.value.trim(); if (v) { plan.units.push({ id: '', name: v, teams: [] }); draw(); } } } });
-      setTimeout(() => add.focus(), 0);
+      const addNew = () => { plan.units.push({ id: '', name: '', on: true, teams: [], focus: true }); draw(); };
       return [
-        h('p', { class: 'hint' }, `Рабочие юниты внутри «${plan.managers.name || 'Managers'}» — сюда Managers раскладывают задачи приложений.`),
-        h('div', { class: 'sw-list' }, plan.units.length ? plan.units.map((u, i) => h('div', { class: 'sw-row' },
-          h('span', { class: 'unit-dot', style: { background: u.id && unitById(u.id) ? unitById(u.id).color : 'var(--accent)', margin: 0 } }),
-          h('input', { class: 'inp', value: u.name, maxlength: 80, oninput: e => { u.name = e.target.value; } }),
-          !u.id && h('span', { class: 'badge' }, 'новый'),
-          h('button', { class: 'icon-btn sm', title: u.id ? 'Убрать (в корзину, задачи сохранятся)' : 'Убрать', onclick: () => {
-            if (u.id) plan.removeUnits.push(u.id);
-            plan.units.splice(i, 1);
-            draw();
-          } }, icon('x', 14))))
-          : h('p', { class: 'muted', style: { margin: 0 } }, 'Пока ни одного — добавьте ниже')),
-        add,
+        h('p', { class: 'hint' }, `Рабочие юниты внутри «${plan.managers.name || 'Managers'}» — сюда Managers раскладывают задачи приложений. Отметьте нужные или создайте новый; снятая галочка — юнит просто выходит из структуры, ничего не удаляется.`),
+        h('div', { class: 'sw-list' }, plan.units.length ? plan.units.map((u, i) => {
+          const name = h('input', { class: 'inp', value: u.name, maxlength: 80, placeholder: 'Название юнита', oninput: e => { u.name = e.target.value; },
+            onkeydown: e => { if (e.key === 'Enter') { e.preventDefault(); addNew(); } } });
+          if (u.focus) { delete u.focus; setTimeout(() => name.focus(), 0); }
+          return h('div', { class: 'sw-row' + (u.on ? '' : ' off') },
+            h('input', { type: 'checkbox', checked: u.on, title: u.on ? 'Входит в структуру' : 'Не входит', onchange: e => { u.on = e.target.checked; draw(); } }),
+            h('span', { class: 'unit-dot', style: { background: u.id && unitById(u.id) ? unitById(u.id).color : 'var(--accent)', margin: 0 } }),
+            name,
+            !u.id ? h('span', { class: 'badge' }, 'новый') : u.teams.length > 0 && h('span', { class: 'muted sw-sub' }, u.teams.length + ' ' + (u.teams.length === 1 ? 'команда' : 'команды')),
+            !u.id && h('button', { class: 'icon-btn sm', title: 'Убрать', onclick: () => { plan.units.splice(i, 1); draw(); } }, icon('x', 14)));
+        }) : h('p', { class: 'muted', style: { margin: 0 } }, 'Юнитов пока нет — создайте первый')),
+        h('button', { class: 'btn sm sw-add', onclick: addNew }, icon('plus', 14), 'Новый юнит'),
       ];
     },
     // 3. команды внутри юнитов
     () => [
       h('p', { class: 'hint' }, 'Какие команды работают внутри каждого юнита. Для каждой появится юнит-команда; задачи из наборов сами раскладываются по ним.'),
-      plan.units.length ? plan.units.map(u => h('div', { class: 'sw-block' },
+      plan.units.some(u => u.on) ? plan.units.filter(u => u.on).map(u => h('div', { class: 'sw-block' },
         h('b', null, u.name || 'Без названия'),
         h('div', { class: 'quick-chips' }, activeTeams().map(t => chip(u.teams.includes(t.id), t.name, t.color, () => { u.teams = toggle(u.teams, t.id); draw(); })))))
         : h('p', { class: 'muted' }, 'Сначала добавьте юниты на шаге 2'),
     ],
     // 4. люди в командах
     () => {
-      const used = activeTeams().filter(t => plan.units.some(u => u.teams.includes(t.id)));
+      const used = activeTeams().filter(t => plan.units.some(u => u.on && u.teams.includes(t.id)));
       const teams = used.length ? used : activeTeams();
       const people = S.people.filter(p => p.active && p.access === 'member').sort((a, b) => a.name.localeCompare(b.name, 'ru'));
       return [
@@ -94,16 +93,17 @@ export function openStructureWizard(onDone) {
       const node = (depth, ic, label, extra) => h('div', { class: 'sw-node', style: { '--d': depth } }, icon(ic, 14), h('b', null, label), extra);
       const peopleOf = tid => S.people.filter(p => p.active && (plan.people[p.id] || []).includes(tid));
       return [
-        h('p', { class: 'hint' }, isNew ? 'Так будет выглядеть структура. Нажмите «Создать структуру».' : 'Так будет после изменений. Убранное уйдёт в корзину со всеми задачами.'),
+        h('p', { class: 'hint' }, isNew ? 'Так будет выглядеть структура. Нажмите «Создать структуру».' : 'Так будет после изменений. Снятые команды уйдут в корзину со своими задачами.'),
         h('div', { class: 'sw-tree' },
           node(0, 'app', plan.app.name || 'App', h('span', { class: 'muted' }, 'приложения')),
           node(1, 'layers', plan.managers.name || 'Managers', h('span', { class: 'muted' }, 'жизненный цикл')),
-          plan.units.map(u => [
+          plan.units.filter(u => u.on).map(u => [
             node(2, 'board', u.name || 'Без названия', !u.id && h('span', { class: 'badge' }, 'новый')),
             u.teams.map(tid => { const t = teamById(tid); const ppl = peopleOf(tid); return t && node(3, 'users', t.name,
               ppl.length ? h('span', { class: 'avatars-stack', title: ppl.map(p => p.name).join(', ') }, ppl.slice(0, 5).map(p => avatar(p, 'sm'))) : h('span', { class: 'warn-text' }, 'никого')); }),
           ])),
-        plan.removeUnits.length > 0 && h('p', { class: 'warn-text' }, 'В корзину: ' + plan.removeUnits.map(id => (unitById(id) || {}).name).filter(Boolean).join(', ')),
+        plan.units.some(u => u.id && !u.on && unitById(u.id) && unitById(u.id).parentId === plan.managers.id) &&
+          h('p', { class: 'muted' }, 'Выйдут из структуры (останутся юнитами): ' + plan.units.filter(u => u.id && !u.on && unitById(u.id).parentId === plan.managers.id).map(u => u.name).join(', ')),
       ];
     },
   ];
@@ -125,7 +125,8 @@ export function openStructureWizard(onDone) {
     try {
       await send('applyStructure', {
         app: plan.app, managers: plan.managers,
-        units: plan.units.filter(u => u.name.trim()), removeUnits: plan.removeUnits, people: plan.people,
+        units: plan.units.filter(u => u.on && u.name.trim()),
+        detachUnits: plan.units.filter(u => u.id && !u.on).map(u => u.id), people: plan.people,
       });
       close();
       toast(isNew ? 'Структура создана' : 'Структура обновлена');

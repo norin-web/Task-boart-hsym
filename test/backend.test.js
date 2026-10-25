@@ -459,6 +459,14 @@ test('мастер структуры: собрать, изменить, пов�
   assert.equal(units.filter(u => u.teamId === 't_ios' && u.parentId === r.unitIds[0]).length, 1); // не удалён, а в архиве
   assert.equal(units.find(u => u.id === r.appId).name, 'Apps');
   assert.equal(units.filter(u => !u.archived && u.parentId === r.managersId).length, 2);
+  // снятый юнит выходит из структуры, но остаётся
+  await api('applyStructure', {
+    app: { id: r.appId, name: 'Apps' }, managers: { id: r.managersId, name: 'Managers' },
+    units: [{ id: r.unitIds[0], name: 'MVP', teams: ['t_design', 't_qa'] }], detachUnits: [r2.unitIds[1]],
+  });
+  const sleep = (await api('bootstrap', {})).units.find(u => u.id === r2.unitIds[1]);
+  assert.equal(sleep.parentId, '');
+  assert.equal(sleep.archived, false);
   // ещё раз то же — без дублей
   await api('applyStructure', {
     app: { id: r.appId, name: 'Apps' }, managers: { id: r.managersId, name: 'Managers' },

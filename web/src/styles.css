@@ -1124,3 +1124,7 @@ button.kpi { font: inherit; text-align: left; cursor: pointer; color: inherit; }
 .sw-node > .i { color: var(--muted); }
 .sw-nav { display: flex; justify-content: space-between; border-top: 1px solid var(--border); padding-top: 12px; }
 .modal-foot:empty { display: none; }
+
+.sw-row.off .inp { opacity: .55; }
+.sw-sub { font-size: 12px; white-space: nowrap; }
+.sw-add { justify-self: start; }

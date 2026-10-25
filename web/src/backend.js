@@ -843,7 +843,8 @@ export function createBackend(db, opts = {}) {
     /**
      * Мастер структуры: App (приложения) → Managers (жизненный цикл) → рабочие юниты → команды внутри → люди в командах.
      * Создаёт недостающее и обновляет существующее; повторный вызов ничего не дублирует.
-     * p: { app: { id?, name }, managers: { id?, name }, units: [{ id?, name, teams: [teamId] }], removeUnits: [id], people: { personId: [teamId] } }
+     * p: { app: { id?, name }, managers: { id?, name }, units: [{ id?, name, teams: [teamId] }], detachUnits: [id] (выйти из структуры),
+     *      removeUnits: [id] (в корзину), people: { personId: [teamId] } }
      */
     async applyStructure(p, ctx) {
       const existing = id => id ? one('units', id) : null;
@@ -900,6 +901,11 @@ export function createBackend(db, opts = {}) {
         }
         const missing = [...want].filter(t => !kids.some(k => k.team_id === t));
         if (missing.length) await methods.setupTeamUnits({ unitId: u.id, teamIds: missing }, ctx);
+      }
+      // снятые в мастере — выходят из структуры, юнит со всеми задачами остаётся
+      for (const id of p.detachUnits || []) {
+        const u = await existing(id);
+        if (u && u.parent_id === mod.id) await methods.updateUnit({ id: u.id, parentId: '' });
       }
       for (const id of p.removeUnits || []) {
         const u = await existing(id);
