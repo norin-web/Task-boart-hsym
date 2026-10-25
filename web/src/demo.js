@@ -140,3 +140,41 @@ async function seed() {
     description: 'Нет ссылок на условия подписки на пейволле.' }, P.oleg.id);
   return P.anna.id;
 }
+
+/**
+ * Тестовые люди в уже собранную базу (ничего не стирая): 6 демо-человек с позициями и командами.
+ * Юниты-команды получают людей сами (по команде); обычные юниты нижнего уровня — всех участников.
+ * Уже существующих (по email) пропускает. Возвращает число добавленных.
+ */
+export async function seedPeople() {
+  return asSystem(async () => {
+    const backend = getBackend();
+    const api = async (method, payload) => {
+      const r = await backend.call(method, payload, {});
+      if (!r.ok) throw new Error(`${method}: ${r.error}`);
+      return r.data;
+    };
+    const boot = await api('bootstrap', {});
+    const teams = new Set((boot.teams || []).map(t => t.id));
+    const TEAM = { d_ios: 't_ios', d_design: 't_design', d_aso: teams.has('t_aso') ? 't_aso' : 't_other', d_qa: 't_qa' };
+    const have = new Set(boot.people.map(p => (p.email || '').toLowerCase()));
+    const added = [];
+    for (const [, name, role, email, access, positionId] of PEOPLE) {
+      const mail = email + '@example.com';
+      if (have.has(mail)) continue;
+      const team = access === 'member' ? TEAM[positionId] : 't_product';
+      added.push(await api('createPerson', {
+        name, role, email: mail, access, positionId: positionId || 'd_po', teamIds: teams.has(team) ? [team] : [],
+      }));
+    }
+    // обычные юниты без подъюнитов и не команды — всем участникам, чтобы им было что открыть
+    const units = boot.units.filter(u => !u.archived);
+    const leaves = units.filter(u => !u.teamId && !units.some(c => c.parentId === u.id));
+    for (const u of leaves) {
+      for (const p of added.filter(x => x.access === 'member')) {
+        await api('setMember', { unitId: u.id, personId: p.id, departmentId: p.positionId });
+      }
+    }
+    return added.length;
+  });
+}

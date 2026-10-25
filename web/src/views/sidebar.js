@@ -1,6 +1,6 @@
 import Sortable from 'sortablejs';
 import { S, LS, byOrder, openCount, me, unitById, isStaff, ACCESS_LABELS } from '../state.js';
-import { $, h, icon, avatar, menu, showErr, fill, confirmDlg } from '../ui.js';
+import { $, h, icon, avatar, menu, showErr, fill, confirmDlg, toast } from '../ui.js';
 import { send } from '../api.js';
 import { link } from '../router.js';
 import { openPalette } from './palette.js';
@@ -105,12 +105,24 @@ export function renderSidebar() {
   }
 }
 
+/** Локальный режим: 6 демо-человек в текущую базу (ничего не стирая), чтобы было за кого «Войти как…». */
+async function addTestPeople() {
+  if (!(await confirmDlg('Добавить тестовых людей (Анна, Олег, Дмитрий, Мария, Павел, Ирина) в текущую базу? Ничего не удалится; уже добавленных пропустим.', { ok: 'Добавить' }))) return;
+  try {
+    const { seedPeople } = await import('../demo.js');
+    const n = await seedPeople();
+    toast(n ? `Добавлено: ${n}. Войти за них — «Войти как…»` : 'Тестовые люди уже есть');
+    if (n) setTimeout(() => location.reload(), 800);
+  } catch (e) { showErr(e); }
+}
+
 function meMenu(anchor) {
   const email = S.session && S.session.user.email;
   menu(anchor, [
     email && { title: email },
     { label: 'Мой профиль', icon: 'user', action: openMyProfile },
     mode === 'local' && { label: 'Войти как…', icon: 'users', action: openActAs },
+    mode === 'local' && isStaff() && { label: 'Добавить тестовых людей', icon: 'plus', action: addTestPeople },
     mode === 'local' && { sep: true },
     mode === 'local' && { label: 'Очистить локальную базу', icon: 'trash', danger: true, action: resetLocal },
     mode === 'supabase' && { sep: true },
