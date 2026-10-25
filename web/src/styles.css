@@ -890,3 +890,80 @@ table.tasks tr.grp-more .old-done { width: auto; margin: 0; }
 .news-dot.approved { background: var(--ok); }
 
 .tpl-links .link-row .inp { flex: 1; max-width: none; }
+
+/* подвкладки (сегменты) */
+.sub-tabs { margin-bottom: 14px; }
+.seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 10px; background: var(--surface-2); }
+.seg-btn { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; font: inherit; font-size: 13px; color: var(--muted); padding: 6px 12px; border-radius: 8px; cursor: pointer; }
+.seg-btn:hover { color: var(--text); }
+.seg-btn.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: var(--shadow-sm); }
+
+/* люди и доступы: ровная сетка, чипы переносятся внутри своей колонки */
+.access-row { grid-template-columns: auto minmax(160px, 1.3fr) minmax(0, 1fr) minmax(0, 1fr) 132px 28px; }
+.access-row .pos-btn { width: 100%; min-width: 0; justify-content: space-between; }
+.access-row .pos-btn .pos-chips { flex: 1; min-width: 0; }
+.access-row .pos-btn > .i { flex: none; }
+.access-head { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.pos-empty { font-size: 12px; }
+.add-person > .pos-btn { flex: 1 1 160px; min-height: 36px; justify-content: space-between; }
+@media (max-width: 900px) {
+  .access-row { grid-template-columns: auto minmax(0, 1fr) 28px; }
+  .access-row > .pos-btn, .access-row > select, .access-row > .access-badge { grid-column: 2 / -1; }
+  .access-head { display: none; }
+}
+
+/* автоматизации */
+.auto-page { display: grid; gap: 16px; max-width: 1040px; }
+.ur-list { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.ur-row { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(200px, 1.4fr) auto auto auto; gap: 14px; align-items: center; padding: 8px 12px; }
+.ur-row + .ur-row { border-top: 1px solid var(--border); }
+.ur-unit { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ur-unit b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ur-cell { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; white-space: nowrap; }
+.ur-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.ur-review { border: 1px solid transparent; background: transparent; font: inherit; color: inherit; padding: 4px 8px; border-radius: 8px; cursor: pointer; text-align: left; }
+.ur-review:hover { border-color: var(--border); background: var(--surface-2); }
+.ur-review > .i:last-child { color: var(--muted); opacity: 0; }
+.ur-review:hover > .i:last-child { opacity: 1; }
+.rv-sum { display: inline-flex; align-items: center; gap: 6px; }
+.an-list { display: grid; gap: 10px; }
+.an-item { display: flex; gap: 10px; align-items: flex-start; }
+.an-ic { display: inline-flex; width: 28px; height: 28px; border-radius: 8px; align-items: center; justify-content: center; background: var(--accent-soft); color: var(--accent-text); flex: none; }
+.rules-link { display: flex; align-items: center; gap: 6px; }
+@media (max-width: 900px) {
+  .ur-row { grid-template-columns: 1fr; gap: 6px; }
+}
+
+/* панель админа → юниты */
+.un-list { display: grid; gap: 10px; }
+.un-row { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; display: grid; gap: 8px; }
+.un-main { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 16px; align-items: center; }
+.un-name { display: inline-flex; align-items: center; gap: 8px; color: var(--text); min-width: 0; }
+.un-name b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.un-name:hover b { color: var(--accent-text); }
+.un-stat, .un-review { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; white-space: nowrap; color: var(--text-2); }
+.un-actions { display: inline-flex; gap: 2px; }
+.un-teams { display: flex; flex-wrap: wrap; gap: 6px; }
+.un-team { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 6px 0 10px; border: 1px solid var(--border); border-radius: 99px; background: var(--surface); font: inherit; font-size: 12.5px; color: var(--text); cursor: pointer; }
+.un-team:hover { border-color: var(--border-strong); }
+.un-team.on { background: var(--accent-soft); border-color: transparent; }
+.un-team .avatars-stack { margin-left: 2px; }
+.un-people { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); }
+.un-person { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+@media (max-width: 760px) { .un-main { grid-template-columns: 1fr auto; } .un-stat, .un-review { grid-column: 1 / -1; } }
+.un-name, .un-name:hover { text-decoration: none; }
+
+/* правила юнитов — таблицей с заголовками */
+.ur-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, .9fr) minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.ur-head { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); background: var(--surface-2); padding-top: 7px; padding-bottom: 7px; }
+.ur-review { min-width: 0; overflow: hidden; justify-content: space-between; }
+.ur-review .rv-sum { min-width: 0; overflow: hidden; }
+.ur-cell .inp.sm { width: 100%; max-width: 100%; }
+.ur-check { justify-content: flex-start; cursor: pointer; }
+.ur-mobile { display: none; }
+.rv-sum .warn-text { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+@media (max-width: 900px) {
+  .ur-head { display: none; }
+  .ur-mobile { display: inline; }
+  .ur-cell { justify-content: space-between; }
+}

@@ -1,12 +1,14 @@
 /** Панель админа (#/admin): обзор, люди и доступы, юниты, позиции, карточка, журнал. Для модераторов и супер-админов. */
 import Sortable from 'sortablejs';
-import { S, me, byOrder, emptyCounts, personById, todayStr, isSuper, ACCESS_LABELS, plural, LINK_KINDS, activeDepts, deptById } from '../state.js';
+import { AUTO_ARCHIVE, HIDE_DONE } from '../state.js';
+import { reviewSection } from './settings.js';
+import { S, LS, me, byOrder, emptyCounts, personById, todayStr, isSuper, ACCESS_LABELS, plural, LINK_KINDS, activeDepts, deptById, activeTeams } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, toast, confirmDlg, menu, modal, field } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView, link, navigate } from '../router.js';
 import { renderSidebar } from './sidebar.js';
 import { attentionBlock, workloadBlock, roleBadge } from './home.js';
-import { peopleManager, positionsManager } from './people.js';
+import { peopleManager, positionsManager, teamsManager } from './people.js';
 import { activityFeed } from './feed.js';
 import { openCreateUnit, unitMenu, archiveUnit, deleteUnit } from './units.js';
 
@@ -14,14 +16,20 @@ const TABS = [
   ['overview', 'Обзор', 'home'],
   ['people', 'Люди и доступы', 'users'],
   ['units', 'Юниты', 'board'],
-  ['positions', 'Позиции', 'layers'],
-  ['templates', 'Шаблоны', 'copy'],
   ['card', 'Карточка', 'link', 'super'],
+  ['automations', 'Автоматизации', 'progress'],
   ['journal', 'Журнал', 'clock'],
 ];
 const tabs = () => TABS.filter(t => t[3] !== 'super' || isSuper());
 
+// Старые вкладки: позиции — внутри «Люди и доступы», шаблоны — в «Автоматизациях»
+const MOVED = { positions: ['people', 'positions'], teams: ['people', 'teams'], templates: ['automations'] };
+
 export async function renderAdmin(tab) {
+  if (MOVED[tab]) {
+    if (MOVED[tab][1]) LS.set('peopleSub', MOVED[tab][1]);
+    tab = MOVED[tab][0];
+  }
   if (tab !== 'trash' && !tabs().some(t => t[0] === tab)) tab = 'overview';
   const navTab = tab === 'trash' ? 'units' : tab; // корзина — часть вкладки «Юниты»
   const page = h('div', { class: 'page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
@@ -47,12 +55,12 @@ export async function renderAdmin(tab) {
   S.units = d.units;
   S.people = d.people;
   S.departments = d.departments;
+  if (d.teams) S.teams = d.teams;
   renderSidebar();
 
   switch (tab) {
-    case 'people': fill(page, h('div', { class: 'card-box' }, peopleManager({ search: true }))); break;
-    case 'positions': fill(page, h('div', { class: 'card-box', style: { maxWidth: '720px' } }, positionsManager())); break;
-    case 'templates': fill(page, h('div', { class: 'card-box', style: { maxWidth: '860px' } }, templatesManager())); break;
+    case 'people': fill(page, peopleTab()); break;
+    case 'automations': fill(page, automationsTab()); break;
     case 'card': fill(page, h('div', { class: 'card-box', style: { maxWidth: '860px' } }, linkFieldsManager())); break;
     case 'units': fill(page, unitsTable(ov)); break;
     case 'trash': fill(page, trashTable(ov)); break;
@@ -145,32 +153,62 @@ function trashTable(settings) {
       : h('div', { class: 'card-box empty-state' }, h('p', { style: { margin: 0 } }, 'Корзина пуста. Удалённые юниты хранятся здесь со всеми задачами и историей.')));
 }
 
+/**
+ * Юниты: строка юнита (задачи, ревьюер, действия) и под ней — команды чипами «UX/UI Designers · 2» с аватарами.
+ * Клик по чипу показывает людей этой команды прямо под строкой; клик по названию — доска юнита.
+ */
 function unitsTable(ov) {
   const units = S.units.filter(u => !u.archived).sort(byOrder);
   const noTeam = new Set(ov ? ov.unitsNoTeam : []);
+  const open = {}; // юнит → раскрытая команда
+  const list = h('div', { class: 'un-list' });
+
+  const teamsOf = u => {
+    const ppl = (u.members || []).map(personById).filter(p => p && p.active);
+    const groups = activeTeams().map(t => ({ t, people: ppl.filter(p => (p.teamIds || []).includes(t.id)) })).filter(g => g.people.length);
+    const loose = ppl.filter(p => !(p.teamIds || []).some(id => activeTeams().some(t => t.id === id)));
+    if (loose.length) groups.push({ t: { id: '', name: 'Без команды', color: 'var(--muted)' }, people: loose });
+    return groups;
+  };
+  const reviewers = u => {
+    const r = u.settings.review || {};
+    if (!r.column) return [];
+    return [...new Set([...Object.values(r.byPosition || {}), r.default].filter(Boolean))].map(personById).filter(Boolean);
+  };
+
+  const row = u => {
+    const c = u.counts || emptyCounts();
+    const openTasks = c.todo + c.in_progress, total = c.todo + c.in_progress + c.done;
+    const groups = teamsOf(u);
+    const shown = groups.find(g => g.t.id === open[u.id]);
+    const rv = reviewers(u);
+    return h('div', { class: 'un-row' },
+      h('div', { class: 'un-main' },
+        link({ unit: u.id, mode: 'board' }, { class: 'un-name', title: 'Открыть доску' },
+          h('span', { class: 'uc-icon sm', style: { background: u.color } }, u.key.slice(0, 2)),
+          h('b', null, u.name), h('span', { class: 'muted' }, u.key)),
+        h('span', { class: 'un-stat', title: 'Открытые / всего' }, icon('checklist', 13), h('b', null, openTasks), h('span', { class: 'muted' }, ' / ' + total),
+          c.overdue > 0 && h('span', { class: 'warn-text', title: 'Просрочено' }, ' · ' + c.overdue + ' просроч.')),
+        h('span', { class: 'un-review', title: rv.length ? 'Ревьюеры: ' + rv.map(p => p.name).join(', ') : 'Ревью не настроено' },
+          icon('eye', 13), rv.length ? h('span', { class: 'avatars-stack' }, rv.slice(0, 3).map(p => avatar(p, 'sm'))) : h('span', { class: 'muted' }, 'нет')),
+        h('span', { class: 'un-actions' },
+          link({ unit: u.id, mode: 'settings' }, { class: 'icon-btn sm', title: 'Настройки юнита' }, icon('settings', 15)),
+          h('button', { class: 'icon-btn sm', title: 'Действия', onclick: e => { e.stopPropagation(); unitMenu(e.currentTarget, u); } }, icon('more')))),
+      h('div', { class: 'un-teams' },
+        groups.length ? groups.map(g => h('button', {
+          class: 'un-team' + (open[u.id] === g.t.id ? ' on' : ''), title: g.people.map(p => p.name).join(', '),
+          onclick: () => { open[u.id] = open[u.id] === g.t.id ? undefined : g.t.id; draw(); },
+        }, h('span', { class: 'dot', style: { background: g.t.color } }), g.t.name, h('span', { class: 'muted' }, '· ' + g.people.length),
+        h('span', { class: 'avatars-stack' }, g.people.slice(0, 4).map(p => avatar(p, 'sm')))))
+          : h('span', { class: noTeam.has(u.id) ? 'warn-text' : 'muted' }, 'В юните пока никого')),
+      shown && h('div', { class: 'un-people' }, shown.people.map(p => h('span', { class: 'un-person' }, avatar(p, 'sm'), p.name,
+        h('span', { class: 'muted' }, (p.positionIds || []).map(id => (deptById(id) || {}).name).filter(Boolean).join(', '))))));
+  };
+  const draw = () => fill(list, units.length ? units.map(row) : h('p', { class: 'muted', style: { padding: '12px 14px', margin: 0 } }, 'Юнитов пока нет'));
+  draw();
   return h('div', null,
     h('div', { class: 'section-head' }, unitsSwitch(false), h('button', { class: 'btn primary sm', onclick: openCreateUnit }, icon('plus', 14), 'Юнит')),
-    h('div', { class: 'table-wrap' }, h('table', { class: 'tasks admin-units' },
-      h('thead', null, h('tr', null, ['Юнит', 'Команда', 'Открыто', 'Просрочено', 'Готово', ''].map(t => h('th', null, t)))),
-      h('tbody', null, units.map(u => {
-        const c = u.counts || emptyCounts();
-        const total = c.todo + c.in_progress + c.done;
-        const team = (u.members || []).map(personById).filter(Boolean);
-        return h('tr', { class: u.archived ? 'archived' : '', onclick: e => { if (!e.target.closest('button')) navigate({ unit: u.id, mode: 'board' }); } },
-          h('td', null, h('span', { class: 'row', style: { gap: '8px', flexWrap: 'nowrap' } },
-            h('span', { class: 'uc-icon sm', style: { background: u.color } }, u.key.slice(0, 2)),
-            h('span', null, h('b', null, u.name), ' ', h('span', { class: 'muted' }, u.key)),
-            u.archived && h('span', { class: 'badge' }, 'архив'))),
-          h('td', null, team.length
-            ? h('span', { class: 'avatars-stack', title: team.map(p => p.name).join(', ') }, team.slice(0, 6).map(p => avatar(p, 'sm')))
-            : h('span', { class: noTeam.has(u.id) ? 'warn-text' : 'muted' }, 'нет команды')),
-          h('td', null, c.todo + c.in_progress),
-          h('td', null, c.overdue ? h('span', { class: 'warn-text' }, c.overdue) : h('span', { class: 'muted' }, '0')),
-          h('td', null, total ? Math.round((c.done / total) * 100) + '%' : '—'),
-          h('td', { style: { width: '120px', textAlign: 'right' } },
-            link({ unit: u.id, mode: 'settings' }, { class: 'btn ghost sm' }, 'Настройки'),
-            h('button', { class: 'icon-btn sm', title: 'Действия', onclick: e => { e.stopPropagation(); unitMenu(e.currentTarget, u); } }, icon('more'))));
-      })))));
+    list);
 }
 
 /* ---------- карточка: поля-ссылки ---------- */
@@ -302,12 +340,14 @@ function templatesManager() {
   };
   const row = t => {
     const d = deptById(t.departmentId);
+    const tm = S.teams.find(x => x.id === t.teamId);
     return h('div', { class: 'lf-row', dataset: { id: t.id } },
       h('span', { class: 'drag', title: 'Перетащите, чтобы изменить порядок' }, icon('grip', 16)),
       h('button', { class: 'tpl-open', onclick: () => editTemplate(t, draw) },
         h('span', { class: 'tpl-name' }, t.name),
         h('span', { class: 'tpl-meta' },
-          d && h('span', { class: 'chip', style: { background: `color-mix(in srgb, ${d.color} 16%, transparent)`, color: d.color } }, d.name),
+          tm && h('span', { class: 'chip', style: { background: `color-mix(in srgb, ${tm.color} 16%, transparent)`, color: tm.color } }, tm.name),
+          d && h('span', { class: 'chip', title: 'Позиция', style: { background: `color-mix(in srgb, ${d.color} 16%, transparent)`, color: d.color } }, d.name),
           t.dueDays >= 0 && h('span', { class: 'chip' }, icon('calendar', 11), (DUE_DAYS.find(x => x[0] === t.dueDays) || [0, ''])[1]),
           t.assigneeId && personById(t.assigneeId) && h('span', { class: 'chip' }, icon('user', 11), personById(t.assigneeId).name),
           t.checklist.length > 0 && h('span', { class: 'chip' }, icon('checklist', 11), t.checklist.length + ' п.'),
@@ -340,22 +380,24 @@ function editTemplate(t, onSaved) {
   const name = h('input', { class: 'inp', value: t ? t.name : '', maxlength: 60, placeholder: 'Например, Релиз или Баг' });
   const title = h('input', { class: 'inp', value: t ? t.title : '', maxlength: 500, placeholder: 'Название задачи (по умолчанию — как у шаблона)' });
   const desc = h('textarea', { class: 'inp', rows: 4, value: t ? t.description : '', maxlength: 20000, placeholder: 'Описание: контекст, критерии готовности…' });
-  // Команда = позиция (дизайнеры, девы…): в «Исполнителе» остаются только её люди
+  // Команда (дизайнеры, девы…): в «Исполнителе» остаются только её люди; позиция — отдельно (кто видит задачу)
   let assignee = t ? t.assigneeId : '';
-  const inTeam = (p, team) => !team || (p.positionIds || [p.positionId]).includes(team);
+  const inTeam = (p, team) => !team || (p.teamIds || []).includes(team);
   const assigneeBox = h('div');
   const drawAssignee = () => fill(assigneeBox, h('select', { class: 'inp', value: assignee, onchange: e => { assignee = e.target.value; } },
     h('option', { value: '' }, '— не назначать —'),
-    S.people.filter(p => p.active && (inTeam(p, dept.value) || p.id === assignee)).sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+    S.people.filter(p => p.active && (inTeam(p, team.value) || p.id === assignee)).sort((a, b) => a.name.localeCompare(b.name, 'ru'))
       .map(p => h('option', { value: p.id }, p.name))));
-  const dept = h('select', {
-    class: 'inp', value: t ? t.departmentId : '',
+  const team = h('select', {
+    class: 'inp', value: t ? t.teamId : '',
     onchange: () => {
       const p = personById(assignee);
-      if (p && !inTeam(p, dept.value)) assignee = ''; // исполнитель не из этой команды — сбрасываем
+      if (p && !inTeam(p, team.value)) assignee = ''; // исполнитель не из этой команды — сбрасываем
       drawAssignee();
     },
-  }, h('option', { value: '' }, '— любая —'), activeDepts().map(d => h('option', { value: d.id }, d.name)));
+  }, h('option', { value: '' }, '— любая —'), activeTeams().map(d => h('option', { value: d.id }, d.name)));
+  const dept = h('select', { class: 'inp', value: t ? t.departmentId : '' },
+    h('option', { value: '' }, '— по исполнителю —'), activeDepts().map(d => h('option', { value: d.id }, d.name)));
   drawAssignee();
   const linkInputs = S.linkFields.filter(f => !f.archived).sort(byOrder).map(f => ({
     f, el: h('input', { class: 'inp', value: (t && t.links[f.id]) || '', placeholder: 'https://…', maxlength: 2000 }),
@@ -368,8 +410,8 @@ function editTemplate(t, onSaved) {
     body: [
       h('div', { class: 'grid2' }, field('Название шаблона', name), field('Название задачи', title)),
       field('Описание', desc),
-      h('div', { class: 'grid2' }, field('Команда', dept, 'Позиция задачи'), field('Исполнитель', assigneeBox, 'Только люди выбранной команды')),
-      h('div', { class: 'grid2' }, field('Срок', due, 'Считается от дня создания задачи'), h('div')),
+      h('div', { class: 'grid2' }, field('Команда', team), field('Исполнитель', assigneeBox, 'Только люди выбранной команды')),
+      h('div', { class: 'grid2' }, field('Позиция', dept, 'Кто видит задачу'), field('Срок', due, 'Считается от дня создания задачи')),
       field('Чеклист', checklist),
       linkInputs.length > 0 && h('div', { class: 'field' }, h('label', null, 'Ссылки'),
         h('div', { class: 'links tpl-links' }, linkInputs.map(({ f, el }) => h('div', { class: 'link-row' },
@@ -382,7 +424,7 @@ function editTemplate(t, onSaved) {
           if (!name.value.trim()) return name.focus();
           const saved = await send('saveTemplate', {
             id: t ? t.id : undefined, name: name.value, title: title.value, description: desc.value, departmentId: dept.value,
-            dueDays: Number(due.value), assigneeId: assignee,
+            dueDays: Number(due.value), assigneeId: assignee, teamId: team.value,
             links: Object.fromEntries(linkInputs.map(({ f, el }) => [f.id, el.value.trim()]).filter(([, v]) => v)),
             checklist: checklist.value.split('\n').map(x => x.trim()).filter(Boolean).map(text => ({ text })),
           });
@@ -393,4 +435,93 @@ function editTemplate(t, onSaved) {
       },
     ],
   });
+}
+
+/* ---------- люди и доступы: люди / команды / позиции ---------- */
+
+const PEOPLE_SUB = [['people', 'Люди', 'users'], ['teams', 'Команды', 'layers'], ['positions', 'Позиции', 'user']];
+
+function peopleTab() {
+  let sub = LS.get('peopleSub', 'people');
+  if (!PEOPLE_SUB.some(x => x[0] === sub)) sub = 'people';
+  const body = h('div');
+  const seg = h('div', { class: 'seg' });
+  const draw = () => {
+    fill(seg, PEOPLE_SUB.map(([id, label, ic]) => h('button', {
+      class: 'seg-btn' + (id === sub ? ' on' : ''), onclick: () => { sub = id; LS.set('peopleSub', id); draw(); },
+    }, icon(ic, 14), label)));
+    fill(body, sub === 'teams' ? h('div', { class: 'card-box', style: { maxWidth: '760px' } }, teamsManager())
+      : sub === 'positions' ? h('div', { class: 'card-box', style: { maxWidth: '760px' } }, positionsManager())
+        : h('div', { class: 'card-box' }, peopleManager({ search: true })));
+  };
+  draw();
+  return h('div', null, h('div', { class: 'sub-tabs' }, seg), body);
+}
+
+/* ---------- автоматизации ---------- */
+
+/** Всё, что происходит само: шаблоны, правила юнитов (ревью, чеклист, выполненные), уведомления. */
+function automationsTab() {
+  return h('div', { class: 'auto-page' },
+    h('div', { class: 'card-box' }, templatesManager()),
+    h('div', { class: 'card-box' }, unitRules()),
+    h('div', { class: 'card-box' }, autoNotes()));
+}
+
+/** Правила по юнитам: одна строка на юнит, всё меняется на месте и сохраняется сразу. */
+function unitRules() {
+  const box = h('div');
+  const units = () => S.units.filter(u => !u.archived).sort(byOrder);
+  const save = async (u, patch) => {
+    const saved = await send('updateUnit', { id: u.id, settings: { ...u.settings, ...patch } });
+    u.settings = saved.settings;
+    draw();
+  };
+  const reviewText = u => {
+    const r = u.settings.review || {};
+    const col = r.column && u.settings.columns.find(c => c.id === r.column);
+    if (!col) return h('span', { class: 'muted' }, 'выключено');
+    const who = [...new Set([...Object.values(r.byPosition || {}), r.default].filter(Boolean))].map(personById).filter(Boolean);
+    return h('span', { class: 'rv-sum' }, h('b', null, col.name),
+      who.length ? h('span', { class: 'avatars-stack', title: who.map(p => p.name).join(', ') }, who.slice(0, 4).map(p => avatar(p, 'sm')))
+        : h('span', { class: 'warn-text', title: 'Выберите ревьюеров' }, icon('alert', 13), 'нет ревьюеров'));
+  };
+  const editReview = u => modal({
+    title: `Ревью · ${u.name}`, wide: true,
+    body: [reviewSection(u, { bare: true })],
+    actions: [{ label: 'Готово', primary: true, action: c => { c(); draw(); } }],
+    onClose: draw,
+  });
+  const row = u => h('div', { class: 'ur-row' },
+    h('div', { class: 'ur-unit' }, h('span', { class: 'uc-icon sm', style: { background: u.color } }, u.key.slice(0, 2)), h('b', null, u.name)),
+    h('button', { class: 'ur-cell ur-review', title: 'Настроить ревью', onclick: () => editReview(u) }, reviewText(u), icon('edit', 13)),
+    h('label', { class: 'ur-cell ur-check', title: 'Участник не перенесёт в «готово», пока в чеклисте есть открытые пункты' },
+      h('input', { type: 'checkbox', checked: !!u.settings.checklistBeforeDone, onchange: e => save(u, { checklistBeforeDone: e.target.checked }).catch(showErr) }),
+      h('span', { class: 'ur-mobile' }, 'Чеклист перед «готово»')),
+    h('div', { class: 'ur-cell' }, h('span', { class: 'ur-mobile ur-label' }, 'Готовые на доске'),
+      h('select', { class: 'inp sm', value: String(u.settings.hideDoneDays || 0), onchange: e => save(u, { hideDoneDays: Number(e.target.value) }).catch(showErr) },
+        HIDE_DONE.map(([d, l]) => h('option', { value: String(d) }, l)))),
+    h('div', { class: 'ur-cell' }, h('span', { class: 'ur-mobile ur-label' }, 'Автоархив'),
+      h('select', { class: 'inp sm', value: String(u.settings.autoArchiveDays || 0), onchange: e => save(u, { autoArchiveDays: Number(e.target.value) }).catch(showErr) },
+        AUTO_ARCHIVE.map(d => h('option', { value: String(d) }, d ? `через ${d} дн.` : 'выключен')))));
+  const draw = () => fill(box,
+    h('div', { class: 'section-head' }, h('h2', { style: { margin: 0, fontSize: '16px' } }, 'Правила юнитов')),
+    h('p', { class: 'hint', style: { marginTop: 0 } }, 'Ревью — задача в колонке ревью уходит ревьюеру своей позиции и возвращается исполнителю. Чеклист — в «готово» только с закрытым чеклистом. Готовые на доске — сколько дней держать выполненные. Меняется сразу.'),
+    units().length ? h('div', { class: 'ur-list' },
+      h('div', { class: 'ur-row ur-head' }, h('span', null, 'Юнит'), h('span', null, 'Ревью'), h('span', null, 'Чеклист перед «готово»'),
+        h('span', null, 'Готовые на доске'), h('span', null, 'Автоархив')),
+      units().map(row)) : h('p', { class: 'muted' }, 'Юнитов пока нет'));
+  draw();
+  return box;
+}
+
+/** Что приложение делает само — для понимания, без настроек. */
+function autoNotes() {
+  const item = (ic, title, text) => h('div', { class: 'an-item' }, h('span', { class: 'an-ic' }, icon(ic, 15)), h('div', null, h('b', null, title), h('div', { class: 'hint' }, text)));
+  return h('div', null,
+    h('h2', { style: { margin: '0 0 10px', fontSize: '16px' } }, 'Уведомления — работают сами'),
+    h('div', { class: 'an-list' },
+      item('user', 'Назначили задачу', 'Исполнителю — «Новое для вас» на главной и счётчик в меню (кроме назначения на себя).'),
+      item('eye', 'Ревью', 'Ревьюеру — «Ревью»; исполнителю — «Вернули» или «Закрыта по ревью».'),
+      item('alert', 'Сроки', 'Исполнителю — «Срок сегодня / завтра» и «Просрочено», по одному разу на срок.')));
 }

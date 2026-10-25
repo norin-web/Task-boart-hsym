@@ -25,6 +25,7 @@ export const S = {
   units: [],
   people: [],
   departments: [],          // общий справочник отделов
+  teams: [],                // команды людей (Product Team, UX/UI Designers…)
   linkFields: [],           // поля-ссылки карточки (Figma, GitHub…), общие для всех юнитов
   templates: [],            // шаблоны задач (общие)
   session: null,            // сессия Supabase Auth (в локальном режиме — null)
@@ -73,6 +74,8 @@ export const LINK_KINDS = { figma: 'Figma', github: 'GitHub', drive: 'Google Dri
 export const visibleLinkFields = () => S.linkFields.filter(f => !f.archived
   && (isStaff() || !f.positions.length || (me() && (me().positionIds || []).some(id => f.positions.includes(id))))).sort(byOrder);
 
+export const activeTeams = () => S.teams.filter(t => !t.archived).sort(byOrder);
+export const teamById = id => (id ? S.teams.find(t => t.id === id) : null);
 export const activeDepts = () => S.departments.filter(d => !d.archived).sort(byOrder);
 export const deptById = id => (id ? S.departments.find(d => d.id === id) : null);
 /** Участники текущего юнита: [{ personId, departmentId }]. */

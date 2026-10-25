@@ -19,6 +19,7 @@ export async function loadBoard(unitId) {
   S.board = d;
   S.people = d.people;
   S.departments = d.departments;
+  if (d.teams) S.teams = d.teams;
   S.quick = { status: null, dept: null, text: '' };
   const u = unitById(unitId);
   if (u) Object.assign(u, d.unit, { members: d.members.map(m => m.personId) });

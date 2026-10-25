@@ -1,5 +1,5 @@
 import Sortable from 'sortablejs';
-import { S, TYPE_LABELS, AUTO_ARCHIVE, HIDE_DONE, PALETTE, unitById, byOrder, KINDS, KIND_LABELS, KIND_COLORS, colColor, personById, activeDepts, deptById } from '../state.js';
+import { S, TYPE_LABELS, PALETTE, unitById, byOrder, KINDS, KIND_LABELS, KIND_COLORS, colColor, personById, activeDepts, deptById } from '../state.js';
 import { $, h, icon, avatar, field, topbar, menu, closeMenu, modal, confirmDlg, toast, showErr, colorPicker, statusDot, fill } from '../ui.js';
 import { send } from '../api.js';
 import { link } from '../router.js';
@@ -16,11 +16,6 @@ export function renderSettings() {
   const key = h('input', { class: 'inp mono', value: u.key, maxlength: 10, oninput: e => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); } });
   const color = colorPicker(u.color);
   const desc = h('textarea', { class: 'inp', rows: 2, value: u.description, maxlength: 1000 });
-  const autoArchive = h('select', { class: 'inp', value: String(st.autoArchiveDays) },
-    AUTO_ARCHIVE.map(d => h('option', { value: String(d) }, d ? `Через ${d} дн. после выполнения` : 'Выключен')));
-  const clGate = h('input', { type: 'checkbox', checked: !!st.checklistBeforeDone });
-  const hideDone = h('select', { class: 'inp', value: String(st.hideDoneDays || 0) },
-    HIDE_DONE.map(([d, label]) => h('option', { value: String(d) }, label)));
   const colEditor = columnsEditor(st.columns);
   const builtinRows = Object.entries(st.builtins).map(([k, bi]) => {
     const label = h('input', { class: 'inp', value: bi.label, maxlength: 40 });
@@ -35,9 +30,8 @@ export function renderSettings() {
   const save = async btn => {
     btn.disabled = true;
     try {
-      st.autoArchiveDays = Number(autoArchive.value);
-      st.hideDoneDays = Number(hideDone.value);
-      st.checklistBeforeDone = clGate.checked;
+      // правила юнита (ревью, чеклист, выполненные) живут в «Автоматизациях» — берём сохранённые
+      Object.assign(st, { review: u.settings.review, hideDoneDays: u.settings.hideDoneDays, autoArchiveDays: u.settings.autoArchiveDays, checklistBeforeDone: u.settings.checklistBeforeDone });
       st.columns = colEditor.value();
       // Задачи из удалённых колонок — в первую оставшуюся (с подтверждением)
       const ids = new Set(st.columns.map(c => c.id));
@@ -52,7 +46,6 @@ export function renderSettings() {
         st.builtins[r.k].label = r.label.value.trim() || st.builtins[r.k].label;
         if (r.hidden) st.builtins[r.k].hidden = r.hidden.checked;
       });
-      st.review = u.settings.review; // ревью сохраняется отдельно, сразу — не затираем
       const saved = await send('updateUnit', { id: u.id, name: name.value, key: key.value, color: color.value(), description: desc.value, settings: st, statusRemap: remap });
       if (orphans.length) orphans.forEach(t => { t.status = remap[t.status]; });
       Object.assign(u, saved);
@@ -97,10 +90,8 @@ export function renderSettings() {
         h('div', { class: 'grid2' }, field('Название', name), field('Ключ задач', key, 'Номера задач: ' + u.key + '-1, ' + u.key + '-2… При смене ключа номера обновятся.')),
         field('Цвет', color.el),
         field('Описание', desc),
-        h('div', { class: 'grid2', style: { alignItems: 'start' } },
-          field('Выполненные на доске', hideDone, 'Сколько держать задачи в «Готово» на доске и в списке. Давние скрываются (внизу колонки — «показать»), но остаются в поиске и статистике.'),
-          field('Автоархив выполненных', autoArchive, 'Задачи из последней колонки уходят в архив. Архив можно показать фильтром на доске.')),
-        h('label', { class: 'chk', style: { margin: '4px 0 12px' } }, clGate, 'В «готово» — только с закрытым чеклистом (для участников; администраторы могут перенести)'),
+        h('p', { class: 'hint rules-link' }, icon('progress', 13), 'Ревью, чеклист перед «готово», скрытие и архив выполненных — в ',
+          link({ view: 'admin', tab: 'automations' }, null, 'Панели админа → Автоматизации'), '.'),
 
         h('div', { class: 'sub-title' }, 'Колонки доски'),
         h('p', { class: 'hint', style: { marginTop: '-4px' } }, 'Тип колонки влияет на статистику: «Готово» — задача выполнена (не просрочена, считается в прогрессе).'),
@@ -112,7 +103,6 @@ export function renderSettings() {
         h('div', { class: 'row', style: { marginTop: '16px' } }, h('button', { class: 'btn primary', onclick: e => save(e.currentTarget) }, 'Сохранить изменения'))),
 
       teamSection(),
-      reviewSection(),
 
       h('section', { class: 'card-box' },
         h('div', { class: 'section-head', style: { marginBottom: '4px' } },
@@ -299,9 +289,8 @@ function columnsEditor(initial) {
  * Колонка ревью и ревьюеры: задача пришла в колонку — назначается ревьюер её позиции (или по умолчанию);
  * ушла дальше или назад — возвращается тому, кто делал её до ревью. Сохраняется сразу.
  */
-function reviewSection() {
-  const u = S.board.unit;
-  const box = h('section', { class: 'card-box' });
+export function reviewSection(u = S.board.unit, { bare = false } = {}) {
+  const box = h(bare ? 'div' : 'section', { class: bare ? '' : 'card-box' });
   const save = async review => {
     const saved = await send('updateUnit', { id: u.id, settings: { ...u.settings, review } });
     u.settings = saved.settings;
@@ -317,7 +306,7 @@ function reviewSection() {
     const on = !!r.column;
     const set = patch => save({ ...r, ...patch }).catch(showErr);
     fill(box,
-      h('div', { class: 'section-head', style: { marginBottom: '4px' } }, h('h2', null, 'Ревью')),
+      !bare && h('div', { class: 'section-head', style: { marginBottom: '4px' } }, h('h2', null, 'Ревью')),
       h('p', { class: 'hint' }, 'Задача пришла в колонку ревью — исполнителем становится ревьюер её позиции. Ревьюер перенёс её дальше или вернул — задача снова на том, кто её делал. Ревьюером может быть любой человек.'),
       h('div', { class: 'rv-row' },
         h('span', { class: 'rv-label' }, 'Колонка ревью'),

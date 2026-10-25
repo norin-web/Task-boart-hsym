@@ -1,6 +1,6 @@
 import {
   S, LS, taskById, personById, activeFields, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDateTime, relTime, addDays,
-  unitById, safeUrl, visibleLinkFields, whoName, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, fmtValue,
+  unitById, safeUrl, visibleLinkFields, whoName, teamById, activeTeams, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, fmtValue,
 } from '../state.js';
 import { $, h, append, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, fill } from '../ui.js';
 import { call, send } from '../api.js';
@@ -413,6 +413,12 @@ function sideBlock(t, { staff, editable }) {
     });
   }
 
+  {
+    const tm = teamById(t.teamId);
+    if (staff || tm) prop('Команда', staff ? teamSelect(t.teamId, v => patchTask(t, { teamId: v }))
+      : ro(h('span', { class: 'chip dept-chip', style: { background: `color-mix(in srgb, ${tm.color} 16%, transparent)`, color: tm.color } }, tm.name)));
+  }
+
   if (!B.department.hidden) {
     const d = deptById(t.departmentId);
     prop(B.department.label, staff ? deptSelect(t.departmentId, v => patchTask(t, { departmentId: v }))
@@ -460,6 +466,18 @@ function metaLines(t) {
 /* ---------- контролы полей ---------- */
 
 /** Отдел: select с цветной точкой. */
+/** Команда задачи: выбор с цветной точкой. */
+export function teamSelect(value, onChange) {
+  const t = teamById(value);
+  const dot = h('span', { class: 'dot', style: { background: t ? t.color : 'var(--border-strong)' } });
+  const list = activeTeams();
+  if (t && t.archived) list.push(t);
+  return h('div', { class: 'status-wrap' }, dot, h('select', {
+    class: 'inp', value: value || '',
+    onchange: e => { const nt = teamById(e.target.value); dot.style.background = nt ? nt.color : 'var(--border-strong)'; onChange(e.target.value); },
+  }, h('option', { value: '' }, '— без команды —'), list.map(x => h('option', { value: x.id }, x.name))));
+}
+
 export function deptSelect(value, onChange) {
   const d = deptById(value);
   const dot = h('span', { class: 'dot', style: { background: d ? d.color : 'var(--border-strong)' } });
@@ -468,18 +486,18 @@ export function deptSelect(value, onChange) {
   return h('div', { class: 'status-wrap' }, dot, h('select', {
     class: 'inp', value: value || '',
     onchange: e => { const nd = deptById(e.target.value); dot.style.background = nd ? nd.color : 'var(--border-strong)'; onChange(e.target.value); },
-  }, h('option', { value: '' }, '— без отдела —'), list.map(x => h('option', { value: x.id }, x.name))));
+  }, h('option', { value: '' }, '— без позиции —'), list.map(x => h('option', { value: x.id }, x.name))));
 }
 
 /**
  * Исполнитель: только участники команды (юнита). Текущий исполнитель вне команды тоже показывается.
  * ids — состав, если не текущая доска (например, форма создания с главной).
  */
-export function assigneeSelect(value, onChange, { ids, unitId, positionId } = {}) {
+export function assigneeSelect(value, onChange, { ids, unitId, teamId } = {}) {
   const team = ids || S.board.members.map(m => m.personId);
   const deptOf = id => { const p = personById(id); const d = p && deptById(p.positionId); return d ? ' · ' + d.name : ''; };
-  // positionId — показываем только людей этой команды (позиции); текущий исполнитель остаётся в списке
-  const ofTeam = p => !positionId || (p.positionIds || [p.positionId]).includes(positionId);
+  // teamId — показываем только людей этой команды; текущий исполнитель остаётся в списке
+  const ofTeam = p => !teamId || (p.teamIds || []).includes(teamId);
   const people = team.map(personById).filter(p => p && ((p.active && ofTeam(p)) || p.id === value));
   const outsider = value && !team.includes(value) && personById(value);
   const sel = h('select', {
@@ -580,7 +598,7 @@ export function openCreateTask(opts = {}) {
   const ownUnit = opts.assigneeId && units.find(u => (u.members || []).includes(opts.assigneeId));
   let unit = inBoard ? S.board.unit : unitById(opts.unitId) || ownUnit || units[0];
   const draft = {
-    status: opts.status || '', assigneeId: opts.assigneeId || '', dueDate: '', fields: {}, links: {},
+    status: opts.status || '', assigneeId: opts.assigneeId || '', dueDate: '', fields: {}, links: {}, teamId: '',
     departmentId: opts.departmentId || (S.filters.depts.length === 1 && inBoard ? S.filters.depts[0] : ''),
   };
 
@@ -597,6 +615,7 @@ export function openCreateTask(opts = {}) {
       title.value = tpl.title || tpl.name;
       desc.value = tpl.description;
       if (tpl.departmentId) draft.departmentId = tpl.departmentId;
+      if (tpl.teamId) draft.teamId = tpl.teamId;
       if (tpl.assigneeId) draft.assigneeId = tpl.assigneeId;
       draft.links = { ...tpl.links };
       draft.dueDate = tpl.dueDays >= 0 ? addDays(tpl.dueDays) : draft.dueDate;
@@ -628,19 +647,22 @@ export function openCreateTask(opts = {}) {
       }, units.map(u => h('option', { value: u.id }, u.name + ' · ' + u.key)))),
       field(B.status.label, h('select', { class: 'inp', value: draft.status || unit.settings.columns[0].id, onchange: e => { draft.status = e.target.value; } },
         unit.settings.columns.map(c => h('option', { value: c.id }, c.name)))),
-      !B.assignee.hidden && field(B.assignee.label, assigneeSelect(draft.assigneeId, v => {
-        draft.assigneeId = v;
-        // Позиция следует за исполнителем (если выбранная команда — не его)
-        const p = personById(v);
-        if (p && !(p.positionIds || [p.positionId]).includes(draft.departmentId)) { draft.departmentId = p.positionId; drawProps(); }
-      }, { ...(inBoard ? {} : { ids: unit.members || [], unitId: unit.id }), positionId: draft.departmentId })),
-      !B.department.hidden && field(B.department.label, deptSelect(draft.departmentId, v => {
-        draft.departmentId = v;
+      field('Команда', teamSelect(draft.teamId, v => {
+        draft.teamId = v;
         // команда сменилась — в «Исполнителе» только её люди; чужой исполнитель снимается
         const p = personById(draft.assigneeId);
-        if (p && v && !(p.positionIds || [p.positionId]).includes(v)) draft.assigneeId = '';
+        if (p && v && !(p.teamIds || []).includes(v)) draft.assigneeId = '';
         drawProps();
       })),
+      !B.assignee.hidden && field(B.assignee.label, assigneeSelect(draft.assigneeId, v => {
+        draft.assigneeId = v;
+        const p = personById(v);
+        // команда — его первая, если не выбрана; позиция — основная, если выбранная не его
+        if (p && !draft.teamId && (p.teamIds || []).length) draft.teamId = p.teamIds[0];
+        if (p && !(p.positionIds || [p.positionId]).includes(draft.departmentId)) draft.departmentId = p.positionId;
+        drawProps();
+      }, { ...(inBoard ? {} : { ids: unit.members || [], unitId: unit.id }), teamId: draft.teamId })),
+      !B.department.hidden && field(B.department.label, deptSelect(draft.departmentId, v => { draft.departmentId = v; })),
       !B.dueDate.hidden && field(B.dueDate.label, h('input', { class: 'inp', type: 'date', value: draft.dueDate, onchange: e => { draft.dueDate = e.target.value; } })),
       inBoard && activeFields().map(f => field(f.name + (f.required || f.requiredOnCreate ? ' *' : ''),
         fieldInput(f, draft.fields[f.id], v => { if (isEmpty(v)) delete draft.fields[f.id]; else draft.fields[f.id] = v; }))),

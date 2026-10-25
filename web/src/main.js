@@ -56,6 +56,7 @@ async function boot() {
     S.units = d.units;
     S.people = d.people;
     S.departments = d.departments;
+    if (d.teams) S.teams = d.teams;
     S.linkFields = d.linkFields || [];
     S.templates = d.templates || [];
   } catch (e) {

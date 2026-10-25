@@ -137,6 +137,7 @@ export async function renderHome() {
   S.units = d.units;
   S.people = d.people;
   S.departments = d.departments;
+  if (d.teams) S.teams = d.teams;
   renderSidebar();
 
   const units = d.units.filter(u => !u.archived);
@@ -480,6 +481,7 @@ async function renderMemberHome() {
   S.units = d.units;
   S.people = d.people;
   S.departments = d.departments;
+  if (d.teams) S.teams = d.teams;
   renderSidebar();
 
   const person = me();

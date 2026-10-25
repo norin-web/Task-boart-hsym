@@ -1,5 +1,5 @@
 import Sortable from 'sortablejs';
-import { S, colorFor, unitById, activeDepts, deptById, PALETTE, ACCESS_LABELS, isStaff, isSuper, byOrder } from '../state.js';
+import { S, colorFor, unitById, activeDepts, deptById, activeTeams, teamById, PALETTE, ACCESS_LABELS, isStaff, isSuper, byOrder } from '../state.js';
 import { h, icon, avatar, field, modal, confirmDlg, showErr, toast, fill, colorPicker, menu } from '../ui.js';
 import { send, call } from '../api.js';
 import { rerender } from '../router.js';
@@ -17,49 +17,64 @@ function tempPassword() {
   return [...buf].map(n => abc[n % abc.length]).join('');
 }
 
-/** Позиции человека чипами: основная первой (жирнее), затем дополнительные. */
-export function positionChips(ids) {
-  return h('span', { class: 'pos-chips' }, ids.map((id, i) => {
-    const d = deptById(id);
-    return d && h('span', {
-      class: 'chip dept-chip' + (i === 0 ? ' main' : ''), title: i === 0 ? 'Основная позиция' : 'Дополнительная позиция',
-      style: { background: `color-mix(in srgb, ${d.color} 16%, transparent)`, color: d.color },
-    }, d.name);
-  }));
+/** Чипы справочника (позиции, команды): первый — жирнее, если main. */
+function dictChips(ids, byId, { main = false, empty = '' } = {}) {
+  const list = ids.map(byId).filter(Boolean);
+  if (!list.length) return h('span', { class: 'muted pos-empty' }, empty);
+  return h('span', { class: 'pos-chips' }, list.map((d, i) => h('span', {
+    class: 'chip dept-chip' + (main && i === 0 ? ' main' : ''), title: main ? (i === 0 ? 'Основная' : 'Дополнительная') : d.name,
+    style: { background: `color-mix(in srgb, ${d.color} 16%, transparent)`, color: d.color },
+  }, d.name)));
 }
 
+/** Позиции человека чипами: основная первой (жирнее), затем дополнительные. */
+export const positionChips = ids => dictChips(ids, deptById, { main: true });
+/** Команды человека чипами. */
+export const teamChips = ids => dictChips(ids, teamById, { empty: 'без команды' });
+
 /**
- * Выбор позиций: кнопка с чипами → меню с галочками (можно несколько) и звёздочкой «основная».
- * get() → [основная, ...дополнительные]; set(ids) сохраняет. Без позиции человек не остаётся: последнюю не снять.
+ * Выбор из справочника: кнопка с чипами → меню с галочками (меню не закрывается, пока отмечаешь).
+ * main — первая выбранная «основная» (★), последнюю не снять; иначе можно снять все.
  */
-export function positionsPicker(get, set, { disabled = false } = {}) {
-  const btn = h('button', { class: 'pos-btn', type: 'button', disabled, title: disabled ? '' : 'Позиции', onclick: e => { e.stopPropagation(); open(); } });
-  const paint = () => fill(btn, positionChips(get()), !disabled && icon('chevron', 14));
+function dictPicker({ title, items, byId, get, set, main = false, note = '', empty = '', disabled = false }) {
+  const btn = h('button', { class: 'pos-btn', type: 'button', disabled, title: disabled ? '' : title, onclick: e => { e.stopPropagation(); open(); } });
+  const paint = () => fill(btn, dictChips(get(), byId, { main, empty }), !disabled && icon('chevron', 14));
   const open = () => {
     const box = h('div');
     const apply = ids => { set(ids); paint(); draw(); };
     const draw = () => {
       const ids = get();
-      fill(box, activeDepts().concat(ids.filter(id => deptById(id) && deptById(id).archived).map(deptById)).map(d => {
-        const on = ids.includes(d.id), main = ids[0] === d.id;
+      fill(box, items().concat(ids.map(byId).filter(d => d && d.archived)).map(d => {
+        const on = ids.includes(d.id), isMain = main && ids[0] === d.id;
         return h('div', { class: 'menu-item aud-item pos-item' + (on ? ' on' : '') },
           h('button', {
             class: 'pos-toggle', role: 'menuitemcheckbox', 'aria-checked': String(on),
-            onclick: () => { if (on && ids.length === 1) return; apply(on ? ids.filter(x => x !== d.id) : [...ids, d.id]); },
+            onclick: () => { if (on && main && ids.length === 1) return; apply(on ? ids.filter(x => x !== d.id) : [...ids, d.id]); },
           }, h('span', { class: 'aud-check' }, on && icon('check', 13)), h('span', { class: 'dot', style: { background: d.color } }), d.name),
-          on && h('button', {
-            class: 'pos-star' + (main ? ' on' : ''), title: main ? 'Основная: её получают задачи, назначенные на человека' : 'Сделать основной',
-            onclick: () => { if (!main) apply([d.id, ...ids.filter(x => x !== d.id)]); },
-          }, main ? '★' : '☆'));
-      }), h('div', { class: 'menu-sep' }), h('div', { class: 'hint aud-note' }, '★ основная — её получают задачи, назначенные на человека'));
+          main && on && h('button', {
+            class: 'pos-star' + (isMain ? ' on' : ''), title: isMain ? 'Основная' : 'Сделать основной',
+            onclick: () => { if (!isMain) apply([d.id, ...ids.filter(x => x !== d.id)]); },
+          }, isMain ? '★' : '☆'));
+      }), note && h('div', { class: 'menu-sep' }), note && h('div', { class: 'hint aud-note' }, note));
     };
     draw();
-    menu(btn, [{ title: 'Позиции' }, box]);
+    menu(btn, [{ title }, box]);
   };
   paint();
   btn.repaint = paint;
   return btn;
 }
+
+/** Позиции: несколько, ★ основная — её получают задачи, назначенные на человека. Без позиции не бывает. */
+export const positionsPicker = (get, set, opts = {}) => dictPicker({
+  title: 'Позиции', items: activeDepts, byId: deptById, get, set, main: true, ...opts,
+  note: '★ основная — её получают задачи, назначенные на человека',
+});
+/** Команды: можно несколько; участник видит задачи своих команд. */
+export const teamsPicker = (get, set, opts = {}) => dictPicker({
+  title: 'Команды', items: activeTeams, byId: teamById, get, set, empty: 'без команды', ...opts,
+  note: 'Участник видит в своих юнитах задачи своих команд',
+});
 
 const accessSelect = (value, onChange) => h('select', { class: 'inp', value, onchange: e => onChange(e.target.value) },
   Object.entries(ACCESS_LABELS).map(([k, v]) => h('option', { value: k }, v)));
@@ -129,6 +144,7 @@ export function peopleManager({ search = false } = {}) {
       h('span', { class: 'person-text' },
         h('span', { class: 'person-name' }, p.name, S.meId === p.id && h('span', { class: 'badge' }, 'вы')),
         h('span', { class: 'person-sub' }, [p.email || 'без email', p.linked ? 'вход есть' : mode === 'supabase' ? 'нет входа' : ''].filter(Boolean).join(' · '))),
+      teamsPicker(() => p.teamIds || [], ids => { p.teamIds = ids; save(p, { teamIds: ids }); }, { disabled: !editableTarget }),
       positionsPicker(() => p.positionIds, ids => { p.positionIds = ids; save(p, { positionId: ids[0], extraPositionIds: ids.slice(1) }); }, { disabled: !editableTarget }),
       isSuper() && p.id !== S.meId ? accessSelect(p.access, v => save(p, { access: v })) : h('span', { class: 'badge access-badge' }, ACCESS_LABELS[p.access]),
       editableTarget && p.id !== S.meId
@@ -136,7 +152,7 @@ export function peopleManager({ search = false } = {}) {
         : h('span', { style: { width: '24px' } }));
   };
 
-  const head = h('div', { class: 'access-row access-head' }, h('span'), h('span', null, 'Человек'), h('span', null, 'Позиция'), h('span', null, 'Роль'), h('span'));
+  const head = h('div', { class: 'access-row access-head' }, h('span'), h('span', null, 'Человек'), h('span', null, 'Команды'), h('span', null, 'Позиции'), h('span', null, 'Роль'), h('span'));
   const visible = () => S.people.filter(p => (!q || (p.name + ' ' + p.email).toLowerCase().includes(q)) && (!accessFilter || (accessFilter === 'nologin' ? !p.linked : accessFilter === 'off' ? !p.active : p.access === accessFilter)));
   const draw = () => {
     const list = visible();
@@ -147,12 +163,14 @@ export function peopleManager({ search = false } = {}) {
   const name = h('input', { class: 'inp', placeholder: 'Имя и фамилия' });
   const email = h('input', { class: 'inp', type: 'email', placeholder: 'email' });
   let posIds = ['d_other'];
+  let teamIds = ['t_other'].filter(teamById);
   let accValue = 'member';
   const pos = positionsPicker(() => posIds, ids => { posIds = ids; });
+  const teamsBtn = teamsPicker(() => teamIds, ids => { teamIds = ids; });
   const acc = isSuper() ? accessSelect('member', v => { accValue = v; }) : null;
   const add = async () => {
     if (!name.value.trim()) return name.focus();
-    const payload = { name: name.value, positionId: posIds[0], extraPositionIds: posIds.slice(1), access: accValue };
+    const payload = { name: name.value, positionId: posIds[0], extraPositionIds: posIds.slice(1), teamIds, access: accValue };
     let p;
     if (mode === 'supabase' && email.value.trim()) {
       const password = tempPassword();
@@ -167,7 +185,9 @@ export function peopleManager({ search = false } = {}) {
     name.value = '';
     email.value = '';
     posIds = ['d_other'];
+    teamIds = ['t_other'].filter(teamById);
     pos.repaint();
+    teamsBtn.repaint();
     draw();
   };
   draw();
@@ -180,12 +200,11 @@ export function peopleManager({ search = false } = {}) {
       h('option', { value: 'off' }, 'Отключённые')));
   const el = h('div', null,
     h('p', { class: 'hint', style: { marginTop: 0 } },
-      isSuper() ? 'Позиция определяет, какие задачи участник видит в своих юнитах. Роли меняет только супер-админ.'
-        : 'Позиция определяет, какие задачи участник видит в своих юнитах. Роли назначает супер-админ.'),
+      'Участник видит в своих юнитах задачи своих команд и позиций. ' + (isSuper() ? 'Роли меняет только супер-админ.' : 'Роли назначает супер-админ.')),
     toolbar,
     box,
     h('div', { class: 'sub-title' }, 'Добавить человека'),
-    h('div', { class: 'add-person' }, name, email, pos, acc,
+    h('div', { class: 'add-person' }, name, email, teamsBtn, pos, acc,
       h('button', { class: 'btn primary', onclick: () => add().catch(showErr) }, icon('plus', 14), 'Добавить')),
     h('p', { class: 'hint' }, mode === 'supabase'
       ? 'С email — сразу создастся вход с временным паролем. Без email — только профиль (вход можно создать позже в меню ⋯).'
@@ -354,27 +373,24 @@ export function openDepartments() {
   modal({ title: 'Позиции', body: positionsManager(), actions: [{ label: 'Готово', primary: true, action: c => c() }], onClose: rerender });
 }
 
-/** Справочник позиций: перетаскивание за ручку, цвет, название на месте, сколько людей, скрыть/удалить. Возвращает элемент. */
-export function positionsManager() {
+/**
+ * Справочник (позиции или команды): перетаскивание за ручку, цвет, название на месте, сколько людей, скрыть/удалить.
+ * Возвращает элемент.
+ */
+function dictionaryManager(cfg) {
   const list = h('div', { class: 'lf-list' });
-  const sorted = () => [...S.departments].sort(byOrder);
-  const save = (d, patch) => send('updateDepartment', { id: d.id, ...patch }).then(saved => { Object.assign(d, saved); return d; });
-  const people = d => S.people.filter(p => (p.positionIds || [p.positionId]).includes(d.id)).length;
+  const sorted = () => [...cfg.items()].sort(byOrder);
+  const save = (d, patch) => send(cfg.api.update, { id: d.id, ...patch }).then(saved => { Object.assign(d, saved); return d; });
   const remove = async d => {
-    const n = people(d);
-    if (!(await confirmDlg(`Удалить позицию «${d.name}»?${n ? ` У ${n} чел. она сменится на Other.` : ''} Задачи с этой позицией останутся без неё — участники перестанут их видеть. Если позиция может понадобиться — лучше скрыть.`, { ok: 'Удалить', danger: true }))) return;
-    await send('deleteDepartment', { id: d.id });
-    S.departments = S.departments.filter(x => x !== d);
-    S.people.forEach(p => {
-      if (!p.positionIds) return;
-      p.positionIds = p.positionIds.filter(x => x !== d.id);
-      if (p.positionId === d.id || !p.positionIds.length) { p.positionId = 'd_other'; p.positionIds = ['d_other', ...p.positionIds.filter(x => x !== 'd_other')]; }
-    });
+    const n = cfg.count(d);
+    if (!(await confirmDlg(cfg.removeText(d, n), { ok: 'Удалить', danger: true }))) return;
+    await send(cfg.api.remove, { id: d.id });
+    cfg.setItems(cfg.items().filter(x => x !== d));
+    cfg.afterRemove(d);
     draw();
   };
   const row = d => {
-    const color = h('input', { type: 'color', class: 'pos-color', value: d.color, title: 'Цвет', onchange: e => save(d, { color: e.target.value }).then(draw).catch(showErr) });
-    const n = people(d);
+    const color = h('input', { type: 'color', value: d.color, title: 'Цвет', onchange: e => save(d, { color: e.target.value }).then(draw).catch(showErr) });
     return h('div', { class: 'lf-row' + (d.archived ? ' off' : ''), dataset: { id: d.id } },
       h('span', { class: 'drag', title: 'Перетащите, чтобы изменить порядок' }, icon('grip', 16)),
       h('label', { class: 'pos-swatch', style: { background: d.color }, title: 'Цвет' }, color),
@@ -384,33 +400,33 @@ export function positionsManager() {
         onkeydown: e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') { e.target.value = d.name; e.target.blur(); } },
       }),
       d.archived && h('span', { class: 'badge' }, 'скрыта'),
-      h('span', { class: 'pos-count', title: 'Людей с этой позицией' }, icon('users', 13), n),
+      h('span', { class: 'pos-count', title: 'Людей' }, icon('users', 13), cfg.count(d)),
       h('button', {
         class: 'icon-btn sm', title: d.archived ? 'Показать в списках' : 'Скрыть из списков (у людей и задач останется)',
         onclick: () => save(d, { archived: !d.archived }).then(draw).catch(showErr),
       }, icon(d.archived ? 'eyeOff' : 'eye', 15)),
-      d.id === 'd_other'
-        ? h('span', { class: 'icon-btn sm', title: 'Other нужна людям без другой позиции — её не удалить', style: { opacity: 0.3 } }, icon('trash', 15))
+      cfg.locked === d.id
+        ? h('span', { class: 'icon-btn sm', title: cfg.lockedTitle, style: { opacity: 0.3 } }, icon('trash', 15))
         : h('button', { class: 'icon-btn sm', title: 'Удалить', onclick: () => remove(d).catch(showErr) }, icon('trash', 15)));
   };
   let sortable = null;
   const draw = () => {
-    fill(list, S.departments.length ? sorted().map(row) : h('p', { class: 'muted', style: { padding: '12px 14px', margin: 0 } }, 'Позиций нет'));
+    fill(list, cfg.items().length ? sorted().map(row) : h('p', { class: 'muted', style: { padding: '12px 14px', margin: 0 } }, cfg.emptyText));
     if (sortable) sortable.destroy();
     sortable = Sortable.create(list, {
       handle: '.drag', animation: 150, ghostClass: 'sortable-ghost', forceFallback: true, fallbackTolerance: 4,
       onEnd: () => {
         const ids = [...list.children].map(el => el.dataset.id).filter(Boolean);
-        ids.forEach((id, i) => { const d = S.departments.find(x => x.id === id); if (d) d.order = i + 1; });
-        send('reorderDepartments', { ids }).catch(showErr);
+        ids.forEach((id, i) => { const d = cfg.items().find(x => x.id === id); if (d) d.order = i + 1; });
+        send(cfg.api.reorder, { ids }).catch(showErr);
       },
     });
   };
-  const name = h('input', { class: 'inp', placeholder: 'Например, Backend Dev', maxlength: 40 });
+  const name = h('input', { class: 'inp', placeholder: cfg.placeholder, maxlength: 40 });
   const add = async () => {
     if (!name.value.trim()) return name.focus();
-    const d = await send('createDepartment', { name: name.value, color: PALETTE[S.departments.length % PALETTE.length] });
-    S.departments.push(d);
+    const d = await send(cfg.api.create, { name: name.value, color: PALETTE[cfg.items().length % PALETTE.length] });
+    cfg.setItems([...cfg.items(), d]);
     name.value = '';
     draw();
     name.focus();
@@ -418,11 +434,38 @@ export function positionsManager() {
   name.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); add().catch(showErr); } });
   draw();
   return h('div', null,
-    h('p', { class: 'hint', style: { marginTop: 0 } }, 'Позиции есть у каждого человека (можно несколько) и у каждой задачи. Участник видит в своих юнитах задачи своих позиций.'),
+    h('p', { class: 'hint', style: { marginTop: 0 } }, cfg.hint),
     list,
-    h('div', { class: 'sub-title' }, 'Добавить позицию'),
+    h('div', { class: 'sub-title' }, cfg.addTitle),
     h('div', { class: 'lf-add' }, name, h('button', { class: 'btn primary', onclick: () => add().catch(showErr) }, icon('plus', 14), 'Добавить')));
 }
+
+/** Позиции: есть у каждого человека (можно несколько) и у каждой задачи. Other не удалить. */
+export const positionsManager = () => dictionaryManager({
+  items: () => S.departments, setItems: v => { S.departments = v; },
+  api: { create: 'createDepartment', update: 'updateDepartment', reorder: 'reorderDepartments', remove: 'deleteDepartment' },
+  count: d => S.people.filter(p => (p.positionIds || [p.positionId]).includes(d.id)).length,
+  locked: 'd_other', lockedTitle: 'Other нужна людям без другой позиции — её не удалить',
+  removeText: (d, n) => `Удалить позицию «${d.name}»?${n ? ` У ${n} чел. она сменится на Other.` : ''} Задачи с этой позицией останутся без неё — участники перестанут их видеть. Если позиция может понадобиться — лучше скрыть.`,
+  afterRemove: d => S.people.forEach(p => {
+    if (!p.positionIds) return;
+    p.positionIds = p.positionIds.filter(x => x !== d.id);
+    if (p.positionId === d.id || !p.positionIds.length) { p.positionId = 'd_other'; p.positionIds = ['d_other', ...p.positionIds.filter(x => x !== 'd_other')]; }
+  }),
+  hint: 'Позиции есть у каждого человека (можно несколько) и у каждой задачи. Участник видит в своих юнитах задачи своих позиций.',
+  placeholder: 'Например, Backend Dev', addTitle: 'Добавить позицию', emptyText: 'Позиций нет',
+});
+
+/** Команды людей: у человека несколько, у задачи одна; участник видит задачи своих команд. */
+export const teamsManager = () => dictionaryManager({
+  items: () => S.teams, setItems: v => { S.teams = v; },
+  api: { create: 'createTeam', update: 'updateTeam', reorder: 'reorderTeams', remove: 'deleteTeam' },
+  count: d => S.people.filter(p => (p.teamIds || []).includes(d.id)).length,
+  removeText: (d, n) => `Удалить команду «${d.name}»?${n ? ` Она пропадёт у ${n} чел.` : ''} Задачи этой команды останутся без неё. Если команда может понадобиться — лучше скрыть.`,
+  afterRemove: d => S.people.forEach(p => { if (p.teamIds) p.teamIds = p.teamIds.filter(x => x !== d.id); }),
+  hint: 'Команды людей: Product Team, UX/UI Designers… У человека может быть несколько. Участник видит в своих юнитах задачи своих команд.',
+  placeholder: 'Например, Growth Team', addTitle: 'Добавить команду', emptyText: 'Команд нет',
+});
 
 export function openShortcuts() {
   const row = (keys, text) => h('div', { class: 'row', style: { justifyContent: 'space-between', padding: '6px 0' } },
