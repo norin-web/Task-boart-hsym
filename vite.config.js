@@ -6,5 +6,6 @@ export default defineConfig({
   base: './',              // относительные пути — работает на github.io/<repo>/
   build: { outDir: '../dist', emptyOutDir: true, target: 'es2022' },
   optimizeDeps: { exclude: ['@electric-sql/pglite'] },
-  server: { port: 5177, strictPort: true },
+  // no-store: браузер не держит старый код после перезапуска сервера
+  server: { port: 5177, strictPort: true, headers: { 'Cache-Control': 'no-store' } },
 });
