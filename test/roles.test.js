@@ -186,6 +186,46 @@ test('уведомления о назначении и онлайн-метка'
   assert.equal((await api.as(dev, () => api('getNotifications', {}))).length, 1);
 });
 
+test('несколько позиций, приоритет — только админы, удаление человека', async () => {
+  const api = await setup();
+  const { admin, mod, designer, dev, A, t1, t2 } = await team(api);
+  // Product owner + дизайнер видит задачи обеих позиций
+  const po = await api('createTask', { unitId: A.id, title: 'Roadmap', departmentId: 'd_po' });
+  await api.as(designer, async () => {
+    assert.ok(!(await api('getBoard', { unitId: A.id })).tasks.some(t => t.id === po.id));
+  });
+  await api('updatePerson', { id: designer.id, extraPositionIds: ['d_po'] });
+  await api.as(designer, async () => {
+    assert.ok((await api('getBoard', { unitId: A.id })).tasks.some(t => t.id === po.id));
+    await assert.rejects(() => api('updatePerson', { id: designer.id, extraPositionIds: [] }), forbidden);
+  });
+
+  // приоритет — поле «только администраторы»
+  const prio = await api('createField', { unitId: A.id, name: 'Приоритет', type: 'select', staffOnly: true, role: 'priority',
+    options: [{ id: 'lo', name: 'Low', color: '#999' }, { id: 'hi', name: 'High', color: '#f00' }] });
+  assert.equal(prio.role, 'priority');
+  const other = await api('createField', { unitId: A.id, name: 'Срочность', type: 'select', role: 'priority', options: [{ id: 'x', name: 'x', color: '#000' }] });
+  const fields = (await api('getBoard', { unitId: A.id })).fields;
+  assert.deepEqual(fields.filter(f => f.role === 'priority').map(f => f.id), [other.id]); // приоритет в юните один
+  await api.as(designer, async () => {
+    await assert.rejects(() => api('updateTask', { id: t1.id, patch: { fields: { [prio.id]: 'hi' } } }), forbidden);
+  });
+  await api.as(mod, () => api('updateTask', { id: t1.id, patch: { fields: { [prio.id]: 'hi' } } }));
+
+  // удаление человека: только супер-админ, задачи остаются без исполнителя
+  await api.as(mod, async () => {
+    await assert.rejects(() => api('deletePerson', { id: dev.id }), forbidden);
+  });
+  await api.as(admin, async () => {
+    await assert.rejects(() => api('deletePerson', { id: admin.id }), /самого себя/);
+    await api('deletePerson', { id: dev.id });
+  });
+  const b = await api('getBoard', { unitId: A.id });
+  assert.equal(b.tasks.find(t => t.id === t2.id).assigneeId, '');
+  assert.ok(!b.people.some(p => p.id === dev.id));
+  assert.ok(!b.members.some(m => m.personId === dev.id));
+});
+
 test('профили: свой профиль, роли меняет только супер-админ', async () => {
   const api = await setup();
   const { admin, mod, designer, dev } = await team(api);

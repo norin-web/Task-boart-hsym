@@ -1,6 +1,6 @@
 import Sortable from 'sortablejs';
 import {
-  S, LS, taskById, personById, activeFields, missingFor, missingNext, visibleLinkFields, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder,
+  S, LS, taskById, personById, activeFields, missingFor, missingNext, priorityOf, byPriority, visibleLinkFields, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder,
   between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, relTime, unitById, emptyCounts, freshFilters,
   activeDepts, deptById, KINDS, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask,
 } from '../state.js';
@@ -260,7 +260,7 @@ function renderColumns(board) {
   const tasks = filterTasks();
   const filtered = tasks.length !== S.board.tasks.filter(t => !t.archived && !(hidingOld() && staleDone(t))).length || S.filters.archived;
   fill(board, columns().map(col => {
-    const items = tasks.filter(t => colById(t.status).id === col.id).sort((x, y) => x.order - y.order);
+    const items = tasks.filter(t => colById(t.status).id === col.id).sort(byPriority());
     const quickHere = S.quick.status === col.id && S.quick.dept == null;
     return h('section', { class: 'col', style: { '--cc': colColor(col) } },
       colHead(col, items.length),
@@ -296,7 +296,7 @@ function renderLanes(board) {
     }, icon('chevron', 14), h('span', { class: 'dot', style: { background: lane.color } }), lane.name, h('span', { class: 'col-count' }, inLane.length)));
     if (collapsed) continue;
     for (const col of cols) {
-      const items = inLane.filter(t => colById(t.status).id === col.id).sort((x, y) => x.order - y.order);
+      const items = inLane.filter(t => colById(t.status).id === col.id).sort(byPriority());
       grid.append(h('div', { class: 'lane-cell' },
         makeList(items, col.id, lane.id, null),
         quickAddEl(col.id, lane.id, true)));
@@ -344,6 +344,7 @@ function taskCard(t, inLane) {
   ].filter(Boolean);
   const person = !B.assignee.hidden && personById(t.assigneeId);
   const missing = missingNext(t);
+  const prio = priorityOf(t);
   const cl = t.checklist || [];
   const clDone = cl.filter(i => i.done).length;
   const due = !B.dueDate.hidden && dueInfo(t.dueDate, taskDone(t));
@@ -358,20 +359,23 @@ function taskCard(t, inLane) {
   ].filter(Boolean);
 
   return h('article', {
-    class: 'card' + (t.archived ? ' archived' : '') + (taskDone(t) ? ' done' : '') + (t._temp ? ' temp' : '') + (canEditTask(t) ? '' : ' locked'), dataset: { id: t.id }, tabindex: '0',
+    class: 'card' + (t.archived ? ' archived' : '') + (taskDone(t) ? ' done' : '') + (t._temp ? ' temp' : '') + (canEditTask(t) ? '' : ' locked')
+      + (prio ? ' prio' + (prio.top ? ' prio-top' : '') : ''),
+    style: prio ? { '--prio': prio.opt.color } : null, dataset: { id: t.id }, tabindex: '0',
     onclick: () => { if (!t._temp) navigate({ unit: S.board.unit.id, mode: S.route.mode, task: t.id }); },
     onkeydown: e => { if (e.key === 'Enter' && !t._temp) navigate({ unit: S.board.unit.id, mode: S.route.mode, task: t.id }); },
     oncontextmenu: e => { if (t._temp) return; e.preventDefault(); cardMenu({ x: e.clientX, y: e.clientY }, t); },
   },
-  h('div', { class: 'card-head' },
-    h('span', { class: 'card-key' }, taskKey(t)),
+  // Ключ задачи на доске не показываем — он в открытой карточке
+  h('div', { class: 'card-top' },
+    prio && prio.top && h('span', { class: 'prio-ic', title: 'Приоритет: ' + prio.opt.name }, icon('prio', 14)),
+    h('div', { class: 'card-title' }, t.title),
     missing.length > 0 && h('span', { class: 'warn-ic', title: 'Для следующей колонки заполните: ' + missing.map(f => f.name).join(', ') }, icon('alert', 13)),
     t.archived && h('span', { class: 'badge' }, 'архив'),
     !t._temp && h('button', {
       class: 'icon-btn sm card-more', title: 'Действия',
       onclick: e => { e.stopPropagation(); cardMenu(e.currentTarget, t); },
     }, icon('more'))),
-  h('div', { class: 'card-title' }, t.title),
   chips.length > 0 && h('div', { class: 'chips' }, chips),
   (foot.length > 0 || person) && h('div', { class: 'card-foot' }, foot, h('span', { class: 'spacer' }), person && avatar(person, 'sm')));
 }
@@ -396,13 +400,17 @@ export function cardMenu(anchor, t) {
   const cols = columns().filter(c => c.id !== t.status);
   const B = S.board.unit.settings.builtins;
   const open = { label: 'Открыть', icon: 'arrow', action: () => navigate({ unit: S.board.unit.id, mode: S.route.mode, task: t.id }) };
+  // Из «Готово» — быстро вернуть в работу (в последнюю колонку перед готовыми)
+  const back = taskDone(t) && [...columns()].reverse().find(c => c.kind !== 'done');
+  const reopen = back && canEditTask(t) && { label: `Вернуть в «${back.name}»`, icon: 'back', action: () => patchTask(t, { status: back.id }) };
   if (!isStaff()) {
     // Участник: открыть и (в своей задаче) перенести в колонку
-    return menu(anchor, [open, ...(canEditTask(t) ? [{ sep: true }, { title: 'Переместить' },
+    return menu(anchor, [open, reopen, ...(canEditTask(t) ? [{ sep: true }, { title: 'Переместить' },
       ...cols.map(c => ({ label: c.name, icon: KIND_ICONS[c.kind], action: () => patchTask(t, { status: c.id }) }))] : [])]);
   }
   menu(anchor, [
-    { label: 'Открыть', icon: 'arrow', action: () => navigate({ unit: S.board.unit.id, mode: S.route.mode, task: t.id }) },
+    open,
+    reopen,
     { sep: true },
     { title: 'Переместить' },
     ...cols.map(c => ({ label: c.name, icon: KIND_ICONS[c.kind], action: () => patchTask(t, { status: c.id }) })),
@@ -577,11 +585,12 @@ function renderList(container) {
 
   // Задачи сгруппированы по колонкам доски (в их порядке); сортировка по заголовку — внутри группы
   const sort = S.listSort;
-  const col = cols.find(c => c.key === sort.key) || { val: t => t.order };
-  const tasks = filterTasks().sort((a, b) => {
+  const col = cols.find(c => c.key === sort.key);
+  // По умолчанию — как на доске: приоритет, затем ручной порядок
+  const tasks = filterTasks().sort(col ? (a, b) => {
     const x = col.val(a), y = col.val(b);
     return (x < y ? -1 : x > y ? 1 : 0) * sort.dir;
-  });
+  } : byPriority());
   const groups = columns().map(c => ({ c, list: tasks.filter(t => colById(t.status) === c), more: oldDoneToggle(c) })).filter(g => g.list.length || g.more);
   const taskRow = t => h('tr', {
     class: (t.archived ? 'archived' : '') + (taskDone(t) ? ' done' : ''),

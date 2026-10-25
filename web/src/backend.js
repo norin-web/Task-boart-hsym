@@ -31,7 +31,7 @@ export function defaultSettings() {
 
 function defaultFields() {
   return [{
-    name: 'Приоритет', type: 'select', showOnCard: true, required: false,
+    name: 'Приоритет', type: 'select', showOnCard: true, required: false, staffOnly: true, role: 'priority',
     options: [
       { id: 'o_low', name: 'Low', color: '#64748b' },
       { id: 'o_medium', name: 'Medium', color: '#f59e0b' },
@@ -183,7 +183,8 @@ const taskOut = r => ({
 
 const fieldOut = r => ({
   id: r.id, unitId: r.unit_id, name: r.name, type: r.type, options: json(r.options, []),
-  showOnCard: !!r.show_on_card, required: !!r.required, requiredFrom: r.required_from || '', order: r.ord, archived: !!r.archived,
+  showOnCard: !!r.show_on_card, required: !!r.required, requiredFrom: r.required_from || '',
+  staffOnly: !!r.staff_only, role: r.role || '', order: r.ord, archived: !!r.archived,
 });
 
 export const ACCESS = ['superadmin', 'moderator', 'member'];
@@ -191,6 +192,8 @@ const personOut = r => ({
   id: r.id, name: r.name, email: r.email, role: r.role || '', color: r.color || '', active: !!r.active,
   access: r.access || 'member', positionId: r.position_id || '', linked: !!r.user_id, prefs: json(r.prefs, {}) || {},
   lastSeenAt: r.last_seen_at || '',
+  extraPositionIds: json(r.extra_positions, []) || [],
+  positionIds: [r.position_id || 'd_other', ...(json(r.extra_positions, []) || [])],
 });
 const deptOut = r => ({ id: r.id, name: r.name, color: r.color, order: r.ord, archived: !!r.archived });
 export const LINK_KINDS = ['figma', 'github', 'drive', 'meta', 'link'];
@@ -364,6 +367,7 @@ export function createBackend(db, opts = {}) {
       id: uid('f'), unit_id: unitId, name: req(str(p.name, 60), 'Название поля'),
       type: FIELD_TYPES.includes(p.type) ? p.type : 'text', options: cleanOptions(p.options),
       show_on_card: !!p.showOnCard, required: !!p.required, required_from: str(p.requiredFrom, 40), ord: order, archived: false,
+      staff_only: !!p.staffOnly, role: p.role === 'priority' && p.type === 'select' ? 'priority' : '',
     };
   }
 
@@ -570,7 +574,6 @@ export function createBackend(db, opts = {}) {
         byPerson, byPosition, unassigned, noPosition,
         overdue: overdue.slice(0, 10), overdueTotal: overdue.length,
         byPersonUnit, unassignedTasks: unassignedTasks.sort(byDue).slice(0, 15), noPositionTasks: noPositionTasks.sort(byDue).slice(0, 15), unitMembers,
-        peopleNoPosition: active.filter(x => x.access === 'member' && !x.positionId).map(x => x.id),
         peopleNoLogin: active.filter(x => !x.linked).map(x => x.id),
         unitsNoTeam: Object.values(U).filter(u => !teamUnits.has(u.id)).map(u => u.id),
       };
@@ -916,6 +919,7 @@ export function createBackend(db, opts = {}) {
     async createField(p) {
       const unit = await findUnit(p.unitId);
       const f = fieldRow(unit.id, p, (await maxOrd('fields', { unit_id: unit.id })) + 1);
+      if (f.role === 'priority') await run(T('fields').update({ role: '' }).eq('unit_id', unit.id).eq('role', 'priority'));
       await run(T('fields').insert(f));
       return fieldOut(f);
     },
@@ -929,6 +933,10 @@ export function createBackend(db, opts = {}) {
       if ('showOnCard' in p) upd.show_on_card = !!p.showOnCard;
       if ('required' in p) upd.required = !!p.required;
       if ('requiredFrom' in p) upd.required_from = str(p.requiredFrom, 40);
+      if ('staffOnly' in p) upd.staff_only = !!p.staffOnly;
+      if ('role' in p) upd.role = p.role === 'priority' && (upd.type || f.type) === 'select' ? 'priority' : '';
+      // Приоритет в юните один: новый снимает флаг с прежнего
+      if (upd.role === 'priority') await run(T('fields').update({ role: '' }).eq('unit_id', f.unit_id).eq('role', 'priority').neq('id', f.id));
       if ('archived' in p) upd.archived = !!p.archived;
       await updateOne('fields', f.id, upd);
       return fieldOut({ ...f, ...upd });
@@ -1011,8 +1019,9 @@ export function createBackend(db, opts = {}) {
       const person = {
         id: uid('p'), name: req(str(p.name, 80), 'Имя'), email: str(p.email, 120).toLowerCase(),
         role: str(p.role, 80), color: color(p.color, ''), telegram_chat_id: '', active: true, created_at: now(),
-        access: ACCESS.includes(p.access) ? p.access : 'member', position_id: await validDept(p.positionId),
+        access: ACCESS.includes(p.access) ? p.access : 'member', position_id: (await validDept(p.positionId)) || 'd_other',
       };
+      person.extra_positions = (await cleanPositions(p.extraPositionIds)).filter(id => id !== person.position_id);
       await run(T('people').insert(person));
       return personOut(person);
     },
@@ -1034,6 +1043,7 @@ export function createBackend(db, opts = {}) {
       const res = await invoke('admin-users', {
         action: 'create', email, password, personId: p.personId || null, name: str(p.name, 80),
         role: str(p.role, 80), access: ACCESS.includes(p.access) ? p.access : 'member', positionId: str(p.positionId, 40),
+        extraPositionIds: await cleanPositions(p.extraPositionIds),
       });
       return personOut(res.person);
     },
@@ -1047,7 +1057,6 @@ export function createBackend(db, opts = {}) {
       return true;
     },
 
-    /** Личные настройки интерфейса: сливаем переданные ключи с сохранёнными. */
     /* ---------- присутствие и уведомления ---------- */
 
     /** Пульс раз в минуту: отметить «я в приложении», вернуть, кто когда был, и число непрочитанных уведомлений. */
@@ -1133,12 +1142,24 @@ export function createBackend(db, opts = {}) {
       return url;
     },
 
+    /** Личные настройки интерфейса: сливаем переданные ключи с сохранёнными. */
     async setMyPrefs(p) {
       const person = (await one('people', p.personId)) || fail('Человек не найден', 'NOT_FOUND');
       const prefs = { ...(json(person.prefs, {}) || {}), ...(p.prefs || {}) };
       if (JSON.stringify(prefs).length > 20000) fail('Слишком большие настройки');
       await updateOne('people', person.id, { prefs });
       return prefs;
+    },
+
+    /**
+     * Удалить человека из системы (супер-админ): задачи — без исполнителя, история и комментарии остаются.
+     * Аккаунт входа удаляет серверная функция — уже после профиля, чтобы проверки прав сработали в базе.
+     */
+    async deletePerson(p) {
+      const person = (await one('people', p.id)) || fail('Человек не найден', 'NOT_FOUND');
+      await rpc('delete_person', { p_person: person.id });
+      if (invoke && person.user_id) await invoke('admin-users', { action: 'deleteAuth', userId: person.user_id });
+      return true;
     },
 
     async updatePerson(p) {
@@ -1150,7 +1171,10 @@ export function createBackend(db, opts = {}) {
       if ('color' in p) upd.color = color(p.color, '');
       if ('active' in p) upd.active = !!p.active;
       if ('access' in p) upd.access = ACCESS.includes(p.access) ? p.access : fail('Неизвестная роль');
-      if ('positionId' in p) upd.position_id = await validDept(p.positionId);
+      if ('positionId' in p) upd.position_id = (await validDept(p.positionId)) || 'd_other';
+      const main = upd.position_id || person.position_id;
+      if ('extraPositionIds' in p) upd.extra_positions = (await cleanPositions(p.extraPositionIds)).filter(id => id !== main);
+      else if (upd.position_id) upd.extra_positions = (json(person.extra_positions, []) || []).filter(id => id !== main);
       await updateOne('people', person.id, upd);
       // Отключённый человек не должен входить: блокируем аккаунт на сервере
       if ('active' in p && invoke && person.user_id && !!p.active !== !!person.active) {

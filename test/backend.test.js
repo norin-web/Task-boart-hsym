@@ -189,14 +189,16 @@ test('свои колонки, отделы, состав команды', async
 
   // отделы и команда
   const board = await api('getBoard', { unitId: u.id });
-  assert.deepEqual(board.departments.map(d => d.name), ['ASO', 'Design', 'iOS', 'Other', 'Тестировщик', 'Релиз-менеджер']);
-  const p = await api('createPerson', { name: 'Ира' });
+  assert.deepEqual(board.departments.map(d => d.name), ['Product owner', 'iOS Dev', 'UX/UI Designer', 'ASO Specialist', 'Release Manager', 'QA', 'Other']);
+  assert.equal((await api('createPerson', { name: 'Без позиции' })).positionId, 'd_other'); // без позиции не бывает
+  const p = await api('createPerson', { name: 'Ира', positionId: 'd_design', extraPositionIds: ['d_po', 'd_design', 'нет'] });
+  assert.deepEqual(p.positionIds, ['d_design', 'd_po']);
   const members = await api('setMember', { unitId: u.id, personId: p.id, departmentId: 'd_design' });
   assert.deepEqual(members, [{ personId: p.id, departmentId: 'd_design' }]);
   const t2 = await api('updateTask', { id: t.id, patch: { assigneeId: p.id } });
-  assert.equal(t2.departmentId, 'd_design'); // отдел подставился из состава команды
+  assert.equal(t2.departmentId, 'd_design'); // основная позиция исполнителя
   const ex = (await api('getTaskExtras', { taskId: t.id })).activity.map(a => `${a.label}:${a.toText}`);
-  assert.ok(ex.includes('Позиция:Design'), ex.join(' | '));
+  assert.ok(ex.includes('Позиция:UX/UI Designer'), ex.join(' | '));
   // позиция следует за исполнителем: другой исполнитель с позицией iOS
   const dev = await api('createPerson', { name: 'Дима', positionId: 'd_ios' });
   assert.equal((await api('updateTask', { id: t.id, patch: { assigneeId: dev.id } })).departmentId, 'd_ios');
@@ -205,6 +207,9 @@ test('свои колонки, отделы, состав команды', async
   await api('updateTask', { id: t.id, patch: { assigneeId: p.id, departmentId: 'd_design' } });
   await api('deleteDepartment', { id: 'd_design' });
   assert.equal((await api('getBoard', { unitId: u.id })).tasks[0].departmentId, '');
+  const after = (await api('bootstrap', {})).people.find(x => x.id === p.id);
+  assert.deepEqual(after.positionIds, ['d_other', 'd_po']); // люди удалённой позиции — в Other
+  await assert.rejects(() => api('deleteDepartment', { id: 'd_other' }), /Other удалить нельзя/);
   assert.equal((await api('bootstrap', {})).units[0].members[0], p.id);
   assert.deepEqual(await api('removeMember', { unitId: u.id, personId: p.id }), []);
 });

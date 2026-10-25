@@ -192,13 +192,6 @@ export function attentionBlock(ov) {
   }));
 
   items.push(attItem({
-    n: ov.peopleNoPosition.length, rows: ov.peopleNoPosition.map(personById).filter(Boolean),
-    forms: ['участник без позиции', 'участника без позиции', 'участников без позиции'],
-    row: (p, done) => [h('span', { class: 'att-who' }, avatar(p, 'sm'), p.name), quickSelect('Позиция…', activeDepts().map(d => [d.id, d.name]),
-      v => call('updatePerson', { id: p.id, positionId: v }).then(() => { p.positionId = v; done(p.name + ' — ' + deptById(v).name); }))],
-  }));
-
-  items.push(attItem({
     n: ov.unitsNoTeam.length, rows: ov.unitsNoTeam.map(id => S.units.find(u => u.id === id)).filter(Boolean),
     forms: ['юнит без команды', 'юнита без команды', 'юнитов без команды'],
     row: (u, done) => [h('span', { class: 'att-who' }, h('span', { class: 'unit-dot', style: { background: u.color, margin: 0 } }), u.name),

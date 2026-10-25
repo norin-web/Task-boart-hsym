@@ -40,6 +40,18 @@ create table if not exists fields (
   archived     boolean not null default false
 );
 create index if not exists fields_unit on fields(unit_id);
+-- Поле меняют только администраторы (участник видит, но не правит) и роль поля ('priority' — приоритет:
+-- метка и сортировка на доске; варианты по порядку — от низкого к высокому). Однократно: «Приоритет» → оба флага.
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_name = 'fields' and column_name = 'role') then
+    alter table fields add column staff_only boolean not null default false;
+    alter table fields add column role text not null default '';
+    update fields set staff_only = true, role = 'priority' where name = 'Приоритет' and type = 'select';
+  end if;
+end $$;
+alter table fields add column if not exists staff_only boolean not null default false;
+alter table fields add column if not exists role text not null default '';
+
 -- Обязательное поле: с какой колонки оно нужно ('' — для любого переноса)
 alter table fields add column if not exists required_from text not null default '';
 
@@ -197,11 +209,27 @@ insert into departments (id, name, color, ord) values
   ('d_qa', 'Тестировщик', '#14b8a6', 5), ('d_release', 'Релиз-менеджер', '#8b5cf6', 6)
 on conflict (id) do nothing;
 
+-- Позиции команды (2026-10): Product owner, iOS Dev, UX/UI Designer, ASO Specialist, Release Manager, QA, Other.
+-- Переименовываем только те, что ещё со старым названием по умолчанию — свои названия не трогаем.
+insert into departments (id, name, color, ord) values ('d_po', 'Product owner', '#0ea5e9', 0) on conflict (id) do nothing;
+update departments set name = 'iOS Dev', ord = 1 where id = 'd_ios' and name = 'iOS';
+update departments set name = 'UX/UI Designer', ord = 2 where id = 'd_design' and name = 'Design';
+update departments set name = 'ASO Specialist', ord = 3 where id = 'd_aso' and name = 'ASO';
+update departments set name = 'Release Manager', ord = 4 where id = 'd_release' and name = 'Релиз-менеджер';
+update departments set name = 'QA', ord = 5 where id = 'd_qa' and name = 'Тестировщик';
+update departments set ord = 9 where id = 'd_other' and ord = 4;
+
+-- Дополнительные позиции человека (основная — position_id; например, Product owner + UX/UI Designer)
+alter table people add column if not exists extra_positions jsonb not null default '[]';
+
 -- Позиция по умолчанию — первый «отдел в команде» человека (однократно, если позиции ещё нет)
 update people p set position_id = m.department_id
   from (select distinct on (person_id) person_id, department_id from unit_members
         where department_id <> '' order by person_id, created_at) m
  where p.id = m.person_id and p.position_id = '';
+-- Без позиции человек не бывает: остальным — Other
+update people set position_id = 'd_other' where position_id = '';
+alter table people alter column position_id set default 'd_other';
 
 -- Служебный режим: системные операции (whoami, серверные функции) обходят проверки триггеров.
 create or replace function app_system() returns boolean language sql stable as $$
@@ -220,6 +248,12 @@ create or replace function my_position() returns text
 language sql stable security definer set search_path = public as $$
   select coalesce((select position_id from people where user_id = auth.uid() and active limit 1), '');
 $$;
+-- Все позиции вошедшего: основная + дополнительные
+create or replace function my_positions() returns text[]
+language sql stable security definer set search_path = public as $$
+  select coalesce((select array_remove(array[position_id] || array(select jsonb_array_elements_text(extra_positions)), '')
+                     from people where user_id = auth.uid() and active limit 1), '{}');
+$$;
 create or replace function is_staff() returns boolean language sql stable set search_path = public as $$
   select my_access() in ('superadmin', 'moderator');
 $$;
@@ -235,7 +269,7 @@ $$;
 create or replace function can_see_link(p_field text) returns boolean
 language sql stable security definer set search_path = public as $$
   select is_staff() or exists (select 1 from link_fields f where f.id = p_field and not f.archived
-    and (f.positions = '[]'::jsonb or (my_position() <> '' and f.positions ? my_position())));
+    and (f.positions = '[]'::jsonb or f.positions ?| my_positions()));
 $$;
 
 -- Кто я: профиль вошедшего. Первый вход по email привязывает существующий профиль с тем же email.
@@ -284,6 +318,11 @@ begin
        or new.department_id is distinct from old.department_id or new.archived is distinct from old.archived
        or new.num is distinct from old.num or new.created_by is distinct from old.created_by then
       raise exception 'Недостаточно прав: участник меняет только статус, описание, поля и чеклист своей задачи' using errcode = '42501';
+    end if;
+    select string_agg(f.name, ', ') into missing from fields f
+     where f.unit_id = new.unit_id and f.staff_only and (new.fields -> f.id) is distinct from (old.fields -> f.id);
+    if missing is not null then
+      raise exception 'Недостаточно прав: «%» меняют только администратор и модератор', missing using errcode = '42501';
     end if;
     if new.status is distinct from old.status then
       -- поле с колонкой required_from нужно при переносе в неё и в колонки правее
@@ -362,6 +401,10 @@ create trigger guard_author before insert on activity for each row execute funct
 
 create or replace function guard_people() returns trigger language plpgsql set search_path = public as $$
 begin
+  -- позиция обязательна; дополнительные — без основной и без повторов
+  if coalesce(new.position_id, '') = '' then new.position_id := 'd_other'; end if;
+  new.extra_positions := coalesce((select jsonb_agg(distinct x) from jsonb_array_elements_text(new.extra_positions) x
+                                    where x <> new.position_id and x <> ''), '[]'::jsonb);
   if app_system() then return new; end if;
   if tg_op = 'INSERT' then
     if new.access <> 'member' and not is_superadmin() then
@@ -377,6 +420,7 @@ begin
     raise exception 'Роли меняет только супер-админ' using errcode = '42501';
   end if;
   if not is_staff() and (new.email is distinct from old.email or new.position_id is distinct from old.position_id
+                         or new.extra_positions is distinct from old.extra_positions
                          or new.active is distinct from old.active) then
     raise exception 'Email, позицию и доступ меняет администратор' using errcode = '42501';
   end if;
@@ -429,6 +473,26 @@ begin
   return n;
 end $$;
 
+-- Удалить человека из системы (только супер-админ): его задачи остаются без исполнителя, состав и уведомления — каскадом.
+-- История и комментарии сохраняются (автор показывается как удалённый сотрудник).
+create or replace function delete_person(p_person text) returns void
+language plpgsql security definer set search_path = public as $$
+declare v people;
+begin
+  if not app_system() and not is_superadmin() then raise exception 'Удалять людей может только супер-админ' using errcode = '42501'; end if;
+  select * into v from people where id = p_person;
+  if v.id is null then raise exception 'Человек не найден' using errcode = 'P0001'; end if;
+  if v.id = my_person_id() then raise exception 'Нельзя удалить самого себя' using errcode = 'P0001'; end if;
+  if v.access = 'superadmin' and v.active
+     and not exists (select 1 from people where access = 'superadmin' and active and id <> v.id) then
+    raise exception 'Нельзя удалить последнего супер-админа' using errcode = 'P0001';
+  end if;
+  perform set_config('app.system', 'on', true);
+  update tasks set assignee_id = '' where assignee_id = v.id;
+  delete from people where id = v.id;
+  perform set_config('app.system', 'off', true);
+end $$;
+
 -- Удалить поле навсегда вместе с его значениями в задачах.
 create or replace function delete_field(p_field text) returns void
 language plpgsql security definer set search_path = public as $$
@@ -449,7 +513,9 @@ begin
   perform set_config('app.system', 'on', true);
   update tasks set department_id = '' where department_id = p_dept;
   update unit_members set department_id = '' where department_id = p_dept;
-  update people set position_id = '' where position_id = p_dept;
+  if p_dept = 'd_other' then raise exception 'Позицию Other удалить нельзя: она нужна людям без другой позиции' using errcode = 'P0001'; end if;
+  update people set position_id = 'd_other' where position_id = p_dept;
+  update people set extra_positions = extra_positions - p_dept where extra_positions ? p_dept;
   delete from departments where id = p_dept;
   perform set_config('app.system', 'off', true);
 end $$;
@@ -509,7 +575,7 @@ create policy people_update on people for update to authenticated
 drop policy if exists tasks_read on tasks;
 create policy tasks_read on tasks for select to authenticated using (
   is_staff() or assignee_id = my_person_id()
-  or (is_unit_member(unit_id) and department_id <> '' and department_id = my_position()));
+  or (is_unit_member(unit_id) and department_id <> '' and department_id = any(my_positions())));
 drop policy if exists tasks_insert on tasks;
 create policy tasks_insert on tasks for insert to authenticated with check (is_staff());
 drop policy if exists tasks_delete on tasks;

@@ -122,6 +122,6 @@ function row(t, { unit = true, done = false } = {}) {
 /** Подпись под именем: роль и позиция. */
 export function personCaption(p) {
   if (!p) return '';
-  const pos = deptById(p.positionId);
-  return [p.access !== 'member' ? ACCESS_LABELS[p.access] : '', pos ? pos.name : ''].filter(Boolean).join(' · ');
+  const pos = (p.positionIds || [p.positionId]).map(id => (deptById(id) || {}).name).filter(Boolean).join(', ');
+  return [p.access !== 'member' ? ACCESS_LABELS[p.access] : '', pos].filter(Boolean).join(' · ');
 }

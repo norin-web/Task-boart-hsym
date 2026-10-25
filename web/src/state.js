@@ -47,6 +47,8 @@ export const taskById = id => (S.board ? S.board.tasks.find(t => t.id === id) : 
 export const personById = id => (id ? S.people.find(p => p.id === id) : null);
 export const activePeople = () => S.people.filter(p => p.active);
 export const me = () => personById(S.meId);
+/** Имя автора/участника истории; кого удалили из системы — «Удалённый сотрудник». */
+export const whoName = id => { const p = personById(id); return p ? p.name : id ? 'Удалённый сотрудник' : 'Система'; };
 
 /* ---------- роли ---------- */
 export const ACCESS_LABELS = { superadmin: 'Супер-админ', moderator: 'Модератор', member: 'Участник' };
@@ -68,7 +70,7 @@ export const taskDone = t => (t.statusKind ? t.statusKind === 'done' : (colById(
 export const LINK_KINDS = { figma: 'Figma', github: 'GitHub', drive: 'Google Drive', meta: 'Metadata', link: 'Ссылка' };
 /** Поля-ссылки, которые видит текущий человек (то же правило проверяет база). */
 export const visibleLinkFields = () => S.linkFields.filter(f => !f.archived
-  && (isStaff() || !f.positions.length || (me() && f.positions.includes(me().positionId)))).sort(byOrder);
+  && (isStaff() || !f.positions.length || (me() && (me().positionIds || []).some(id => f.positions.includes(id))))).sort(byOrder);
 
 export const activeDepts = () => S.departments.filter(d => !d.archived).sort(byOrder);
 export const deptById = id => (id ? S.departments.find(d => d.id === id) : null);
@@ -76,6 +78,22 @@ export const deptById = id => (id ? S.departments.find(d => d.id === id) : null)
 export const members = () => (S.board ? S.board.members : []);
 export const memberOf = personId => members().find(m => m.personId === personId);
 export const taskKey = t => (t._temp ? '…' : S.board.unit.key + '-' + t.num);
+/** Поле-приоритет юнита (одно): варианты по порядку — от низкого к высокому. */
+export const priorityField = () => activeFields().find(f => f.role === 'priority' && f.type === 'select');
+/** Приоритет задачи: { opt, rank 0…1, top } или null, если не задан. */
+export function priorityOf(t, f = priorityField()) {
+  if (!f || !t.fields) return null;
+  const opts = f.options || [];
+  const i = opts.findIndex(o => o.id === t.fields[f.id]);
+  if (i < 0) return null;
+  return { opt: opts[i], rank: opts.length > 1 ? i / (opts.length - 1) : 1, top: i === opts.length - 1 && opts.length > 1 };
+}
+/** Сортировка в колонке: сначала выше приоритет, потом ручной порядок. */
+export function byPriority() {
+  const f = priorityField();
+  const r = t => { const p = priorityOf(t, f); return p ? p.rank : -1; };
+  return (a, b) => r(b) - r(a) || a.order - b.order;
+}
 export const isEmpty = v => v == null || v === '' || (Array.isArray(v) && !v.length);
 const colIdx = id => columns().findIndex(c => c.id === id);
 /** Нужно ли поле для переноса в колонку status: с колонки requiredFrom и правее; без колонки (или её удалили) — для любого переноса. Как в базе. */

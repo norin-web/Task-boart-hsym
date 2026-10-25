@@ -1,10 +1,12 @@
-import { S, colorFor, unitById, activeDepts, deptById, PALETTE, ACCESS_LABELS, isStaff, isSuper } from '../state.js';
+import Sortable from 'sortablejs';
+import { S, colorFor, unitById, activeDepts, deptById, PALETTE, ACCESS_LABELS, isStaff, isSuper, byOrder } from '../state.js';
 import { h, icon, avatar, field, modal, confirmDlg, showErr, toast, fill, colorPicker, menu } from '../ui.js';
-import { send } from '../api.js';
+import { send, call } from '../api.js';
 import { rerender } from '../router.js';
 import { mode, supabase, localPeople, localLogin } from '../data.js';
 import { LS } from '../state.js';
 import { personCaption } from './my.js';
+import { renderSidebar } from './sidebar.js';
 
 const sortPeople = () => S.people.sort((a, b) => a.name.localeCompare(b.name));
 
@@ -15,10 +17,49 @@ function tempPassword() {
   return [...buf].map(n => abc[n % abc.length]).join('');
 }
 
-const positionSelect = (value, onChange, { disabled = false } = {}) => h('select', {
-  class: 'inp', value: value || '', disabled, onchange: e => onChange(e.target.value),
-}, h('option', { value: '' }, '— без позиции —'),
-activeDepts().concat(value && deptById(value) && deptById(value).archived ? [deptById(value)] : []).map(d => h('option', { value: d.id }, d.name)));
+/** Позиции человека чипами: основная первой (жирнее), затем дополнительные. */
+export function positionChips(ids) {
+  return h('span', { class: 'pos-chips' }, ids.map((id, i) => {
+    const d = deptById(id);
+    return d && h('span', {
+      class: 'chip dept-chip' + (i === 0 ? ' main' : ''), title: i === 0 ? 'Основная позиция' : 'Дополнительная позиция',
+      style: { background: `color-mix(in srgb, ${d.color} 16%, transparent)`, color: d.color },
+    }, d.name);
+  }));
+}
+
+/**
+ * Выбор позиций: кнопка с чипами → меню с галочками (можно несколько) и звёздочкой «основная».
+ * get() → [основная, ...дополнительные]; set(ids) сохраняет. Без позиции человек не остаётся: последнюю не снять.
+ */
+export function positionsPicker(get, set, { disabled = false } = {}) {
+  const btn = h('button', { class: 'pos-btn', type: 'button', disabled, title: disabled ? '' : 'Позиции', onclick: e => { e.stopPropagation(); open(); } });
+  const paint = () => fill(btn, positionChips(get()), !disabled && icon('chevron', 14));
+  const open = () => {
+    const box = h('div');
+    const apply = ids => { set(ids); paint(); draw(); };
+    const draw = () => {
+      const ids = get();
+      fill(box, activeDepts().concat(ids.filter(id => deptById(id) && deptById(id).archived).map(deptById)).map(d => {
+        const on = ids.includes(d.id), main = ids[0] === d.id;
+        return h('div', { class: 'menu-item aud-item pos-item' + (on ? ' on' : '') },
+          h('button', {
+            class: 'pos-toggle', role: 'menuitemcheckbox', 'aria-checked': String(on),
+            onclick: () => { if (on && ids.length === 1) return; apply(on ? ids.filter(x => x !== d.id) : [...ids, d.id]); },
+          }, h('span', { class: 'aud-check' }, on && icon('check', 13)), h('span', { class: 'dot', style: { background: d.color } }), d.name),
+          on && h('button', {
+            class: 'pos-star' + (main ? ' on' : ''), title: main ? 'Основная: её получают задачи, назначенные на человека' : 'Сделать основной',
+            onclick: () => { if (!main) apply([d.id, ...ids.filter(x => x !== d.id)]); },
+          }, main ? '★' : '☆'));
+      }), h('div', { class: 'menu-sep' }), h('div', { class: 'hint aud-note' }, '★ основная — её получают задачи, назначенные на человека'));
+    };
+    draw();
+    menu(btn, [{ title: 'Позиции' }, box]);
+  };
+  paint();
+  btn.repaint = paint;
+  return btn;
+}
 
 const accessSelect = (value, onChange) => h('select', { class: 'inp', value, onchange: e => onChange(e.target.value) },
   Object.entries(ACCESS_LABELS).map(([k, v]) => h('option', { value: k }, v)));
@@ -55,14 +96,26 @@ export function peopleManager({ search = false } = {}) {
   let q = '';
   let accessFilter = '';
   const save = (p, patch) => send('updatePerson', { id: p.id, ...patch })
-    .then(saved => { Object.assign(p, saved); draw(); })
+    .then(saved => { Object.assign(p, saved); draw(); if (p.id === S.meId) renderSidebar(); })
     .catch(e => { showErr(e); draw(); });
 
   const accountMenu = (anchor, p) => menu(anchor, [
     mode === 'supabase' && !p.linked && { label: 'Создать вход (email + пароль)', icon: 'user', action: () => accountDialog(p) },
     mode === 'supabase' && p.linked && { label: 'Новый временный пароль', icon: 'edit', action: () => resetDialog(p) },
     { label: p.active ? 'Отключить доступ' : 'Вернуть доступ', icon: 'archive', danger: p.active, action: () => toggleActive(p) },
+    isSuper() && { sep: true },
+    isSuper() && { label: 'Удалить из системы', icon: 'trash', danger: true, action: () => removePerson(p).catch(showErr) },
   ]);
+
+  const removePerson = async p => {
+    const n = (await call('queryTasks', { assigneeId: p.id }).catch(() => [])).length;
+    const tasksNote = n ? ` Его задачи (${n}) останутся без исполнителя.` : '';
+    if (!(await confirmDlg(`Удалить ${p.name} из системы навсегда? Вход и профиль удалятся, человек пропадёт из команд.${tasksNote} История и комментарии сохранятся.`, { ok: 'Удалить', danger: true }))) return;
+    await send('deletePerson', { id: p.id });
+    S.people = S.people.filter(x => x !== p);
+    toast(p.name + ' удалён(а) из системы');
+    draw();
+  };
 
   const toggleActive = async p => {
     if (p.active && !(await confirmDlg(`Отключить ${p.name}? Человек не сможет войти; его задачи останутся.`, { ok: 'Отключить', danger: true }))) return;
@@ -76,7 +129,7 @@ export function peopleManager({ search = false } = {}) {
       h('span', { class: 'person-text' },
         h('span', { class: 'person-name' }, p.name, S.meId === p.id && h('span', { class: 'badge' }, 'вы')),
         h('span', { class: 'person-sub' }, [p.email || 'без email', p.linked ? 'вход есть' : mode === 'supabase' ? 'нет входа' : ''].filter(Boolean).join(' · '))),
-      positionSelect(p.positionId, v => save(p, { positionId: v }), { disabled: !editableTarget }),
+      positionsPicker(() => p.positionIds, ids => { p.positionIds = ids; save(p, { positionId: ids[0], extraPositionIds: ids.slice(1) }); }, { disabled: !editableTarget }),
       isSuper() && p.id !== S.meId ? accessSelect(p.access, v => save(p, { access: v })) : h('span', { class: 'badge access-badge' }, ACCESS_LABELS[p.access]),
       editableTarget && p.id !== S.meId
         ? h('button', { class: 'icon-btn sm', title: 'Доступ', onclick: e => { e.stopPropagation(); accountMenu(e.currentTarget, p); } }, icon('more'))
@@ -84,7 +137,7 @@ export function peopleManager({ search = false } = {}) {
   };
 
   const head = h('div', { class: 'access-row access-head' }, h('span'), h('span', null, 'Человек'), h('span', null, 'Позиция'), h('span', null, 'Роль'), h('span'));
-  const visible = () => S.people.filter(p => (!q || (p.name + ' ' + p.email).toLowerCase().includes(q)) && (!accessFilter || (accessFilter === 'nopos' ? p.access === 'member' && !p.positionId : accessFilter === 'nologin' ? !p.linked : accessFilter === 'off' ? !p.active : p.access === accessFilter)));
+  const visible = () => S.people.filter(p => (!q || (p.name + ' ' + p.email).toLowerCase().includes(q)) && (!accessFilter || (accessFilter === 'nologin' ? !p.linked : accessFilter === 'off' ? !p.active : p.access === accessFilter)));
   const draw = () => {
     const list = visible();
     fill(box, list.length ? [head, ...list.map(row)] : h('p', { class: 'muted', style: { padding: '12px 14px', margin: 0 } }, S.people.length ? 'Никого не найдено' : 'Пока никого нет'));
@@ -93,13 +146,13 @@ export function peopleManager({ search = false } = {}) {
   // Добавить человека
   const name = h('input', { class: 'inp', placeholder: 'Имя и фамилия' });
   const email = h('input', { class: 'inp', type: 'email', placeholder: 'email' });
-  let posValue = '';
+  let posIds = ['d_other'];
   let accValue = 'member';
-  const pos = positionSelect('', v => { posValue = v; });
+  const pos = positionsPicker(() => posIds, ids => { posIds = ids; });
   const acc = isSuper() ? accessSelect('member', v => { accValue = v; }) : null;
   const add = async () => {
     if (!name.value.trim()) return name.focus();
-    const payload = { name: name.value, positionId: posValue, access: accValue };
+    const payload = { name: name.value, positionId: posIds[0], extraPositionIds: posIds.slice(1), access: accValue };
     let p;
     if (mode === 'supabase' && email.value.trim()) {
       const password = tempPassword();
@@ -113,6 +166,8 @@ export function peopleManager({ search = false } = {}) {
     sortPeople();
     name.value = '';
     email.value = '';
+    posIds = ['d_other'];
+    pos.repaint();
     draw();
   };
   draw();
@@ -121,7 +176,6 @@ export function peopleManager({ search = false } = {}) {
     h('select', { class: 'inp', style: { width: 'auto' }, onchange: ev => { accessFilter = ev.target.value; draw(); } },
       h('option', { value: '' }, 'Все'),
       Object.entries(ACCESS_LABELS).map(([k, v]) => h('option', { value: k }, v)),
-      h('option', { value: 'nopos' }, 'Участники без позиции'),
       mode === 'supabase' && h('option', { value: 'nologin' }, 'Без входа'),
       h('option', { value: 'off' }, 'Отключённые')));
   const el = h('div', null,
@@ -177,12 +231,12 @@ export function openMyProfile() {
   const preview = h('span');
   const color = colorPicker(p.color, { auto: true, autoColor: colorFor(p.id), onChange: () => fill(preview, avatar({ ...p, color: color.value() }, 'lg')) });
   fill(preview, avatar(p, 'lg'));
-  const pos = deptById(p.positionId);
+  const posNames = (p.positionIds || []).map(id => (deptById(id) || {}).name).filter(Boolean).join(', ');
   modal({
     title: 'Мой профиль',
     body: [
       h('div', { class: 'row', style: { gap: '14px', marginBottom: '14px', flexWrap: 'nowrap' } }, preview,
-        h('div', null, h('div', { style: { fontWeight: 600 } }, p.name), h('div', { class: 'hint' }, [ACCESS_LABELS[p.access], pos && pos.name, p.email].filter(Boolean).join(' · ')))),
+        h('div', null, h('div', { style: { fontWeight: 600 } }, p.name), h('div', { class: 'hint' }, [ACCESS_LABELS[p.access], posNames, p.email].filter(Boolean).join(' · ')))),
       h('div', { class: 'grid2' }, field('Имя', name), field('Должность', role, 'Свободный текст; позицию назначает администратор')),
       field('Цвет аватара', color.el),
       mode === 'supabase' && passwordBlock(),
@@ -242,7 +296,7 @@ export async function openActAs() {
       avatar({ id: p.id, name: p.name }),
       h('span', { class: 'person-text' },
         h('span', { class: 'person-name' }, p.name, S.meId === p.id && h('span', { class: 'badge' }, 'сейчас')),
-        h('span', { class: 'person-sub' }, (deptById(p.position_id) || {}).name || 'без позиции')),
+        h('span', { class: 'person-sub' }, (deptById(p.position_id) || deptById('d_other') || {}).name || '')),
       !p.active && h('span', { class: 'badge' }, 'отключён'),
       h('span', { class: 'role-badge role-' + p.access }, ACCESS_LABELS[p.access])))),
     ],
@@ -264,22 +318,18 @@ export function addMemberDialog(unitId) {
       toast(isStaff() ? 'Все участники уже в команде. Новых людей добавляют в «Люди и доступы».' : 'Нет доступных людей');
       return resolve(null);
     }
-    const person = h('select', { class: 'inp' }, candidates.map(p => h('option', { value: p.id }, p.name + (deptById(p.positionId) ? ' · ' + deptById(p.positionId).name : ''))));
-    let posValue = '';
-    const posWrap = field('Позиция', positionSelect('', v => { posValue = v; }), 'У человека нет позиции — без неё он не увидит задачи юнита.');
-    const sync = () => { posWrap.hidden = !!(S.people.find(p => p.id === person.value) || {}).positionId; };
-    person.addEventListener('change', sync);
+    const person = h('select', { class: 'inp' }, candidates.map(p => h('option', { value: p.id },
+      p.name + ' · ' + p.positionIds.map(id => (deptById(id) || {}).name).filter(Boolean).join(', '))));
     let result = null;
     modal({
       title: 'Добавить в команду' + (unit ? ' «' + unit.name + '»' : ''),
-      body: [field('Участник', person), posWrap],
+      body: [field('Участник', person, 'Позиции — из профиля человека («Люди и доступы»).')],
       onClose: () => resolve(result),
       actions: [
         { label: 'Отмена' },
         {
           label: 'Добавить', primary: true, action: async close => {
             const p = S.people.find(x => x.id === person.value);
-            if (!p.positionId && posValue) Object.assign(p, await send('updatePerson', { id: p.id, positionId: posValue }));
             const members = await send('setMember', { unitId, personId: p.id, departmentId: p.positionId });
             applyMembers(unitId, members);
             result = p.id;
@@ -288,7 +338,6 @@ export function addMemberDialog(unitId) {
         },
       ],
     });
-    sync();
   });
 }
 
@@ -305,35 +354,59 @@ export function openDepartments() {
   modal({ title: 'Позиции', body: positionsManager(), actions: [{ label: 'Готово', primary: true, action: c => c() }], onClose: rerender });
 }
 
-/** Справочник позиций: название, цвет, порядок, скрыть/удалить. Возвращает элемент. */
+/** Справочник позиций: перетаскивание за ручку, цвет, название на месте, сколько людей, скрыть/удалить. Возвращает элемент. */
 export function positionsManager() {
-  const box = h('div', { class: 'rows people-list' });
-  const draw = () => fill(box, S.departments.length ? [...S.departments].sort((a, b) => a.order - b.order).map(row) : h('p', { class: 'muted', style: { padding: '12px 14px', margin: 0 } }, 'Позиций нет'));
-  const save = (d, patch) => send('updateDepartment', { id: d.id, ...patch }).then(saved => { Object.assign(d, saved); draw(); }).catch(showErr);
-  const move = (d, dir) => {
-    const list = [...S.departments].sort((a, b) => a.order - b.order);
-    const i = list.indexOf(d);
-    list.splice(i + dir, 0, list.splice(i, 1)[0]);
-    list.forEach((x, k) => { x.order = k + 1; });
-    draw();
-    send('reorderDepartments', { ids: list.map(x => x.id) }).catch(showErr);
-  };
+  const list = h('div', { class: 'lf-list' });
+  const sorted = () => [...S.departments].sort(byOrder);
+  const save = (d, patch) => send('updateDepartment', { id: d.id, ...patch }).then(saved => { Object.assign(d, saved); return d; });
+  const people = d => S.people.filter(p => (p.positionIds || [p.positionId]).includes(d.id)).length;
   const remove = async d => {
-    if (!(await confirmDlg(`Удалить позицию «${d.name}»? Люди и задачи с этой позицией останутся без неё — участники перестанут видеть такие задачи. Если позиция может понадобиться — лучше скрыть.`, { ok: 'Удалить', danger: true }))) return;
+    const n = people(d);
+    if (!(await confirmDlg(`Удалить позицию «${d.name}»?${n ? ` У ${n} чел. она сменится на Other.` : ''} Задачи с этой позицией останутся без неё — участники перестанут их видеть. Если позиция может понадобиться — лучше скрыть.`, { ok: 'Удалить', danger: true }))) return;
     await send('deleteDepartment', { id: d.id });
     S.departments = S.departments.filter(x => x !== d);
-    S.people.forEach(p => { if (p.positionId === d.id) p.positionId = ''; });
+    S.people.forEach(p => {
+      if (!p.positionIds) return;
+      p.positionIds = p.positionIds.filter(x => x !== d.id);
+      if (p.positionId === d.id || !p.positionIds.length) { p.positionId = 'd_other'; p.positionIds = ['d_other', ...p.positionIds.filter(x => x !== 'd_other')]; }
+    });
     draw();
   };
-  const row = (d, i, arr) => h('div', { class: 'person-item' + (d.archived ? ' inactive' : '') },
-    h('input', { type: 'color', class: 'dept-color', value: d.color, title: 'Цвет', onchange: e => save(d, { color: e.target.value }) }),
-    h('input', { class: 'inp', value: d.name, maxlength: 40, style: { flex: 1 }, onchange: e => { if (e.target.value.trim()) save(d, { name: e.target.value }); } }),
-    h('span', { class: 'hint', style: { whiteSpace: 'nowrap' } }, S.people.filter(p => p.positionId === d.id).length + ' чел.'),
-    h('button', { class: 'icon-btn sm', title: 'Выше', disabled: i === 0, onclick: () => move(d, -1) }, '↑'),
-    h('button', { class: 'icon-btn sm', title: 'Ниже', disabled: i === arr.length - 1, onclick: () => move(d, 1) }, '↓'),
-    h('button', { class: 'btn ghost sm', onclick: () => save(d, { archived: !d.archived }) }, d.archived ? 'Показать' : 'Скрыть'),
-    h('button', { class: 'icon-btn sm', title: 'Удалить', onclick: () => remove(d).catch(showErr) }, icon('trash', 14)));
-  const name = h('input', { class: 'inp', placeholder: 'Например, Продуктовый дизайнер', maxlength: 40 });
+  const row = d => {
+    const color = h('input', { type: 'color', class: 'pos-color', value: d.color, title: 'Цвет', onchange: e => save(d, { color: e.target.value }).then(draw).catch(showErr) });
+    const n = people(d);
+    return h('div', { class: 'lf-row' + (d.archived ? ' off' : ''), dataset: { id: d.id } },
+      h('span', { class: 'drag', title: 'Перетащите, чтобы изменить порядок' }, icon('grip', 16)),
+      h('label', { class: 'pos-swatch', style: { background: d.color }, title: 'Цвет' }, color),
+      h('input', {
+        class: 'lf-name', value: d.name, maxlength: 40, 'aria-label': 'Название',
+        onchange: e => { const v = e.target.value.trim(); if (!v) { e.target.value = d.name; return; } save(d, { name: v }).catch(showErr); },
+        onkeydown: e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') { e.target.value = d.name; e.target.blur(); } },
+      }),
+      d.archived && h('span', { class: 'badge' }, 'скрыта'),
+      h('span', { class: 'pos-count', title: 'Людей с этой позицией' }, icon('users', 13), n),
+      h('button', {
+        class: 'icon-btn sm', title: d.archived ? 'Показать в списках' : 'Скрыть из списков (у людей и задач останется)',
+        onclick: () => save(d, { archived: !d.archived }).then(draw).catch(showErr),
+      }, icon(d.archived ? 'eyeOff' : 'eye', 15)),
+      d.id === 'd_other'
+        ? h('span', { class: 'icon-btn sm', title: 'Other нужна людям без другой позиции — её не удалить', style: { opacity: 0.3 } }, icon('trash', 15))
+        : h('button', { class: 'icon-btn sm', title: 'Удалить', onclick: () => remove(d).catch(showErr) }, icon('trash', 15)));
+  };
+  let sortable = null;
+  const draw = () => {
+    fill(list, S.departments.length ? sorted().map(row) : h('p', { class: 'muted', style: { padding: '12px 14px', margin: 0 } }, 'Позиций нет'));
+    if (sortable) sortable.destroy();
+    sortable = Sortable.create(list, {
+      handle: '.drag', animation: 150, ghostClass: 'sortable-ghost', forceFallback: true, fallbackTolerance: 4,
+      onEnd: () => {
+        const ids = [...list.children].map(el => el.dataset.id).filter(Boolean);
+        ids.forEach((id, i) => { const d = S.departments.find(x => x.id === id); if (d) d.order = i + 1; });
+        send('reorderDepartments', { ids }).catch(showErr);
+      },
+    });
+  };
+  const name = h('input', { class: 'inp', placeholder: 'Например, Backend Dev', maxlength: 40 });
   const add = async () => {
     if (!name.value.trim()) return name.focus();
     const d = await send('createDepartment', { name: name.value, color: PALETTE[S.departments.length % PALETTE.length] });
@@ -345,10 +418,10 @@ export function positionsManager() {
   name.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); add().catch(showErr); } });
   draw();
   return h('div', null,
-    h('p', { class: 'hint', style: { marginTop: 0 } }, 'Позиция есть у каждого участника и у каждой задачи. Участник видит в своих юнитах только задачи своей позиции.'),
-    box,
+    h('p', { class: 'hint', style: { marginTop: 0 } }, 'Позиции есть у каждого человека (можно несколько) и у каждой задачи. Участник видит в своих юнитах задачи своих позиций.'),
+    list,
     h('div', { class: 'sub-title' }, 'Добавить позицию'),
-    h('div', { class: 'row', style: { flexWrap: 'nowrap' } }, name, h('button', { class: 'btn primary', onclick: () => add().catch(showErr) }, icon('plus', 14), 'Добавить')));
+    h('div', { class: 'lf-add' }, name, h('button', { class: 'btn primary', onclick: () => add().catch(showErr) }, icon('plus', 14), 'Добавить')));
 }
 
 export function openShortcuts() {

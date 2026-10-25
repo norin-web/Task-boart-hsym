@@ -1,5 +1,5 @@
 /** Лента событий с фильтрами: главная администратора и «Журнал» в панели админа. */
-import { S, LS, personById, relTime, fmtDateTime, activeDepts, byOrder } from '../state.js';
+import { S, LS, personById, relTime, fmtDateTime, activeDepts, byOrder, whoName } from '../state.js';
 import { h, icon, avatar, fill, showErr, toast, menu, modal, field } from '../ui.js';
 import { call } from '../api.js';
 import { taskLink } from '../router.js';
@@ -47,7 +47,7 @@ export function feedItem(a) {
   return h('div', { class: 'feed-item' },
     avatar(p, 'sm'),
     h('div', { class: 'feed-body' },
-      h('div', { class: 'feed-text' }, h('b', null, p ? p.name : 'Кто-то'), ' · ', activityText(a)),
+      h('div', { class: 'feed-text' }, h('b', null, whoName(a.actorId)), ' · ', activityText(a)),
       a.task && a.unit && taskLink(a.unit.id, a.task.id, { class: 'feed-task' },
         h('span', { class: 'unit-dot', style: { background: a.unit.color, margin: 0 } }),
         h('span', { class: 'key-badge' }, a.task.key),

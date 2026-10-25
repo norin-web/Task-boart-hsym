@@ -1,6 +1,6 @@
 import {
   S, LS, taskById, personById, activeFields, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDateTime, relTime, addDays,
-  unitById, safeUrl, visibleLinkFields, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, fmtValue,
+  unitById, safeUrl, visibleLinkFields, whoName, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, fmtValue,
 } from '../state.js';
 import { $, h, append, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, fill } from '../ui.js';
 import { call, send } from '../api.js';
@@ -297,7 +297,7 @@ function discussionBlock(t, editable) {
       avatar(p),
       h('div', { class: 'comment-main' },
         h('div', { class: 'comment-head' },
-          h('b', null, p ? p.name : 'Аноним'),
+          h('b', null, whoName(c.authorId)),
           h('span', { class: 'when', title: fmtDateTime(c.at) }, relTime(c.at) + (c.editedAt ? ' · изменено' : '')),
           !isEditing && (isStaff() || c.authorId === S.meId) && h('span', { class: 'actions' },
             h('button', { class: 'link-btn', onclick: () => { editing = c.id; draw(); } }, 'Изменить'),
@@ -355,7 +355,7 @@ function discussionBlock(t, editable) {
       return h('div', { class: 'tl-item' },
         h('span', { class: 'tl-dot' }),
         h('div', null,
-          h('div', null, h('b', null, p ? p.name : 'Кто-то'), ' · ', activityText(a)),
+          h('div', null, h('b', null, whoName(a.actorId)), ' · ', activityText(a)),
           h('div', { class: 'tl-when', title: fmtDateTime(a.at) }, relTime(a.at))));
     }))
     : h('p', { class: 'muted' }, 'Пока пусто'));
@@ -436,7 +436,7 @@ function sideBlock(t, { staff, editable }) {
   const blocking = missingNext(t);
   activeFields().forEach(f => {
     const v = t.fields[f.id];
-    prop(f.name, editable
+    prop(f.name, editable && (staff || !f.staffOnly)
       ? fieldInput(f, v, val => patchTask(t, { fields: { [f.id]: isEmpty(val) ? null : val } }))
       : ro(isEmpty(v) ? null : f.type === 'url' && safeUrl(v) ? h('a', { href: safeUrl(v), target: '_blank', rel: 'noopener noreferrer' }, v) : fmtValue(f, v)),
     { required: f.required, empty: editable && blocking.includes(f) });

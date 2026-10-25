@@ -2,6 +2,7 @@
 //   create   — аккаунт (email + временный пароль) и привязанный профиль
 //   password — новый временный пароль
 //   active   — заблокировать / разблокировать вход
+//   deleteAuth — удалить аккаунт входа уже удалённого из people человека (только супер-админ)
 // Секретный ключ (SUPABASE_SERVICE_ROLE_KEY) Supabase передаёт функции сам — в коде и в браузере его нет.
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -88,7 +89,9 @@ Deno.serve(async req => {
         personId = newId();
         const { error } = await admin.from('people').insert({
           id: personId, name: String(body.name || email.split('@')[0]).slice(0, 80), role: String(body.role || '').slice(0, 80),
-          access, position_id: String(body.positionId || ''), created_at: nowIso(), ...fields,
+          access, position_id: String(body.positionId || '') || 'd_other',
+          extra_positions: Array.isArray(body.extraPositionIds) ? body.extraPositionIds.map(String).slice(0, 10) : [],
+          created_at: nowIso(), ...fields,
         });
         if (error) return json({ error: error.message }, 400);
       }
@@ -109,6 +112,18 @@ Deno.serve(async req => {
         const { error } = await admin.auth.admin.updateUserById(target.user_id, { ban_duration: body.active ? 'none' : '876000h' });
         if (error) return json({ error: error.message }, 400);
       }
+      return json({ ok: true });
+    }
+
+    if (body.action === 'deleteAuth') {
+      if (!isSuper) return json({ error: 'Удалять людей может только супер-админ' }, 403);
+      const userId = String(body.userId || '');
+      if (!userId || userId === auth.user.id) return json({ error: 'Нельзя удалить этот аккаунт' }, 400);
+      // Удаляем только «осиротевший» аккаунт: профиль уже удалён в базе (там проверены права и последний супер-админ)
+      const { data: still } = await admin.from('people').select('id').eq('user_id', userId).maybeSingle();
+      if (still) return json({ error: 'Аккаунт ещё привязан к человеку' }, 400);
+      const { error } = await admin.auth.admin.deleteUser(userId);
+      if (error) return json({ error: error.message }, 400);
       return json({ ok: true });
     }
 

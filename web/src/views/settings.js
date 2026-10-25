@@ -5,7 +5,7 @@ import { send } from '../api.js';
 import { link } from '../router.js';
 import { renderSidebar } from './sidebar.js';
 import { archiveUnit, deleteUnit } from './units.js';
-import { addMemberDialog, applyMembers, openDepartments } from './people.js';
+import { addMemberDialog, applyMembers, openDepartments, positionChips } from './people.js';
 
 export function renderSettings() {
   const b = S.board;
@@ -74,6 +74,8 @@ export function renderSettings() {
     h('span', { class: 'badge' }, TYPE_LABELS[f.type] || f.type),
     f.showOnCard && h('span', { class: 'badge' }, 'на карточке'),
     f.required && h('span', { class: 'badge' }, requiredLabel(f)),
+    f.role === 'priority' && h('span', { class: 'badge' }, 'приоритет'),
+    f.staffOnly && h('span', { class: 'badge' }, 'меняют админы'),
     h('span', { class: 'spacer' }),
     h('button', { class: 'btn sm', onclick: () => openFieldEditor(f) }, icon('edit', 13), 'Изменить'),
     h('button', { class: 'btn ghost sm', title: 'Убрать с карточек (значения сохранятся)', onclick: () => setFieldArchived(f, true) }, 'Убрать'))));
@@ -171,6 +173,9 @@ function openFieldEditor(f) {
   const type = h('select', { class: 'inp', value: f ? f.type : 'select' },
     Object.entries(TYPE_LABELS).map(([k, v]) => h('option', { value: k }, v)));
   const showOnCard = h('input', { type: 'checkbox', checked: f ? f.showOnCard : true });
+  const staffOnly = h('input', { type: 'checkbox', checked: f ? f.staffOnly : false });
+  const isPriority = h('input', { type: 'checkbox', checked: f ? f.role === 'priority' : false });
+  const prioRow = h('label', { class: 'chk' }, isPriority, 'Это приоритет: полоса на карточке и сортировка в колонке (варианты сверху вниз — от низкого к высокому)');
   // '' — не обязательное, '*' — для любого переноса, id колонки — с неё и правее
   const required = h('select', { class: 'inp', value: !f || !f.required ? '' : f.requiredFrom || '*' },
     h('option', { value: '' }, 'Не обязательное'),
@@ -199,6 +204,7 @@ function openFieldEditor(f) {
   const typeNote = h('div', { class: 'hint' });
   const syncType = () => {
     optSection.hidden = !['select', 'multiselect'].includes(type.value);
+    prioRow.hidden = type.value !== 'select';
     typeNote.textContent = !isNew && type.value !== f.type ? 'Тип меняется: уже заполненные значения могут отображаться некорректно.' : '';
     if (!optSection.hidden && !options.length) {
       ['Вариант 1', 'Вариант 2'].forEach((n, i) => options.push({ id: 'o_' + Math.random().toString(36).slice(2, 10), name: n, color: PALETTE[i] }));
@@ -217,6 +223,8 @@ function openFieldEditor(f) {
       h('div', { class: 'grid2', style: { alignItems: 'end' } },
         field('Обязательное для участников', required),
         h('label', { class: 'chk', style: { marginBottom: '10px' } }, showOnCard, 'Показывать на карточке')),
+      h('label', { class: 'chk' }, staffOnly, 'Меняют только администратор и модератор (участник видит, но не правит)'),
+      prioRow,
     ],
     wide: true,
     actions: [
@@ -226,10 +234,13 @@ function openFieldEditor(f) {
           if (!name.value.trim()) { name.focus(); return; }
           const payload = {
             name: name.value, type: type.value, showOnCard: showOnCard.checked, required: !!required.value, requiredFrom: required.value === '*' ? '' : required.value,
+            staffOnly: staffOnly.checked, role: type.value === 'select' && isPriority.checked ? 'priority' : '',
             options: ['select', 'multiselect'].includes(type.value) ? options.filter(o => o.name.trim()) : [],
           };
-          if (isNew) S.board.fields.push(await send('createField', { unitId: S.board.unit.id, ...payload }));
-          else Object.assign(f, await send('updateField', { id: f.id, ...payload }));
+          const saved = isNew ? await send('createField', { unitId: S.board.unit.id, ...payload }) : await send('updateField', { id: f.id, ...payload });
+          // приоритет в юните один — у прежнего флаг снят и на сервере
+          if (saved.role === 'priority') S.board.fields.forEach(x => { if (x.id !== saved.id && x.role === 'priority') x.role = ''; });
+          if (isNew) S.board.fields.push(saved); else Object.assign(f, saved);
           close();
           renderSettings();
         },
@@ -277,9 +288,6 @@ function columnsEditor(initial) {
 function teamSection() {
   const b = S.board;
   const box = h('section', { class: 'card-box' });
-  // Позиция хранится в профиле человека — меняется для всех его юнитов
-  const setPosition = (p, positionId) => send('updatePerson', { id: p.id, positionId })
-    .then(saved => { Object.assign(p, saved); toast('Позиция обновлена'); }).catch(e => { showErr(e); draw(); });
   const remove = async m => {
     const p = personById(m.personId);
     if (!(await confirmDlg(`Убрать ${p ? p.name : 'участника'} из команды? Задачи, где он исполнитель, останутся за ним.`, { ok: 'Убрать', danger: true }))) return;
@@ -288,7 +296,6 @@ function teamSection() {
     draw();
   };
   const draw = () => {
-    const depts = activeDepts();
     fill(box,
       h('div', { class: 'section-head', style: { marginBottom: '4px' } },
         h('h2', null, 'Команда'),
@@ -300,13 +307,11 @@ function teamSection() {
         ? b.members.map(m => {
           const p = personById(m.personId);
           if (!p) return null;
-          const d = deptById(p.positionId);
+          // Позиции — из профиля человека (меняются в «Люди и доступы»)
           return h('div', { class: 'member-row' },
             avatar(p),
             h('span', { class: 'person-text' }, h('span', { class: 'person-name' }, p.name), p.role && h('span', { class: 'person-sub' }, p.role)),
-            h('select', { class: 'inp' + (p.positionId ? '' : ' empty-req'), value: p.positionId, title: 'Позиция (общая для всех юнитов)', onchange: e => setPosition(p, e.target.value) },
-              h('option', { value: '' }, '— без позиции —'),
-              depts.concat(d && d.archived ? [d] : []).map(x => h('option', { value: x.id }, x.name))),
+            positionChips(p.positionIds || [p.positionId]),
             h('button', { class: 'icon-btn sm', title: 'Убрать из команды', onclick: () => remove(m).catch(showErr) }, icon('x', 15)));
         })
         : h('p', { class: 'muted' }, 'В команде пока никого. Добавьте участников, чтобы назначать их на задачи.'));
