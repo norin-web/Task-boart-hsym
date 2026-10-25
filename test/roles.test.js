@@ -93,6 +93,23 @@ test('участник: только свои задачи, обязательн
   assert.ok(extras.activity.filter(a => a.action === 'update').every(a => a.actorId === designer.id));
 });
 
+test('обязательное поле с колонки: нужно только при переносе в неё и правее', async () => {
+  const api = await setup();
+  const { admin, designer, A, link, t1 } = await team(api);
+  await api('updateField', { id: link.id, requiredFrom: 'done' });
+  await api.as(designer, async () => {
+    const moved = await api('updateTask', { id: t1.id, patch: { status: 'in_progress' } });
+    assert.equal(moved.status, 'in_progress');
+    await assert.rejects(() => api('updateTask', { id: t1.id, patch: { status: 'done' } }), e => e.code === 'RULE' && /Макет/.test(e.message));
+    assert.equal((await api('updateTask', { id: t1.id, patch: { status: 'todo' } })).status, 'todo'); // назад — можно
+  });
+  await api.as(admin, async () => {
+    assert.equal((await api('updateTask', { id: t1.id, patch: { status: 'done' } })).status, 'done'); // админа правило не держит
+  });
+  const f = (await api('getBoard', { unitId: A.id })).fields.find(x => x.id === link.id);
+  assert.equal(f.requiredFrom, 'done');
+});
+
 test('профили: свой профиль, роли меняет только супер-админ', async () => {
   const api = await setup();
   const { admin, mod, designer, dev } = await team(api);

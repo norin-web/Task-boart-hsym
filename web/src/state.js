@@ -67,6 +67,13 @@ export const members = () => (S.board ? S.board.members : []);
 export const memberOf = personId => members().find(m => m.personId === personId);
 export const taskKey = t => (t._temp ? '…' : S.board.unit.key + '-' + t.num);
 export const isEmpty = v => v == null || v === '' || (Array.isArray(v) && !v.length);
+const colIdx = id => columns().findIndex(c => c.id === id);
+/** Нужно ли поле для переноса в колонку status: с колонки requiredFrom и правее; без колонки (или её удалили) — для любого переноса. Как в базе. */
+export const requiredIn = (f, status) => f.required && (!f.requiredFrom || colIdx(f.requiredFrom) < 0 || colIdx(status) >= colIdx(f.requiredFrom));
+/** Пустые поля, без которых задачу не перенести в колонку status. */
+export const missingFor = (t, status) => activeFields().filter(f => requiredIn(f, status) && isEmpty(t.fields[f.id]));
+/** Что мешает перенести задачу в следующую колонку. */
+export const missingNext = t => { const next = columns()[colIdx(t.status) + 1]; return next ? missingFor(t, next.id) : []; };
 export const optById = (f, id) => (f.options || []).find(o => o.id === id);
 export const maxOrder = list => list.reduce((m, x) => Math.max(m, Number(x.order) || 0), 0);
 export const byOrder = (a, b) => (a.order || 0) - (b.order || 0);

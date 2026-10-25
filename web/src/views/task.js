@@ -1,5 +1,5 @@
 import {
-  S, LS, taskById, personById, activeFields, taskKey, isEmpty, optById, dueInfo, fmtDateTime, relTime, addDays,
+  S, LS, taskById, personById, activeFields, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDateTime, relTime, addDays,
   unitById, safeUrl, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, fmtValue,
 } from '../state.js';
 import { $, h, append, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, fill } from '../ui.js';
@@ -380,12 +380,13 @@ function sideBlock(t, { staff, editable }) {
     });
   }
 
+  const blocking = missingNext(t);
   activeFields().forEach(f => {
     const v = t.fields[f.id];
     prop(f.name, editable
       ? fieldInput(f, v, val => patchTask(t, { fields: { [f.id]: isEmpty(val) ? null : val } }))
       : ro(isEmpty(v) ? null : f.type === 'url' && safeUrl(v) ? h('a', { href: safeUrl(v), target: '_blank', rel: 'noopener noreferrer' }, v) : fmtValue(f, v)),
-    { required: f.required, empty: editable && f.required && isEmpty(v) });
+    { required: f.required, empty: editable && blocking.includes(f) });
   });
 
   return h('div', { class: 'panel-side' }, props, h('div', { class: 'side-meta', id: 'task-meta' }, metaLines(t)));

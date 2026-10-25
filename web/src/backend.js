@@ -180,7 +180,7 @@ const taskOut = r => ({
 
 const fieldOut = r => ({
   id: r.id, unitId: r.unit_id, name: r.name, type: r.type, options: json(r.options, []),
-  showOnCard: !!r.show_on_card, required: !!r.required, order: r.ord, archived: !!r.archived,
+  showOnCard: !!r.show_on_card, required: !!r.required, requiredFrom: r.required_from || '', order: r.ord, archived: !!r.archived,
 });
 
 export const ACCESS = ['superadmin', 'moderator', 'member'];
@@ -342,7 +342,7 @@ export function createBackend(db, opts = {}) {
     return {
       id: uid('f'), unit_id: unitId, name: req(str(p.name, 60), 'Название поля'),
       type: FIELD_TYPES.includes(p.type) ? p.type : 'text', options: cleanOptions(p.options),
-      show_on_card: !!p.showOnCard, required: !!p.required, ord: order, archived: false,
+      show_on_card: !!p.showOnCard, required: !!p.required, required_from: str(p.requiredFrom, 40), ord: order, archived: false,
     };
   }
 
@@ -896,6 +896,7 @@ export function createBackend(db, opts = {}) {
       if ('options' in p) upd.options = cleanOptions(p.options);
       if ('showOnCard' in p) upd.show_on_card = !!p.showOnCard;
       if ('required' in p) upd.required = !!p.required;
+      if ('requiredFrom' in p) upd.required_from = str(p.requiredFrom, 40);
       if ('archived' in p) upd.archived = !!p.archived;
       await updateOne('fields', f.id, upd);
       return fieldOut({ ...f, ...upd });

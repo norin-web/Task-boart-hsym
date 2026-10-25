@@ -40,6 +40,8 @@ create table if not exists fields (
   archived     boolean not null default false
 );
 create index if not exists fields_unit on fields(unit_id);
+-- Обязательное поле: с какой колонки оно нужно ('' — для любого переноса)
+alter table fields add column if not exists required_from text not null default '';
 
 create table if not exists people (
   id               text primary key,
@@ -237,8 +239,14 @@ begin
       raise exception 'Недостаточно прав: участник меняет только статус, описание, поля и чеклист своей задачи' using errcode = '42501';
     end if;
     if new.status is distinct from old.status then
+      -- поле с колонкой required_from нужно при переносе в неё и в колонки правее
+      with cols as (
+        select c.v ->> 'id' as id, c.i from units u, jsonb_array_elements(u.settings -> 'columns') with ordinality c(v, i)
+         where u.id = new.unit_id)
       select string_agg(f.name, ', ' order by f.ord) into missing from fields f
        where f.unit_id = new.unit_id and f.required and not f.archived
+         and (f.required_from = ''
+              or coalesce((select i from cols where id = new.status), 0) >= coalesce((select i from cols where id = f.required_from), 0))
          and coalesce(new.fields -> f.id, 'null'::jsonb) in ('null'::jsonb, '""'::jsonb, '[]'::jsonb, 'false'::jsonb);
       if missing is not null then
         raise exception 'Сначала заполните обязательные поля: %', missing using errcode = 'P0001';

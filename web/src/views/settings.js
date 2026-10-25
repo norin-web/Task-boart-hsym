@@ -70,7 +70,7 @@ export function renderSettings() {
     h('span', { class: 'name' }, f.name),
     h('span', { class: 'badge' }, TYPE_LABELS[f.type] || f.type),
     f.showOnCard && h('span', { class: 'badge' }, 'на карточке'),
-    f.required && h('span', { class: 'badge' }, 'обязательное'),
+    f.required && h('span', { class: 'badge' }, requiredLabel(f)),
     h('span', { class: 'spacer' }),
     h('button', { class: 'btn sm', onclick: () => openFieldEditor(f) }, icon('edit', 13), 'Изменить'),
     h('button', { class: 'btn ghost sm', title: 'Убрать с карточек (значения сохранятся)', onclick: () => setFieldArchived(f, true) }, 'Убрать'))));
@@ -155,13 +155,22 @@ async function deleteFieldForever(f) {
   }).catch(showErr);
 }
 
+function requiredLabel(f) {
+  const c = f.requiredFrom && S.board.unit.settings.columns.find(x => x.id === f.requiredFrom);
+  return c ? `обязательное с «${c.name}»` : 'обязательное';
+}
+
 function openFieldEditor(f) {
   const isNew = !f;
   const name = h('input', { class: 'inp', value: f ? f.name : '', maxlength: 60, placeholder: 'Например, Оценка или Канал' });
   const type = h('select', { class: 'inp', value: f ? f.type : 'select' },
     Object.entries(TYPE_LABELS).map(([k, v]) => h('option', { value: k }, v)));
   const showOnCard = h('input', { type: 'checkbox', checked: f ? f.showOnCard : true });
-  const required = h('input', { type: 'checkbox', checked: f ? f.required : false });
+  // '' — не обязательное, '*' — для любого переноса, id колонки — с неё и правее
+  const required = h('select', { class: 'inp', value: !f || !f.required ? '' : f.requiredFrom || '*' },
+    h('option', { value: '' }, 'Не обязательное'),
+    h('option', { value: '*' }, 'Для любого переноса'),
+    S.board.unit.settings.columns.slice(1).map(c => h('option', { value: c.id }, `Для переноса в «${c.name}» и дальше`)));
   const options = f ? structuredClone(f.options) : [];
 
   const optBox = h('div');
@@ -200,9 +209,9 @@ function openFieldEditor(f) {
     body: [
       h('div', { class: 'grid2' }, field('Название', name), field('Тип', type, typeNote)),
       optSection,
-      h('div', { class: 'row', style: { gap: '18px' } },
-        h('label', { class: 'chk' }, showOnCard, 'Показывать на карточке'),
-        h('label', { class: 'chk' }, required, 'Обязательное')),
+      h('div', { class: 'grid2', style: { alignItems: 'end' } },
+        field('Обязательное для участников', required),
+        h('label', { class: 'chk', style: { marginBottom: '10px' } }, showOnCard, 'Показывать на карточке')),
     ],
     wide: true,
     actions: [
@@ -211,7 +220,7 @@ function openFieldEditor(f) {
         label: isNew ? 'Создать поле' : 'Сохранить', primary: true, action: async close => {
           if (!name.value.trim()) { name.focus(); return; }
           const payload = {
-            name: name.value, type: type.value, showOnCard: showOnCard.checked, required: required.checked,
+            name: name.value, type: type.value, showOnCard: showOnCard.checked, required: !!required.value, requiredFrom: required.value === '*' ? '' : required.value,
             options: ['select', 'multiselect'].includes(type.value) ? options.filter(o => o.name.trim()) : [],
           };
           if (isNew) S.board.fields.push(await send('createField', { unitId: S.board.unit.id, ...payload }));

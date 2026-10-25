@@ -1,6 +1,6 @@
 import Sortable from 'sortablejs';
 import {
-  S, LS, taskById, personById, activeFields, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder,
+  S, LS, taskById, personById, activeFields, missingFor, missingNext, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder,
   between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, relTime, unitById, emptyCounts, freshFilters,
   activeDepts, deptById, KINDS, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask,
 } from '../state.js';
@@ -295,7 +295,7 @@ function onDragEnd(evt) {
   if (evt.to.dataset.status !== t.status) patch.status = evt.to.dataset.status;
   if (evt.to.dataset.lane && evt.to.dataset.dept !== (t.departmentId || '')) patch.departmentId = evt.to.dataset.dept;
   // Участник не может сменить статус, пока не заполнены обязательные поля — возвращаем и открываем карточку
-  const missing = patch.status && !isStaff() && activeFields().filter(f => f.required && isEmpty(t.fields[f.id]));
+  const missing = patch.status && !isStaff() && missingFor(t, patch.status);
   if (missing && missing.length) {
     setTimeout(() => {
       renderTasks();
@@ -320,7 +320,7 @@ function taskCard(t, inLane) {
     ...fields.filter(f => f.showOnCard).flatMap(f => fieldChip(f, t)),
   ].filter(Boolean);
   const person = !B.assignee.hidden && personById(t.assigneeId);
-  const missing = fields.some(f => f.required && isEmpty(t.fields[f.id]));
+  const missing = missingNext(t);
   const cl = t.checklist || [];
   const clDone = cl.filter(i => i.done).length;
   const due = !B.dueDate.hidden && dueInfo(t.dueDate, taskDone(t));
@@ -338,7 +338,7 @@ function taskCard(t, inLane) {
   },
   h('div', { class: 'card-head' },
     h('span', { class: 'card-key' }, taskKey(t)),
-    missing && h('span', { class: 'warn-ic', title: 'Не заполнены обязательные поля' }, icon('alert', 13)),
+    missing.length > 0 && h('span', { class: 'warn-ic', title: 'Для следующей колонки заполните: ' + missing.map(f => f.name).join(', ') }, icon('alert', 13)),
     t.archived && h('span', { class: 'badge' }, 'архив'),
     !t._temp && h('button', {
       class: 'icon-btn sm card-more', title: 'Действия',
