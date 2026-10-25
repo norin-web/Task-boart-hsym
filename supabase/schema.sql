@@ -18,6 +18,16 @@ create table if not exists units (
   updated_at  text not null
 );
 
+-- Корзина юнитов: когда юнит отправили в архив (для автоудаления)
+alter table units add column if not exists archived_at text not null default '';
+
+-- Общие настройки приложения (ключ → значение)
+create table if not exists app_settings (
+  key        text primary key,
+  value      jsonb not null,
+  updated_at text not null default ''
+);
+
 create table if not exists fields (
   id           text primary key,
   unit_id      text not null references units(id) on delete cascade,
@@ -302,6 +312,30 @@ begin
   delete from units where id = p_unit;
 end $$;
 
+-- Автоудаление юнитов из корзины: срок в днях — app_settings.unitRetentionDays (0 или нет — не удалять).
+-- Вызывается приложением при открытии главной/панели админа. Возвращает число удалённых юнитов.
+create or replace function purge_archived_units() returns integer
+language plpgsql security definer set search_path = public as $$
+declare
+  days integer;
+  cutoff text;
+  n integer := 0;
+  u record;
+begin
+  if not app_system() and not is_staff() then return 0; end if;
+  select coalesce((value #>> '{}')::integer, 0) into days from app_settings where key = 'unitRetentionDays';
+  if coalesce(days, 0) <= 0 then return 0; end if;
+  cutoff := to_char((now() - make_interval(days => days)) at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+  for u in select id from units where archived and archived_at <> '' and archived_at < cutoff loop
+    delete from activity
+     where task_id in (select id from tasks where unit_id = u.id)
+        or (unit_id = u.id and task_id not in (select id from tasks));
+    delete from units where id = u.id;
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+
 -- Удалить поле навсегда вместе с его значениями в задачах.
 create or replace function delete_field(p_field text) returns void
 language plpgsql security definer set search_path = public as $$
@@ -341,6 +375,12 @@ begin
     execute format('drop policy if exists team_all on %I', t);
   end loop;
 end $$;
+
+alter table app_settings enable row level security;
+drop policy if exists settings_read on app_settings;
+create policy settings_read on app_settings for select to authenticated using (true);
+drop policy if exists settings_write on app_settings;
+create policy settings_write on app_settings for all to authenticated using (is_superadmin()) with check (is_superadmin());
 
 -- Юниты, поля, состав: видят администраторы и участники юнита; меняют администраторы.
 drop policy if exists units_read on units;

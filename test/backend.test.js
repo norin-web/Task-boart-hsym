@@ -19,6 +19,7 @@ async function setup() {
     return r.data;
   };
   api.call = backend.call;
+  api.pg = pg;
   return api;
 }
 
@@ -203,6 +204,23 @@ test('свои колонки, отделы, состав команды', async
   assert.equal((await api('getBoard', { unitId: u.id })).tasks[0].departmentId, '');
   assert.equal((await api('bootstrap', {})).units[0].members[0], p.id);
   assert.deepEqual(await api('removeMember', { unitId: u.id, personId: p.id }), []);
+});
+
+test('корзина юнитов: восстановление и автоудаление по сроку', async () => {
+  const api = await setup();
+  const u = await api('createUnit', { name: 'Old', key: 'OLD' });
+  await api('createTask', { unitId: u.id, title: 'x' });
+  const arch = await api('updateUnit', { id: u.id, archived: true });
+  assert.ok(arch.archived && arch.archivedAt);
+  assert.equal((await api('updateUnit', { id: u.id, archived: false })).archivedAt, '');
+  await api('updateUnit', { id: u.id, archived: true });
+  assert.equal((await api('getAppSettings', {})).unitRetentionDays, 30);
+  await assert.rejects(() => api('updateAppSettings', { unitRetentionDays: 5 }), /срок/);
+  await api('updateAppSettings', { unitRetentionDays: 7 });
+  assert.equal(await api('purgeArchivedUnits', {}), 0); // ещё рано
+  await api.pg.query("update units set archived_at = '2000-01-01T00:00:00.000Z' where id = $1", [u.id]);
+  assert.equal(await api('purgeArchivedUnits', {}), 1);
+  assert.equal((await api('bootstrap', {})).units.length, 0);
 });
 
 test('неизвестный метод и внутренние ошибки не падают', async () => {

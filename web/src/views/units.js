@@ -11,8 +11,10 @@ export function unitMenu(anchor, u) {
     { label: 'Переименовать', icon: 'edit', action: () => renameUnit(u) },
     { label: 'Дублировать (со схемой полей)', icon: 'copy', action: () => duplicateUnit(u) },
     { sep: true },
-    { label: u.archived ? 'Вернуть из архива' : 'В архив', icon: 'archive', action: () => archiveUnit(u, !u.archived) },
-    { label: 'Удалить', icon: 'trash', danger: true, action: () => deleteUnit(u) },
+    ...(u.archived
+      ? [{ label: 'Восстановить', icon: 'archive', action: () => archiveUnit(u, false) },
+        { label: 'Удалить навсегда', icon: 'trash', danger: true, action: () => deleteUnit(u) }]
+      : [{ label: 'Удалить', icon: 'trash', danger: true, action: () => archiveUnit(u, true) }]),
   ]);
 }
 
@@ -38,15 +40,16 @@ export function archiveUnit(u, archived) {
   send('updateUnit', { id: u.id, archived }).then(saved => {
     Object.assign(u, saved);
     if (S.board && S.board.unit.id === u.id) Object.assign(S.board.unit, saved);
-    toast(archived ? 'Юнит перенесён в архив' : 'Юнит возвращён', archived ? { action: { label: 'Отменить', run: () => archiveUnit(u, false) } } : {});
-    rerender();
+    toast(archived ? `«${u.name}» в корзине — его можно восстановить в панели админа` : `«${u.name}» восстановлен`,
+      archived ? { action: { label: 'Отменить', run: () => archiveUnit(u, false) } } : {});
+    if (archived && S.route.unit === u.id) navigate({ view: 'home' }); else rerender();
   }).catch(showErr);
 }
 
 export async function deleteUnit(u) {
   const n = u.counts ? u.counts.todo + u.counts.in_progress + u.counts.done : 0;
   const ok = await confirmDlg(
-    `Удалить юнит «${u.name}»${n ? ` и ${n} задач` : ''} вместе с полями, комментариями и историей? Это нельзя отменить. Если юнит может ещё понадобиться — лучше отправить его в архив.`,
+    `Удалить юнит «${u.name}»${n ? ` и ${n} задач` : ''} вместе с полями, комментариями и историей? Восстановить будет нельзя.`,
     { ok: 'Удалить навсегда', danger: true, title: 'Удаление юнита' });
   if (!ok) return;
   send('deleteUnit', { id: u.id }).then(() => {

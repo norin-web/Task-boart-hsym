@@ -1,13 +1,13 @@
 /** Панель админа (#/admin): обзор, люди и доступы, юниты, позиции, журнал. Для модераторов и супер-админов. */
-import { S, me, byOrder, emptyCounts, personById, todayStr, isSuper, ACCESS_LABELS } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill } from '../ui.js';
+import { S, me, byOrder, emptyCounts, personById, todayStr, isSuper, ACCESS_LABELS, plural } from '../state.js';
+import { $, h, icon, avatar, topbar, showErr, fill, toast } from '../ui.js';
 import { call } from '../api.js';
 import { currentView, link, navigate } from '../router.js';
 import { renderSidebar } from './sidebar.js';
 import { attentionBlock, workloadBlock, roleBadge } from './home.js';
 import { peopleManager, positionsManager } from './people.js';
 import { activityFeed } from './feed.js';
-import { openCreateUnit, unitMenu } from './units.js';
+import { openCreateUnit, unitMenu, archiveUnit, deleteUnit } from './units.js';
 
 const TABS = [
   ['overview', 'Обзор', 'home'],
@@ -18,13 +18,14 @@ const TABS = [
 ];
 
 export async function renderAdmin(tab) {
-  if (!TABS.some(t => t[0] === tab)) tab = 'overview';
+  if (tab !== 'trash' && !TABS.some(t => t[0] === tab)) tab = 'overview';
+  const navTab = tab === 'trash' ? 'units' : tab; // корзина — часть вкладки «Юниты»
   const page = h('div', { class: 'page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
   const key = 'admin:' + tab;
   fill($('#main'),
     topbar([h('h1', null, 'Панель админа'), roleBadge(me())], []),
     h('nav', { class: 'admin-tabs' }, TABS.map(([id, label, ic]) =>
-      link({ view: 'admin', tab: id }, { class: 'admin-tab' + (id === tab ? ' on' : '') }, icon(ic, 15), label))),
+      link({ view: 'admin', tab: id }, { class: 'admin-tab' + (id === navTab ? ' on' : '') }, icon(ic, 15), label))),
     h('div', { class: 'view-body' }, page));
 
   // Свежие люди, юниты и позиции — общая основа всех вкладок
@@ -32,7 +33,7 @@ export async function renderAdmin(tab) {
   try {
     [d, ov] = await Promise.all([
       call('getHome', { today: todayStr() }),
-      tab === 'overview' || tab === 'units' ? call('getOverview', { today: todayStr() }) : null,
+      tab === 'overview' || tab === 'units' ? call('getOverview', { today: todayStr() }) : tab === 'trash' ? call('getAppSettings', {}) : null,
     ]);
   } catch (e) {
     showErr(e);
@@ -48,6 +49,7 @@ export async function renderAdmin(tab) {
     case 'people': fill(page, h('div', { class: 'card-box' }, peopleManager({ search: true }))); break;
     case 'positions': fill(page, h('div', { class: 'card-box', style: { maxWidth: '720px' } }, positionsManager())); break;
     case 'units': fill(page, unitsTable(ov)); break;
+    case 'trash': fill(page, trashTable(ov)); break;
     case 'journal': fill(page, h('div', { style: { maxWidth: '760px' } }, activityFeed({ limit: 40, title: 'Журнал событий' }))); break;
     default: fill(page, overview(d, ov));
   }
@@ -88,11 +90,60 @@ function overview(d, ov) {
 
 const right = (ok, text) => h('div', { class: 'right-row' + (ok ? '' : ' no') }, icon(ok ? 'check' : 'x', 14), text);
 
+/** Переключатель «Активные / Корзина» над таблицами юнитов. */
+function unitsSwitch(trash) {
+  const n = S.units.filter(u => u.archived).length;
+  return h('div', { class: 'seg' },
+    link({ view: 'admin', tab: 'units' }, { class: trash ? '' : 'on' }, 'Активные'),
+    link({ view: 'admin', tab: 'trash' }, { class: trash ? 'on' : '' }, icon('trash', 13), 'Корзина' + (n ? ' · ' + n : '')));
+}
+
+const RETENTION = [[7, '7 дней'], [15, '15 дней'], [30, '30 дней'], [60, '2 месяца'], [90, '3 месяца'], [0, 'Никогда']];
+
+/** Корзина: удалённые юниты со всеми данными; восстановить или удалить навсегда. Автоудаление по сроку. */
+function trashTable(settings) {
+  const days = settings ? settings.unitRetentionDays : 30;
+  const units = S.units.filter(u => u.archived).sort((a, b) => (b.archivedAt || '').localeCompare(a.archivedAt || ''));
+  const until = u => {
+    if (!days || !u.archivedAt) return h('span', { class: 'muted' }, '—');
+    const at = new Date(new Date(u.archivedAt).getTime() + days * 864e5);
+    const left = Math.max(0, Math.ceil((at - Date.now()) / 864e5));
+    return h('span', { class: left <= 3 ? 'warn-text' : '' }, at.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }), h('span', { class: 'muted' }, ' · через ' + left + ' ' + plural(left, ['день', 'дня', 'дней'])));
+  };
+  const retention = isSuper()
+    ? h('select', {
+      class: 'inp sm', value: String(days),
+      onchange: e => call('updateAppSettings', { unitRetentionDays: Number(e.target.value) })
+        .then(() => { toast('Срок хранения сохранён'); renderAdmin('trash'); }).catch(showErr),
+    }, RETENTION.map(([v, t]) => h('option', { value: String(v) }, t)))
+    : h('b', null, (RETENTION.find(r => r[0] === days) || [0, days + ' дн.'])[1]);
+  return h('div', null,
+    h('div', { class: 'section-head' }, unitsSwitch(true),
+      h('label', { class: 'row muted', style: { gap: '8px', fontSize: '13px' } }, 'Удалять навсегда через', retention)),
+    units.length
+      ? h('div', { class: 'table-wrap' }, h('table', { class: 'tasks admin-units' },
+        h('thead', null, h('tr', null, ['Юнит', 'Задач', 'Удалён', 'Удалится навсегда', ''].map(t => h('th', null, t)))),
+        h('tbody', null, units.map(u => {
+          const c = u.counts || emptyCounts();
+          return h('tr', null,
+            h('td', null, h('span', { class: 'row', style: { gap: '8px', flexWrap: 'nowrap' } },
+              h('span', { class: 'uc-icon sm', style: { background: u.color } }, u.key.slice(0, 2)),
+              h('span', null, h('b', null, u.name), ' ', h('span', { class: 'muted' }, u.key)))),
+            h('td', null, c.todo + c.in_progress + c.done),
+            h('td', null, u.archivedAt ? new Date(u.archivedAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : h('span', { class: 'muted' }, '—')),
+            h('td', null, until(u)),
+            h('td', { style: { width: '240px', textAlign: 'right' } },
+              h('button', { class: 'btn sm', onclick: () => archiveUnit(u, false) }, 'Восстановить'), ' ',
+              h('button', { class: 'btn ghost sm danger-text', onclick: () => deleteUnit(u) }, 'Удалить навсегда')));
+        }))))
+      : h('div', { class: 'card-box empty-state' }, h('p', { style: { margin: 0 } }, 'Корзина пуста. Удалённые юниты хранятся здесь со всеми задачами и историей.')));
+}
+
 function unitsTable(ov) {
-  const units = [...S.units].sort((a, b) => (a.archived - b.archived) || byOrder(a, b));
+  const units = S.units.filter(u => !u.archived).sort(byOrder);
   const noTeam = new Set(ov ? ov.unitsNoTeam : []);
   return h('div', null,
-    h('div', { class: 'section-head' }, h('h2', null, 'Юниты'), h('button', { class: 'btn primary sm', onclick: openCreateUnit }, icon('plus', 14), 'Юнит')),
+    h('div', { class: 'section-head' }, unitsSwitch(false), h('button', { class: 'btn primary sm', onclick: openCreateUnit }, icon('plus', 14), 'Юнит')),
     h('div', { class: 'table-wrap' }, h('table', { class: 'tasks admin-units' },
       h('thead', null, h('tr', null, ['Юнит', 'Команда', 'Открыто', 'Просрочено', 'Готово', ''].map(t => h('th', null, t)))),
       h('tbody', null, units.map(u => {

@@ -642,3 +642,4 @@ body.login-page #shell { display: block; }
 .ugroup-head .link-btn { font-size: 12px; }
 .trow.done { opacity: .6; }
 .trow.done .t-title { text-decoration: line-through; }
+.danger-text { color: var(--danger) !important; }

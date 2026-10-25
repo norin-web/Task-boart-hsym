@@ -168,7 +168,7 @@ function cleanFieldValues(obj, keepNulls) {
 const unitOut = r => ({
   id: r.id, name: r.name, key: r.key, color: r.color, description: r.description,
   settings: unitSettings(r.settings), nextNum: r.next_num, order: r.ord, archived: !!r.archived,
-  createdAt: r.created_at, updatedAt: r.updated_at,
+  archivedAt: r.archived_at || '', createdAt: r.created_at, updatedAt: r.updated_at,
 });
 
 const taskOut = r => ({
@@ -450,6 +450,8 @@ export function createBackend(db, opts = {}) {
     },
 
     async getHome(p) {
+      // Заодно чистим корзину юнитов по сроку хранения (для участников функция ничего не делает)
+      await rpc('purge_archived_units', {}).catch(() => 0);
       const day = today(p.today);
       const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
       const [units, ppl, depts, log] = await Promise.all([
@@ -627,7 +629,10 @@ export function createBackend(db, opts = {}) {
       if ('color' in p) upd.color = color(p.color, u.color);
       if ('description' in p) upd.description = str(p.description, 1000);
       if ('settings' in p) upd.settings = storedSettings(p.settings);
-      if ('archived' in p) upd.archived = !!p.archived;
+      if ('archived' in p) {
+        upd.archived = !!p.archived;
+        if (upd.archived !== !!u.archived) upd.archived_at = upd.archived ? now() : '';
+      }
       upd.updated_at = now();
       await updateOne('units', u.id, upd);
       if (upd.settings) await remapStatuses(u.id, unitSettings(u.settings), unitSettings(upd.settings), p.statusRemap || {});
@@ -650,6 +655,27 @@ export function createBackend(db, opts = {}) {
       await run(T('units').insert(unit));
       await insertFields(unit.id, (await unitFields(src.id)).filter(f => !f.archived));
       return { ...unitOut(unit), counts: emptyCounts(), members: [] };
+    },
+
+    /** Общие настройки приложения. */
+    async getAppSettings() {
+      const rows = await all(() => T('app_settings').select('key,value').order('key'));
+      return { unitRetentionDays: 30, ...Object.fromEntries(rows.map(r => [r.key, json(r.value, r.value)])) };
+    },
+
+    /** Меняет супер-админ (RLS). Сейчас: unitRetentionDays — через сколько дней удалять юниты из корзины, 0 — никогда. */
+    async updateAppSettings(p) {
+      if ('unitRetentionDays' in p) {
+        const d = Number(p.unitRetentionDays);
+        if (![0, 7, 15, 30, 60, 90].includes(d)) fail('Недопустимый срок');
+        await run(T('app_settings').upsert({ key: 'unitRetentionDays', value: d, updated_at: now() }, { onConflict: 'key' }));
+      }
+      return methods.getAppSettings();
+    },
+
+    /** Удаляет из корзины юниты старше срока хранения. */
+    async purgeArchivedUnits() {
+      return rpc('purge_archived_units', {});
     },
 
     /** Удаляет юнит; задачи, поля, комментарии и состав уходят каскадом. */
