@@ -643,3 +643,10 @@ body.login-page #shell { display: block; }
 .trow.done { opacity: .6; }
 .trow.done .t-title { text-decoration: line-through; }
 .danger-text { color: var(--danger) !important; }
+
+/* Карточка задачи по центру */
+.panel-backdrop.center { background: rgba(10,12,18,.55); }
+.panel.center { top: 50%; left: 50%; right: auto; bottom: auto; transform: translate(-50%, -50%); width: min(1080px, calc(100vw - 48px)); height: min(820px, calc(100vh - 48px)); border-radius: 14px; border: 1px solid var(--border); overflow: hidden; animation: pop-center .16s ease-out; }
+.panel.center .panel-side { border-bottom-right-radius: 14px; }
+@keyframes pop-center { from { opacity: 0; transform: translate(-50%, -48%) scale(.98); } }
+@media (max-width: 720px) { .panel.center { width: 100vw; height: 100vh; border-radius: 0; } }

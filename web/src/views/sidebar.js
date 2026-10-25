@@ -45,7 +45,6 @@ function unitItem(u, r) {
 export function renderSidebar() {
   const r = S.route;
   const units = S.units.filter(u => !u.archived).sort(byOrder);
-  const archived = S.units.filter(u => u.archived);
   const person = me();
   const [themeLabel, themeIcon] = THEMES[LS.get('theme', 'auto')] || THEMES.auto;
   const list = h('div', { class: 'nav-units' }, units.map(u => unitItem(u, r)));
@@ -56,15 +55,13 @@ export function renderSidebar() {
     h('button', { class: 'search-btn', onclick: openPalette }, icon('search', 15), h('span', null, 'Поиск'), h('kbd', null, isMac ? '⌘K' : 'Ctrl K')),
     link({ view: 'home' }, { class: 'nav-item' + (!r.unit && (!r.view || r.view === 'home') ? ' active' : '') }, icon('home'), h('span', { class: 'nav-label' }, staff ? 'Главная' : 'Мой дашборд')),
     staff && link({ view: 'my' }, { class: 'nav-item' + (r.view === 'my' ? ' active' : '') }, icon('user'), h('span', { class: 'nav-label' }, 'Мои задачи')),
-    staff && link({ view: 'admin' }, { class: 'nav-item' + (r.view === 'admin' && r.tab !== 'trash' ? ' active' : '') }, icon('settings'), h('span', { class: 'nav-label' }, 'Панель админа')),
+    staff && link({ view: 'admin' }, { class: 'nav-item' + (r.view === 'admin' ? ' active' : '') }, icon('settings'), h('span', { class: 'nav-label' }, 'Панель админа')),
     h('div', { class: 'nav-section' },
       h('span', null, staff ? 'Юниты' : 'Мои юниты'),
       staff && h('button', { class: 'icon-btn sm', title: 'Новый юнит', onclick: openCreateUnit }, icon('plus', 14))),
     list,
     !units.length && staff && h('button', { class: 'nav-item', onclick: openCreateUnit }, icon('plus'), h('span', { class: 'nav-label muted' }, 'Создать юнит')),
     !units.length && !staff && h('div', { class: 'nav-empty' }, 'Пока нет юнитов'),
-    staff && archived.length > 0 && link({ view: 'admin', tab: 'trash' }, { class: 'nav-item' + (r.view === 'admin' && r.tab === 'trash' ? ' active' : '') },
-      icon('trash'), h('span', { class: 'nav-label' }, 'Корзина'), h('span', { class: 'nav-count' }, archived.length)),
     h('div', { class: 'nav-spacer' }),
 
     h('button', { class: 'nav-item', onclick: cycleTheme, title: 'Переключить тему' }, icon(themeIcon), h('span', { class: 'nav-label' }, themeLabel)),

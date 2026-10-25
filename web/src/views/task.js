@@ -1,5 +1,5 @@
 import {
-  S, taskById, personById, activeFields, taskKey, isEmpty, optById, dueInfo, fmtDateTime, relTime, addDays,
+  S, LS, taskById, personById, activeFields, taskKey, isEmpty, optById, dueInfo, fmtDateTime, relTime, addDays,
   unitById, safeUrl, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, fmtValue,
 } from '../state.js';
 import { $, h, append, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, fill } from '../ui.js';
@@ -43,6 +43,9 @@ export async function peekTask(unitId, taskId) {
   openTask(taskId);
 }
 
+/** Где открывается карточка задачи: справа (по умолчанию) или по центру. Запоминается в браузере. */
+const cardCenter = () => LS.get('cardMode', 'side') === 'center';
+
 export function openTask(id) {
   const t = taskById(id);
   if (!t) {
@@ -51,7 +54,7 @@ export function openTask(id) {
   }
   S.panelTaskId = id;
   fill($('#panel-root'),
-    h('div', { class: 'panel-backdrop', onclick: closeTask }),
+    h('div', { class: 'panel-backdrop' + (cardCenter() ? ' center' : ''), onclick: closeTask }),
     buildPanel(t));
 }
 
@@ -97,11 +100,15 @@ function buildPanel(t) {
       t.archived && h('span', { class: 'badge' }, 'в архиве')),
     h('span', { class: 'spacer' }),
     S.peek && h('button', { class: 'btn ghost sm', title: 'Перейти на доску юнита с этой задачей', onclick: () => openUnitBoard(t) }, icon('board', 14), 'Открыть доску'),
+    h('button', {
+      class: 'icon-btn', title: cardCenter() ? 'Открывать карточки справа' : 'Открывать карточки по центру',
+      onclick: () => { LS.set('cardMode', cardCenter() ? 'side' : 'center'); openTask(t.id); },
+    }, icon(cardCenter() ? 'panelSide' : 'panelCenter', 16)),
     h('button', { class: 'icon-btn', title: 'Скопировать ссылку', onclick: () => copyLink(t) }, icon('copy', 16)),
     staff && h('button', { class: 'icon-btn', title: 'Действия', onclick: e => panelMenu(e.currentTarget, t) }, icon('more', 18)),
     h('button', { class: 'icon-btn', title: 'Закрыть (Esc)', onclick: closeTask }, icon('x', 18)));
 
-  return h('aside', { class: 'panel', role: 'dialog', 'aria-label': taskKey(t) },
+  return h('aside', { class: 'panel' + (cardCenter() ? ' center' : ''), role: 'dialog', 'aria-label': taskKey(t) },
     head,
     h('div', { class: 'panel-body' }, main, sideBlock(t, { staff, editable })));
 }

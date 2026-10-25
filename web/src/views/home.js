@@ -29,7 +29,6 @@ export async function renderHome() {
   const page = h('div', { class: 'page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
   fill($('#main'),
     topbar([h('h1', null, 'Главная')], [
-      h('button', { class: 'btn', onclick: () => navigate({ view: 'admin' }) }, icon('settings', 15), h('span', { class: 'btn-label' }, 'Панель админа')),
       h('button', { class: 'btn primary', onclick: () => openCreateTask() }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Задача')),
     ]),
     h('div', { class: 'view-body' }, page));
