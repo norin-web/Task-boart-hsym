@@ -41,7 +41,9 @@ export function renderUnread() {
 function unitItem(u, r, depth = 0) {
   const n = openCount(u);
   const overdue = u.counts && u.counts.overdue;
-  return link({ unit: u.id, mode: 'board' }, {
+  // юнит с командами внутри (MVP) открывается сводкой, остальные — доской
+  const hasKids = S.units.some(x => !x.archived && x.parentId === u.id && x.teamId);
+  return link({ unit: u.id, mode: hasKids ? 'overview' : 'board' }, {
     class: 'nav-item unit' + (r.unit === u.id ? ' active' : '') + (u.archived ? ' archived' : '') + (depth ? ' sub' : ''),
     dataset: { id: u.id }, style: depth ? { '--depth': Math.min(depth, 4) } : null,
     // правый клик — меню юнита (в т. ч. «Входит в…» — место в дереве)

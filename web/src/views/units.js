@@ -11,12 +11,41 @@ export function unitMenu(anchor, u) {
     { label: 'Переименовать', icon: 'edit', action: () => renameUnit(u) },
     { label: 'Дублировать (со схемой полей)', icon: 'copy', action: () => duplicateUnit(u) },
     { label: 'Входит в…', icon: 'tree', action: () => setTimeout(() => parentMenu(anchor, u), 0) },
+    { label: 'Команды внутри…', icon: 'users', action: () => teamUnitsDialog(u) },
     { sep: true },
     ...(u.archived
       ? [{ label: 'Восстановить', icon: 'archive', action: () => archiveUnit(u, false) },
         { label: 'Удалить навсегда', icon: 'trash', danger: true, action: () => deleteUnit(u) }]
       : [{ label: 'Удалить', icon: 'trash', danger: true, action: () => archiveUnit(u, true) }]),
   ]);
+}
+
+/** Команды внутри юнита (Design, iOS… в MVP): по юниту на команду справочника, люди команды — в составе. */
+export function teamUnitsDialog(u) {
+  const have = new Set(S.units.filter(x => x.parentId === u.id && x.teamId).map(x => x.teamId));
+  const teams = (S.teams || []).filter(t => !t.archived);
+  // по умолчанию — производственные команды (Design, iOS, ASO, QA, Release), без Product и Other
+  const core = ['t_design', 't_ios', 't_aso', 't_qa', 't_release'];
+  const picked = new Set(teams.filter(t => !have.has(t.id) && (core.includes(t.id) || !teams.some(x => core.includes(x.id)))).map(t => t.id));
+  const list = h('div', { class: 'team-pick' }, teams.map(t => h('label', { class: 'chk' + (have.has(t.id) ? ' muted' : '') },
+    h('input', { type: 'checkbox', checked: have.has(t.id) || picked.has(t.id), disabled: have.has(t.id), onchange: e => { if (e.target.checked) picked.add(t.id); else picked.delete(t.id); } }),
+    h('span', { class: 'dot', style: { background: t.color } }), t.name, have.has(t.id) && ' — уже есть')));
+  modal({
+    title: `Команды внутри «${u.name}»`,
+    body: [h('p', { class: 'hint', style: { marginTop: 0 } }, 'У каждой команды будет своя доска внутри юнита, люди команды попадут в её состав. Наборы задач, разбитые в этот юнит, сами разложат задачи по командам. У юнита появится «Сводка» по всем командам.'), list],
+    actions: [{ label: 'Отмена' }, {
+      label: 'Создать', primary: true, action: async close => {
+        if (!picked.size) return close();
+        await send('setupTeamUnits', { unitId: u.id, teamIds: [...picked] });
+        close();
+        const d = await send('bootstrap', {});
+        S.units = d.units;
+        renderSidebar();
+        toast(`Команды созданы внутри «${u.name}»`);
+        navigate({ unit: u.id, mode: 'overview' });
+      },
+    }],
+  });
 }
 
 /** Место юнита в дереве: под каким юнитом он стоит (себя и своих потомков выбрать нельзя). */

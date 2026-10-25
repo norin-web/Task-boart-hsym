@@ -418,7 +418,7 @@ test('команды: у человека несколько, видимость
   const api = await setup();
   const { mod, designer, dev, A, t2 } = await team(api);
   assert.deepEqual((await api('bootstrap', {})).teams.map(t => t.name),
-    ['Product Team', 'UX/UI Designers', 'iOS Development', 'QA Team', 'Release Managers', 'Other']);
+    ['Product Team', 'UX/UI Designers', 'iOS Development', 'QA Team', 'Release Managers', 'ASO', 'Other']);
   assert.deepEqual(designer.teamIds, ['t_other']); // по умолчанию — Other
   // задача iOS-команды с позицией QA: дизайнер её не видит, пока не в iOS Development
   const t = await api('createTask', { unitId: A.id, title: 'Сборка', departmentId: 'd_qa', teamId: 't_ios' });

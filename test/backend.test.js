@@ -339,6 +339,25 @@ test('наборы задач: «Новое приложение — полны�
   assert.deepEqual((await api('getTaskSets', {})).map(s => s.name), ['Апдейт']);
 });
 
+test('команды внутри юнита: юниты по командам, набор раскидывает задачи по ним, сводка', async () => {
+  const api = await setup();
+  const mod = await api('createUnit', { name: 'Managers', key: 'MOD' });
+  const mvp = await api('createUnit', { name: 'MVP', key: 'MVP' });
+  await api('updateUnit', { id: mvp.id, parentId: mod.id });
+  const made = await api('setupTeamUnits', { unitId: mvp.id, teamIds: ['t_design', 't_ios'] });
+  assert.equal(made.length, 2);
+  assert.equal((await api('setupTeamUnits', { unitId: mvp.id, teamIds: ['t_design'] })).length, 0); // без дублей
+  const app = await api('createTask', { unitId: mod.id, title: 'New App', kind: 'app' });
+  const set = (await api('getTaskSets', {}))[0];
+  const tasks = await api('applyTaskSet', { setId: set.id, parentId: app.id, unitId: mvp.id });
+  const units = (await api('bootstrap', {})).units;
+  const unitOf = t => units.find(u => u.id === t.unitId).name;
+  assert.deepEqual(tasks.map(unitOf), ['UX/UI Designers', 'iOS Development', 'MVP', 'MVP', 'MVP']); // QA/ASO/Release — команд нет
+  const ov = await api('getUnitOverview', { unitId: mvp.id });
+  assert.deepEqual(ov.units.map(u => [u.name, u.tasks.length]), [['UX/UI Designers', 1], ['iOS Development', 1]]);
+  assert.equal(ov.units[0].tasks[0].parent.title, 'New App');
+});
+
 test('неизвестный метод и внутренние ошибки не падают', async () => {
   const { call } = await setup();
   assert.equal((await call('dropTables', {})).ok, false);

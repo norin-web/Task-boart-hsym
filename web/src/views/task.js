@@ -1,6 +1,6 @@
 import {
   S, LS, plural, taskById, personById, activeFields, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDateTime, relTime, addDays,
-  unitById, safeUrl, visibleLinkFields, TASK_KINDS, KIND_COLORS, descendantUnits, whoName, teamById, activeTeams, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, fmtValue,
+  unitById, safeUrl, visibleLinkFields, TASK_KINDS, KIND_COLORS, descendantUnits, childUnits, whoName, teamById, activeTeams, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, fmtValue,
 } from '../state.js';
 import { $, h, append, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, fill } from '../ui.js';
 import { call, send } from '../api.js';
@@ -137,7 +137,9 @@ export function openDecompose(t, kind, onCreated) {
  * Выбранный юнит запоминается.
  */
 export function decomposeMenu(anchor, t, onCreated) {
-  const below = descendantUnits(S.board.unit.id);
+  // «Куда» — юниты уровнем ниже (MVP, а не команды внутри него: набор сам раскладывает задачи по командам)
+  const direct = childUnits(S.board.unit.id);
+  const below = direct.length ? direct : descendantUnits(S.board.unit.id);
   if (!below.length) {
     return toast(`Ниже «${S.board.unit.name}» нет юнитов. У команды: меню юнита → «Входит в…» → ${S.board.unit.name}`, { type: 'error' });
   }

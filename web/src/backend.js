@@ -196,7 +196,7 @@ function cleanFieldValues(obj, keepNulls) {
 
 const unitOut = r => ({
   id: r.id, name: r.name, key: r.key, color: r.color, description: r.description,
-  settings: unitSettings(r.settings), nextNum: r.next_num, order: r.ord, archived: !!r.archived, parentId: r.parent_id || '',
+  settings: unitSettings(r.settings), nextNum: r.next_num, order: r.ord, archived: !!r.archived, parentId: r.parent_id || '', teamId: r.team_id || '',
   archivedAt: r.archived_at || '', createdAt: r.created_at, updatedAt: r.updated_at,
 });
 
@@ -760,6 +760,7 @@ export function createBackend(db, opts = {}) {
       if ('color' in p) upd.color = color(p.color, u.color);
       if ('description' in p) upd.description = str(p.description, 1000);
       if ('settings' in p) upd.settings = storedSettings(p.settings);
+      if ('teamId' in p) upd.team_id = await validTeam(p.teamId);
       if ('parentId' in p) {
         // родитель — другой юнит и не потомок этого (без циклов)
         let pid = str(p.parentId, 40);
@@ -804,6 +805,48 @@ export function createBackend(db, opts = {}) {
       const order = [ceo.id, mod.id, ...rows.map(u => u.id)];
       await methods.reorderUnits({ ids: order });
       return { ceoId: ceo.id, modId: mod.id };
+    },
+
+    /**
+     * Команды внутри юнита одним шагом: по юниту на каждую команду справочника (Design, iOS…), кто в команде — в состав.
+     * Уже созданные (по команде) не дублирует.
+     */
+    async setupTeamUnits(p, ctx) {
+      const u = await findUnit(p.unitId);
+      const kids = await run(T('units').select('team_id').eq('parent_id', u.id));
+      const have = new Set(kids.map(k => k.team_id).filter(Boolean));
+      const ppl = await people();
+      const made = [];
+      for (const tm of (await teams()).filter(t => !t.archived && !have.has(t.id) && (!p.teamIds || p.teamIds.includes(t.id)))) {
+        let key = normKey(tm.name).slice(0, 4);
+        if (!/^[A-Z]/.test(key) || (await keyTaken(key))) key = '';
+        const nu = await methods.createUnit({ name: tm.name, key, color: tm.color, description: `Команда «${tm.name}» в «${u.name}»` }, ctx);
+        await methods.updateUnit({ id: nu.id, parentId: u.id, teamId: tm.id });
+        for (const person of ppl.filter(x => x.active && (x.teamIds || []).includes(tm.id))) {
+          await methods.setMember({ unitId: nu.id, personId: person.id, departmentId: person.positionId || '' });
+        }
+        made.push(nu.id);
+      }
+      return made;
+    },
+
+    /** Сводка юнита с командами внутри: по каждой команде — её задачи с этапом (давние готовые не показываем). */
+    async getUnitOverview(p) {
+      const u = await findUnit(p.unitId);
+      const kids = (await run(T('units').select('*').eq('parent_id', u.id).eq('archived', false).order('ord').order('id'))).map(r => ({ ...r, st: unitSettings(r.settings) }));
+      if (!kids.length) return { units: [] };
+      const tasks = await run(T('tasks').select('*').in('unit_id', kids.map(k => k.id)).eq('archived', false).order('ord').order('id'));
+      const old = new Date(Date.now() - 14 * 864e5).toISOString();
+      const parents = (await treeInfo(tasks, today(p.today))).parents;
+      return {
+        units: kids.map(k => ({
+          id: k.id, name: k.name, key: k.key, color: k.color, teamId: k.team_id || '',
+          tasks: tasks.filter(t => t.unit_id === k.id).map(t => {
+            const col = columnOf(k.st, t.status);
+            return { ...taskOut(t), key: `${k.key}-${t.num}`, statusName: col.name, statusKind: col.kind, statusColor: col.color || '', parent: parents[t.id] || null };
+          }).filter(t => t.statusKind !== 'done' || (t.doneAt || '') >= old),
+        })),
+      };
     },
 
     async reorderUnits(p) {
@@ -1382,10 +1425,13 @@ export function createBackend(db, opts = {}) {
     async applyTaskSet(p, ctx) {
       const set = (await one('task_sets', p.setId)) || fail('Набор не найден', 'NOT_FOUND');
       const parent = await findTask(p.parentId);
+      // задача набора с командой уходит в юнит-команду внутри выбранного юнита (Design в MVP), иначе — в сам юнит
+      const kids = await run(T('units').select('id,team_id').eq('parent_id', String(p.unitId)).eq('archived', false));
+      const byTeam = Object.fromEntries(kids.filter(k => k.team_id).map(k => [k.team_id, k.id]));
       const created = [];
       for (const it of taskSetOut(set).items) {
         created.push(await methods.createTask({
-          unitId: p.unitId, parentId: parent.id, title: `${it.title} · ${parent.title}`, description: it.description,
+          unitId: byTeam[it.teamId] || p.unitId, parentId: parent.id, title: `${it.title} · ${parent.title}`, description: it.description,
           teamId: it.teamId, departmentId: it.positionId, dueDate: it.dueDays >= 0 ? addDaysIso(it.dueDays) : '',
         }, ctx));
       }

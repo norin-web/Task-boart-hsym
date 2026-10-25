@@ -2,13 +2,13 @@ import Sortable from 'sortablejs';
 import {
   S, LS, taskById, personById, activeFields, missingFor, missingNext, priorityOf, byPriority, visibleLinkFields, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder,
   between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, relTime, unitById, emptyCounts, freshFilters,
-  activeDepts, deptById, KINDS, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS, descendantUnits,
+  activeDepts, deptById, KINDS, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS, descendantUnits, childUnits,
 } from '../state.js';
 import { $, h, icon, avatar, topbar, menu, closeMenu, modal, field, confirmDlg, promptDlg, toast, showErr, statusDot, fill } from '../ui.js';
 import { call, send } from '../api.js';
 import { navigate, link } from '../router.js';
 import { updateSidebarCounts, renderUnread } from './sidebar.js';
-import { openTask, closePanel, openCreateTask, duplicateTask, deleteTaskUndoable, refreshPanel, openDecompose, decomposeMenu } from './task.js';
+import { openTask, closePanel, openCreateTask, duplicateTask, deleteTaskUndoable, refreshPanel, openDecompose, decomposeMenu, peekTask } from './task.js';
 
 let sortables = [];
 let quickInput = null;
@@ -39,13 +39,14 @@ export function renderBoardView() {
       teamStack(),
     ], [
       h('div', { class: 'seg', role: 'tablist' },
+        childUnits(u.id).length > 0 && link({ unit: u.id, mode: 'overview' }, { class: mode === 'overview' ? 'on' : '', title: 'Задачи команд внутри юнита' }, icon('layers', 15), h('span', { class: 'btn-label' }, 'Сводка')),
         link({ unit: u.id, mode: 'board' }, { class: mode === 'board' ? 'on' : '', title: 'Доска' }, icon('board', 15), h('span', { class: 'btn-label' }, 'Доска')),
         link({ unit: u.id, mode: 'list' }, { class: mode === 'list' ? 'on' : '', title: 'Список' }, icon('list', 15), h('span', { class: 'btn-label' }, 'Список'))),
       isStaff() && link({ unit: u.id, mode: 'settings' }, { class: 'icon-btn', title: 'Настройки юнита' }, icon('settings', 17)),
       isStaff() && h('button', { class: 'btn primary', onclick: () => openCreateTask(), title: 'Новая задача (C)' }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Задача')),
     ]),
-    filterBar(),
-    h('div', { id: 'tasks', class: mode === 'list' ? 'view-body' : 'board' }));
+    mode !== 'overview' && filterBar(),
+    h('div', { id: 'tasks', class: mode === 'list' || mode === 'overview' ? 'view-body' : 'board' }));
   renderTasks();
 }
 
@@ -64,6 +65,7 @@ function teamStack() {
 export function renderTasks() {
   const el = $('#tasks');
   if (!el || !S.board) return;
+  if (S.route.mode === 'overview') return renderOverview(el);
   if (S.route.mode === 'list') renderList(el);
   else if (S.lanes && isStaff() && (S.lanes !== 'kind' || S.board.tasks.some(t => t.kind))) renderLanes(el);
   else renderColumns(el);
@@ -274,6 +276,41 @@ function renderColumns(board) {
       quickAddEl(col.id, null));
   }), addColumnBtn());
   done();
+}
+
+/**
+ * Сводка юнита с командами внутри (MVP → Design, iOS…): строки — команды, колонки — «Не начато / В работе / Готово»
+ * (у команд колонки свои — показываем их название на карточке). Клик — задача поверх; перетаскивания нет.
+ */
+async function renderOverview(el) {
+  const unitId = S.board.unit.id;
+  fill(el, h('div', { class: 'boot' }, h('span', { class: 'spinner' })));
+  let ov;
+  try { ov = await call('getUnitOverview', { unitId, today: todayStr() }); } catch (e) { return showErr(e); }
+  if (!S.board || S.board.unit.id !== unitId || S.route.mode !== 'overview') return;
+  const kinds = ['todo', 'progress', 'done'];
+  const card = (u, t) => {
+    const p = personById(t.assigneeId);
+    const due = dueInfo(t.dueDate, t.statusKind === 'done');
+    return h('button', { class: 'ov-card' + (t.statusKind === 'done' ? ' done' : ''), onclick: () => peekTask(u.id, t.id) },
+      h('div', { class: 'ov-title' }, t.title),
+      t.parent && h('div', { class: 'card-parent' }, icon('tree', 11), t.parent.title),
+      h('div', { class: 'ov-meta' },
+        h('span', { class: 'chip st-chip', style: { '--sc': t.statusColor || KIND_COLORS[t.statusKind] } }, t.statusName),
+        due && h('span', { class: 'due ' + due.cls }, icon('calendar', 11), due.text),
+        h('span', { class: 'spacer' }), p && avatar(p, 'sm')));
+  };
+  fill(el, h('div', { class: 'ov' },
+    h('div', { class: 'ov-head' }, h('span'), kinds.map(k => h('div', { class: 'ov-col-head', style: { '--cc': KIND_COLORS[k] } }, h('span', { class: 'dot', style: { background: KIND_COLORS[k] } }), KIND_LABELS[k]))),
+    ov.units.map(u => {
+      const open = u.tasks.filter(t => t.statusKind !== 'done').length;
+      return h('div', { class: 'ov-row' },
+        h('div', { class: 'ov-unit' },
+          link({ unit: u.id, mode: 'board' }, { class: 'ov-unit-link', title: 'Доска команды' }, h('span', { class: 'unit-dot', style: { background: u.color, margin: 0 } }), u.name, icon('arrow', 12)),
+          h('span', { class: 'muted' }, open ? open + ' в работе и к выполнению' : 'пусто')),
+        kinds.map(k => h('div', { class: 'ov-cell' }, u.tasks.filter(t => t.statusKind === k).map(t => card(u, t)))));
+    }),
+    !ov.units.length && h('div', { class: 'card-box empty-state' }, 'Команд внутри пока нет')));
 }
 
 /** Дорожки: строки по отделам, внутри — те же колонки. */

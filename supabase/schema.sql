@@ -31,6 +31,8 @@ create table if not exists app_settings (
 -- Иерархия: юнит → дочерние юниты (CEO → модераторы → команды); задача → дочерние задачи (декомпозиция вниз).
 -- kind задачи: '' — обычная, app — приложение, update — апдейт, reject — реджект.
 alter table units add column if not exists parent_id text not null default '';
+-- Юнит-команда внутри юнита (Design в MVP): к какой команде справочника относится — туда наборы задач кладут её задачи
+alter table units add column if not exists team_id text not null default '';
 
 create table if not exists fields (
   id           text primary key,
@@ -376,6 +378,18 @@ begin
   return query select * from people where id = v_id;
 end $$;
 
+-- Команда ASO (2026-10-26) — нужна наборам задач и командам внутри юнита; ASO-задачи набора — ей
+do $$ begin
+  if not exists (select 1 from app_settings where key = 'teamAsoSeeded') then
+    insert into teams (id, name, color, ord) values ('t_aso', 'ASO', '#f59e0b', 6) on conflict (id) do nothing;
+    insert into app_settings (key, value, updated_at) values ('teamAsoSeeded', 'true'::jsonb, '') on conflict (key) do nothing;
+  end if;
+end $$;
+update task_sets s set items = (
+  select jsonb_agg(case when e ->> 'positionId' = 'd_aso' and e ->> 'teamId' = 't_other' then jsonb_set(e, '{teamId}', '"t_aso"') else e end order by i)
+    from jsonb_array_elements(s.items) with ordinality x(e, i))
+ where s.id = 'ts_new_app' and exists (select 1 from jsonb_array_elements(s.items) e where e ->> 'positionId' = 'd_aso' and e ->> 'teamId' = 't_other');
+
 -- Однократно: набор «Новое приложение — полный цикл» (если его удалят — не возвращается).
 do $$ begin
   if not exists (select 1 from app_settings where key = 'taskSetsSeeded') then
@@ -383,7 +397,7 @@ do $$ begin
       {"title": "Дизайн", "teamId": "t_design", "positionId": "d_design", "dueDays": -1, "description": ""},
       {"title": "Разработка iOS", "teamId": "t_ios", "positionId": "d_ios", "dueDays": -1, "description": ""},
       {"title": "Тестирование", "teamId": "t_qa", "positionId": "d_qa", "dueDays": -1, "description": ""},
-      {"title": "ASO: стор и метаданные", "teamId": "t_other", "positionId": "d_aso", "dueDays": -1, "description": ""},
+      {"title": "ASO: стор и метаданные", "teamId": "t_aso", "positionId": "d_aso", "dueDays": -1, "description": ""},
       {"title": "Релиз", "teamId": "t_release", "positionId": "d_release", "dueDays": -1, "description": ""}
     ]'::jsonb, 1) on conflict (id) do nothing;
     insert into app_settings (key, value, updated_at) values ('taskSetsSeeded', 'true'::jsonb, '') on conflict (key) do nothing;

@@ -3,7 +3,7 @@
  *   #/                       главная
  *   #/my                     мои задачи
  *   #/admin[?tab=…]          панель админа (модераторы и супер-админы)
- *   #/u/:unit[/list|/settings][?task=:id]
+ *   #/u/:unit[/list|/settings|/overview][?task=:id]
  */
 import { S, freshFilters, isStaff } from './state.js';
 import { $, h, fill, closeMenu, closeNav, showErr } from './ui.js';
@@ -24,7 +24,7 @@ export function parseLocation() {
   const task = new URLSearchParams(query || '').get('task');
   if (path === '/my') return { view: 'my' };
   if (path === '/admin') return { view: 'admin', tab: new URLSearchParams(query || '').get('tab') || 'overview' };
-  const m = /^\/u\/([\w-]+)(?:\/(list|settings))?$/.exec(path);
+  const m = /^\/u\/([\w-]+)(?:\/(list|settings|overview))?$/.exec(path);
   if (m) return { unit: m[1], mode: m[2] || 'board', task: task || null };
   return { view: 'home' };
 }
