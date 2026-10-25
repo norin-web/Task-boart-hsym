@@ -11,6 +11,19 @@ import { refreshNews } from './views/home.js';
 import { openCreateTask, closeTask } from './views/task.js';
 import { openShortcuts } from './views/people.js';
 
+// «Работать здесь» на экране блокировки — забрать базу у другой вкладки
+let takeOver = false;
+
+/** Локальный режим: приложение уже открыто в другой вкладке этого браузера. */
+function lockedScreen() {
+  fill($('#shell'), h('div', { class: 'boot error', style: { gridColumn: '1 / -1', flexDirection: 'column', gap: '8px', textAlign: 'center' } },
+    h('b', null, 'Tasks уже открыт в другой вкладке'),
+    h('div', { class: 'muted', style: { maxWidth: '420px' } }, 'Локальные данные хранятся в браузере, и две вкладки затирают изменения друг друга. Работайте в одной.'),
+    h('div', { class: 'row', style: { justifyContent: 'center', marginTop: '8px' } },
+      h('button', { class: 'btn primary', onclick: () => { takeOver = true; start(); } }, 'Работать здесь'),
+      h('button', { class: 'btn', onclick: () => location.reload() }, 'Проверить снова'))));
+}
+
 const fatal = text => fill($('#shell'), h('div', { class: 'boot error', style: { gridColumn: '1 / -1', flexDirection: 'column' } },
   h('div', null, text),
   h('div', { class: 'row', style: { justifyContent: 'center', marginTop: '12px' } },
@@ -19,8 +32,9 @@ const fatal = text => fill($('#shell'), h('div', { class: 'boot error', style: {
 
 async function start() {
   try {
-    await initBackend();
+    await initBackend({ takeOver: takeOver });
   } catch (e) {
+    if (e.code === 'LOCKED') return lockedScreen();
     return fatal('Не удалось подключить хранилище: ' + e.message);
   }
   if (mode === 'supabase') {

@@ -29,13 +29,30 @@ async function invoke(name, body) {
   return data;
 }
 
-export async function initBackend() {
+/**
+ * Замок на локальную базу (Web Locks): держим, пока открыта вкладка. takeOver — забрать у другой вкладки;
+ * у неё замок отнимается, и она перезагружается в экран «открыто в другой вкладке», ничего не записав.
+ */
+function holdLocalLock(takeOver) {
+  if (!navigator.locks) return Promise.resolve(true);
+  return new Promise(resolve => {
+    navigator.locks.request('tasks-local-db', takeOver ? { steal: true } : { ifAvailable: true }, lock => {
+      if (!lock) { resolve(false); return null; }
+      resolve(true);
+      return new Promise(() => {}); // держим до закрытия вкладки
+    }).catch(() => location.reload()); // замок забрала другая вкладка
+  });
+}
+
+export async function initBackend(opts = {}) {
   if (mode === 'supabase') {
     const { createClient } = await import('@supabase/supabase-js');
     supabase = createClient(URL_, KEY, { auth: { flowType: 'pkce', persistSession: true, detectSessionInUrl: true } });
     backend = createBackend(supabase, { invoke });
     return;
   }
+  // Локальная база — одна на браузер, и две вкладки затирают данные друг друга: работает только одна
+  if (!(await holdLocalLock(opts.takeOver))) throw new ApiError('Tasks уже открыт в другой вкладке', 'LOCKED');
   const [{ PGlite }, { pgliteClient, AUTH_STUB_SQL, actAs }, schema] = await Promise.all([
     import('@electric-sql/pglite'),
     import('./pglite-client.js'),
