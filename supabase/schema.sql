@@ -436,8 +436,9 @@ begin
   if app_system() then return new; end if;
   if tg_op = 'INSERT' then
     new.created_by := coalesce(my_person_id(), '');
+    -- «нужно при создании» — для задач, которые заводят вручную; дочерние (наборы «Разбить на задачи») уточняют потом
     select string_agg(f.name, ', ' order by f.ord) into missing from fields f
-     where (f.unit_id = new.unit_id or f.unit_id is null) and f.required_on_create and not f.archived
+     where new.parent_id = '' and (f.unit_id = new.unit_id or f.unit_id is null) and f.required_on_create and not f.archived
        and coalesce(new.fields -> f.id, 'null'::jsonb) in ('null'::jsonb, '""'::jsonb, '[]'::jsonb, 'false'::jsonb);
     if missing is not null then
       raise exception 'Заполните при создании: %', missing using errcode = 'P0001';
@@ -470,16 +471,17 @@ begin
               or (f.unit_id is not null
                   and coalesce((select i from cols where id = new.status), 0) >= coalesce((select i from cols where id = f.required_from), 0))
               or (f.unit_id is null
-                  and array_position(array['todo', 'progress', 'done'], (select kind from cols where id = new.status))
+                  and array_position(array['todo', 'progress', 'done'],
+                                     (select case kind when 'live' then 'done' else kind end from cols where id = new.status))
                       >= coalesce(array_position(array['todo', 'progress', 'done'], f.required_from), 1)))
          and coalesce(new.fields -> f.id, 'null'::jsonb) in ('null'::jsonb, '""'::jsonb, '[]'::jsonb, 'false'::jsonb);
       if missing is not null then
         raise exception 'Сначала заполните обязательные поля: %', missing using errcode = 'P0001';
       end if;
-      -- юнит может требовать закрытый чеклист перед «готово»
+      -- юнит может требовать закрытый чеклист перед «готово» (и «в сторе»)
       if exists (select 1 from units u, jsonb_array_elements(u.settings -> 'columns') c
                   where u.id = new.unit_id and coalesce((u.settings ->> 'checklistBeforeDone')::boolean, false)
-                    and c ->> 'id' = new.status and c ->> 'kind' = 'done')
+                    and c ->> 'id' = new.status and c ->> 'kind' in ('done', 'live'))
          and exists (select 1 from jsonb_array_elements(new.checklist) i where not coalesce((i ->> 'done')::boolean, false)) then
         raise exception 'Сначала закройте чеклист: в «готово» нельзя с невыполненными пунктами' using errcode = 'P0001';
       end if;
@@ -545,7 +547,7 @@ create trigger review_assign before update on tasks for each row execute functio
 -- общими полями и ссылками; модераторам — уведомление «handoff». Один раз на пару «задача — юнит».
 -- Передать задачу в юнит ниже (передача вниз юнита): копия как есть — название, описание, срок, чеклист,
 -- общие поля и ссылки; kind app, parent — эта задача. Один раз на пару «задача — юнит». Возвращает id копии.
-create or replace function do_handoff(p_task text) returns text language plpgsql security definer set search_path = public as $$
+create or replace function handoff_copy(p_task text) returns text language plpgsql security definer set search_path = public as $$
 declare
   t tasks;
   target text;
@@ -556,7 +558,6 @@ declare
 begin
   select * into t from tasks where id = p_task;
   if t.id is null then return null; end if;
-  if not app_system() and not is_staff() then raise exception 'Передавать вниз могут администраторы' using errcode = '42501'; end if;
   select coalesce(settings -> 'handoff' ->> 'unitId', '') into target from units where id = t.unit_id;
   if target = '' or not exists (select 1 from units where id = target and not archived) then return null; end if;
   select id into v_id from tasks where parent_id = t.id and unit_id = target limit 1;
@@ -581,14 +582,38 @@ begin
   return v_id;
 end $$;
 
--- Задача пришла в колонку передачи (settings.handoff.column) — передаём вниз.
+-- Передать вниз вручную (кнопка «Передать в …») — только администраторы.
+create or replace function do_handoff(p_task text) returns text language plpgsql security definer set search_path = public as $$
+begin
+  if not app_system() and not is_staff() then raise exception 'Передавать вниз могут администраторы' using errcode = '42501'; end if;
+  return handoff_copy(p_task);
+end $$;
+
+-- Дублировать задачу (администраторы): копия в том же юните и колонке — поля, чеклист, связи; без ревью.
+-- Копия, а не новая задача, поэтому «нужно при создании» не проверяется (значения берутся из оригинала).
+create or replace function duplicate_task(p_task text, p_id text, p_title text, p_ord double precision, p_at text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not app_system() and not is_staff() then raise exception 'Недостаточно прав для этого действия' using errcode = '42501'; end if;
+  if not exists (select 1 from tasks where id = p_task) then raise exception 'Задача не найдена' using errcode = 'P0001'; end if;
+  perform set_config('app.system', 'on', true);
+  insert into tasks (id, unit_id, num, title, description, status, assignee_id, department_id, due_date, ord,
+                     fields, checklist, archived, done_at, created_by, created_at, updated_at, parent_id, kind, team_id)
+  select p_id, unit_id, next_task_num(unit_id), p_title, description, status, assignee_id, department_id, due_date, p_ord,
+         fields, checklist, false, case when done_at <> '' then p_at else '' end, coalesce(my_person_id(), ''), p_at, p_at, parent_id, kind, team_id
+    from tasks where id = p_task;
+  perform set_config('app.system', 'off', true);
+end $$;
+
+-- Задача пришла в колонку передачи (settings.handoff.column) — передаём вниз, кто бы её ни перенёс
+-- (участник тоже: колонку ему разрешает юнит).
 create or replace function handoff_task() returns trigger language plpgsql security definer set search_path = public as $$
 declare ho jsonb;
 begin
   if new.status is not distinct from old.status then return new; end if;
   select settings -> 'handoff' into ho from units where id = new.unit_id;
   if coalesce(ho ->> 'column', '') = '' or new.status <> ho ->> 'column' then return new; end if;
-  perform do_handoff(new.id);
+  perform handoff_copy(new.id);
   return new;
 end $$;
 drop trigger if exists handoff_task on tasks;
@@ -647,7 +672,7 @@ begin
     elsif old.review_from <> '' and new.review_from = '' and new.assignee_id = old.review_from then
       -- ревьюер принял работу (перенёс в «готово») — «закрыта по ревью», иначе — «вернули»
       v_kind := case when exists (select 1 from units u, jsonb_array_elements(u.settings -> 'columns') c
-                                   where u.id = new.unit_id and c ->> 'id' = new.status and c ->> 'kind' = 'done')
+                                   where u.id = new.unit_id and c ->> 'id' = new.status and c ->> 'kind' in ('done', 'live'))
                      then 'approved' else 'returned' end;
     end if;
   end if;
@@ -1013,9 +1038,15 @@ drop policy if exists activity_read on activity;
 create policy activity_read on activity for select to authenticated
   using (is_staff() or exists (select 1 from tasks t where t.id = task_id));
 drop policy if exists activity_insert on activity;
-create policy activity_insert on activity for insert to authenticated with check (true);
+-- Записать в историю можно только про задачу, с которой человек работает (исполнитель, отправивший на ревью, ревьюер);
+-- записи без задачи и про чужие задачи — только администраторы.
+create policy activity_insert on activity for insert to authenticated with check (
+  is_staff() or (task_id <> '' and exists (select 1 from tasks t where t.id = task_id and t.unit_id = activity.unit_id
+    and my_person_id() in (t.assignee_id, t.review_from, t.reviewer_id))));
 
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
 revoke execute on all functions in schema public from public, anon;
 grant execute on all functions in schema public to authenticated;
+-- копия без проверки прав — только для триггера и do_handoff, напрямую не вызывается
+revoke execute on function handoff_copy(text) from authenticated;

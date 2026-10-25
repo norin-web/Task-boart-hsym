@@ -526,3 +526,79 @@ test('вход: привязка профиля по email, первый вхо�
   // неизвестный email при наличии супер-админа — доступа нет
   assert.equal(await api.as({ uid: UID(9), email: 'stranger@x.ru' }, () => api('whoami', {})), null);
 });
+
+test('передача вниз: срабатывает, когда задачу в колонку переносит участник; вручную — только администраторы', async () => {
+  const api = await setup();
+  const { designer, A, B, link, t1 } = await team(api);
+  await api('updateField', { id: link.id, required: false });
+  await api('updateUnit', { id: A.id, settings: { ...A.settings, handoff: { column: 'in_progress', unitId: B.id } } });
+  await api.as(designer, async () => {
+    assert.equal((await api('updateTask', { id: t1.id, patch: { status: 'in_progress' } })).status, 'in_progress');
+    await assert.rejects(() => api('handoffTask', { id: t1.id }), forbidden);
+    await assert.rejects(() => api.pg.query('select handoff_copy($1)', [t1.id]), /permission denied/);
+  });
+  const copies = (await api.pg.query('select title, kind from tasks where unit_id = $1 and parent_id = $2', [B.id, t1.id])).rows;
+  assert.deepEqual(copies, [{ title: 'Макет экрана', kind: 'app' }]);
+});
+
+test('«в сторе» (live) — как «готово»: чеклист, обязательные с «готово», «закрыта по ревью»', async () => {
+  const api = await setup();
+  const { mod, designer, dev, A, link, t1, t2 } = await team(api);
+  await api('updateField', { id: link.id, required: false });
+  const st = (await api('getBoard', { unitId: A.id })).unit.settings;
+  st.columns = st.columns.map(c => (c.kind === 'done' ? { ...c, kind: 'live' } : c));
+  st.columns.splice(2, 0, { id: 'review', name: 'Review', kind: 'progress', color: '' });
+  await api('updateUnit', { id: A.id, settings: { ...st, checklistBeforeDone: true, review: { column: 'review', byPosition: {}, default: designer.id } } });
+  const ch = await api('createField', { global: true, name: 'Канал', type: 'text', required: true, requiredFrom: 'done' });
+  await api('updateTask', { id: t1.id, patch: { checklist: [{ text: 'a' }] } });
+  await api.as(designer, async () => {
+    await assert.rejects(() => api('updateTask', { id: t1.id, patch: { status: 'done' } }), /Канал/);
+    await api('updateTask', { id: t1.id, patch: { fields: { [ch.id]: 'web' } } });
+    await assert.rejects(() => api('updateTask', { id: t1.id, patch: { status: 'done' } }), /чеклист/);
+    await api('updateTask', { id: t1.id, patch: { checklist: [{ text: 'a', done: true }] } });
+    assert.equal((await api('updateTask', { id: t1.id, patch: { status: 'done' } })).status, 'done');
+  });
+  // ревьюер переносит в «в сторе» — исполнителю «закрыта по ревью»
+  await api('updateTask', { id: t2.id, patch: { fields: { [ch.id]: 'web' } } });
+  await api.as(dev, () => api('updateTask', { id: t2.id, patch: { status: 'review' } }));
+  await api.as(designer, () => api('updateTask', { id: t2.id, patch: { status: 'done' } }));
+  await api.as(dev, async () => {
+    const n = (await api('getNotifications', {})).find(x => x.taskId === t2.id);
+    assert.equal(n.kind, 'approved');
+  });
+  assert.ok(mod);
+});
+
+test('«нужно при создании» — для задач вручную; наборы и дубли создаются', async () => {
+  const api = await setup();
+  const { mod, A, B, t1 } = await team(api);
+  const brief = await api('createField', { global: true, name: 'Бриф', type: 'text', requiredOnCreate: true });
+  const set = await api('saveTaskSet', { name: 'S', items: [{ title: 'a' }, { title: 'b' }] });
+  await api.as(mod, async () => {
+    await assert.rejects(() => api('createTask', { unitId: A.id, title: 'Без брифа' }), /Бриф/);
+    assert.equal((await api('applyTaskSet', { setId: set.id, parentId: t1.id, unitId: B.id })).length, 2);
+    const copy = await api('duplicateTask', { id: t1.id });
+    assert.equal(copy.title, 'Макет экрана (копия)');
+    assert.equal(copy.assigneeId, t1.assigneeId);
+    assert.equal(copy.reviewFrom, '');
+    const full = await api('createTask', { unitId: A.id, title: 'С брифом', fields: { [brief.id]: 'есть' } });
+    assert.equal(full.fields[brief.id], 'есть');
+  });
+});
+
+test('история: участник пишет только про свои задачи', async () => {
+  const api = await setup();
+  const { designer, A, link, t1, t2 } = await team(api);
+  await api('updateField', { id: link.id, required: false });
+  await api.as(designer, async () => {
+    const ins = (task, unit) => api.pg.query(
+      `insert into activity (id, unit_id, task_id, action, field, from_val, to_val, at) values ($1, $2, $3, 'update', 'status', '"todo"', '"done"', '2026-01-01')`,
+      ['a_' + Math.random().toString(36).slice(2), unit, task]);
+    await assert.rejects(() => ins(t2.id, A.id), /row-level security/); // чужая задача
+    await assert.rejects(() => ins('', A.id), /row-level security/); // запись юнита
+    await ins(t1.id, A.id); // своя
+    await api('updateTask', { id: t1.id, patch: { status: 'in_progress' } }); // обычный путь пишет историю
+  });
+  const hist = (await api('getTaskExtras', { taskId: t1.id })).activity.filter(a => a.field === 'status');
+  assert.ok(hist.length >= 2);
+});

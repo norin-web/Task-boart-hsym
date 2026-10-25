@@ -1251,13 +1251,13 @@ export function createBackend(db, opts = {}) {
 
     async duplicateTask(p, ctx) {
       const src = await findTask(p.id);
-      const ts = now();
-      const task = {
-        ...src, id: uid('t'), num: await rpc('next_task_num', { p_unit: src.unit_id }), title: str(src.title + ' (копия)', 500),
-        ord: (await maxOrd('tasks', { unit_id: src.unit_id, status: src.status })) + 1,
-        archived: false, done_at: src.done_at ? ts : '', created_by: actor(ctx), created_at: ts, updated_at: ts,
-      };
-      await run(T('tasks').insert(task));
+      const id = uid('t');
+      // копирует база: «нужно при создании» к копии не относится
+      await rpc('duplicate_task', {
+        p_task: src.id, p_id: id, p_title: str(src.title + ' (копия)', 500),
+        p_ord: (await maxOrd('tasks', { unit_id: src.unit_id, status: src.status })) + 1, p_at: now(),
+      });
+      const task = await findTask(id);
       await log([{ unitId: task.unit_id, taskId: task.id, action: 'create', to: task.title }], ctx);
       return { ...taskOut(task), commentCount: 0 };
     },

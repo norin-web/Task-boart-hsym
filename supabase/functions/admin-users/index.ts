@@ -55,6 +55,18 @@ Deno.serve(async req => {
       if (password.length < 8) return json({ error: 'Временный пароль — от 8 символов' }, 400);
       if (access !== 'member' && !isSuper) return json({ error: 'Роли назначает только супер-админ' }, 403);
 
+      // Профиль: указанный, либо свободный с тем же email, либо новый. Права на него проверяем
+      // до любых изменений аккаунта — иначе модератор успел бы сменить пароль чужому аккаунту.
+      let personId: string | null = body.personId || null;
+      if (!personId) {
+        const { data: free } = await admin.from('people').select('id').is('user_id', null).ilike('email', email).limit(1);
+        personId = free && free.length ? free[0].id : null;
+      }
+      if (personId) {
+        const denied = guardTarget(await findPerson(personId));
+        if (denied) return denied;
+      }
+
       // Аккаунт: новый или уже существующий (например, созданный раньше в панели Supabase)
       let userId: string;
       const created = await admin.auth.admin.createUser({ email, password, email_confirm: true });
@@ -64,24 +76,15 @@ Deno.serve(async req => {
         const existing = list?.users.find(u => (u.email || '').toLowerCase() === email);
         if (!existing) return json({ error: 'Аккаунт с этим email уже есть, но найти его не удалось' }, 400);
         const { data: linked } = await admin.from('people').select('id').eq('user_id', existing.id).maybeSingle();
-        if (linked && linked.id !== body.personId) return json({ error: 'Этот email уже привязан к другому человеку' }, 400);
+        if (linked && linked.id !== personId) return json({ error: 'Этот email уже привязан к другому человеку' }, 400);
         await admin.auth.admin.updateUserById(existing.id, { password, ban_duration: 'none' });
         userId = existing.id;
       } else {
         userId = created.data.user.id;
       }
 
-      // Профиль: указанный, либо свободный с тем же email, либо новый
-      let personId: string | null = body.personId || null;
-      if (!personId) {
-        const { data: free } = await admin.from('people').select('id').is('user_id', null).ilike('email', email).limit(1);
-        personId = free && free.length ? free[0].id : null;
-      }
       const fields: Record<string, unknown> = { email, user_id: userId, active: true };
       if (personId) {
-        const target = await findPerson(personId);
-        const denied = guardTarget(target);
-        if (denied) return denied;
         if (body.name) fields.name = String(body.name).slice(0, 80);
         const { error } = await admin.from('people').update(fields).eq('id', personId);
         if (error) return json({ error: error.message }, 400);
