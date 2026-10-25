@@ -1,7 +1,7 @@
 /** Панель админа (#/admin): обзор, люди и доступы, юниты, позиции, журнал. Для модераторов и супер-админов. */
-import { S, me, byOrder, emptyCounts, personById, todayStr, isSuper, ACCESS_LABELS, plural } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill, toast } from '../ui.js';
-import { call } from '../api.js';
+import { S, me, byOrder, emptyCounts, personById, todayStr, isSuper, ACCESS_LABELS, plural, LINK_KINDS, activeDepts } from '../state.js';
+import { $, h, icon, avatar, topbar, showErr, fill, toast, confirmDlg } from '../ui.js';
+import { call, send } from '../api.js';
 import { currentView, link, navigate } from '../router.js';
 import { renderSidebar } from './sidebar.js';
 import { attentionBlock, workloadBlock, roleBadge } from './home.js';
@@ -14,17 +14,19 @@ const TABS = [
   ['people', 'Люди и доступы', 'users'],
   ['units', 'Юниты', 'board'],
   ['positions', 'Позиции', 'layers'],
+  ['card', 'Карточка', 'link', 'super'],
   ['journal', 'Журнал', 'clock'],
 ];
+const tabs = () => TABS.filter(t => t[3] !== 'super' || isSuper());
 
 export async function renderAdmin(tab) {
-  if (tab !== 'trash' && !TABS.some(t => t[0] === tab)) tab = 'overview';
+  if (tab !== 'trash' && !tabs().some(t => t[0] === tab)) tab = 'overview';
   const navTab = tab === 'trash' ? 'units' : tab; // корзина — часть вкладки «Юниты»
   const page = h('div', { class: 'page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
   const key = 'admin:' + tab;
   fill($('#main'),
     topbar([h('h1', null, 'Панель админа'), roleBadge(me())], []),
-    h('nav', { class: 'admin-tabs' }, TABS.map(([id, label, ic]) =>
+    h('nav', { class: 'admin-tabs' }, tabs().map(([id, label, ic]) =>
       link({ view: 'admin', tab: id }, { class: 'admin-tab' + (id === navTab ? ' on' : '') }, icon(ic, 15), label))),
     h('div', { class: 'view-body' }, page));
 
@@ -48,6 +50,7 @@ export async function renderAdmin(tab) {
   switch (tab) {
     case 'people': fill(page, h('div', { class: 'card-box' }, peopleManager({ search: true }))); break;
     case 'positions': fill(page, h('div', { class: 'card-box', style: { maxWidth: '720px' } }, positionsManager())); break;
+    case 'card': fill(page, h('div', { class: 'card-box', style: { maxWidth: '860px' } }, linkFieldsManager())); break;
     case 'units': fill(page, unitsTable(ov)); break;
     case 'trash': fill(page, trashTable(ov)); break;
     case 'journal': fill(page, h('div', { style: { maxWidth: '760px' } }, activityFeed({ limit: 40, title: 'Журнал событий' }))); break;
@@ -165,4 +168,71 @@ function unitsTable(ov) {
             link({ unit: u.id, mode: 'settings' }, { class: 'btn ghost sm' }, 'Настройки'),
             h('button', { class: 'icon-btn sm', title: 'Действия', onclick: e => { e.stopPropagation(); unitMenu(e.currentTarget, u); } }, icon('more'))));
       })))));
+}
+
+/* ---------- карточка: поля-ссылки ---------- */
+
+/** Ссылки в карточке задачи (Figma, GitHub…): общий набор для всех юнитов и кому из позиций их видно. Только супер-админ. */
+function linkFieldsManager() {
+  const box = h('div', { class: 'rows people-list' });
+  const sorted = () => [...S.linkFields].sort(byOrder);
+  const draw = () => fill(box, S.linkFields.length ? sorted().map(row) : h('p', { class: 'muted', style: { padding: '12px 14px', margin: 0 } }, 'Полей нет'));
+  const save = (f, patch) => send('updateLinkField', { id: f.id, ...patch }).then(saved => { Object.assign(f, saved); draw(); }).catch(showErr);
+  const move = (f, dir) => {
+    const list = sorted();
+    const i = list.indexOf(f);
+    list.splice(i + dir, 0, list.splice(i, 1)[0]);
+    list.forEach((x, k) => { x.order = k + 1; });
+    draw();
+    send('reorderLinkFields', { ids: list.map(x => x.id) }).catch(showErr);
+  };
+  const remove = async f => {
+    if (!(await confirmDlg(`Удалить поле «${f.name}» навсегда? Ссылки этого поля пропадут из всех задач. Если поле может понадобиться — лучше скрыть.`, { ok: 'Удалить', danger: true }))) return;
+    await send('deleteLinkField', { id: f.id });
+    S.linkFields = S.linkFields.filter(x => x !== f);
+    draw();
+  };
+  // Кому видно: «Всем» или выбранные позиции; клик по позиции включает/выключает её
+  const audience = f => {
+    const all = !f.positions.length;
+    const toggle = id => save(f, { positions: f.positions.includes(id) ? f.positions.filter(x => x !== id) : [...f.positions, id] });
+    return h('div', { class: 'aud' },
+      h('button', { class: 'aud-chip' + (all ? ' on' : ''), title: 'Видно всем позициям', onclick: () => { if (!all) save(f, { positions: [] }); } }, 'Всем'),
+      activeDepts().map(d => {
+        const on = f.positions.includes(d.id);
+        return h('button', {
+          class: 'aud-chip' + (on ? ' on' : ''), title: on ? 'Скрыть от позиции' : 'Показать позиции',
+          style: on ? { background: `color-mix(in srgb, ${d.color} 16%, transparent)`, color: d.color, borderColor: 'transparent' } : null,
+          onclick: () => toggle(d.id),
+        }, h('span', { class: 'dot', style: { background: d.color } }), d.name);
+      }));
+  };
+  const kindSelect = f => h('select', { class: 'inp sm', value: f.kind, title: 'Иконка', style: { width: 'auto' }, onchange: e => save(f, { kind: e.target.value }) },
+    Object.entries(LINK_KINDS).map(([k, v]) => h('option', { value: k }, v)));
+  const row = (f, i, arr) => h('div', { class: 'lf-row' + (f.archived ? ' inactive' : '') },
+    h('div', { class: 'lf-top' },
+      h('span', { class: 'lf-ic' }, icon(f.kind === 'link' ? 'link' : f.kind, 16)),
+      h('input', { class: 'inp', value: f.name, maxlength: 40, style: { flex: 1 }, onchange: e => { if (e.target.value.trim()) save(f, { name: e.target.value }); } }),
+      kindSelect(f),
+      h('button', { class: 'icon-btn sm', title: 'Выше', disabled: i === 0, onclick: () => move(f, -1) }, '↑'),
+      h('button', { class: 'icon-btn sm', title: 'Ниже', disabled: i === arr.length - 1, onclick: () => move(f, 1) }, '↓'),
+      h('button', { class: 'btn ghost sm', onclick: () => save(f, { archived: !f.archived }) }, f.archived ? 'Показать' : 'Скрыть'),
+      h('button', { class: 'icon-btn sm', title: 'Удалить', onclick: () => remove(f).catch(showErr) }, icon('trash', 14))),
+    h('div', { class: 'lf-aud' }, h('span', { class: 'hint' }, 'Кому видно:'), audience(f)));
+  const name = h('input', { class: 'inp', placeholder: 'Например, Jira или Notion', maxlength: 40 });
+  const add = async () => {
+    if (!name.value.trim()) return name.focus();
+    S.linkFields.push(await send('createLinkField', { name: name.value, kind: 'link' }));
+    name.value = '';
+    draw();
+    name.focus();
+  };
+  name.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); add().catch(showErr); } });
+  draw();
+  return h('div', null,
+    h('h2', { style: { marginTop: 0, fontSize: '16px' } }, 'Ссылки в карточке задачи'),
+    h('p', { class: 'hint', style: { marginTop: 0 } }, 'Общие для всех юнитов. Участник видит поле, только если оно открыто его позиции; администраторы видят всё. Скрытые от позиции ссылки не уходят ей даже в браузер.'),
+    box,
+    h('div', { class: 'sub-title' }, 'Добавить поле'),
+    h('div', { class: 'row', style: { flexWrap: 'nowrap' } }, name, h('button', { class: 'btn primary', onclick: () => add().catch(showErr) }, icon('plus', 14), 'Добавить')));
 }

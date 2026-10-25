@@ -110,6 +110,41 @@ test('обязательное поле с колонки: нужно тольк
   assert.equal(f.requiredFrom, 'done');
 });
 
+test('ссылки: видимость по позициям проверяет база', async () => {
+  const api = await setup();
+  const { admin, mod, designer, dev, A, B, t1, t2 } = await team(api);
+  // Google Drive — только дизайнерам; Figma — всем
+  await api('updateLinkField', { id: 'lf_drive', positions: ['d_design', 'нет-такой'] });
+  await api.as(designer, async () => {
+    await assert.rejects(() => api('updateLinkField', { id: 'lf_drive', positions: [] }), forbidden);
+  });
+  await api.as(mod, async () => {
+    await assert.rejects(() => api('createLinkField', { name: 'Jira' }), forbidden); // набор — только супер-админ
+    await api('setTaskLink', { taskId: t2.id, fieldId: 'lf_drive', url: 'drive.google.com/x' });
+    await api('setTaskLink', { taskId: t2.id, fieldId: 'lf_figma', url: 'https://figma.com/f' });
+    await assert.rejects(() => api('setTaskLink', { taskId: t2.id, fieldId: 'lf_figma', url: 'javascript:alert(1)' }));
+  });
+  const drive = (await api('bootstrap', {})).linkFields.find(f => f.id === 'lf_drive');
+  assert.deepEqual(drive.positions, ['d_design']);
+  await api.as(dev, async () => {
+    const t = (await api('getBoard', { unitId: A.id })).tasks.find(x => x.id === t2.id);
+    assert.deepEqual(t.links, { lf_figma: 'https://figma.com/f' }); // Drive разработчику не уходит вовсе
+    await assert.rejects(() => api('setTaskLink', { taskId: t2.id, fieldId: 'lf_drive', url: 'https://x.ru' }), forbidden);
+    await api('setTaskLink', { taskId: t2.id, fieldId: 'lf_figma', url: '' }); // своя задача, видимое поле
+    const hist = (await api('getTaskExtras', { taskId: t2.id })).activity.filter(a => a.field.startsWith('link:'));
+    assert.ok(hist.length >= 2 && hist.every(a => !/drive\.google|figma\.com/.test(a.toText + a.fromText)));
+  });
+  await api.as(designer, async () => {
+    await assert.rejects(() => api('setTaskLink', { taskId: t2.id, fieldId: 'lf_figma', url: 'https://x.ru' })); // чужая задача
+    await api('setTaskLink', { taskId: t1.id, fieldId: 'lf_drive', url: 'https://drive.google.com/d' });
+  });
+  await api('moveTask', { id: t1.id, unitId: B.id });
+  const moved = (await api('getBoard', { unitId: B.id })).tasks.find(x => x.id === t1.id);
+  assert.equal(moved.links.lf_drive, 'https://drive.google.com/d');
+  await api('deleteLinkField', { id: 'lf_drive' });
+  assert.ok(!(await api('bootstrap', {})).linkFields.some(f => f.id === 'lf_drive'));
+});
+
 test('профили: свой профиль, роли меняет только супер-админ', async () => {
   const api = await setup();
   const { admin, mod, designer, dev } = await team(api);

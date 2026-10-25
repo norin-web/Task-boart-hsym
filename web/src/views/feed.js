@@ -36,6 +36,7 @@ export function activityText(a) {
     case 'delete': return 'удаление задачи «' + a.fromText + '»';
     case 'update':
       if (a.field === 'description') return a.label.toLowerCase() + ' изменено';
+      if (a.field.startsWith('link:')) return 'ссылка ' + a.label + ' ' + a.toText;
       return a.label + ': ' + a.fromText + ' → ' + a.toText;
     default: return a.action;
   }

@@ -54,6 +54,7 @@ async function boot() {
     S.units = d.units;
     S.people = d.people;
     S.departments = d.departments;
+    S.linkFields = d.linkFields || [];
   } catch (e) {
     return fatal('Не удалось загрузить данные: ' + e.message);
   }

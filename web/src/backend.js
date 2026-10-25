@@ -189,6 +189,18 @@ const personOut = r => ({
   access: r.access || 'member', positionId: r.position_id || '', linked: !!r.user_id, prefs: json(r.prefs, {}) || {},
 });
 const deptOut = r => ({ id: r.id, name: r.name, color: r.color, order: r.ord, archived: !!r.archived });
+export const LINK_KINDS = ['figma', 'github', 'drive', 'meta', 'link'];
+const linkFieldOut = r => ({
+  id: r.id, name: r.name, kind: r.kind, positions: json(r.positions, []) || [], order: r.ord, archived: !!r.archived,
+});
+/** Только http(s)-ссылки: javascript: и прочее не сохраняем. */
+const linkUrl = v => {
+  const u = str(v, 2000);
+  if (!u) return '';
+  const full = /^[a-z][\w+.-]*:/i.test(u) ? u : 'https://' + u;
+  if (!/^https?:\/\/[^\s]+$/i.test(full)) fail('Нужна ссылка вида https://…');
+  return full;
+};
 const commentOut = r => ({ id: r.id, taskId: r.task_id, text: r.text, authorId: r.author_id, at: r.at, editedAt: r.edited_at });
 
 /* ================= backend ================= */
@@ -250,6 +262,11 @@ export function createBackend(db, opts = {}) {
     .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
   const departments = async () => (await all(() => T('departments').select('*').order('ord').order('id'))).map(deptOut);
   const unitFields = async unitId => (await all(() => T('fields').select('*').eq('unit_id', unitId).order('ord').order('id'))).map(fieldOut);
+  const linkFields = async () => (await all(() => T('link_fields').select('*').order('ord').order('id'))).map(linkFieldOut);
+  const cleanPositions = async list => {
+    const ids = new Set((await departments()).map(d => d.id));
+    return [...new Set((Array.isArray(list) ? list : []).map(String))].filter(id => ids.has(id));
+  };
   const unitMembers = async unitId => (await all(() => T('unit_members').select('person_id,department_id').eq('unit_id', unitId).order('created_at').order('person_id')))
     .map(m => ({ personId: m.person_id, departmentId: m.department_id }));
 
@@ -354,13 +371,15 @@ export function createBackend(db, opts = {}) {
   async function enrichActivity(rows) {
     if (!rows.length) return [];
     const taskIds = [...new Set(rows.map(r => r.task_id).filter(Boolean))];
-    const [units, peopleRows, fields, depts, tasks] = await Promise.all([
+    const [units, peopleRows, fields, depts, tasks, lfRows] = await Promise.all([
       all(() => T('units').select('id,name,key,color,settings').order('id')),
       all(() => T('people').select('id,name').order('id')),
       all(() => T('fields').select('*').order('id')),
       all(() => T('departments').select('id,name').order('id')),
       taskIds.length ? run(T('tasks').select('id,unit_id,num,title,department_id').in('id', taskIds)) : [],
+      all(() => T('link_fields').select('id,name').order('id')),
     ]);
+    const LF = Object.fromEntries(lfRows.map(r => [r.id, r]));
     const index = list => Object.fromEntries(list.map(r => [r.id, r]));
     const U = index(units), P = index(peopleRows), F = index(fields), D = index(depts), TT = index(tasks);
     const personName = id => (id && P[id] ? P[id].name : '');
@@ -385,6 +404,12 @@ export function createBackend(db, opts = {}) {
         case 'checklist': label = 'Чеклист'; break;
         case 'unit': label = 'Юнит'; break;
         default:
+          // ссылки: в истории только факт изменения, без адреса — история видна шире, чем само поле
+          if (/^link:/.test(a.field)) {
+            const lf = LF[a.field.slice(5)];
+            label = lf ? lf.name : 'Ссылка';
+            fromText = ''; toText = to ? 'добавлена' : 'удалена';
+          }
           if (/^f_/.test(a.field)) {
             const f = F[a.field] ? fieldOut(F[a.field]) : null;
             label = f ? f.name : 'Удалённое поле';
@@ -445,8 +470,8 @@ export function createBackend(db, opts = {}) {
     /* ---------- общие данные, главная, поиск ---------- */
 
     async bootstrap(p) {
-      const [units, ppl, depts] = await Promise.all([unitsWithCounts(today(p.today)), people(), departments()]);
-      return { units: units.map(({ doneWeek, ...u }) => u), people: ppl, departments: depts };
+      const [units, ppl, depts, lf] = await Promise.all([unitsWithCounts(today(p.today)), people(), departments(), linkFields()]);
+      return { units: units.map(({ doneWeek, ...u }) => u), people: ppl, departments: depts, linkFields: lf };
     },
 
     async getHome(p) {
@@ -571,18 +596,21 @@ export function createBackend(db, opts = {}) {
     async getBoard(p) {
       const unit = await findUnit(p.unitId);
       await autoArchive(unit);
-      const [fields, tasks, counts, units, ppl, depts, members] = await Promise.all([
+      const [fields, tasks, counts, units, ppl, depts, members, links] = await Promise.all([
         unitFields(unit.id),
         all(() => T('tasks').select('*').eq('unit_id', unit.id).order('id')),
         rpc('comment_counts', { p_unit: unit.id }),
         all(() => T('units').select('id,name,key,color,archived').order('ord').order('id')),
         people(), departments(), unitMembers(unit.id),
+        all(() => T('task_links').select('task_id,field_id,url').eq('unit_id', unit.id).order('task_id').order('field_id')),
       ]);
       const cc = Object.fromEntries((counts || []).map(c => [c.task_id, Number(c.n)]));
+      const lk = {};
+      links.forEach(l => { (lk[l.task_id] || (lk[l.task_id] = {}))[l.field_id] = l.url; });
       return {
         unit: unitOut(unit),
         fields,
-        tasks: tasks.map(t => ({ ...taskOut(t), commentCount: cc[t.id] || 0 })),
+        tasks: tasks.map(t => ({ ...taskOut(t), commentCount: cc[t.id] || 0, links: lk[t.id] || {} })),
         units: units.map(u => ({ ...u, archived: !!u.archived })),
         people: ppl,
         departments: depts,
@@ -1016,6 +1044,56 @@ export function createBackend(db, opts = {}) {
     },
 
     /** Личные настройки интерфейса: сливаем переданные ключи с сохранёнными. */
+    /* ---------- ссылки в карточке ---------- */
+
+    async createLinkField(p) {
+      const f = {
+        id: uid('lf'), name: req(str(p.name, 40), 'Название'), kind: LINK_KINDS.includes(p.kind) ? p.kind : 'link',
+        positions: await cleanPositions(p.positions), ord: (await maxOrd('link_fields')) + 1, archived: false,
+      };
+      await run(T('link_fields').insert(f));
+      return linkFieldOut(f);
+    },
+
+    async updateLinkField(p) {
+      const f = (await one('link_fields', p.id)) || fail('Поле не найдено', 'NOT_FOUND');
+      const upd = {};
+      if ('name' in p) upd.name = req(str(p.name, 40), 'Название');
+      if ('kind' in p) upd.kind = LINK_KINDS.includes(p.kind) ? p.kind : 'link';
+      if ('positions' in p) upd.positions = await cleanPositions(p.positions);
+      if ('archived' in p) upd.archived = !!p.archived;
+      await updateOne('link_fields', f.id, upd);
+      return linkFieldOut({ ...f, ...upd });
+    },
+
+    async reorderLinkFields(p) {
+      await Promise.all((p.ids || []).map((id, i) => run(T('link_fields').update({ ord: i + 1 }).eq('id', String(id)))));
+      return linkFields();
+    },
+
+    /** Удалить поле навсегда — вместе со всеми ссылками в задачах. */
+    async deleteLinkField(p) {
+      const gone = await run(T('link_fields').delete().eq('id', String(p.id ?? '')).select('id'));
+      if (!gone.length) fail('Недостаточно прав для этого действия', 'FORBIDDEN');
+      return true;
+    },
+
+    /** Поставить или убрать (url = '') ссылку в задаче. */
+    async setTaskLink(p, ctx) {
+      const t = await findTask(p.taskId);
+      const fieldId = str(p.fieldId, 40);
+      const url = linkUrl(p.url);
+      const had = (await run(T('task_links').select('url').eq('task_id', t.id).eq('field_id', fieldId).maybeSingle()));
+      if (url) {
+        await run(T('task_links').upsert({ task_id: t.id, field_id: fieldId, unit_id: t.unit_id, url, updated_at: now() }, { onConflict: 'task_id,field_id' }));
+      } else if (had) {
+        const gone = await run(T('task_links').delete().eq('task_id', t.id).eq('field_id', fieldId).select('task_id'));
+        if (!gone.length) fail('Недостаточно прав для этого действия', 'FORBIDDEN');
+      }
+      if ((had ? had.url : '') !== url) await log([{ unitId: t.unit_id, taskId: t.id, action: 'update', field: 'link:' + fieldId, to: url ? 1 : null }], ctx);
+      return url;
+    },
+
     async setMyPrefs(p) {
       const person = (await one('people', p.personId)) || fail('Человек не найден', 'NOT_FOUND');
       const prefs = { ...(json(person.prefs, {}) || {}), ...(p.prefs || {}) };

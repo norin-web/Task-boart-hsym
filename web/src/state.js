@@ -24,6 +24,7 @@ export const S = {
   units: [],
   people: [],
   departments: [],          // общий справочник отделов
+  linkFields: [],           // поля-ссылки карточки (Figma, GitHub…), общие для всех юнитов
   session: null,            // сессия Supabase Auth (в локальном режиме — null)
   board: null,              // { unit, fields, tasks, units, people }
   route: { view: 'home' },  // { view } | { unit, mode: board|list|settings, task }
@@ -59,6 +60,11 @@ export const colById = id => columns().find(c => c.id === id) || columns()[0];
 export const colName = s => { const c = colById(s); return c ? c.name : s; };
 export const colColor = c => (c ? c.color || KIND_COLORS[c.kind] : KIND_COLORS.todo);
 export const taskDone = t => (t.statusKind ? t.statusKind === 'done' : (colById(t.status) || {}).kind === 'done');
+
+export const LINK_KINDS = { figma: 'Figma', github: 'GitHub', drive: 'Google Drive', meta: 'Metadata', link: 'Ссылка' };
+/** Поля-ссылки, которые видит текущий человек (то же правило проверяет база). */
+export const visibleLinkFields = () => S.linkFields.filter(f => !f.archived
+  && (isStaff() || !f.positions.length || (me() && f.positions.includes(me().positionId)))).sort(byOrder);
 
 export const activeDepts = () => S.departments.filter(d => !d.archived).sort(byOrder);
 export const deptById = id => (id ? S.departments.find(d => d.id === id) : null);

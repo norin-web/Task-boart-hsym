@@ -1,6 +1,6 @@
 import {
   S, LS, taskById, personById, activeFields, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDateTime, relTime, addDays,
-  unitById, safeUrl, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, fmtValue,
+  unitById, safeUrl, visibleLinkFields, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, fmtValue,
 } from '../state.js';
 import { $, h, append, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, fill } from '../ui.js';
 import { call, send } from '../api.js';
@@ -89,6 +89,7 @@ function buildPanel(t) {
     title,
     !editable && h('div', { class: 'readonly-note' }, icon('alert', 14), 'Только просмотр: менять можно свои задачи'),
     !B.description.hidden && descriptionBlock(t, B.description.label, editable),
+    linksBlock(t, editable),
     checklistBlock(t, editable),
     discussionBlock(t, editable));
 
@@ -137,6 +138,56 @@ function copyLink(t) {
   const url = location.origin + location.pathname + '#/u/' + t.unitId + '?task=' + t.id;
   (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject())
     .then(() => toast('Ссылка на ' + taskKey(t) + ' скопирована'), () => toast(url));
+}
+
+/* ---------- ссылки ---------- */
+
+/** Ссылки задачи (Figma, GitHub…): только поля, открытые позиции человека. Правка на месте: карандаш → поле → Enter. */
+function linksBlock(t, editable) {
+  const fields = visibleLinkFields();
+  const links = t.links || (t.links = {});
+  if (!fields.length || (!editable && !fields.some(f => links[f.id]))) return null;
+  const box = h('div', { class: 'block' });
+  const row = f => {
+    const url = links[f.id] || '';
+    const el = h('div', { class: 'link-row' });
+    const view = () => fill(el,
+      h('span', { class: 'lf-ic' }, icon(f.kind === 'link' ? 'link' : f.kind, 15)),
+      h('span', { class: 'link-name' }, f.name),
+      url
+        ? h('a', { class: 'link-url', href: safeUrl(url), target: '_blank', rel: 'noopener noreferrer', title: url }, url.replace(/^https?:\/\/(www\.)?/, ''))
+        : editable ? h('button', { class: 'link-add', onclick: edit }, 'Добавить ссылку') : h('span', { class: 'muted' }, '—'),
+      editable && url && h('button', { class: 'icon-btn sm link-edit', title: 'Изменить', onclick: edit }, icon('edit', 13)));
+    const edit = () => {
+      const inp = h('input', { class: 'inp sm', value: url, placeholder: 'https://…', maxlength: 2000 });
+      const save = async () => {
+        const v = inp.value.trim();
+        if (v === url) return view();
+        inp.disabled = true;
+        try {
+          const saved = await send('setTaskLink', { taskId: t.id, fieldId: f.id, url: v });
+          if (saved) links[f.id] = saved; else delete links[f.id];
+          if (!S.peek) renderTasks();
+          fill(box, ...draw());
+        } catch (e) { inp.disabled = false; showErr(e); }
+      };
+      inp.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); save(); }
+        if (e.key === 'Escape') { e.stopPropagation(); view(); }
+      });
+      fill(el, h('span', { class: 'lf-ic' }, icon(f.kind === 'link' ? 'link' : f.kind, 15)), h('span', { class: 'link-name' }, f.name), inp,
+        h('button', { class: 'btn primary sm', onclick: save }, 'OK'),
+        h('button', { class: 'btn ghost sm', onclick: view }, 'Отмена'));
+      inp.focus();
+      inp.select();
+    };
+    view();
+    return el;
+  };
+  const draw = () => [h('div', { class: 'block-title' }, 'Ссылки'),
+    h('div', { class: 'links' }, fields.filter(f => editable || links[f.id]).map(row))];
+  fill(box, ...draw());
+  return box;
 }
 
 /* ---------- описание ---------- */

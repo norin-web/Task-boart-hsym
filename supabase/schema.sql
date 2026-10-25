@@ -122,6 +122,32 @@ create table if not exists activity (
 create index if not exists activity_task on activity(task_id);
 create index if not exists activity_at on activity(at);
 
+-- Ссылки в карточке задачи (Figma, GitHub, Google Drive…): общий набор для всех юнитов, настраивает супер-админ.
+-- positions — каким позициям участников видно поле ('[]' — всем); администраторы видят всё.
+create table if not exists link_fields (
+  id        text primary key,
+  name      text not null,
+  kind      text not null default 'link',
+  positions jsonb not null default '[]',
+  ord       double precision not null default 0,
+  archived  boolean not null default false
+);
+insert into link_fields (id, name, kind, ord) values
+  ('lf_figma', 'Figma', 'figma', 1), ('lf_github', 'GitHub', 'github', 2),
+  ('lf_drive', 'Google Drive', 'drive', 3), ('lf_meta', 'Metadata', 'meta', 4)
+on conflict (id) do nothing;
+
+-- Значения ссылок — отдельной таблицей, чтобы скрытое поле не уходило в браузер вместе с задачей.
+create table if not exists task_links (
+  task_id    text not null references tasks(id) on delete cascade,
+  field_id   text not null references link_fields(id) on delete cascade,
+  unit_id    text not null default '',
+  url        text not null,
+  updated_at text not null default '',
+  primary key (task_id, field_id)
+);
+create index if not exists task_links_unit on task_links(unit_id);
+
 -- ---------- атомарные операции ----------
 
 -- Следующий номер задачи в юните (DEV-1, DEV-2…) без гонок.
@@ -191,6 +217,13 @@ language sql stable security definer set search_path = public as $$
   select exists (select 1 from unit_members where unit_id = p_unit and person_id = my_person_id());
 $$;
 
+-- Видно ли вошедшему поле-ссылку: администраторам — все, участнику — поля для всех и для его позиции.
+create or replace function can_see_link(p_field text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select is_staff() or exists (select 1 from link_fields f where f.id = p_field and not f.archived
+    and (f.positions = '[]'::jsonb or (my_position() <> '' and f.positions ? my_position())));
+$$;
+
 -- Кто я: профиль вошедшего. Первый вход по email привязывает существующий профиль с тем же email.
 -- Если в сервисе ещё нет ни одного супер-админа, вошедший становится супер-админом.
 create or replace function whoami() returns setof people
@@ -257,6 +290,16 @@ begin
 end $$;
 drop trigger if exists guard_tasks on tasks;
 create trigger guard_tasks before insert or update on tasks for each row execute function guard_tasks();
+
+-- Задачу перенесли в другой юнит — её ссылки переезжают вместе с ней.
+create or replace function sync_link_unit() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  update task_links set unit_id = new.unit_id where task_id = new.id;
+  return new;
+end $$;
+drop trigger if exists sync_link_unit on tasks;
+create trigger sync_link_unit after update of unit_id on tasks for each row
+  when (new.unit_id is distinct from old.unit_id) execute function sync_link_unit();
 
 -- Автор комментария и записи в истории — всегда вошедший пользователь, а не то, что прислал браузер.
 create or replace function guard_author() returns trigger language plpgsql set search_path = public as $$
@@ -380,7 +423,7 @@ alter function comment_counts(text) set search_path = public;
 do $$
 declare t text;
 begin
-  foreach t in array array['units', 'fields', 'people', 'departments', 'unit_members', 'tasks', 'comments', 'activity'] loop
+  foreach t in array array['units', 'fields', 'people', 'departments', 'unit_members', 'tasks', 'comments', 'activity', 'link_fields', 'task_links'] loop
     execute format('alter table %I enable row level security', t);
     execute format('drop policy if exists team_all on %I', t);
   end loop;
@@ -434,6 +477,22 @@ create policy tasks_delete on tasks for delete to authenticated using (is_staff(
 drop policy if exists tasks_update on tasks;
 create policy tasks_update on tasks for update to authenticated
   using (is_staff() or assignee_id = my_person_id()) with check (is_staff() or assignee_id = my_person_id());
+
+-- Поля-ссылки: названия видны всем (без значений), меняет набор только супер-админ.
+drop policy if exists link_fields_read on link_fields;
+create policy link_fields_read on link_fields for select to authenticated using (true);
+drop policy if exists link_fields_write on link_fields;
+create policy link_fields_write on link_fields for all to authenticated using (is_superadmin()) with check (is_superadmin());
+
+-- Ссылки задачи: видны, если видна задача и поле разрешено позиции; менять — администраторы и исполнитель.
+drop policy if exists task_links_read on task_links;
+create policy task_links_read on task_links for select to authenticated
+  using (can_see_link(field_id) and exists (select 1 from tasks t where t.id = task_id));
+drop policy if exists task_links_write on task_links;
+create policy task_links_write on task_links for all to authenticated
+  using (can_see_link(field_id) and exists (select 1 from tasks t where t.id = task_id and (is_staff() or t.assignee_id = my_person_id())))
+  with check (can_see_link(field_id) and exists (select 1 from tasks t where t.id = task_id and t.unit_id = task_links.unit_id
+    and (is_staff() or t.assignee_id = my_person_id())));
 
 -- Комментарии: видны вместе с задачей; писать — администраторы и исполнитель; править/удалять — автор или администратор.
 drop policy if exists comments_read on comments;

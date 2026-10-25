@@ -1,6 +1,6 @@
 import Sortable from 'sortablejs';
 import {
-  S, LS, taskById, personById, activeFields, missingFor, missingNext, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder,
+  S, LS, taskById, personById, activeFields, missingFor, missingNext, visibleLinkFields, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder,
   between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, relTime, unitById, emptyCounts, freshFilters,
   activeDepts, deptById, KINDS, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask,
 } from '../state.js';
@@ -328,6 +328,10 @@ function taskCard(t, inLane) {
     due && h('span', { class: 'due ' + due.cls, title: due.hint }, icon('calendar', 12), due.text),
     cl.length > 0 && h('span', { class: 'meta-ic' + (clDone === cl.length ? ' done' : ''), title: 'Чеклист' }, icon('checklist', 13), clDone + '/' + cl.length),
     t.commentCount > 0 && h('span', { class: 'meta-ic', title: 'Комментарии' }, icon('message', 13), t.commentCount),
+    ...visibleLinkFields().filter(f => t.links && t.links[f.id]).map(f => h('a', {
+      class: 'meta-ic card-link', href: safeUrl(t.links[f.id]), target: '_blank', rel: 'noopener noreferrer', title: f.name,
+      onclick: e => e.stopPropagation(), onpointerdown: e => e.stopPropagation(),
+    }, icon(f.kind === 'link' ? 'link' : f.kind, 13))),
   ].filter(Boolean);
 
   return h('article', {
