@@ -122,7 +122,7 @@ async function seed() {
     { id: 'store', name: 'Ревью стора', kind: 'progress', color: '#8b5cf6' }, { id: 'live', name: 'Релиз', kind: 'done' },
   ] } });
   await api('updateUnit', { id: ceo.id, settings: { ...ceo.settings,
-    columns: [{ id: 'idea', name: 'Идея', kind: 'todo' }, { id: 'go', name: 'В работу', kind: 'progress' }, { id: 'launched', name: 'Запущено', kind: 'done' }],
+    columns: [{ id: 'idea', name: 'To Do', kind: 'todo' }, { id: 'go', name: 'In Progress', kind: 'progress' }, { id: 'launched', name: 'In Store', kind: 'live' }],
     handoff: { column: 'go', unitId: mod.id } } });
   for (const key of ['ALP', 'BRV', 'CHR']) await api('updateUnit', { id: U[key].id, parentId: mod.id });
 

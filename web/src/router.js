@@ -6,7 +6,7 @@
  *   #/admin[?tab=…]          панель админа (модераторы и супер-админы)
  *   #/u/:unit[/list|/settings|/overview][?task=:id]
  */
-import { S, freshFilters, isStaff } from './state.js';
+import { S, isStaff, loadBoardView } from './state.js';
 import { $, h, fill, closeMenu, closeNav, showErr } from './ui.js';
 import { renderSidebar } from './views/sidebar.js';
 import { renderHome } from './views/home.js';
@@ -103,7 +103,7 @@ export async function render() {
   if (!S.board || S.board.unit.id !== r.unit) {
     rendered = 'loading';
     closePanel();
-    S.filters = freshFilters();
+    loadBoardView(r.unit); // фильтры и дорожки этой доски — как оставили
     fill($('#main'), h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
     try {
       await loadBoard(r.unit);

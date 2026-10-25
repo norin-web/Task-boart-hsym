@@ -1,7 +1,7 @@
 import Sortable from 'sortablejs';
 import {
   S, LS, taskById, personById, activeFields, missingFor, missingNext, priorityOf, byPriority, visibleLinkFields, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder,
-  between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, relTime, unitById, emptyCounts, freshFilters,
+  between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, relTime, unitById, emptyCounts, freshFilters, saveBoardView,
   activeDepts, deptById, KINDS, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS, descendantUnits, childUnits,
 } from '../state.js';
 import { $, h, icon, avatar, topbar, menu, closeMenu, modal, field, confirmDlg, promptDlg, toast, showErr, statusDot, fill } from '../ui.js';
@@ -67,6 +67,7 @@ function teamStack() {
 export function renderTasks() {
   const el = $('#tasks');
   if (!el || !S.board) return;
+  saveBoardView(S.board.unit.id); // любое изменение фильтров/дорожек приходит сюда — запоминаем для этой доски
   if (S.route.mode === 'overview') return renderOverview(el);
   if (S.route.mode === 'list') renderList(el);
   else if (S.lanes && isStaff() && (S.lanes !== 'kind' || S.board.tasks.some(t => t.kind))) renderLanes(el);
@@ -141,11 +142,11 @@ function filterRest() {
     h('button', { class: 'fchip' + (f.archived ? ' on' : ''), onclick: () => set('archived', !f.archived) }, icon('archive', 13), 'Архив'),
     S.route.mode === 'board' && isStaff() && !B.department.hidden && h('button', {
       class: 'fchip' + (S.lanes === true ? ' on' : ''), title: 'Разложить задачи по отделам',
-      onclick: () => { S.lanes = S.lanes === true ? false : true; LS.set('lanes', S.lanes); renderTasks(); drawFilterRest(); },
+      onclick: () => { S.lanes = S.lanes === true ? false : true; renderTasks(); drawFilterRest(); },
     }, icon('rows', 13), 'По отделам'),
     S.route.mode === 'board' && isStaff() && S.board.tasks.some(t => t.kind) && h('button', {
       class: 'fchip' + (S.lanes === 'kind' ? ' on' : ''), title: 'Приложения, апдейты, реджекты — отдельными дорожками',
-      onclick: () => { S.lanes = S.lanes === 'kind' ? false : 'kind'; LS.set('lanes', S.lanes); renderTasks(); drawFilterRest(); },
+      onclick: () => { S.lanes = S.lanes === 'kind' ? false : 'kind'; renderTasks(); drawFilterRest(); },
     }, icon('app', 13), 'По типу'),
     active && h('button', {
       class: 'link-btn', onclick: () => {

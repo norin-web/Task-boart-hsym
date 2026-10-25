@@ -32,6 +32,18 @@ export const LS = {
   set(k, v) { try { localStorage.setItem('tm.' + k, JSON.stringify(v)); } catch { /* ignore */ } },
 };
 
+/** Вид доски (фильтры и дорожки) — у каждого юнита свой, запоминается в браузере; поиск по тексту не храним. */
+export function loadBoardView(unitId) {
+  const v = (LS.get('boardView', {}) || {})[unitId] || {};
+  S.filters = { ...freshFilters(), ...(v.filters || {}), q: '' };
+  S.lanes = v.lanes === true || v.lanes === 'kind' ? v.lanes : false;
+}
+export function saveBoardView(unitId) {
+  const all = LS.get('boardView', {}) || {};
+  const { q, ...filters } = S.filters;
+  all[unitId] = { filters, lanes: S.lanes };
+  LS.set('boardView', all);
+}
 export const freshFilters = () => ({ q: '', assignees: [], depts: [], overdue: false, archived: false, opts: [] });
 
 export const S = {
@@ -47,7 +59,7 @@ export const S = {
   route: { view: 'home' },  // { view } | { unit, mode: board|list|settings, task }
   filters: freshFilters(),
   quick: { status: null, dept: null, text: '' },
-  lanes: LS.get('lanes', false),   // дорожки по отделам на доске
+  lanes: false,             // дорожки на доске: false | true (по отделам) | 'kind' (по типу) — у каждой доски свои
   collapsedLanes: new Set(),
   panelTaskId: null,
   listSort: { key: 'status', dir: 1 },
