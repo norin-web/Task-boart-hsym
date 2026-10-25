@@ -50,6 +50,17 @@ export async function initBackend() {
   backend = createBackend(pgliteClient(pg));
 }
 
+/** Локальный режим: стереть базу этого браузера (все юниты, задачи, люди) и начать с нуля. */
+export async function resetLocalData() {
+  if (mode !== 'local') return;
+  if (pg) await pg.close();
+  await new Promise(resolve => {
+    const q = indexedDB.deleteDatabase('/pglite/tasks-local');
+    q.onsuccess = q.onerror = q.onblocked = () => resolve();
+  });
+  Object.keys(localStorage).filter(k => k.startsWith('tm.') && k !== 'tm.theme').forEach(k => localStorage.removeItem(k));
+}
+
 export function getBackend() {
   if (!backend) throw new Error('Хранилище ещё не готово');
   return backend;

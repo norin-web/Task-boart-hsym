@@ -169,6 +169,19 @@ function trashTable(settings) {
 }
 
 /** Юниты: простые строки с подписями; клик — карточка юнита справа, поверх страницы (никуда не уводит). */
+/** Иерархия одним нажатием: «Компания» → «Модераторы» → текущие юниты, передача вниз включена. */
+async function setupHierarchy() {
+  const names = S.units.filter(u => !u.archived).map(u => u.name).join(', ');
+  const ok = await confirmDlg(`Создать «Компания» (приложения) и «Модераторы» (жизненный цикл)${names ? ' и поставить под Модераторов: ' + names : ''}? Задача Компании в «В работу» будет сама появляться у Модераторов. Уровни потом меняются в настройках юнитов.`,
+    { ok: 'Собрать', title: 'Структура юнитов' });
+  if (!ok) return;
+  try {
+    await send('setupHierarchy', {});
+    toast('Структура готова: Компания → Модераторы → команды');
+    renderAdmin('units');
+  } catch (e) { showErr(e); }
+}
+
 function unitsTable(ov) {
   const units = S.units.filter(u => !u.archived).sort(byOrder);
   const noTeam = new Set(ov ? ov.unitsNoTeam : []);
@@ -192,7 +205,9 @@ function unitsTable(ov) {
   }) : h('p', { class: 'muted', style: { padding: '12px 14px', margin: 0 } }, 'Юнитов пока нет'));
   draw();
   return h('div', null,
-    h('div', { class: 'section-head' }, unitsSwitch(false), h('button', { class: 'btn primary sm', onclick: openCreateUnit }, icon('plus', 14), 'Юнит')),
+    h('div', { class: 'section-head' }, unitsSwitch(false), h('div', { class: 'row', style: { gap: '6px' } },
+      !units.some(u => u.parentId) && h('button', { class: 'btn sm', title: 'Компания → Модераторы → ваши юниты, передача «В работу» → Модераторы', onclick: setupHierarchy }, icon('tree', 14), 'Собрать структуру'),
+      h('button', { class: 'btn primary sm', onclick: openCreateUnit }, icon('plus', 14), 'Юнит'))),
     list);
 }
 

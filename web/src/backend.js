@@ -778,6 +778,31 @@ export function createBackend(db, opts = {}) {
       return unitOut(await findUnit(u.id));
     },
 
+    /**
+     * Собрать иерархию одним шагом: «Компания» (приложения) → «Модераторы» (жизненный цикл) → все текущие верхние юниты.
+     * Передача вниз: Компания «В работу» → Модераторы. Повторный вызов ничего не дублирует.
+     */
+    async setupHierarchy(p, ctx) {
+      const rows = await all(() => T('units').select('*').eq('archived', false).order('ord').order('id'));
+      if (rows.some(u => u.parent_id)) fail('Структура уже есть — уровни юнитов меняются в их настройках («Входит в»)');
+      const top = rows.filter(u => !u.parent_id);
+      const ceo = await methods.createUnit({ name: 'Компания', key: (await keyTaken('CEO')) ? '' : 'CEO', color: '#0f766e', description: 'Приложения компании: идея → в работу → запущено' }, ctx);
+      const mod = await methods.createUnit({ name: 'Модераторы', key: (await keyTaken('MOD')) ? '' : 'MOD', color: '#7c3aed', description: 'Жизненный цикл приложений, апдейты и реджекты' }, ctx);
+      await methods.updateUnit({ id: mod.id, parentId: ceo.id, settings: { ...mod.settings, columns: [
+        { id: 'brief', name: 'Бриф', kind: 'todo' }, { id: 'design', name: 'Дизайн', kind: 'progress', color: '#ec4899' },
+        { id: 'dev', name: 'Разработка', kind: 'progress', color: '#3b82f6' }, { id: 'qa', name: 'Тест', kind: 'progress', color: '#f59e0b' },
+        { id: 'store', name: 'Ревью стора', kind: 'progress', color: '#8b5cf6' }, { id: 'live', name: 'Релиз', kind: 'done' },
+      ] } });
+      await methods.updateUnit({ id: ceo.id, settings: { ...ceo.settings,
+        columns: [{ id: 'idea', name: 'Идея', kind: 'todo' }, { id: 'go', name: 'В работу', kind: 'progress' }, { id: 'launched', name: 'Запущено', kind: 'done' }],
+        handoff: { column: 'go', unitId: mod.id } } });
+      for (const u of top) await methods.updateUnit({ id: u.id, parentId: mod.id });
+      // Компания и Модераторы — первыми в меню
+      const order = [ceo.id, mod.id, ...rows.map(u => u.id)];
+      await methods.reorderUnits({ ids: order });
+      return { ceoId: ceo.id, modId: mod.id };
+    },
+
     async reorderUnits(p) {
       await Promise.all((p.ids || []).map((id, i) => run(T('units').update({ ord: i + 1 }).eq('id', String(id)))));
       return true;

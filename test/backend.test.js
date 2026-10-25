@@ -306,6 +306,18 @@ test('иерархия: юниты по уровням, передача вни�
   assert.deepEqual(up.ancestors.map(a => a.title), ['Новое приложение', 'Новое приложение', 'Апдейт 1.1']);
 });
 
+test('структура одним шагом: Компания → Модераторы → юниты', async () => {
+  const api = await setup();
+  const a = await api('createUnit', { name: 'A', key: 'AAA' });
+  const r = await api('setupHierarchy', {});
+  const units = (await api('bootstrap', {})).units;
+  const by = id => units.find(u => u.id === id);
+  assert.equal(by(r.modId).parentId, r.ceoId);
+  assert.equal(by(a.id).parentId, r.modId);
+  assert.equal(by(r.ceoId).settings.handoff.unitId, r.modId);
+  await assert.rejects(() => api('setupHierarchy', {}), /уже есть/);
+});
+
 test('неизвестный метод и внутренние ошибки не падают', async () => {
   const { call } = await setup();
   assert.equal((await call('dropTables', {})).ok, false);

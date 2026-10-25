@@ -1,13 +1,13 @@
 import Sortable from 'sortablejs';
 import { S, LS, byOrder, openCount, me, unitById, isStaff, ACCESS_LABELS } from '../state.js';
-import { $, h, icon, avatar, menu, showErr, fill } from '../ui.js';
+import { $, h, icon, avatar, menu, showErr, fill, confirmDlg } from '../ui.js';
 import { send } from '../api.js';
 import { link } from '../router.js';
 import { openPalette } from './palette.js';
 import { openCreateUnit } from './units.js';
 import { openPeople, openActAs, openDepartments, openMyProfile } from './people.js';
 import { personCaption } from './my.js';
-import { mode, supabase } from '../data.js';
+import { mode, supabase, resetLocalData } from '../data.js';
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 
@@ -107,6 +107,8 @@ function meMenu(anchor) {
     email && { title: email },
     { label: 'Мой профиль', icon: 'user', action: openMyProfile },
     mode === 'local' && { label: 'Войти как…', icon: 'users', action: openActAs },
+    mode === 'local' && { sep: true },
+    mode === 'local' && { label: 'Очистить локальную базу', icon: 'trash', danger: true, action: resetLocal },
     mode === 'supabase' && { sep: true },
     mode === 'supabase' && { label: 'Выйти', icon: 'back', action: () => supabase.auth.signOut() },
   ]);
@@ -121,4 +123,14 @@ export function updateSidebarCounts() {
     c.textContent = openCount(u) || '';
     c.classList.toggle('warn', !!(u.counts && u.counts.overdue));
   });
+}
+
+/** Локальный режим: всё стереть и начать с пустой тулзы (вход — «Администратор», супер-админ). */
+async function resetLocal() {
+  const ok = await confirmDlg('Стереть все локальные данные этого браузера: юниты, задачи, людей, настройки? Начнётся пустая тулза. Отменить нельзя.',
+    { ok: 'Стереть всё', danger: true, title: 'Очистить локальную базу' });
+  if (!ok) return;
+  await resetLocalData();
+  location.hash = '#/';
+  location.reload();
 }
