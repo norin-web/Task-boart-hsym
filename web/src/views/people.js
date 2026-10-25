@@ -73,7 +73,8 @@ export function openPeople() {
         : h('span', { style: { width: '24px' } }));
   };
 
-  const draw = () => fill(box, S.people.length ? S.people.map(row) : h('p', { class: 'muted', style: { padding: '12px 14px', margin: 0 } }, 'Пока никого нет'));
+  const head = h('div', { class: 'access-row access-head' }, h('span'), h('span', null, 'Человек'), h('span', null, 'Позиция'), h('span', null, 'Роль'), h('span'));
+  const draw = () => fill(box, S.people.length ? [head, ...S.people.map(row)] : h('p', { class: 'muted', style: { padding: '12px 14px', margin: 0 } }, 'Пока никого нет'));
 
   // Добавить человека
   const name = h('input', { class: 'inp', placeholder: 'Имя и фамилия' });
