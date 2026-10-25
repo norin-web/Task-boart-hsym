@@ -613,3 +613,9 @@ body.login-page #shell { display: block; }
 @media (max-width: 640px) { .att-row { flex-wrap: wrap; } .att-row .inp.sm { max-width: none; flex: 1; } .load-tasks:not(:empty) { padding-left: 0; } }
 .att-info > .att-head > .i:first-child { color: var(--st-progress); }
 .att-who small { font-weight: 400; }
+.stat.clickable { text-align: left; color: var(--text); font: inherit; cursor: pointer; width: 100%; }
+.stat.clickable:hover, .stat.clickable.on { border-color: var(--border-strong); background: var(--surface-2); }
+.menu.menu-tasks { width: min(560px, calc(100vw - 16px)); }
+.st-row { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto; gap: 8px; font-size: 13px; }
+.st-row .ft-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-who { font-size: 12px; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

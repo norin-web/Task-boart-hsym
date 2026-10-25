@@ -1,9 +1,9 @@
 import { S, greeting, me, personById, plural, emptyCounts, isStaff, deptById, todayStr, fmtDate, activeDepts, ACCESS_LABELS } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill, toast } from '../ui.js';
+import { $, h, icon, avatar, topbar, showErr, fill, toast, menu, closeMenu } from '../ui.js';
 import { call } from '../api.js';
 import { currentView, link, navigate, taskLink } from '../router.js';
 import { renderSidebar } from './sidebar.js';
-import { openCreateTask } from './task.js';
+import { openCreateTask, peekTask } from './task.js';
 import { openCreateUnit, unitMenu } from './units.js';
 import { mode } from '../data.js';
 import { taskGroups, loadMyTasks, personCaption } from './my.js';
@@ -64,10 +64,10 @@ export async function renderHome() {
         h('button', { class: 'btn', onclick: () => navigate({ view: 'my' }) }, icon('user', 15), 'Мои задачи'))),
 
     h('div', { class: 'stats' },
-      stat('К выполнению', st.todo, 'circle', 'var(--st-todo)'),
-      stat('В работе', st.in_progress, 'progress', 'var(--st-progress)'),
-      stat('Просрочено', st.overdue, 'alert', 'var(--danger)'),
-      stat('Сделано за 7 дней', st.doneWeek, 'done', 'var(--st-done)')),
+      stat('К выполнению', st.todo, 'circle', 'var(--st-todo)', t => t.statusKind === 'todo'),
+      stat('В работе', st.in_progress, 'progress', 'var(--st-progress)', t => t.statusKind === 'progress'),
+      stat('Просрочено', st.overdue, 'alert', 'var(--danger)', t => t.statusKind !== 'done' && t.dueDate && t.dueDate < todayStr()),
+      stat('Сделано за 7 дней', st.doneWeek, 'done', 'var(--st-done)', t => t.statusKind === 'done' && t.doneAt && t.doneAt >= weekAgo())),
 
     h('div', { class: 'home-grid' },
       h('div', { class: 'home-col' },
@@ -276,10 +276,41 @@ function summary(st) {
   return open + ' ' + plural(open, ['открытая задача', 'открытые задачи', 'открытых задач']) + (st.overdue ? ', ' + st.overdue + ' просрочено' : '');
 }
 
-function stat(label, value, ic, color) {
-  return h('div', { class: 'stat' },
+const weekAgo = () => new Date(Date.now() - 7 * 864e5).toISOString();
+
+/** Плашка статистики. С фильтром — кликабельна: список задач в выпадающем меню, каждая открывается поверх. */
+function stat(label, value, ic, color, pick) {
+  const open = async e => {
+    const anchor = e.currentTarget;
+    if (anchor.classList.contains('on')) return closeMenu();
+    let tasks;
+    try { tasks = (await call('queryTasks', { limit: 500 })).filter(pick); } catch (err) { return showErr(err); }
+    const byDue = (a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999');
+    tasks.sort(label.startsWith('Сделано') ? (a, b) => (b.doneAt || '').localeCompare(a.doneAt || '') : byDue);
+    const m = menu(anchor, [
+      { title: label + ' · ' + tasks.length },
+      ...(tasks.length ? tasks.map(statRow) : [h('div', { class: 'muted', style: { padding: '8px 10px' } }, 'Задач нет')]),
+    ]);
+    m.classList.add('menu-tasks');
+    m.style.left = Math.max(8, Math.min(window.innerWidth - m.offsetWidth - 8, anchor.getBoundingClientRect().left)) + 'px';
+    anchor.classList.add('on');
+    new MutationObserver((_, obs) => { if (!m.isConnected) { anchor.classList.remove('on'); obs.disconnect(); } }).observe(document.body, { childList: true });
+  };
+  return h(pick ? 'button' : 'div', { class: 'stat' + (pick ? ' clickable' : ''), onclick: pick && value ? open : null },
     h('div', { class: 'stat-ic', style: { background: `color-mix(in srgb, ${color} 14%, transparent)`, color } }, icon(ic, 18)),
     h('div', null, h('div', { class: 'stat-val' }, value), h('div', { class: 'stat-label' }, label)));
+}
+
+function statRow(t) {
+  const due = t.dueDate && fmtDate(t.dueDate);
+  const late = t.statusKind !== 'done' && t.dueDate && t.dueDate < todayStr();
+  const p = personById(t.assigneeId);
+  return h('button', { class: 'menu-item st-row', onclick: () => { closeMenu(); peekTask(t.unit.id, t.id); } },
+    h('span', { class: 'unit-dot', style: { background: t.unit.color, margin: 0 } }),
+    h('span', { class: 'key-badge' }, t.key),
+    h('span', { class: 'ft-title' }, t.title),
+    h('span', { class: 'muted st-who' }, p ? p.name : 'без исполнителя'),
+    due && h('span', { class: 'due' + (late ? ' overdue' : '') }, due));
 }
 
 function unitCard(u) {
