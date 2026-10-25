@@ -356,6 +356,13 @@ test('команды внутри юнита: юниты по командам, 
   const ov = await api('getUnitOverview', { unitId: mvp.id });
   assert.deepEqual(ov.units.map(u => [u.name, u.tasks.length]), [['UX/UI Designers', 1], ['iOS Development', 1]]);
   assert.equal(ov.units[0].tasks[0].parent.title, 'New App');
+  // новый дизайнер сам попадает в юнит своей команды, сменил команду — переезжает
+  const design = units.find(u => u.name === 'UX/UI Designers'), ios = units.find(u => u.name === 'iOS Development');
+  const p = await api('createPerson', { name: 'Дизайнер', positionId: 'd_design', teamIds: ['t_design'] });
+  const membersOf = async u => (await api('getBoard', { unitId: u.id })).members.map(m => m.personId);
+  assert.ok((await membersOf(design)).includes(p.id));
+  await api('updatePerson', { id: p.id, teamIds: ['t_ios'] });
+  assert.ok(!(await membersOf(design)).includes(p.id) && (await membersOf(ios)).includes(p.id));
 });
 
 test('неизвестный метод и внутренние ошибки не падают', async () => {

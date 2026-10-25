@@ -357,6 +357,23 @@ export function createBackend(db, opts = {}) {
     return { stats, parents };
   }
 
+  /**
+   * Состав юнитов-команд следует за командами человека: в команде — в составе её юнитов (Design в MVP), вышел — убираем.
+   * before — прежние команды (при создании пусто).
+   */
+  async function syncTeamUnits(personId, teamIds, before, positionId) {
+    const touched = [...new Set([...teamIds, ...before])];
+    if (!touched.length) return;
+    const units = await run(T('units').select('id,team_id').in('team_id', touched).eq('archived', false));
+    for (const u of units) {
+      if (teamIds.includes(u.team_id) && !before.includes(u.team_id)) {
+        await run(T('unit_members').upsert({ unit_id: u.id, person_id: personId, department_id: positionId || '', created_at: now() }, { onConflict: 'unit_id,person_id' }));
+      } else if (!teamIds.includes(u.team_id)) {
+        await run(T('unit_members').delete().eq('unit_id', u.id).eq('person_id', personId));
+      }
+    }
+  }
+
   const unitFields = async unitId => [...await globalFields(), ...await ownFields(unitId)];
   const taskSets = async () => (await all(() => T('task_sets').select('*').order('ord').order('id'))).map(taskSetOut);
   const templates = async () => (await all(() => T('task_templates').select('*').order('ord').order('id'))).map(templateOut);
@@ -1290,6 +1307,7 @@ export function createBackend(db, opts = {}) {
       // команды: указанные или Other (если такая есть)
       person.team_ids = 'teamIds' in p ? await cleanTeams(p.teamIds) : (await validTeam('t_other')) ? ['t_other'] : [];
       await run(T('people').insert(person));
+      await syncTeamUnits(person.id, person.team_ids, [], person.position_id);
       return personOut(person);
     },
 
@@ -1534,6 +1552,7 @@ export function createBackend(db, opts = {}) {
       if ('extraPositionIds' in p) upd.extra_positions = (await cleanPositions(p.extraPositionIds)).filter(id => id !== main);
       else if (upd.position_id) upd.extra_positions = (json(person.extra_positions, []) || []).filter(id => id !== main);
       await updateOne('people', person.id, upd);
+      if (upd.team_ids) await syncTeamUnits(person.id, upd.team_ids, json(person.team_ids, []) || [], upd.position_id || person.position_id);
       // Отключённый человек не должен входить: блокируем аккаунт на сервере
       if ('active' in p && invoke && person.user_id && !!p.active !== !!person.active) {
         await invoke('admin-users', { action: 'active', personId: person.id, active: !!p.active });
