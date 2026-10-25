@@ -226,6 +226,44 @@ test('несколько позиций, приоритет — только а�
   assert.ok(!b.members.some(m => m.personId === dev.id));
 });
 
+test('ревью: автоназначение ревьюера по позиции и возврат исполнителю', async () => {
+  const api = await setup();
+  const { mod, designer, dev, A, link, t1, t2 } = await team(api);
+  await api('updateField', { id: link.id, required: false });
+  const st = (await api('getBoard', { unitId: A.id })).unit.settings;
+  st.columns.splice(2, 0, { id: 'review', name: 'Review', kind: 'progress', color: '' });
+  delete st.review;
+  let u = await api('updateUnit', { id: A.id, settings: st });
+  assert.equal(u.settings.review.column, 'review'); // угадали по названию
+  u = await api('updateUnit', { id: A.id, settings: { ...u.settings, review: { column: 'review', byPosition: { d_ios: designer.id }, default: mod.id } } });
+  assert.deepEqual(u.settings.review.byPosition, { d_ios: designer.id });
+
+  // разработчик сдаёт задачу на ревью → она на дизайнере (ревьюер iOS), разработчик её по-прежнему видит
+  await api.as(dev, async () => {
+    const t = await api('updateTask', { id: t2.id, patch: { status: 'review' } });
+    assert.equal(t.assigneeId, designer.id);
+    assert.equal(t.reviewFrom, dev.id);
+    assert.equal(t.departmentId, 'd_ios'); // позиция задачи не меняется
+    assert.ok((await api('getBoard', { unitId: A.id })).tasks.some(x => x.id === t2.id));
+    await assert.rejects(() => api('updateTask', { id: t2.id, patch: { status: 'done' } }), forbidden); // теперь не его
+  });
+  // ревьюер — обычный участник другой позиции: видит, двигает, задача возвращается исполнителю
+  await api.as(designer, async () => {
+    assert.equal((await api('getNotifications', {})).filter(n => n.taskId === t2.id).length, 1);
+    const t = await api('updateTask', { id: t2.id, patch: { status: 'done' } });
+    assert.equal(t.assigneeId, dev.id);
+    assert.equal(t.reviewFrom, '');
+    assert.equal(t.reviewerId, designer.id);
+  });
+  const hist = (await api('getTaskExtras', { taskId: t2.id })).activity.filter(a => a.field === 'assigneeId').map(a => a.toText);
+  assert.deepEqual(hist, ['Разраб', 'Дизайнер']);
+
+  // дизайнерская задача → ревьюер по умолчанию (модератор); свой же ревьюер — без переназначения
+  await api.as(designer, async () => {
+    assert.equal((await api('updateTask', { id: t1.id, patch: { status: 'review' } })).assigneeId, mod.id);
+  });
+});
+
 test('профили: свой профиль, роли меняет только супер-админ', async () => {
   const api = await setup();
   const { admin, mod, designer, dev } = await team(api);

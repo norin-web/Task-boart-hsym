@@ -107,6 +107,9 @@ create table if not exists tasks (
   updated_at    text not null
 );
 create index if not exists tasks_unit on tasks(unit_id);
+-- Ревью: кто был исполнителем до колонки ревью (ему задача вернётся) и кто ревьюер
+alter table tasks add column if not exists review_from text not null default '';
+alter table tasks add column if not exists reviewer_id text not null default '';
 create index if not exists tasks_assignee on tasks(assignee_id);
 
 create table if not exists comments (
@@ -354,6 +357,46 @@ drop trigger if exists sync_link_unit on tasks;
 create trigger sync_link_unit after update of unit_id on tasks for each row
   when (new.unit_id is distinct from old.unit_id) execute function sync_link_unit();
 
+-- Автоназначение на ревью (настройка юнита settings.review: column, byPosition {позиция → человек}, default):
+-- задача пришла в колонку ревью — исполнителем становится ревьюер её позиции (или ревьюер по умолчанию),
+-- прежний исполнитель запоминается; ушла из ревью — возвращается ему (если исполнителя не сменили вручную).
+-- Срабатывает после guard_tasks (по алфавиту), поэтому участнику не нужно право менять исполнителя.
+create or replace function review_assign() returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  rv jsonb;
+  col text;
+  who text;
+  at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+begin
+  if new.status is not distinct from old.status then return new; end if;
+  select settings -> 'review' into rv from units where id = new.unit_id;
+  col := coalesce(rv ->> 'column', '');
+  if col = '' then return new; end if;
+  if new.status = col then
+    who := coalesce(nullif(rv -> 'byPosition' ->> new.department_id, ''), rv ->> 'default', '');
+    if who <> '' and who <> new.assignee_id and new.assignee_id = old.assignee_id
+       and exists (select 1 from people where id = who and active) then
+      new.review_from := old.assignee_id;
+      new.reviewer_id := who;
+      new.assignee_id := who;
+      insert into activity (id, unit_id, task_id, action, field, from_val, to_val, at)
+      values ('a_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), new.unit_id, new.id, 'update', 'assigneeId',
+              to_jsonb(old.assignee_id)::text, to_jsonb(who)::text, at_);
+    end if;
+  elsif old.status = col and new.review_from <> '' then
+    if new.assignee_id = old.assignee_id and exists (select 1 from people where id = new.review_from and active) then
+      new.assignee_id := new.review_from;
+      insert into activity (id, unit_id, task_id, action, field, from_val, to_val, at)
+      values ('a_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), new.unit_id, new.id, 'update', 'assigneeId',
+              to_jsonb(old.assignee_id)::text, to_jsonb(new.review_from)::text, at_);
+    end if;
+    new.review_from := '';
+  end if;
+  return new;
+end $$;
+drop trigger if exists review_assign on tasks;
+create trigger review_assign before update on tasks for each row execute function review_assign();
+
 -- Назначили задачу — уведомление новому исполнителю (кроме случая, когда назначил сам себя);
 -- у прежнего исполнителя непрочитанное уведомление по этой задаче снимается.
 create or replace function notify_assignee() returns trigger language plpgsql security definer set search_path = public as $$
@@ -372,7 +415,7 @@ begin
   return new;
 end $$;
 drop trigger if exists notify_assignee on tasks;
-create trigger notify_assignee after insert or update of assignee_id on tasks for each row execute function notify_assignee();
+create trigger notify_assignee after insert or update on tasks for each row execute function notify_assignee();
 
 -- Отметка «был в приложении» — только себе.
 create or replace function touch_presence() returns void language sql security definer set search_path = public as $$
@@ -574,15 +617,17 @@ create policy people_update on people for update to authenticated
 -- Задачи: администраторы — все; участник — задачи своей позиции в своих юнитах и свои задачи.
 drop policy if exists tasks_read on tasks;
 create policy tasks_read on tasks for select to authenticated using (
-  is_staff() or assignee_id = my_person_id()
+  is_staff() or assignee_id = my_person_id() or review_from = my_person_id() or reviewer_id = my_person_id()
   or (is_unit_member(unit_id) and department_id <> '' and department_id = any(my_positions())));
 drop policy if exists tasks_insert on tasks;
 create policy tasks_insert on tasks for insert to authenticated with check (is_staff());
 drop policy if exists tasks_delete on tasks;
 create policy tasks_delete on tasks for delete to authenticated using (is_staff());
 drop policy if exists tasks_update on tasks;
+-- После переноса в ревью/из ревью исполнитель меняется триггером — строка остаётся «своей» через review_from / reviewer_id
 create policy tasks_update on tasks for update to authenticated
-  using (is_staff() or assignee_id = my_person_id()) with check (is_staff() or assignee_id = my_person_id());
+  using (is_staff() or assignee_id = my_person_id())
+  with check (is_staff() or assignee_id = my_person_id() or review_from = my_person_id() or reviewer_id = my_person_id());
 
 -- Поля-ссылки: названия видны всем (без значений), меняет набор только супер-админ.
 drop policy if exists link_fields_read on link_fields;

@@ -83,6 +83,21 @@ function normKey(k) {
   return /^[A-Z][A-Z0-9]{1,9}$/.test(k) ? k : '';
 }
 
+/**
+ * Ревью: колонка ревью и ревьюеры (по позиции задачи и по умолчанию). Пока не настраивали — колонка с названием
+ * Review/Ревью, ревьюеров нет (автоназначение выключено). Применяет триггер review_assign в базе.
+ */
+function reviewSettings(r, columns) {
+  const ids = new Set(columns.map(c => c.id));
+  const guess = (columns.find(c => /review|ревью/i.test(c.name)) || {}).id || '';
+  const column = r && typeof r === 'object' && 'column' in r ? (ids.has(r.column) ? r.column : '') : guess;
+  const byPosition = {};
+  for (const [k, v] of Object.entries((r && r.byPosition) || {})) {
+    if (/^[\w-]{1,40}$/.test(k) && v) byPosition[k] = str(v, 40);
+  }
+  return { column, byPosition, default: str(r && r.default, 40) };
+}
+
 export function unitSettings(raw) {
   const s = json(raw, {}) || {};
   const d = defaultSettings();
@@ -110,6 +125,7 @@ export function unitSettings(raw) {
     })),
     autoArchiveDays: Math.max(0, Math.min(365, parseInt(s.autoArchiveDays, 10) || 0)),
     hideDoneDays: Math.max(0, Math.min(365, parseInt(s.hideDoneDays, 10) || 0)),
+    review: reviewSettings(s.review, columns),
   };
 }
 
@@ -120,6 +136,7 @@ function storedSettings(s) {
     builtins: Object.fromEntries(Object.entries(full.builtins).map(([k, v]) => [k, { label: v.label, hidden: v.hidden }])),
     autoArchiveDays: full.autoArchiveDays,
     hideDoneDays: full.hideDoneDays,
+    review: full.review,
   };
 }
 
@@ -178,6 +195,7 @@ const taskOut = r => ({
   id: r.id, unitId: r.unit_id, num: r.num, title: r.title, description: r.description, status: r.status,
   assigneeId: r.assignee_id, departmentId: r.department_id || '', dueDate: r.due_date, order: r.ord,
   fields: json(r.fields, {}), checklist: json(r.checklist, []), archived: !!r.archived, doneAt: r.done_at,
+  reviewFrom: r.review_from || '', reviewerId: r.reviewer_id || '',
   createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at,
 });
 
@@ -832,13 +850,14 @@ export function createBackend(db, opts = {}) {
           title: t.title, description: t.description, status: t.status, assignee_id: t.assignee_id, department_id: t.department_id,
           due_date: t.due_date, ord: t.ord, fields: t.fields, checklist: t.checklist, archived: t.archived,
           done_at: t.done_at, updated_at: t.updated_at,
-        }).eq('id', t.id).eq('updated_at', r.updated_at).select('id'));
+        }).eq('id', t.id).eq('updated_at', r.updated_at).select('*'));
         if (!saved.length) {
           const fresh = await one('tasks', t.id);
           if (fresh && fresh.updated_at !== r.updated_at) fail('Задачу уже изменил кто-то другой', 'CONFLICT', taskOut(fresh));
           fail('Недостаточно прав: менять можно только свои задачи', 'FORBIDDEN');
         }
         await log(logs, ctx);
+        return taskOut(saved[0]); // из базы: исполнителя мог сменить триггер ревью
       }
       return taskOut(t);
     },

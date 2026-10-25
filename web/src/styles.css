@@ -853,3 +853,12 @@ table.tasks tr.grp-more .old-done { width: auto; margin: 0; }
 .card.prio-top::before { width: 4px; }
 .prio-ic { display: inline-flex; color: var(--prio); margin-top: 1px; flex: none; }
 .card.done.prio-top { background: var(--surface); border-color: var(--border); }
+
+/* настройки юнита → ревью */
+.rv-list { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.rv-row { display: flex; align-items: center; gap: 12px; padding: 6px 10px; }
+.rv-list .rv-row + .rv-row { border-top: 1px solid var(--border); }
+.rv-label { display: inline-flex; align-items: center; gap: 8px; width: 170px; flex: none; font-size: 13px; }
+.rv-row .inp { flex: 1; max-width: 320px; }
+.rv-default { background: var(--surface-2); }
+@media (max-width: 560px) { .rv-label { width: 120px; } }

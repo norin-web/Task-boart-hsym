@@ -50,6 +50,7 @@ export function renderSettings() {
         st.builtins[r.k].label = r.label.value.trim() || st.builtins[r.k].label;
         if (r.hidden) st.builtins[r.k].hidden = r.hidden.checked;
       });
+      st.review = u.settings.review; // ревью сохраняется отдельно, сразу — не затираем
       const saved = await send('updateUnit', { id: u.id, name: name.value, key: key.value, color: color.value(), description: desc.value, settings: st, statusRemap: remap });
       if (orphans.length) orphans.forEach(t => { t.status = remap[t.status]; });
       Object.assign(u, saved);
@@ -107,6 +108,7 @@ export function renderSettings() {
         h('div', { class: 'row', style: { marginTop: '16px' } }, h('button', { class: 'btn primary', onclick: e => save(e.currentTarget) }, 'Сохранить изменения'))),
 
       teamSection(),
+      reviewSection(),
 
       h('section', { class: 'card-box' },
         h('div', { class: 'section-head', style: { marginBottom: '4px' } },
@@ -284,6 +286,56 @@ function columnsEditor(initial) {
 }
 
 /* ---------- команда ---------- */
+
+/* ---------- ревью: автоназначение ---------- */
+
+/**
+ * Колонка ревью и ревьюеры: задача пришла в колонку — назначается ревьюер её позиции (или по умолчанию);
+ * ушла дальше или назад — возвращается тому, кто делал её до ревью. Сохраняется сразу.
+ */
+function reviewSection() {
+  const u = S.board.unit;
+  const box = h('section', { class: 'card-box' });
+  const save = async review => {
+    const saved = await send('updateUnit', { id: u.id, settings: { ...u.settings, review } });
+    u.settings = saved.settings;
+    draw();
+    toast('Ревью: сохранено');
+  };
+  const people = () => S.people.filter(p => p.active).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  const personSelect = (value, onChange, empty) => h('select', { class: 'inp', value: value || '', onchange: e => onChange(e.target.value) },
+    h('option', { value: '' }, empty),
+    people().map(p => h('option', { value: p.id }, p.name)));
+  const draw = () => {
+    const r = u.settings.review || { column: '', byPosition: {}, default: '' };
+    const on = !!r.column;
+    const set = patch => save({ ...r, ...patch }).catch(showErr);
+    fill(box,
+      h('div', { class: 'section-head', style: { marginBottom: '4px' } }, h('h2', null, 'Ревью')),
+      h('p', { class: 'hint' }, 'Задача пришла в колонку ревью — исполнителем становится ревьюер её позиции. Ревьюер перенёс её дальше или вернул — задача снова на том, кто её делал. Ревьюером может быть любой человек.'),
+      h('div', { class: 'rv-row' },
+        h('span', { class: 'rv-label' }, 'Колонка ревью'),
+        h('select', { class: 'inp', value: r.column, onchange: e => set({ column: e.target.value }) },
+          h('option', { value: '' }, 'Выключено'),
+          u.settings.columns.map(c => h('option', { value: c.id }, c.name)))),
+      on && [
+        h('div', { class: 'sub-title' }, 'Ревьюеры по позиции задачи'),
+        h('div', { class: 'rv-list' },
+          activeDepts().map(d => h('div', { class: 'rv-row' },
+            h('span', { class: 'rv-label' }, h('span', { class: 'dot', style: { background: d.color } }), d.name),
+            personSelect(r.byPosition[d.id], v => {
+              const byPosition = { ...r.byPosition };
+              if (v) byPosition[d.id] = v; else delete byPosition[d.id];
+              set({ byPosition });
+            }, '— по умолчанию —'))),
+          h('div', { class: 'rv-row rv-default' },
+            h('span', { class: 'rv-label' }, 'По умолчанию'),
+            personSelect(r.default, v => set({ default: v }), '— без ревьюера —'))),
+      ]);
+  };
+  draw();
+  return box;
+}
 
 function teamSection() {
   const b = S.board;
