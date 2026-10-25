@@ -122,6 +122,17 @@ function buildPanel(t) {
 }
 
 /**
+ * Дочерняя карточка задачи доски: апдейт / реджект (kind, в этом же юните) или задача в юнит ниже ('' — «Разбить на задачи»).
+ */
+export function openDecompose(t, kind, onCreated) {
+  const u = S.board.unit;
+  const below = descendantUnits(u.id);
+  const parent = { id: t.id, title: t.title, key: taskKey(t) };
+  if (kind) return openCreateTask({ unitId: u.id, kind, parent, title: t.kind === 'app' ? TASK_KINDS[kind].label + ' · ' + t.title : '', onCreated });
+  return openCreateTask({ unitId: below[0] ? below[0].id : u.id, unitIds: below.length ? [...below.map(x => x.id), u.id] : null, parent, onCreated });
+}
+
+/**
  * Связи по иерархии: откуда задача (цепочка родителей), этап приложения, апдейты/реджекты и подзадачи ниже.
  * Админам — «+ Апдейт», «+ Реджект» (у приложения) и «Разбить на задачи» в юниты ниже.
  */
@@ -129,14 +140,11 @@ function treeBlock(t, staff) {
   const box = h('div', { class: 'tree-block' });
   const u = S.board.unit;
   const below = descendantUnits(u.id);
-  const brief = { id: t.id, title: t.title, key: taskKey(t) };
   const reload = () => load();
-  const add = (kind, unitId, unitIds) => openCreateTask({ unitId, unitIds, kind, parent: brief, title: kind && t.kind === 'app' ? TASK_KINDS[kind].label + ' · ' + t.title : '', onCreated: reload });
   const actions = staff && h('div', { class: 'tree-actions' },
-    t.kind === 'app' && h('button', { class: 'btn sm', onclick: () => add('update', u.id) }, icon('refresh', 13), 'Апдейт'),
-    t.kind === 'app' && h('button', { class: 'btn sm', onclick: () => add('reject', u.id) }, icon('alert', 13), 'Реджект'),
-    h('button', { class: 'btn sm', onclick: () => add('', below[0] ? below[0].id : u.id, below.length ? [...below.map(x => x.id), u.id] : null) },
-      icon('tree', 13), below.length ? 'Разбить на задачи' : 'Подзадача'));
+    t.kind === 'app' && h('button', { class: 'btn sm', onclick: () => openDecompose(t, 'update', reload) }, icon('refresh', 13), 'Апдейт'),
+    t.kind === 'app' && h('button', { class: 'btn sm', onclick: () => openDecompose(t, 'reject', reload) }, icon('alert', 13), 'Реджект'),
+    h('button', { class: 'btn sm', onclick: () => openDecompose(t, '', reload) }, icon('tree', 13), below.length ? 'Разбить на задачи' : 'Подзадача'));
 
   const kindTag = k => TASK_KINDS[k] && h('span', { class: 'kind-tag', style: { '--kc': TASK_KINDS[k].color } }, TASK_KINDS[k].short);
   const statusChip = n => h('span', { class: 'chip st-chip', style: { '--sc': n.statusColor || KIND_COLORS[n.statusKind] } }, n.statusName);
@@ -657,7 +665,7 @@ export function openCreateTask(opts = {}) {
     return openCreateUnit();
   }
   // opts.parent — родительская задача (декомпозиция вниз), opts.kind — тип карточки, opts.unitIds — из каких юнитов выбирать
-  const pool = opts.unitIds ? units.filter(u => opts.unitIds.includes(u.id)) : units;
+  const pool = opts.unitIds ? opts.unitIds.map(id => units.find(u => u.id === id)).filter(Boolean) : units; // юниты ниже — первыми
   const inBoard = !!S.board && (!opts.unitId || opts.unitId === S.board.unit.id) && !opts.unitIds;
   // С дашборда для конкретного человека — его первый юнит, исполнитель и позиция подставлены
   const ownUnit = opts.assigneeId && units.find(u => (u.members || []).includes(opts.assigneeId));

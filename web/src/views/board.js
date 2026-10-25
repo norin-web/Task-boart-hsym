@@ -2,13 +2,13 @@ import Sortable from 'sortablejs';
 import {
   S, LS, taskById, personById, activeFields, missingFor, missingNext, priorityOf, byPriority, visibleLinkFields, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder,
   between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, relTime, unitById, emptyCounts, freshFilters,
-  activeDepts, deptById, KINDS, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS,
+  activeDepts, deptById, KINDS, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS, descendantUnits,
 } from '../state.js';
 import { $, h, icon, avatar, topbar, menu, closeMenu, modal, field, confirmDlg, promptDlg, toast, showErr, statusDot, fill } from '../ui.js';
 import { call, send } from '../api.js';
 import { navigate, link } from '../router.js';
 import { updateSidebarCounts, renderUnread } from './sidebar.js';
-import { openTask, closePanel, openCreateTask, duplicateTask, deleteTaskUndoable, refreshPanel } from './task.js';
+import { openTask, closePanel, openCreateTask, duplicateTask, deleteTaskUndoable, refreshPanel, openDecompose } from './task.js';
 
 let sortables = [];
 let quickInput = null;
@@ -396,7 +396,8 @@ function taskCard(t, inLane) {
   // Тип карточки и «↑ родитель» (иерархия): откуда пришла задача
   (TASK_KINDS[t.kind] || t.parent) && h('div', { class: 'card-up' },
     TASK_KINDS[t.kind] && h('span', { class: 'kind-tag', style: { '--kc': TASK_KINDS[t.kind].color } }, TASK_KINDS[t.kind].short),
-    t.parent && h('span', { class: 'card-parent', title: t.parent.unit.name + ' · ' + t.parent.key }, '↑ ', t.parent.title)),
+    // название как у родителя (карточка-приложение) — показываем, откуда пришла: юнит родителя
+    t.parent && h('span', { class: 'card-parent', title: t.parent.unit.name + ' · ' + t.parent.key }, '↑ ', t.parent.title === t.title ? t.parent.unit.name : t.parent.title)),
   // Ключ задачи на доске не показываем — он в открытой карточке
   h('div', { class: 'card-top' },
     prio && prio.top && h('span', { class: 'prio-ic', title: 'Приоритет: ' + prio.opt.name }, icon('prio', 14)),
@@ -452,6 +453,10 @@ export function cardMenu(anchor, t) {
     ...(!B.department.hidden ? activeDepts().filter(d => d.id !== t.departmentId).map(d => h('button', {
       class: 'menu-item', onclick: () => { closeMenu(); patchTask(t, { departmentId: d.id }); },
     }, h('span', { class: 'dot', style: { background: d.color, margin: '0 4px' } }), d.name)) : []),
+    { sep: true },
+    { label: descendantUnits(S.board.unit.id).length ? 'Разбить на задачи' : 'Подзадача', icon: 'tree', action: () => openDecompose(t, '', () => reloadBoard()) },
+    t.kind === 'app' && { label: 'Апдейт', icon: 'refresh', action: () => openDecompose(t, 'update', () => reloadBoard()) },
+    t.kind === 'app' && { label: 'Реджект', icon: 'alert', action: () => openDecompose(t, 'reject', () => reloadBoard()) },
     { sep: true },
     !B.assignee.hidden && S.meId && t.assigneeId !== S.meId && { label: 'Назначить на меня', icon: 'user', action: () => patchTask(t, { assigneeId: S.meId }) },
     !B.assignee.hidden && t.assigneeId && { label: 'Снять исполнителя', icon: 'x', action: () => patchTask(t, { assigneeId: '' }) },
