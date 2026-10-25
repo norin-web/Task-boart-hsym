@@ -711,8 +711,18 @@ export function openCreateTask(opts = {}) {
     tplNote);
   const props = h('div', { class: 'grid2' });
 
+  // Декомпозиция (есть родитель): только «куда», название и описание — остальное раздают в юните, куда упадёт задача
+  const compact = !!opts.parent;
   const drawProps = () => {
     const B = unit.settings.builtins;
+    if (compact) {
+      fill(props, h('div', { style: { gridColumn: '1 / -1' } },
+        pool.length > 1 || !inBoard
+          ? field(opts.kind ? 'Юнит' : 'Куда передать', h('select', { class: 'inp', value: unit.id, onchange: e => { unit = unitById(e.target.value); } },
+            pool.map(u => h('option', { value: u.id }, u.name))), !opts.kind && 'Исполнителя, позицию и срок назначат в этом юните.')
+          : !opts.kind && h('p', { class: 'hint', style: { margin: 0 } }, 'Ниже этого юнита ещё нет команд — задача останется здесь. Команды ставятся ниже в их настройках: «Входит в».')));
+      return;
+    }
     fill(props, 
       !inBoard && field('Юнит', h('select', {
         class: 'inp', value: unit.id,
@@ -755,16 +765,16 @@ export function openCreateTask(opts = {}) {
           oninput: e => { if (e.target.value.trim()) draft.links[f.id] = e.target.value.trim(); else delete draft.links[f.id]; },
         }))))));
   };
-  drawLinks();
+  if (!compact) drawLinks();
 
   const kind = TASK_KINDS[opts.kind];
   const close = modal({
-    title: kind ? 'Новый ' + kind.label.toLowerCase() : opts.parent ? 'Подзадача' : 'Новая задача',
-    wide: true,
+    title: kind ? 'Новый ' + kind.label.toLowerCase() : opts.parent ? 'Задача в юнит ниже' : 'Новая задача',
+    wide: !compact,
     body: [
       opts.parent && h('div', { class: 'parent-note' }, icon('tree', 13), 'Часть «', h('b', null, opts.parent.title), '»',
         h('span', { class: 'muted' }, ' · ' + opts.parent.key)),
-      tplRow, title, h('div', { style: { height: '10px' } }), desc, h('div', { style: { height: '14px' } }), props, linksBox],
+      !compact && tplRow, title, h('div', { style: { height: '10px' } }), desc, h('div', { style: { height: '14px' } }), props, linksBox],
     footLeft: more,
     actions: [
       { label: 'Отмена' },
@@ -774,7 +784,7 @@ export function openCreateTask(opts = {}) {
           if (!text) { title.focus(); return; }
           const { links, ...rest } = draft;
           const task = await send('createTask', {
-            unitId: unit.id, title: text, description: desc.value, ...rest,
+            unitId: unit.id, title: text, description: desc.value, ...(compact ? {} : rest),
             parentId: opts.parent ? opts.parent.id : '', kind: opts.kind || '',
           });
           // ссылки — отдельной таблицей, после создания задачи
