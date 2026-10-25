@@ -4,10 +4,10 @@
  * существующее одним вызовом (applyStructure), ничего не дублируя. Убранное уходит в корзину со всеми задачами.
  */
 import { S, unitById, activeTeams, teamById, byOrder } from '../state.js';
-import { h, icon, avatar, fill, modal, toast, showErr } from '../ui.js';
+import { h, icon, avatar, fill, modal, toast, showErr, menu } from '../ui.js';
 import { send } from '../api.js';
 
-const STEPS = ['Уровни', 'Юниты', 'Команды', 'Люди', 'Проверка'];
+const STEPS = ['Уровни', 'Юниты', 'Команды и люди', 'Проверка'];
 
 /** Текущая структура: App — юнит с передачей вниз, Managers — куда он передаёт, рабочие — внутри Managers. */
 function currentPlan() {
@@ -65,30 +65,81 @@ export function openStructureWizard(onDone) {
         h('button', { class: 'btn sm sw-add', onclick: addNew }, icon('plus', 14), 'Новый юнит'),
       ];
     },
-    // 3. команды внутри юнитов
-    () => [
-      h('p', { class: 'hint' }, 'Какие команды работают внутри каждого юнита. Для каждой появится юнит-команда; задачи из наборов сами раскладываются по ним.'),
-      plan.units.some(u => u.on) ? plan.units.filter(u => u.on).map(u => h('div', { class: 'sw-block' },
-        h('b', null, u.name || 'Без названия'),
-        h('div', { class: 'quick-chips' }, activeTeams().map(t => chip(u.teams.includes(t.id), t.name, t.color, () => { u.teams = toggle(u.teams, t.id); draw(); })))))
-        : h('p', { class: 'muted' }, 'Сначала добавьте юниты на шаге 2'),
-    ],
-    // 4. люди в командах
+    // 3. команды внутри юнитов и люди в них — сразу: чекбокс команды, у отмеченной — кто в ней
     () => {
-      const used = activeTeams().filter(t => plan.units.some(u => u.on && u.teams.includes(t.id)));
-      const teams = used.length ? used : activeTeams();
-      const people = S.people.filter(p => p.active && p.access === 'member').sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-      return [
-        h('p', { class: 'hint' }, 'Кто в какой команде. Человек может быть в нескольких; в юнитах-командах он появится сам. Администраторов добавлять не нужно — они видят всё.'),
-        teams.map(t => h('div', { class: 'sw-block' },
-          h('b', { class: 'sw-team' }, h('span', { class: 'dot', style: { background: t.color } }), t.name),
-          people.length ? h('div', { class: 'quick-chips' }, people.map(p => {
+      const units = plan.units.filter(u => u.on);
+      const members = () => S.people.filter(p => p.active && p.access === 'member').sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+      const peopleOf = tid => members().filter(p => (plan.people[p.id] || []).includes(tid));
+      // «Люди» команды: поле с именами текстом → меню с галочками (меню не закрывается, пока отмечаешь)
+      const peoplePicker = t => {
+        const btn = h('button', { class: 'pos-btn sw-people', type: 'button', onclick: e => { e.stopPropagation(); open(); } });
+        const paint = () => {
+          const list = peopleOf(t.id);
+          fill(btn, list.length ? h('span', { class: 'pick-val' }, h('span', { class: 'pick-text' }, list.map(p => p.name).join(', ')))
+            : h('span', { class: 'muted pick-val' }, 'Выбрать людей'), icon('chevron', 14));
+        };
+        const open = () => {
+          const box = h('div');
+          const allRow = () => {
+            const all = members().every(p => (plan.people[p.id] || []).includes(t.id));
+            return h('div', { class: 'menu-item aud-item pos-item sw-all' + (all ? ' on' : '') },
+              h('button', { class: 'pos-toggle', role: 'menuitemcheckbox', 'aria-checked': String(all), onclick: () => {
+                for (const p of members()) {
+                  const cur = (plan.people[p.id] || []).filter(x => x !== t.id);
+                  plan.people[p.id] = all ? cur : [...cur, t.id];
+                }
+                drawMenu(); paint();
+              } }, h('span', { class: 'aud-check' }, all && icon('check', 13)), 'Выбрать всех'));
+          };
+          const drawMenu = () => fill(box, members().length ? [allRow(), h('div', { class: 'menu-sep' }), ...members().map(p => {
             const on = (plan.people[p.id] || []).includes(t.id);
-            return h('button', { class: 'quick-chip sw-chip' + (on ? ' on' : ''), onclick: () => { plan.people[p.id] = toggle(plan.people[p.id] || [], t.id); draw(); } }, avatar(p, 'sm'), p.name);
-          })) : h('p', { class: 'muted', style: { margin: 0 } }, 'Участников пока нет — их добавляют в «Люди и доступы»'))),
+            return h('div', { class: 'menu-item aud-item pos-item' + (on ? ' on' : '') },
+              h('button', { class: 'pos-toggle', role: 'menuitemcheckbox', 'aria-checked': String(on), onclick: () => {
+                plan.people[p.id] = toggle(plan.people[p.id] || [], t.id);
+                drawMenu(); paint();
+              } }, h('span', { class: 'aud-check' }, on && icon('check', 13)), avatar(p, 'sm'), p.name));
+          })] : h('div', { class: 'hint aud-note' }, 'Участников пока нет — добавьте в «Люди и доступы»'));
+          drawMenu();
+          menu(btn, [{ title: t.name }, box]);
+        };
+        paint();
+        return btn;
+      };
+      const addTeam = u => h('input', {
+        class: 'inp sm sw-newteam', placeholder: '+ Новая команда — Enter', maxlength: 40,
+        onkeydown: async e => {
+          if (e.key !== 'Enter') return;
+          e.preventDefault();
+          const name = e.target.value.trim();
+          if (!name) return;
+          e.target.disabled = true;
+          try {
+            const t = await send('createTeam', { name });
+            S.teams = [...S.teams, t];
+            u.teams = [...u.teams, t.id];
+            draw();
+          } catch (err) { e.target.disabled = false; showErr(err); }
+        },
+      });
+      const shared = tid => units.filter(u => u.teams.includes(tid)).length > 1;
+      return [
+        h('p', { class: 'hint' }, 'Отметьте команды внутри каждого юнита и сразу — кто в них. Для каждой команды появится юнит-команда; задачи из наборов сами раскладываются по ним. Команда у человека общая: одна и та же команда в разных юнитах — с теми же людьми.'),
+        units.length ? units.map(u => h('div', { class: 'sw-block' },
+          h('b', null, u.name || 'Без названия'),
+          h('div', { class: 'sw-teams' }, activeTeams().map(t => {
+            const on = u.teams.includes(t.id);
+            return h('div', { class: 'sw-team-row' + (on ? ' on' : '') },
+              h('label', { class: 'sw-team-name' },
+                h('input', { type: 'checkbox', checked: on, onchange: () => { u.teams = toggle(u.teams, t.id); draw(); } }),
+                h('span', { class: 'dot', style: { background: t.color } }), t.name,
+                on && shared(t.id) && h('span', { class: 'muted sw-sub', title: 'Эта команда отмечена и в другом юните — люди общие' }, '· общая')),
+              on ? peoplePicker(t) : h('span'));
+          })),
+          addTeam(u)))
+          : h('p', { class: 'muted' }, 'Сначала отметьте юниты на шаге 2'),
       ];
     },
-    // 5. проверка
+    // 4. проверка
     () => {
       const node = (depth, ic, label, extra) => h('div', { class: 'sw-node', style: { '--d': depth } }, icon(ic, 14), h('b', null, label), extra);
       const peopleOf = tid => S.people.filter(p => p.active && (plan.people[p.id] || []).includes(tid));

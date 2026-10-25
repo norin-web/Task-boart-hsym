@@ -1128,3 +1128,11 @@ button.kpi { font: inherit; text-align: left; cursor: pointer; color: inherit; }
 .sw-row.off .inp { opacity: .55; }
 .sw-sub { font-size: 12px; white-space: nowrap; }
 .sw-add { justify-self: start; }
+
+/* мастер: команды и люди */
+.sw-teams { display: grid; gap: 2px; }
+.sw-team-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 10px; align-items: center; min-height: 34px; padding: 2px 4px; border-radius: 8px; }
+.sw-team-row.on { background: var(--surface-2); }
+.sw-team-name { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; cursor: pointer; min-width: 0; }
+.sw-people { width: 100%; min-height: 30px; justify-content: space-between; }
+.sw-newteam { max-width: 260px; justify-self: start; margin-top: 4px; }
