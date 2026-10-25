@@ -877,3 +877,11 @@ table.tasks tr.grp-more .old-done { width: auto; margin: 0; }
 .news-kind.soon { background: var(--warn-soft); color: var(--warn); }
 .news-dot.overdue { background: var(--danger); }
 .news-dot.due_soon { background: var(--warn); }
+
+.tpl-row { margin: 0 0 10px; }
+.quick-chip.on { background: var(--accent-soft); color: var(--accent-text); border-color: transparent; font-weight: 600; }
+
+/* панель админа → шаблоны */
+.tpl-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; border: 0; background: transparent; font: inherit; color: var(--text); text-align: left; padding: 4px 6px; cursor: pointer; }
+.tpl-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tpl-meta { display: inline-flex; flex-wrap: wrap; gap: 4px; }

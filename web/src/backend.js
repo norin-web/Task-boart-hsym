@@ -229,6 +229,10 @@ const linkUrl = v => {
   if (!/^https?:\/\/[^\s]+$/i.test(full)) fail('Нужна ссылка вида https://…');
   return full;
 };
+const templateOut = r => ({
+  id: r.id, name: r.name, title: r.title, description: r.description, departmentId: r.department_id,
+  dueDays: Number(r.due_days), checklist: json(r.checklist, []) || [], order: r.ord,
+});
 const commentOut = r => ({ id: r.id, taskId: r.task_id, text: r.text, authorId: r.author_id, at: r.at, editedAt: r.edited_at });
 
 /* ================= backend ================= */
@@ -290,6 +294,7 @@ export function createBackend(db, opts = {}) {
     .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
   const departments = async () => (await all(() => T('departments').select('*').order('ord').order('id'))).map(deptOut);
   const unitFields = async unitId => (await all(() => T('fields').select('*').eq('unit_id', unitId).order('ord').order('id'))).map(fieldOut);
+  const templates = async () => (await all(() => T('task_templates').select('*').order('ord').order('id'))).map(templateOut);
   const linkFields = async () => (await all(() => T('link_fields').select('*').order('ord').order('id'))).map(linkFieldOut);
   const cleanPositions = async list => {
     const ids = new Set((await departments()).map(d => d.id));
@@ -500,8 +505,8 @@ export function createBackend(db, opts = {}) {
     /* ---------- общие данные, главная, поиск ---------- */
 
     async bootstrap(p) {
-      const [units, ppl, depts, lf] = await Promise.all([unitsWithCounts(today(p.today)), people(), departments(), linkFields()]);
-      return { units: units.map(({ doneWeek, ...u }) => u), people: ppl, departments: depts, linkFields: lf };
+      const [units, ppl, depts, lf, tpl] = await Promise.all([unitsWithCounts(today(p.today)), people(), departments(), linkFields(), templates()]);
+      return { units: units.map(({ doneWeek, ...u }) => u), people: ppl, departments: depts, linkFields: lf, templates: tpl };
     },
 
     async getHome(p) {
@@ -1123,6 +1128,34 @@ export function createBackend(db, opts = {}) {
       let q = T('notifications').update({ read_at: now() }).eq('read_at', '');
       if (p.taskId) q = q.eq('task_id', String(p.taskId));
       return (await run(q.select('id'))).length;
+    },
+
+    /* ---------- шаблоны задач ---------- */
+
+    async saveTemplate(p) {
+      const row = {
+        name: req(str(p.name, 60), 'Название шаблона'), title: str(p.title, 500), description: str(p.description, 20000),
+        department_id: await validDept(p.departmentId), checklist: cleanChecklist(p.checklist),
+        due_days: [-1, 0, 1, 2, 3, 5, 7, 14, 30].includes(Number(p.dueDays)) ? Number(p.dueDays) : -1,
+      };
+      if (p.id) {
+        await updateOne('task_templates', String(p.id), row);
+        return templateOut({ ...(await one('task_templates', p.id)) });
+      }
+      const t = { id: uid('tp'), ...row, ord: (await maxOrd('task_templates')) + 1 };
+      await run(T('task_templates').insert(t));
+      return templateOut(t);
+    },
+
+    async deleteTemplate(p) {
+      const gone = await run(T('task_templates').delete().eq('id', String(p.id ?? '')).select('id'));
+      if (!gone.length) fail('Недостаточно прав для этого действия', 'FORBIDDEN');
+      return true;
+    },
+
+    async reorderTemplates(p) {
+      await Promise.all((p.ids || []).map((id, i) => run(T('task_templates').update({ ord: i + 1 }).eq('id', String(id)))));
+      return templates();
     },
 
     /* ---------- ссылки в карточке ---------- */

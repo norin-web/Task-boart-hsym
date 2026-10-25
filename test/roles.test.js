@@ -355,6 +355,28 @@ test('уведомления о сроках: просрочено и срок �
   });
 });
 
+test('шаблоны задач: ведут администраторы, видят все', async () => {
+  const api = await setup();
+  const { mod, designer, A } = await team(api);
+  const tpl = await api.as(mod, () => api('saveTemplate', {
+    name: 'Релиз', title: 'Релиз X.Y', departmentId: 'd_release', dueDays: 7, checklist: [{ text: 'Сборка' }, { text: 'Скрины' }],
+  }));
+  assert.equal(tpl.dueDays, 7);
+  assert.deepEqual(tpl.checklist.map(i => i.text), ['Сборка', 'Скрины']);
+  await api.as(designer, async () => {
+    assert.equal((await api('bootstrap', {})).templates[0].name, 'Релиз');
+    await assert.rejects(() => api('saveTemplate', { name: 'x' }), forbidden);
+    await assert.rejects(() => api('deleteTemplate', { id: tpl.id }), forbidden);
+  });
+  const upd = await api('saveTemplate', { id: tpl.id, name: 'Релиз iOS', dueDays: 99 });
+  assert.equal(upd.name, 'Релиз iOS');
+  assert.equal(upd.dueDays, -1); // неизвестный срок — без срока
+  const t = await api('createTask', { unitId: A.id, title: 'Релиз 3.5', checklist: tpl.checklist, departmentId: tpl.departmentId });
+  assert.equal(t.checklist.length, 2);
+  await api('deleteTemplate', { id: tpl.id });
+  assert.equal((await api('bootstrap', {})).templates.length, 0);
+});
+
 test('профили: свой профиль, роли меняет только супер-админ', async () => {
   const api = await setup();
   const { admin, mod, designer, dev } = await team(api);

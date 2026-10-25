@@ -26,6 +26,7 @@ export const S = {
   people: [],
   departments: [],          // общий справочник отделов
   linkFields: [],           // поля-ссылки карточки (Figma, GitHub…), общие для всех юнитов
+  templates: [],            // шаблоны задач (общие)
   session: null,            // сессия Supabase Auth (в локальном режиме — null)
   board: null,              // { unit, fields, tasks, units, people }
   route: { view: 'home' },  // { view } | { unit, mode: board|list|settings, task }

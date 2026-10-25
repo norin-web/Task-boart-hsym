@@ -179,6 +179,19 @@ create index if not exists notifications_person on notifications(person_id, read
 -- К чему относится уведомление о сроке: дата срока (новый срок — новое уведомление)
 alter table notifications add column if not exists ref text not null default '';
 
+-- Шаблоны задач: общие для всех юнитов, ведут администраторы и модераторы; при создании задачи
+-- подставляют название, описание, позицию, срок (через due_days дней, -1 — без срока) и чеклист.
+create table if not exists task_templates (
+  id            text primary key,
+  name          text not null,
+  title         text not null default '',
+  description   text not null default '',
+  department_id text not null default '',
+  due_days      integer not null default -1,
+  checklist     jsonb not null default '[]',
+  ord           double precision not null default 0
+);
+
 -- ---------- атомарные операции ----------
 
 -- Следующий номер задачи в юните (DEV-1, DEV-2…) без гонок.
@@ -663,7 +676,7 @@ alter function comment_counts(text) set search_path = public;
 do $$
 declare t text;
 begin
-  foreach t in array array['units', 'fields', 'people', 'departments', 'unit_members', 'tasks', 'comments', 'activity', 'link_fields', 'task_links', 'notifications'] loop
+  foreach t in array array['units', 'fields', 'people', 'departments', 'unit_members', 'tasks', 'comments', 'activity', 'link_fields', 'task_links', 'notifications', 'task_templates'] loop
     execute format('alter table %I enable row level security', t);
     execute format('drop policy if exists team_all on %I', t);
   end loop;
@@ -735,6 +748,12 @@ create policy task_links_write on task_links for all to authenticated
   using (can_see_link(field_id) and exists (select 1 from tasks t where t.id = task_id and (is_staff() or t.assignee_id = my_person_id())))
   with check (can_see_link(field_id) and exists (select 1 from tasks t where t.id = task_id and t.unit_id = task_links.unit_id
     and (is_staff() or t.assignee_id = my_person_id())));
+
+-- Шаблоны: видят все вошедшие, ведут администраторы и модераторы.
+drop policy if exists templates_read on task_templates;
+create policy templates_read on task_templates for select to authenticated using (true);
+drop policy if exists templates_write on task_templates;
+create policy templates_write on task_templates for all to authenticated using (is_staff()) with check (is_staff());
 
 -- Уведомления: только свои; создаёт их триггер.
 drop policy if exists notifications_own on notifications;

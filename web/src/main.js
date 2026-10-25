@@ -57,6 +57,7 @@ async function boot() {
     S.people = d.people;
     S.departments = d.departments;
     S.linkFields = d.linkFields || [];
+    S.templates = d.templates || [];
   } catch (e) {
     return fatal('Не удалось загрузить данные: ' + e.message);
   }

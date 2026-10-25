@@ -1,7 +1,7 @@
 /** Панель админа (#/admin): обзор, люди и доступы, юниты, позиции, карточка, журнал. Для модераторов и супер-админов. */
 import Sortable from 'sortablejs';
-import { S, me, byOrder, emptyCounts, personById, todayStr, isSuper, ACCESS_LABELS, plural, LINK_KINDS, activeDepts } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill, toast, confirmDlg, menu } from '../ui.js';
+import { S, me, byOrder, emptyCounts, personById, todayStr, isSuper, ACCESS_LABELS, plural, LINK_KINDS, activeDepts, deptById } from '../state.js';
+import { $, h, icon, avatar, topbar, showErr, fill, toast, confirmDlg, menu, modal, field } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView, link, navigate } from '../router.js';
 import { renderSidebar } from './sidebar.js';
@@ -15,6 +15,7 @@ const TABS = [
   ['people', 'Люди и доступы', 'users'],
   ['units', 'Юниты', 'board'],
   ['positions', 'Позиции', 'layers'],
+  ['templates', 'Шаблоны', 'copy'],
   ['card', 'Карточка', 'link', 'super'],
   ['journal', 'Журнал', 'clock'],
 ];
@@ -51,6 +52,7 @@ export async function renderAdmin(tab) {
   switch (tab) {
     case 'people': fill(page, h('div', { class: 'card-box' }, peopleManager({ search: true }))); break;
     case 'positions': fill(page, h('div', { class: 'card-box', style: { maxWidth: '720px' } }, positionsManager())); break;
+    case 'templates': fill(page, h('div', { class: 'card-box', style: { maxWidth: '860px' } }, templatesManager())); break;
     case 'card': fill(page, h('div', { class: 'card-box', style: { maxWidth: '860px' } }, linkFieldsManager())); break;
     case 'units': fill(page, unitsTable(ov)); break;
     case 'trash': fill(page, trashTable(ov)); break;
@@ -282,4 +284,87 @@ function linkFieldsManager() {
     list,
     h('div', { class: 'sub-title' }, 'Добавить поле'),
     h('div', { class: 'lf-add' }, kindBtn, name, h('button', { class: 'btn primary', onclick: () => add().catch(showErr) }, icon('plus', 14), 'Добавить')));
+}
+
+/* ---------- шаблоны задач ---------- */
+
+const DUE_DAYS = [[-1, 'Без срока'], [0, 'Сегодня'], [1, 'Завтра'], [2, 'Через 2 дня'], [3, 'Через 3 дня'], [5, 'Через 5 дней'], [7, 'Через неделю'], [14, 'Через 2 недели'], [30, 'Через месяц']];
+
+/** Шаблоны задач: общие для всех юнитов. Порядок — перетаскиванием, правка — в окне. */
+function templatesManager() {
+  const list = h('div', { class: 'lf-list' });
+  const sorted = () => [...S.templates].sort(byOrder);
+  const remove = async t => {
+    if (!(await confirmDlg(`Удалить шаблон «${t.name}»? Задачи, созданные по нему, останутся.`, { ok: 'Удалить', danger: true }))) return;
+    await send('deleteTemplate', { id: t.id });
+    S.templates = S.templates.filter(x => x !== t);
+    draw();
+  };
+  const row = t => {
+    const d = deptById(t.departmentId);
+    return h('div', { class: 'lf-row', dataset: { id: t.id } },
+      h('span', { class: 'drag', title: 'Перетащите, чтобы изменить порядок' }, icon('grip', 16)),
+      h('button', { class: 'tpl-open', onclick: () => editTemplate(t, draw) },
+        h('span', { class: 'tpl-name' }, t.name),
+        h('span', { class: 'tpl-meta' },
+          d && h('span', { class: 'chip', style: { background: `color-mix(in srgb, ${d.color} 16%, transparent)`, color: d.color } }, d.name),
+          t.dueDays >= 0 && h('span', { class: 'chip' }, icon('calendar', 11), (DUE_DAYS.find(x => x[0] === t.dueDays) || [0, ''])[1]),
+          t.checklist.length > 0 && h('span', { class: 'chip' }, icon('checklist', 11), t.checklist.length + ' п.'))),
+      h('button', { class: 'icon-btn sm', title: 'Изменить', onclick: () => editTemplate(t, draw) }, icon('edit', 14)),
+      h('button', { class: 'icon-btn sm', title: 'Удалить', onclick: () => remove(t).catch(showErr) }, icon('trash', 15)));
+  };
+  let sortable = null;
+  const draw = () => {
+    fill(list, S.templates.length ? sorted().map(row) : h('p', { class: 'muted', style: { padding: '12px 14px', margin: 0 } }, 'Шаблонов пока нет'));
+    if (sortable) sortable.destroy();
+    sortable = Sortable.create(list, {
+      handle: '.drag', animation: 150, ghostClass: 'sortable-ghost', forceFallback: true, fallbackTolerance: 4,
+      onEnd: () => {
+        const ids = [...list.children].map(el => el.dataset.id).filter(Boolean);
+        ids.forEach((id, i) => { const t = S.templates.find(x => x.id === id); if (t) t.order = i + 1; });
+        send('reorderTemplates', { ids }).catch(showErr);
+      },
+    });
+  };
+  draw();
+  return h('div', null,
+    h('div', { class: 'section-head' }, h('h2', { style: { margin: 0, fontSize: '16px' } }, 'Шаблоны задач'),
+      h('button', { class: 'btn primary sm', onclick: () => editTemplate(null, draw) }, icon('plus', 14), 'Шаблон')),
+    h('p', { class: 'hint', style: { marginTop: 0 } }, 'Заготовки для повторяющихся задач: при создании задачи выберите шаблон — подставятся название, описание, позиция, срок и чеклист.'),
+    list);
+}
+
+function editTemplate(t, onSaved) {
+  const name = h('input', { class: 'inp', value: t ? t.name : '', maxlength: 60, placeholder: 'Например, Релиз или Баг' });
+  const title = h('input', { class: 'inp', value: t ? t.title : '', maxlength: 500, placeholder: 'Название задачи (по умолчанию — как у шаблона)' });
+  const desc = h('textarea', { class: 'inp', rows: 4, value: t ? t.description : '', maxlength: 20000, placeholder: 'Описание: контекст, критерии готовности…' });
+  const dept = h('select', { class: 'inp', value: t ? t.departmentId : '' },
+    h('option', { value: '' }, '— по исполнителю —'), activeDepts().map(d => h('option', { value: d.id }, d.name)));
+  const due = h('select', { class: 'inp', value: String(t ? t.dueDays : -1) }, DUE_DAYS.map(([v, l]) => h('option', { value: String(v) }, l)));
+  const checklist = h('textarea', { class: 'inp', rows: 5, value: t ? t.checklist.map(i => i.text).join('\n') : '', placeholder: 'Пункты чеклиста — по одному на строку' });
+  modal({
+    title: t ? `Шаблон «${t.name}»` : 'Новый шаблон',
+    wide: true,
+    body: [
+      h('div', { class: 'grid2' }, field('Название шаблона', name), field('Название задачи', title)),
+      field('Описание', desc),
+      h('div', { class: 'grid2' }, field('Позиция', dept), field('Срок', due, 'Считается от дня создания задачи')),
+      field('Чеклист', checklist),
+    ],
+    actions: [
+      { label: 'Отмена' },
+      {
+        label: t ? 'Сохранить' : 'Создать шаблон', primary: true, action: async close => {
+          if (!name.value.trim()) return name.focus();
+          const saved = await send('saveTemplate', {
+            id: t ? t.id : undefined, name: name.value, title: title.value, description: desc.value, departmentId: dept.value,
+            dueDays: Number(due.value), checklist: checklist.value.split('\n').map(x => x.trim()).filter(Boolean).map(text => ({ text })),
+          });
+          if (t) Object.assign(t, saved); else S.templates.push(saved);
+          close();
+          onSaved();
+        },
+      },
+    ],
+  });
 }

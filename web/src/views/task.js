@@ -586,6 +586,31 @@ export function openCreateTask(opts = {}) {
   title.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submitBtn().click(); } });
   const desc = autosize(h('textarea', { class: 'inp', rows: 3, placeholder: 'Описание (необязательно)', maxlength: 20000 }));
   const more = h('label', { class: 'chk hint' }, h('input', { type: 'checkbox' }), 'Создать ещё одну');
+  // Шаблон: подставляет название, описание, позицию, срок и чеклист — дальше можно править
+  let used = null;
+  const tplNote = h('span', { class: 'hint' });
+  const applyTemplate = tpl => {
+    used = used === tpl ? null : tpl;
+    if (used) {
+      title.value = tpl.title || tpl.name;
+      desc.value = tpl.description;
+      if (tpl.departmentId) draft.departmentId = tpl.departmentId;
+      draft.dueDate = tpl.dueDays >= 0 ? addDays(tpl.dueDays) : draft.dueDate;
+      draft.checklist = tpl.checklist.map(i => ({ text: i.text }));
+    } else {
+      draft.checklist = [];
+    }
+    tplNote.textContent = draft.checklist && draft.checklist.length ? 'Чеклист из шаблона: ' + draft.checklist.length + ' п.' : '';
+    tplRow.querySelectorAll('.quick-chip').forEach(b => b.classList.toggle('on', b.dataset.id === (used && used.id)));
+    title.dispatchEvent(new Event('input'));
+    desc.dispatchEvent(new Event('input'));
+    drawProps();
+    title.focus();
+  };
+  const tplRow = S.templates.length > 0 && h('div', { class: 'quick-chips tpl-row' },
+    h('span', { class: 'quick-note' }, 'Шаблон:'),
+    S.templates.map(tpl => h('button', { class: 'quick-chip', dataset: { id: tpl.id }, onclick: () => applyTemplate(tpl) }, tpl.name)),
+    tplNote);
   const props = h('div', { class: 'grid2' });
 
   const drawProps = () => {
@@ -614,7 +639,7 @@ export function openCreateTask(opts = {}) {
   const close = modal({
     title: 'Новая задача',
     wide: true,
-    body: [title, h('div', { style: { height: '10px' } }), desc, h('div', { style: { height: '14px' } }), props],
+    body: [tplRow, title, h('div', { style: { height: '10px' } }), desc, h('div', { style: { height: '14px' } }), props],
     footLeft: more,
     actions: [
       { label: 'Отмена' },
@@ -630,6 +655,7 @@ export function openCreateTask(opts = {}) {
           }
           if (more.querySelector('input').checked) {
             title.value = ''; desc.value = '';
+            if (used) applyTemplate(used); // сбросить шаблон
             title.focus();
             toast('Создана ' + key);
             return;
