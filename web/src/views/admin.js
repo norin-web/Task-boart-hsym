@@ -5,10 +5,11 @@ import { reviewSection } from './settings.js';
 import { S, LS, me, byOrder, emptyCounts, personById, todayStr, isSuper, ACCESS_LABELS, plural, LINK_KINDS, activeDepts, deptById, activeTeams } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, toast, confirmDlg, menu, modal, field } from '../ui.js';
 import { call, send } from '../api.js';
-import { currentView, link, navigate } from '../router.js';
+import { currentView, link, navigate, rerender } from '../router.js';
 import { renderSidebar } from './sidebar.js';
 import { attentionBlock, workloadBlock, roleBadge } from './home.js';
-import { peopleManager, positionsManager, teamsManager } from './people.js';
+import { peopleManager, positionsManager, teamsManager, addPersonDialog, teamChips, positionChips } from './people.js';
+import { openCreateTask } from './task.js';
 import { activityFeed } from './feed.js';
 import { openCreateUnit, unitMenu, archiveUnit, deleteUnit } from './units.js';
 
@@ -73,26 +74,36 @@ function overview(d, ov) {
   const active = d.people.filter(p => p.active);
   const count = access => active.filter(p => p.access === access).length;
   const units = d.units.filter(u => !u.archived);
-  const kpi = (label, value, to) => link(to, { class: 'kpi' }, h('div', { class: 'kpi-val' }, value), h('div', { class: 'kpi-label' }, label));
+  // Плитка: клик показывает список прямо здесь (без перехода на другую вкладку)
+  const kpi = (label, value, list) => h('button', {
+    class: 'kpi', title: 'Показать', onclick: e => { e.stopPropagation(); kpiPopover(e.currentTarget, label, list()); },
+  }, h('div', { class: 'kpi-val' }, value), h('div', { class: 'kpi-label' }, label));
+  const peopleList = arr => () => arr.length ? arr.map(p => h('div', { class: 'kp-row' }, avatar(p, 'sm'),
+    h('span', { class: 'kp-name' }, p.name), h('span', { class: 'kp-sub' }, teamChips(p.teamIds || []), positionChips(p.positionIds || [])))) : [h('p', { class: 'muted kp-empty' }, 'Никого')];
+  const unitList = () => units.length ? units.map(u => {
+    const c = u.counts || emptyCounts();
+    return link({ unit: u.id, mode: 'board' }, { class: 'kp-row kp-link' },
+      h('span', { class: 'uc-icon sm', style: { background: u.color } }, u.key.slice(0, 2)), h('span', { class: 'kp-name' }, u.name),
+      h('span', { class: 'kp-sub muted' }, (c.todo + c.in_progress) + ' откр.' + (c.overdue ? ' · ' + c.overdue + ' просроч.' : '')));
+  }) : [h('p', { class: 'muted kp-empty' }, 'Юнитов нет')];
   return h('div', { class: 'admin-overview' },
     h('div', { class: 'kpis' },
-      kpi('Людей в команде', active.length, { view: 'admin', tab: 'people' }),
-      kpi(ACCESS_LABELS.superadmin + 'ы', count('superadmin'), { view: 'admin', tab: 'people' }),
-      kpi(ACCESS_LABELS.moderator + 'ы', count('moderator'), { view: 'admin', tab: 'people' }),
-      kpi('Участники', count('member'), { view: 'admin', tab: 'people' }),
-      kpi('Юниты', units.length, { view: 'admin', tab: 'units' }),
-      kpi('Открытых задач', d.stats.todo + d.stats.in_progress, { view: 'home' }),
-      kpi('Просрочено', d.stats.overdue, { view: 'home' })),
+      kpi('Людей в команде', active.length, peopleList(active)),
+      kpi(ACCESS_LABELS.superadmin + 'ы', count('superadmin'), peopleList(active.filter(p => p.access === 'superadmin'))),
+      kpi(ACCESS_LABELS.moderator + 'ы', count('moderator'), peopleList(active.filter(p => p.access === 'moderator'))),
+      kpi('Участники', count('member'), peopleList(active.filter(p => p.access === 'member'))),
+      kpi('Юниты', units.length, unitList)),
     h('div', { class: 'home-grid' },
       h('div', { class: 'home-col' }, attentionBlock(ov), workloadBlock(ov, { all: true })),
       h('div', { class: 'home-col' },
         h('section', null,
           h('div', { class: 'section-head' }, h('h2', null, 'Быстрые действия')),
+          // всё открывается окном здесь же
           h('div', { class: 'quick-actions-grid' },
-            link({ view: 'admin', tab: 'people' }, { class: 'qa' }, icon('user', 16), 'Добавить человека'),
-            h('button', { class: 'qa', onclick: openCreateUnit }, icon('plus', 16), 'Новый юнит'),
-            link({ view: 'admin', tab: 'positions' }, { class: 'qa' }, icon('layers', 16), 'Позиции'),
-            link({ view: 'admin', tab: 'journal' }, { class: 'qa' }, icon('clock', 16), 'Журнал событий'))),
+            h('button', { class: 'qa', onclick: () => openCreateTask() }, icon('checklist', 16), 'Новая задача'),
+            h('button', { class: 'qa', onclick: () => addPersonDialog(() => rerender()) }, icon('user', 16), 'Добавить человека'),
+            h('button', { class: 'qa', onclick: openCreateUnit }, icon('board', 16), 'Новый юнит'),
+            h('button', { class: 'qa', onclick: () => editTemplate(null, () => toast('Шаблон создан')) }, icon('copy', 16), 'Новый шаблон'))),
         h('section', null,
           h('div', { class: 'section-head' }, h('h2', null, 'Ваши права')),
           h('div', { class: 'card-box rights' },
@@ -100,6 +111,11 @@ function overview(d, ov) {
             right(true, 'Люди: добавление, позиции, вход и отключение'),
             right(isSuper(), 'Роли: назначение модераторов и супер-админов'),
             right(isSuper(), 'Профили супер-админов'))))));
+}
+
+/** Список у плитки обзора: открывается рядом, закрывается кликом мимо. */
+function kpiPopover(anchor, title, rows) {
+  menu(anchor, [{ title }, h('div', { class: 'kp-list' }, rows)]);
 }
 
 const right = (ok, text) => h('div', { class: 'right-row' + (ok ? '' : ' no') }, icon(ok ? 'check' : 'x', 14), text);

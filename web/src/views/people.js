@@ -38,7 +38,17 @@ export const teamChips = ids => dictChips(ids, teamById, { empty: 'без ком
  */
 function dictPicker({ title, items, byId, get, set, main = false, note = '', empty = '', disabled = false }) {
   const btn = h('button', { class: 'pos-btn', type: 'button', disabled, title: disabled ? '' : title, onclick: e => { e.stopPropagation(); open(); } });
-  const paint = () => fill(btn, dictChips(get(), byId, { main, empty }), !disabled && icon('chevron', 14));
+  // Внутри поля — как в обычном списке: точки цветов и названия через запятую (без чипов)
+  const paint = () => {
+    const list = get().map(byId).filter(Boolean);
+    fill(btn,
+      list.length
+        ? h('span', { class: 'pick-val', title: list.map(d => d.name).join(', ') },
+          h('span', { class: 'aud-dots' }, list.slice(0, 3).map(d => h('span', { class: 'dot', style: { background: d.color } }))),
+          h('span', { class: 'pick-text' }, list.map(d => d.name).join(', ')))
+        : h('span', { class: 'muted pick-val' }, empty || '—'),
+      !disabled && icon('chevron', 14));
+  };
   const open = () => {
     const box = h('div');
     const apply = ids => { set(ids); paint(); draw(); };
@@ -97,6 +107,55 @@ function showCredentials(person, password) {
 }
 
 /* ================= Люди и доступы (модераторы и супер-админы) ================= */
+
+/** Создать человека: с email в Supabase — сразу вход и временный пароль, иначе — только профиль. */
+async function createPersonWith({ name, email, posIds, teamIds, access }) {
+  const payload = { name, positionId: posIds[0], extraPositionIds: posIds.slice(1), teamIds, access };
+  let p;
+  if (mode === 'supabase' && email.trim()) {
+    const password = tempPassword();
+    p = await send('createAccount', { ...payload, email, password });
+    showCredentials(p, password);
+  } else {
+    p = await send('createPerson', { ...payload, email });
+  }
+  const i = S.people.findIndex(x => x.id === p.id);
+  if (i >= 0) S.people[i] = p; else S.people.push(p);
+  sortPeople();
+  return p;
+}
+
+/** «Добавить человека» окном — с обзора и откуда угодно, не уходя со страницы. */
+export function addPersonDialog(onDone) {
+  const name = h('input', { class: 'inp', placeholder: 'Имя и фамилия', maxlength: 80 });
+  const email = h('input', { class: 'inp', type: 'email', placeholder: 'name@company.com' });
+  let posIds = ['d_other'];
+  let teamIds = ['t_other'].filter(teamById);
+  let access = 'member';
+  modal({
+    title: 'Добавить человека',
+    body: [
+      h('div', { class: 'grid2' }, field('Имя', name), field('Email', email, mode === 'supabase' ? 'С email сразу создастся вход с временным паролем' : 'Локальный режим: входа нет')),
+      h('div', { class: 'grid2' },
+        field('Команды', teamsPicker(() => teamIds, ids => { teamIds = ids; })),
+        field('Позиции', positionsPicker(() => posIds, ids => { posIds = ids; }))),
+      isSuper() && field('Роль', accessSelect('member', v => { access = v; })),
+    ],
+    actions: [
+      { label: 'Отмена' },
+      {
+        label: 'Добавить', primary: true, action: async close => {
+          if (!name.value.trim()) return name.focus();
+          const p = await createPersonWith({ name: name.value, email: email.value, posIds, teamIds, access });
+          close();
+          toast(p.name + ' — добавлен(а)');
+          if (onDone) onDone(p);
+        },
+      },
+    ],
+  });
+  setTimeout(() => name.focus(), 50);
+}
 
 export function openPeople() {
   modal({ title: 'Люди и доступы', wide: true, body: peopleManager(), actions: [{ label: 'Готово', primary: true, action: c => c() }], onClose: rerender });
@@ -170,18 +229,7 @@ export function peopleManager({ search = false } = {}) {
   const acc = isSuper() ? accessSelect('member', v => { accValue = v; }) : null;
   const add = async () => {
     if (!name.value.trim()) return name.focus();
-    const payload = { name: name.value, positionId: posIds[0], extraPositionIds: posIds.slice(1), teamIds, access: accValue };
-    let p;
-    if (mode === 'supabase' && email.value.trim()) {
-      const password = tempPassword();
-      p = await send('createAccount', { ...payload, email: email.value, password });
-      showCredentials(p, password);
-    } else {
-      p = await send('createPerson', { ...payload, email: email.value });
-    }
-    const i = S.people.findIndex(x => x.id === p.id);
-    if (i >= 0) S.people[i] = p; else S.people.push(p);
-    sortPeople();
+    await createPersonWith({ name: name.value, email: email.value, posIds, teamIds, access: accValue });
     name.value = '';
     email.value = '';
     posIds = ['d_other'];

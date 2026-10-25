@@ -967,3 +967,18 @@ table.tasks tr.grp-more .old-done { width: auto; margin: 0; }
   .ur-mobile { display: inline; }
   .ur-cell { justify-content: space-between; }
 }
+
+/* обзор: плитки-кнопки и списки у них */
+button.kpi { font: inherit; text-align: left; cursor: pointer; color: inherit; }
+.kp-list { display: grid; min-width: 300px; max-width: 420px; }
+.kp-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; font-size: 13px; color: var(--text); }
+.kp-link:hover { background: var(--surface-2); text-decoration: none; }
+.kp-name { white-space: nowrap; }
+.kp-sub { margin-left: auto; display: inline-flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; font-size: 12px; }
+.kp-empty { padding: 6px 10px; margin: 0; }
+
+/* поле выбора команд/позиций — текстом, как select */
+.pick-val { display: inline-flex; align-items: center; gap: 7px; min-width: 0; flex: 1; font-size: 13.5px; color: var(--text); }
+.pick-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pos-btn { justify-content: space-between; text-align: left; }
+.pos-btn > .i { color: var(--muted); flex: none; }
