@@ -90,6 +90,9 @@ const ICONS = {
   drive: 'M8 3h8l6 11-4 7H6l-4-7z M2 14h20 M8 3l7 11 M16 3 9 14 M6 21l3-7',
   meta: 'M12 2H2v10l9.3 9.3a1 1 0 0 0 1.4 0l8.6-8.6a1 1 0 0 0 0-1.4z M7 7h.01',
   layers: 'M12 2 2 7l10 5 10-5z M2 17l10 5 10-5 M2 12l10 5 10-5',
+  app: 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z M8 12h8 M12 8v8',
+  refresh: 'M21 12a9 9 0 1 1-3-6.7L21 8 M21 3v5h-5',
+  tree: 'M6 3v18 M6 8h8 M6 16h8 M14 5h6v6h-6z M14 13h6v6h-6z',
 };
 const DOTS = new Set(['more', 'grip', 'list']);
 

@@ -45,6 +45,7 @@ function noteText(kind, by) {
   if (kind === 'review') return who ? 'отправил(а) ' + who : 'от вас';
   if (kind === 'returned') return who ? 'вернул(а) ' + who : 'вернули';
   if (kind === 'approved') return who ? 'принял(а) ' + who : 'принято';
+  if (kind === 'handoff') return who ? 'передал(а) ' + who : 'передано';
   return who ? 'назначил(а) ' + who : 'назначено';
 }
 
@@ -76,6 +77,7 @@ function newsBlock() {
     n.kind === 'review' && h('span', { class: 'news-kind review', title: 'Задача пришла вам на ревью' }, icon('eye', 12), 'Ревью'),
     n.kind === 'returned' && h('span', { class: 'news-kind returned', title: 'Ревьюер вернул задачу вам' }, icon('back', 12), 'Вернули'),
     n.kind === 'approved' && h('span', { class: 'news-kind approved', title: 'Ревьюер принял работу — задача закрыта' }, icon('done', 12), 'Закрыта по ревью'),
+    n.kind === 'handoff' && h('span', { class: 'news-kind handoff', title: 'Сверху передали в работу — разложите на задачи' }, icon('app', 12), 'Новое приложение'),
     n.kind === 'overdue' && h('span', { class: 'news-kind overdue', title: 'Срок прошёл' }, icon('alert', 12), 'Просрочено'),
     n.kind === 'due_soon' && h('span', { class: 'news-kind soon', title: 'Срок скоро' }, icon('clock', 12), n.dueDate === todayStr() ? 'Срок сегодня' : 'Срок завтра'),
     h('span', { class: 'key-badge' }, n.key),

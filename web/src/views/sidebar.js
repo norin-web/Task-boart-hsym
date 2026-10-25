@@ -38,12 +38,12 @@ export function renderUnread() {
   b.hidden = !S.unread;
 }
 
-function unitItem(u, r) {
+function unitItem(u, r, depth = 0) {
   const n = openCount(u);
   const overdue = u.counts && u.counts.overdue;
   return link({ unit: u.id, mode: 'board' }, {
-    class: 'nav-item unit' + (r.unit === u.id ? ' active' : '') + (u.archived ? ' archived' : ''),
-    dataset: { id: u.id },
+    class: 'nav-item unit' + (r.unit === u.id ? ' active' : '') + (u.archived ? ' archived' : '') + (depth ? ' sub' : ''),
+    dataset: { id: u.id }, style: depth ? { '--depth': Math.min(depth, 4) } : null,
   },
   h('span', { class: 'unit-dot', style: { background: u.color } }),
   h('span', { class: 'nav-label' }, u.name),
@@ -52,10 +52,18 @@ function unitItem(u, r) {
 
 export function renderSidebar() {
   const r = S.route;
-  const units = S.units.filter(u => !u.archived).sort(byOrder);
+  // Юниты деревом: верхние, под каждым — его юниты ниже (родитель не виден участнику — юнит считается верхним)
+  const visible = S.units.filter(u => !u.archived);
+  const ids = new Set(visible.map(u => u.id));
+  const units = [];
+  const walk = (list, depth) => list.sort(byOrder).forEach(u => {
+    units.push({ u, depth });
+    walk(visible.filter(x => x.parentId === u.id), depth + 1);
+  });
+  walk(visible.filter(u => !u.parentId || !ids.has(u.parentId)), 0);
   const person = me();
   const [themeLabel, themeIcon] = THEMES[LS.get('theme', 'auto')] || THEMES.auto;
-  const list = h('div', { class: 'nav-units' }, units.map(u => unitItem(u, r)));
+  const list = h('div', { class: 'nav-units' }, units.map(({ u, depth }) => unitItem(u, r, depth)));
   const staff = isStaff();
 
   fill($('#sidebar'),

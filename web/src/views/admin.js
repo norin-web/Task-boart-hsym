@@ -3,7 +3,7 @@ import Sortable from 'sortablejs';
 import { AUTO_ARCHIVE, HIDE_DONE } from '../state.js';
 import { reviewSection, openFieldEditor, requiredLabel } from './settings.js';
 import { TYPE_LABELS } from '../state.js';
-import { S, LS, me, byOrder, unitById, emptyCounts, personById, todayStr, isSuper, ACCESS_LABELS, plural, LINK_KINDS, activeDepts, deptById, activeTeams } from '../state.js';
+import { S, LS, me, byOrder, unitById, emptyCounts, personById, todayStr, isSuper, ACCESS_LABELS, plural, LINK_KINDS, activeDepts, deptById, activeTeams, descendantUnits } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, toast, confirmDlg, menu, modal, field } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView, link, navigate, rerender } from '../router.js';
@@ -605,9 +605,39 @@ function unitRules() {
         : h('span', { class: 'warn-text', title: 'Выберите ревьюеров' }, icon('alert', 13), 'нет ревьюеров'));
   };
   const editReview = u => openReviewEditor(u, draw);
+  /** Передача вниз: задача пришла в колонку — у выбранного юнита появляется карточка-приложение. */
+  const handoffText = u => {
+    const ho = u.settings.handoff || {};
+    const col = ho.column && u.settings.columns.find(c => c.id === ho.column);
+    const to = ho.unitId && unitById(ho.unitId);
+    if (!col || !to) return h('span', { class: 'muted' }, 'выключено');
+    return h('span', { class: 'rv-sum' }, h('b', null, col.name), ' → ', h('span', { class: 'unit-dot', style: { background: to.color, margin: 0 } }), to.name);
+  };
+  const editHandoff = u => {
+    const ho = u.settings.handoff || {};
+    const col = h('select', { class: 'inp', value: ho.column || '' }, h('option', { value: '' }, 'Не передавать'),
+      u.settings.columns.map(c => h('option', { value: c.id }, `Когда задача в «${c.name}»`)));
+    const kids = descendantUnits(u.id);
+    const target = h('select', { class: 'inp', value: ho.unitId || (kids[0] || {}).id || '' },
+      (kids.length ? kids : units().filter(x => x.id !== u.id)).map(x => h('option', { value: x.id }, x.name)));
+    modal({
+      title: `Передача вниз · ${u.name}`,
+      body: [
+        h('p', { class: 'hint', style: { marginTop: 0 } }, 'Задача пришла в выбранную колонку — в юните ниже появляется её карточка-приложение (название, описание, срок, общие поля и ссылки), модераторам — уведомление. Один раз на задачу.'),
+        h('div', { class: 'grid2' }, field('Колонка', col), field('Куда передать', target)),
+        !kids.length && h('p', { class: 'hint' }, 'У юнита нет юнитов ниже — их задают в настройках юнита («Входит в»).'),
+      ],
+      actions: [{ label: 'Отмена' }, {
+        label: 'Сохранить', primary: true,
+        action: async close => { await save(u, { handoff: col.value ? { column: col.value, unitId: target.value } : { column: '', unitId: '' } }); close(); },
+      }],
+    });
+  };
   const row = u => h('div', { class: 'ur-row' },
     h('div', { class: 'ur-unit' }, h('span', { class: 'uc-icon sm', style: { background: u.color } }, u.key.slice(0, 2)), h('b', null, u.name)),
     h('button', { class: 'ur-cell ur-review', title: 'Настроить ревью', onclick: () => editReview(u) }, reviewText(u), icon('edit', 13)),
+    h('button', { class: 'ur-cell ur-review', title: 'Передача задач на уровень ниже', onclick: () => editHandoff(u) },
+      h('span', { class: 'ur-mobile ur-label' }, 'Передать вниз'), handoffText(u), icon('edit', 13)),
     h('label', { class: 'ur-cell ur-check', title: 'Участник не перенесёт в «готово», пока в чеклисте есть открытые пункты' },
       h('input', { type: 'checkbox', checked: !!u.settings.checklistBeforeDone, onchange: e => save(u, { checklistBeforeDone: e.target.checked }).catch(showErr) }),
       h('span', { class: 'ur-mobile' }, 'Чеклист перед «готово»')),
@@ -619,9 +649,9 @@ function unitRules() {
         AUTO_ARCHIVE.map(d => h('option', { value: String(d) }, d ? `через ${d} дн.` : 'выключен')))));
   const draw = () => fill(box,
     h('div', { class: 'section-head' }, h('h2', { style: { margin: 0, fontSize: '16px' } }, 'Правила юнитов')),
-    h('p', { class: 'hint', style: { marginTop: 0 } }, 'Ревью — задача в колонке ревью уходит ревьюеру своей позиции и возвращается исполнителю. Чеклист — в «готово» только с закрытым чеклистом. Готовые на доске — сколько дней держать выполненные. Меняется сразу.'),
+    h('p', { class: 'hint', style: { marginTop: 0 } }, 'Ревью — задача в колонке ревью уходит ревьюеру своей позиции и возвращается исполнителю. Передать вниз — задача из колонки появляется карточкой-приложением у юнита ниже. Чеклист — в «готово» только с закрытым чеклистом. Готовые на доске — сколько дней держать выполненные. Меняется сразу.'),
     units().length ? h('div', { class: 'ur-list' },
-      h('div', { class: 'ur-row ur-head' }, h('span', null, 'Юнит'), h('span', null, 'Ревью'), h('span', null, 'Чеклист перед «готово»'),
+      h('div', { class: 'ur-row ur-head' }, h('span', null, 'Юнит'), h('span', null, 'Ревью'), h('span', null, 'Передать вниз'), h('span', null, 'Чеклист перед «готово»'),
         h('span', null, 'Готовые на доске'), h('span', null, 'Автоархив')),
       units().map(row)) : h('p', { class: 'muted' }, 'Юнитов пока нет'));
   draw();

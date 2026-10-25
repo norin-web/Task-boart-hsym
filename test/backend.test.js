@@ -263,6 +263,49 @@ test('общие поля: на все юниты, обязательность 
   assert.deepEqual(board.tasks.find(x => x.id === t.id).fields, { f_priority: 'o_high' });
 });
 
+test('иерархия: юниты по уровням, передача вниз, апдейты и декомпозиция, сводка', async () => {
+  const api = await setup();
+  const ceo = await api('createUnit', { name: 'Компания', key: 'CEO' });
+  const mod = await api('createUnit', { name: 'Модераторы', key: 'MOD' });
+  const ios = await api('createUnit', { name: 'iOS', key: 'IOS' });
+  await api('updateUnit', { id: mod.id, parentId: ceo.id });
+  await api('updateUnit', { id: ios.id, parentId: mod.id });
+  await assert.rejects(() => api('updateUnit', { id: ceo.id, parentId: ios.id }), /самого себя/);
+
+  // CEO: «В работу» → карточка-приложение у модераторов
+  await api('updateUnit', { id: ceo.id, settings: { ...ceo.settings, handoff: { column: 'in_progress', unitId: mod.id } } });
+  const app = await api('createTask', { unitId: ceo.id, title: 'Новое приложение', dueDate: '2030-01-01', fields: { f_priority: 'o_high' } });
+  await api('updateTask', { id: app.id, patch: { status: 'in_progress' } });
+  await api('updateTask', { id: app.id, patch: { status: 'todo' } });
+  await api('updateTask', { id: app.id, patch: { status: 'in_progress' } }); // повторно — не дублирует
+  let mb = await api('getBoard', { unitId: mod.id });
+  assert.equal(mb.tasks.length, 1);
+  const card = mb.tasks[0];
+  assert.equal(card.kind, 'app');
+  assert.equal(card.parentId, app.id);
+  assert.equal(card.title, 'Новое приложение');
+  assert.equal(card.fields.f_priority, 'o_high');
+  assert.equal(card.parent.key, 'CEO-1');
+
+  // модераторы: апдейт приложения и задачи в iOS
+  const upd = await api('createTask', { unitId: mod.id, title: 'Апдейт 1.1', kind: 'update', parentId: card.id });
+  const t1 = await api('createTask', { unitId: ios.id, title: 'Экран', parentId: upd.id, dueDate: '2000-01-01' });
+  await api('createTask', { unitId: ios.id, title: 'Сборка', parentId: card.id, status: 'done' });
+  assert.equal(t1.parentId, upd.id);
+
+  // CEO видит сводку и дерево
+  const cb = await api('getBoard', { unitId: ceo.id, today: '2026-10-26' });
+  assert.deepEqual(cb.tasks[0].tree, { total: 4, done: 1, overdue: 1 });
+  const mb2 = await api('getBoard', { unitId: mod.id, today: '2026-10-26' });
+  assert.deepEqual(mb2.tasks.find(t => t.id === card.id).tree, { total: 3, done: 1, overdue: 1 }); // вложенные не дважды
+  assert.deepEqual(mb2.tasks.find(t => t.id === upd.id).tree, { total: 1, done: 0, overdue: 1 });
+  const tree = await api('getTaskTree', { id: app.id });
+  assert.deepEqual(tree.descendants.map(d => [d.title, d.depth]), [['Новое приложение', 1], ['Апдейт 1.1', 2], ['Сборка', 2], ['Экран', 3]]);
+  assert.ok(tree.descendants[0].stages.length >= 3);
+  const up = await api('getTaskTree', { id: t1.id });
+  assert.deepEqual(up.ancestors.map(a => a.title), ['Новое приложение', 'Новое приложение', 'Апдейт 1.1']);
+});
+
 test('неизвестный метод и внутренние ошибки не падают', async () => {
   const { call } = await setup();
   assert.equal((await call('dropTables', {})).ok, false);

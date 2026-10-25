@@ -1,5 +1,5 @@
 /**
- * Демо-данные для локального режима: 6 человек, 3 команды, 17 задач.
+ * Демо-данные для локального режима: 6 человек, 3 команды, 17 задач; иерархия Компания → Модераторы → команды с приложением.
  * В режиме Supabase не используется — там данные команды настоящие.
  */
 import { getBackend, asSystem } from './data.js';
@@ -86,6 +86,7 @@ async function seed() {
   };
 
   const P = {};
+  const U = {};
   for (const [key, name, role, email, access, positionId] of PEOPLE) {
     P[key] = await api('createPerson', { name, role, email: email + '@example.com', access, positionId });
   }
@@ -104,6 +105,38 @@ async function seed() {
       }, P.anna.id);
       for (const [who, text] of t.comments || []) await api('addComment', { taskId: task.id, text }, P[who].id);
     }
+    U[def.unit.key] = u;
   }
+
+  // Иерархия: Компания (приложения) → Модераторы (жизненный цикл) → команды Alpha/Bravo/Charlie
+  const ceo = await api('createUnit', { name: 'Компания', key: 'CEO', color: '#0f766e', description: 'Приложения компании: идея → в работу → запущено' });
+  const mod = await api('createUnit', { name: 'Модераторы', key: 'MOD', color: '#7c3aed', description: 'Жизненный цикл приложений, апдейты и реджекты' });
+  await api('updateUnit', { id: mod.id, parentId: ceo.id, settings: { ...mod.settings, columns: [
+    { id: 'brief', name: 'Бриф', kind: 'todo' }, { id: 'design', name: 'Дизайн', kind: 'progress', color: '#ec4899' },
+    { id: 'dev', name: 'Разработка', kind: 'progress', color: '#3b82f6' }, { id: 'qa', name: 'Тест', kind: 'progress', color: '#f59e0b' },
+    { id: 'store', name: 'Ревью стора', kind: 'progress', color: '#8b5cf6' }, { id: 'live', name: 'Релиз', kind: 'done' },
+  ] } });
+  await api('updateUnit', { id: ceo.id, settings: { ...ceo.settings,
+    columns: [{ id: 'idea', name: 'Идея', kind: 'todo' }, { id: 'go', name: 'В работу', kind: 'progress' }, { id: 'launched', name: 'Запущено', kind: 'done' }],
+    handoff: { column: 'go', unitId: mod.id } } });
+  for (const key of ['ALP', 'BRV', 'CHR']) await api('updateUnit', { id: U[key].id, parentId: mod.id });
+
+  const app = await api('createTask', { unitId: ceo.id, title: 'Sleep Sounds — новое приложение', status: 'idea', dueDate: day(45),
+    description: 'Звуки для сна: подписка, 30 звуков на старте, виджет. Рынки — US, UK.' }, P.anna.id);
+  await api('createTask', { unitId: ceo.id, title: 'Медитации для детей', status: 'idea', description: 'Идея на следующий квартал.' }, P.anna.id);
+  await api('updateTask', { id: app.id, patch: { status: 'go' } }, P.anna.id); // → карточка у модераторов
+  const card = (await api('getBoard', { unitId: mod.id })).tasks.find(t => t.parentId === app.id);
+  await api('updateTask', { id: card.id, patch: { status: 'design', assigneeId: P.oleg.id } }, P.oleg.id);
+  const kids = [
+    { unitId: U.ALP.id, title: 'Макеты онбординга и пейволла', assigneeId: P.masha.id, departmentId: D.design, status: 'in_progress', dueDate: day(4) },
+    { unitId: U.ALP.id, title: 'Каркас приложения и плеер', assigneeId: P.dima.id, departmentId: D.ios, dueDate: day(10) },
+    { unitId: U.BRV.id, title: 'Семантика и название для стора', assigneeId: P.pavel.id, departmentId: D.aso, status: 'done' },
+  ];
+  for (const k of kids) await api('createTask', { ...k, parentId: card.id }, P.oleg.id);
+  const upd = await api('createTask', { unitId: mod.id, title: 'Апдейт 1.1 · Sleep Sounds', kind: 'update', parentId: card.id, status: 'brief',
+    description: 'Таймер сна и новые звуки дождя.' }, P.oleg.id);
+  await api('createTask', { unitId: U.ALP.id, title: 'Таймер сна', parentId: upd.id, assigneeId: P.dima.id, departmentId: D.ios, dueDate: day(20) }, P.oleg.id);
+  await api('createTask', { unitId: mod.id, title: 'Реджект: Guideline 3.1.2 (подписка)', kind: 'reject', parentId: card.id, status: 'dev', dueDate: day(-1),
+    description: 'Нет ссылок на условия подписки на пейволле.' }, P.oleg.id);
   return P.anna.id;
 }

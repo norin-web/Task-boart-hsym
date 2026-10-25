@@ -2,7 +2,7 @@ import Sortable from 'sortablejs';
 import {
   S, LS, taskById, personById, activeFields, missingFor, missingNext, priorityOf, byPriority, visibleLinkFields, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder,
   between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, relTime, unitById, emptyCounts, freshFilters,
-  activeDepts, deptById, KINDS, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask,
+  activeDepts, deptById, KINDS, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS,
 } from '../state.js';
 import { $, h, icon, avatar, topbar, menu, closeMenu, modal, field, confirmDlg, promptDlg, toast, showErr, statusDot, fill } from '../ui.js';
 import { call, send } from '../api.js';
@@ -65,7 +65,7 @@ export function renderTasks() {
   const el = $('#tasks');
   if (!el || !S.board) return;
   if (S.route.mode === 'list') renderList(el);
-  else if (S.lanes && isStaff()) renderLanes(el);
+  else if (S.lanes && isStaff() && (S.lanes !== 'kind' || S.board.tasks.some(t => t.kind))) renderLanes(el);
   else renderColumns(el);
   syncCounts();
 }
@@ -136,9 +136,13 @@ function filterRest() {
     !B.dueDate.hidden && h('button', { class: 'fchip' + (f.overdue ? ' on' : ''), onclick: () => set('overdue', !f.overdue) }, icon('alert', 13), 'Просроченные'),
     h('button', { class: 'fchip' + (f.archived ? ' on' : ''), onclick: () => set('archived', !f.archived) }, icon('archive', 13), 'Архив'),
     S.route.mode === 'board' && isStaff() && !B.department.hidden && h('button', {
-      class: 'fchip' + (S.lanes ? ' on' : ''), title: 'Разложить задачи по отделам',
-      onclick: () => { S.lanes = !S.lanes; LS.set('lanes', S.lanes); renderTasks(); drawFilterRest(); },
+      class: 'fchip' + (S.lanes === true ? ' on' : ''), title: 'Разложить задачи по отделам',
+      onclick: () => { S.lanes = S.lanes === true ? false : true; LS.set('lanes', S.lanes); renderTasks(); drawFilterRest(); },
     }, icon('rows', 13), 'По отделам'),
+    S.route.mode === 'board' && isStaff() && S.board.tasks.some(t => t.kind) && h('button', {
+      class: 'fchip' + (S.lanes === 'kind' ? ' on' : ''), title: 'Приложения, апдейты, реджекты — отдельными дорожками',
+      onclick: () => { S.lanes = S.lanes === 'kind' ? false : 'kind'; LS.set('lanes', S.lanes); renderTasks(); drawFilterRest(); },
+    }, icon('app', 13), 'По типу'),
     active && h('button', {
       class: 'link-btn', onclick: () => {
         S.filters = freshFilters();
@@ -278,10 +282,18 @@ function renderLanes(board) {
   board.classList.add('lanes');
   const cols = columns();
   const tasks = filterTasks();
-  const lanes = activeDepts().map(d => ({ id: d.id, name: d.name, color: d.color }))
-    .filter(l => !S.filters.depts.length || S.filters.depts.includes(l.id));
-  const orphan = tasks.filter(t => !deptById(t.departmentId) || deptById(t.departmentId).archived);
-  if (orphan.length && !S.filters.depts.length) lanes.push({ id: '', name: 'Без отдела', color: 'var(--border-strong)' });
+  // Дорожки по типу карточки (приложения / апдейты / реджекты / задачи) или по отделам
+  const byKind = S.lanes === 'kind';
+  let lanes, orphan = [];
+  if (byKind) {
+    lanes = [...Object.entries(TASK_KINDS).map(([id, k]) => ({ id, name: k.plural, color: k.color })),
+      { id: '', name: 'Задачи', color: 'var(--border-strong)' }].filter(l => tasks.some(t => (t.kind || '') === l.id));
+  } else {
+    lanes = activeDepts().map(d => ({ id: d.id, name: d.name, color: d.color }))
+      .filter(l => !S.filters.depts.length || S.filters.depts.includes(l.id));
+    orphan = tasks.filter(t => !deptById(t.departmentId) || deptById(t.departmentId).archived);
+    if (orphan.length && !S.filters.depts.length) lanes.push({ id: '', name: 'Без отдела', color: 'var(--border-strong)' });
+  }
 
   const grid = h('div', { class: 'lanes-grid', style: { gridTemplateColumns: `repeat(${cols.length}, minmax(216px, 1fr)) 40px` } },
     cols.map(col => h('div', { class: 'lane-col-head', style: { '--cc': colColor(col) } },
@@ -289,7 +301,7 @@ function renderLanes(board) {
     h('div', { class: 'lane-col-head add' }, addColumnBtn()));
 
   for (const lane of lanes) {
-    const inLane = lane.id ? tasks.filter(t => t.departmentId === lane.id) : orphan;
+    const inLane = byKind ? tasks.filter(t => (t.kind || '') === lane.id) : lane.id ? tasks.filter(t => t.departmentId === lane.id) : orphan;
     const collapsed = S.collapsedLanes.has(lane.id);
     grid.append(h('button', {
       class: 'lane-head' + (collapsed ? ' collapsed' : ''), style: { gridColumn: '1 / -1' },
@@ -299,8 +311,9 @@ function renderLanes(board) {
     for (const col of cols) {
       const items = inLane.filter(t => colById(t.status).id === col.id).sort(byPriority());
       grid.append(h('div', { class: 'lane-cell' },
-        makeList(items, col.id, lane.id, null),
-        quickAddEl(col.id, lane.id, true)));
+        // в дорожках по типу перенос между дорожками тип не меняет — список как у колонки
+        makeList(items, col.id, byKind ? null : lane.id, null),
+        !byKind && quickAddEl(col.id, lane.id, true)));
     }
     grid.append(h('div'));
   }
@@ -362,6 +375,8 @@ function taskCard(t, inLane) {
   const due = !B.dueDate.hidden && dueInfo(t.dueDate, taskDone(t));
   const foot = [
     due && h('span', { class: 'due ' + due.cls, title: due.hint }, icon('calendar', 12), due.text),
+    t.tree && h('span', { class: 'meta-ic tree-ic' + (t.tree.done === t.tree.total ? ' done' : t.tree.overdue ? ' late' : ''),
+      title: `Подзадачи ниже: готово ${t.tree.done} из ${t.tree.total}` + (t.tree.overdue ? `, просрочено ${t.tree.overdue}` : '') }, icon('tree', 13), t.tree.done + '/' + t.tree.total),
     cl.length > 0 && h('span', { class: 'meta-ic' + (clDone === cl.length ? ' done' : ''), title: 'Чеклист' }, icon('checklist', 13), clDone + '/' + cl.length),
     t.commentCount > 0 && h('span', { class: 'meta-ic', title: 'Комментарии' }, icon('message', 13), t.commentCount),
     ...visibleLinkFields().filter(f => t.links && t.links[f.id]).map(f => h('a', {
@@ -378,6 +393,10 @@ function taskCard(t, inLane) {
     onkeydown: e => { if (e.key === 'Enter' && !t._temp) navigate({ unit: S.board.unit.id, mode: S.route.mode, task: t.id }); },
     oncontextmenu: e => { if (t._temp) return; e.preventDefault(); cardMenu({ x: e.clientX, y: e.clientY }, t); },
   },
+  // Тип карточки и «↑ родитель» (иерархия): откуда пришла задача
+  (TASK_KINDS[t.kind] || t.parent) && h('div', { class: 'card-up' },
+    TASK_KINDS[t.kind] && h('span', { class: 'kind-tag', style: { '--kc': TASK_KINDS[t.kind].color } }, TASK_KINDS[t.kind].short),
+    t.parent && h('span', { class: 'card-parent', title: t.parent.unit.name + ' · ' + t.parent.key }, '↑ ', t.parent.title)),
   // Ключ задачи на доске не показываем — он в открытой карточке
   h('div', { class: 'card-top' },
     prio && prio.top && h('span', { class: 'prio-ic', title: 'Приоритет: ' + prio.opt.name }, icon('prio', 14)),

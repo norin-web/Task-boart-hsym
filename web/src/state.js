@@ -11,6 +11,19 @@ export const HIDE_DONE = [[0, 'Всегда показывать'], [1, 'Сут�
 export const KINDS = ['todo', 'progress', 'done'];
 export const KIND_LABELS = { todo: 'Не начато', progress: 'В работе', done: 'Готово' };
 export const KIND_COLORS = { todo: 'var(--st-todo)', progress: 'var(--st-progress)', done: 'var(--st-done)' };
+/** Тип карточки (иерархия): приложение, апдейт, реджект; '' — обычная задача. */
+export const TASK_KINDS = {
+  app: { label: 'Приложение', plural: 'Приложения', short: 'App', color: '#6366f1', icon: 'app' },
+  update: { label: 'Апдейт', plural: 'Апдейты', short: 'Апдейт', color: '#0ea5e9', icon: 'refresh' },
+  reject: { label: 'Реджект', plural: 'Реджекты', short: 'Реджект', color: '#ef4444', icon: 'alert' },
+};
+/** Дочерние юниты (на уровень ниже) и все потомки юнита. */
+export const childUnits = id => S.units.filter(u => !u.archived && u.parentId === id);
+export function descendantUnits(id) {
+  const out = [];
+  for (let level = childUnits(id); level.length; level = level.flatMap(u => childUnits(u.id))) out.push(...level);
+  return out;
+}
 export const KIND_ICONS = { todo: 'circle', progress: 'progress', done: 'done' };
 
 /** localStorage с защитой от приватного режима и битых значений. */

@@ -237,6 +237,20 @@ test('несколько позиций, приоритет — только а�
   assert.ok(!b.members.some(m => m.personId === dev.id));
 });
 
+test('передача вниз: модераторам — уведомление; участник не меняет связи задачи', async () => {
+  const api = await setup();
+  const { mod, designer, A, B, t1 } = await team(api);
+  await api('updateUnit', { id: A.id, settings: { ...A.settings, handoff: { column: 'in_progress', unitId: B.id } } });
+  await api('updateTask', { id: t1.id, patch: { status: 'in_progress' } });
+  await api.as(mod, async () => {
+    const n = await api('getNotifications', {});
+    assert.ok(n.some(x => x.kind === 'handoff' && x.unit.id === B.id), JSON.stringify(n.map(x => x.kind)));
+  });
+  await api.as(designer, async () => {
+    await assert.rejects(() => api.pg.query("update tasks set kind = 'app' where id = $1", [t1.id]), /Недостаточно прав/);
+  });
+});
+
 test('ревью: автоназначение ревьюера по позиции и возврат исполнителю', async () => {
   const api = await setup();
   const { mod, designer, dev, A, link, t1, t2 } = await team(api);

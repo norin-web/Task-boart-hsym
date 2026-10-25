@@ -28,6 +28,10 @@ create table if not exists app_settings (
   updated_at text not null default ''
 );
 
+-- Иерархия: юнит → дочерние юниты (CEO → модераторы → команды); задача → дочерние задачи (декомпозиция вниз).
+-- kind задачи: '' — обычная, app — приложение, update — апдейт, reject — реджект.
+alter table units add column if not exists parent_id text not null default '';
+
 create table if not exists fields (
   id           text primary key,
   unit_id      text not null references units(id) on delete cascade,
@@ -168,6 +172,10 @@ create table if not exists task_links (
 create index if not exists task_links_unit on task_links(unit_id);
 
 -- Уведомления человеку (пока одно: «на вас назначили задачу»). Пишет только триггер; читает и отмечает — сам человек.
+alter table tasks add column if not exists parent_id text not null default '';
+alter table tasks add column if not exists kind text not null default '';
+create index if not exists tasks_parent on tasks(parent_id);
+
 create table if not exists notifications (
   id        text primary key,
   person_id text not null references people(id) on delete cascade,
@@ -402,7 +410,8 @@ begin
        or new.due_date is distinct from old.due_date or new.unit_id is distinct from old.unit_id
        or new.department_id is distinct from old.department_id or new.archived is distinct from old.archived
        or new.num is distinct from old.num or new.created_by is distinct from old.created_by
-       or new.team_id is distinct from old.team_id then
+       or new.team_id is distinct from old.team_id
+       or new.parent_id is distinct from old.parent_id or new.kind is distinct from old.kind then
       raise exception 'Недостаточно прав: участник меняет только статус, описание, поля и чеклист своей задачи' using errcode = '42501';
     end if;
     select string_agg(f.name, ', ') into missing from fields f
@@ -491,6 +500,46 @@ begin
 end $$;
 drop trigger if exists review_assign on tasks;
 create trigger review_assign before update on tasks for each row execute function review_assign();
+
+-- Передача вниз (настройка юнита settings.handoff: {column, unitId}): задача пришла в колонку column —
+-- в юните unitId появляется дочерняя карточка-приложение (kind app) с тем же названием, описанием, сроком,
+-- общими полями и ссылками; модераторам — уведомление «handoff». Один раз на пару «задача — юнит».
+create or replace function handoff_task() returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  ho jsonb;
+  target text;
+  v_id text;
+  v_status text;
+  v_actor text := coalesce(my_person_id(), '');
+  at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+begin
+  if new.status is not distinct from old.status then return new; end if;
+  select settings -> 'handoff' into ho from units where id = new.unit_id;
+  target := coalesce(ho ->> 'unitId', '');
+  if coalesce(ho ->> 'column', '') = '' or target = '' or new.status <> ho ->> 'column' then return new; end if;
+  if not exists (select 1 from units where id = target and not archived) then return new; end if;
+  if exists (select 1 from tasks where parent_id = new.id and unit_id = target) then return new; end if;
+  select settings -> 'columns' -> 0 ->> 'id' into v_status from units where id = target;
+  v_id := 't_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12);
+  perform set_config('app.system', 'on', true);
+  insert into tasks (id, unit_id, num, title, description, status, assignee_id, department_id, due_date, ord,
+                     fields, checklist, archived, done_at, created_by, created_at, updated_at, parent_id, kind)
+  values (v_id, target, next_task_num(target), new.title, new.description, coalesce(v_status, 'todo'), '', '', new.due_date, 0,
+          (select coalesce(jsonb_object_agg(e.key, e.value), '{}'::jsonb) from jsonb_each(new.fields) e
+            where exists (select 1 from fields f where f.id = e.key and f.unit_id is null)),
+          '[]'::jsonb, false, '', v_actor, at_, at_, new.id, 'app');
+  insert into task_links (task_id, field_id, unit_id, url, updated_at)
+  select v_id, field_id, target, url, at_ from task_links where task_id = new.id;
+  insert into activity (id, unit_id, task_id, action, field, from_val, to_val, at)
+  values ('a_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), target, v_id, 'create', '', '', to_jsonb(new.title)::text, at_);
+  insert into notifications (id, person_id, task_id, kind, actor_id, at)
+  select 'n_' || substr(md5(random()::text || clock_timestamp()::text || p.id), 1, 12), p.id, v_id, 'handoff', v_actor, at_
+    from people p where p.active and p.access = 'moderator' and p.id <> v_actor;
+  perform set_config('app.system', 'off', true);
+  return new;
+end $$;
+drop trigger if exists handoff_task on tasks;
+create trigger handoff_task after update of status on tasks for each row execute function handoff_task();
 
 -- «Забрать из ревью»: тот, кто отправил задачу на ревью, возвращает её себе в колонку перед ревью
 -- (что-то забыл). Исполнителем снова становится он — это делает review_assign при выходе из колонки ревью.

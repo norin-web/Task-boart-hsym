@@ -7,6 +7,8 @@
 export const KINDS = ['todo', 'progress', 'done'];
 const KIND_COUNT_KEY = { todo: 'todo', progress: 'in_progress', done: 'done' };
 export const FIELD_TYPES = ['text', 'longtext', 'number', 'date', 'select', 'multiselect', 'person', 'checkbox', 'url'];
+/** Тип карточки: '' — задача, app — приложение, update — апдейт, reject — реджект. */
+export const TASK_KINDS = ['', 'app', 'update', 'reject'];
 export const PALETTE = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6', '#14b8a6', '#64748b', '#84cc16'];
 
 export function defaultSettings() {
@@ -122,7 +124,15 @@ export function unitSettings(raw) {
     hideDoneDays: Math.max(0, Math.min(365, parseInt(s.hideDoneDays, 10) || 0)),
     review: reviewSettings(s.review, columns),
     checklistBeforeDone: !!s.checklistBeforeDone,
+    handoff: handoffSettings(s.handoff, columns),
   };
+}
+
+/** Передача вниз: задача пришла в колонку column — в юните unitId появляется карточка-приложение (триггер handoff_task). */
+function handoffSettings(h, columns) {
+  const column = h && columns.some(c => c.id === h.column) ? h.column : '';
+  const unitId = h && typeof h.unitId === 'string' ? h.unitId.slice(0, 40) : '';
+  return { column: unitId ? column : '', unitId: column ? unitId : '' };
 }
 
 function storedSettings(s) {
@@ -134,6 +144,7 @@ function storedSettings(s) {
     hideDoneDays: full.hideDoneDays,
     review: full.review,
     checklistBeforeDone: full.checklistBeforeDone,
+    handoff: full.handoff,
   };
 }
 
@@ -184,7 +195,7 @@ function cleanFieldValues(obj, keepNulls) {
 
 const unitOut = r => ({
   id: r.id, name: r.name, key: r.key, color: r.color, description: r.description,
-  settings: unitSettings(r.settings), nextNum: r.next_num, order: r.ord, archived: !!r.archived,
+  settings: unitSettings(r.settings), nextNum: r.next_num, order: r.ord, archived: !!r.archived, parentId: r.parent_id || '',
   archivedAt: r.archived_at || '', createdAt: r.created_at, updatedAt: r.updated_at,
 });
 
@@ -193,6 +204,7 @@ const taskOut = r => ({
   assigneeId: r.assignee_id, departmentId: r.department_id || '', dueDate: r.due_date, order: r.ord,
   fields: json(r.fields, {}), checklist: json(r.checklist, []), archived: !!r.archived, doneAt: r.done_at,
   reviewFrom: r.review_from || '', reviewerId: r.reviewer_id || '', teamId: r.team_id || '',
+  parentId: r.parent_id || '', kind: r.kind || '',
   createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at,
 });
 
@@ -299,6 +311,50 @@ export function createBackend(db, opts = {}) {
   /** Поля юнита: сначала общие (на все юниты), потом свои. */
   const globalFields = async () => (await all(() => T('fields').select('*').is('unit_id', null).order('ord').order('id'))).map(fieldOut);
   const ownFields = async unitId => (await all(() => T('fields').select('*').eq('unit_id', unitId).order('ord').order('id'))).map(fieldOut);
+  /**
+   * Сводка по потомкам задач (вниз по иерархии, до 6 уровней): сколько всего, готово, просрочено,
+   * и родитель каждой задачи (для «↑ App» на карточке). Возвращает { stats: {id → {total, done, overdue}}, parents: {id → brief} }.
+   */
+  async function treeInfo(tasks, day) {
+    const stats = {}, parents = {};
+    const withParent = tasks.filter(t => t.parent_id);
+    const roots = tasks.map(t => t.id);
+    if (!roots.length) return { stats, parents };
+    const unitRows = await all(() => T('units').select('id,key,name,color,settings').order('id'));
+    const U = Object.fromEntries(unitRows.map(u => [u.id, { ...u, st: unitSettings(u.settings) }]));
+    // все потомки (без повторов) и дети каждого — затем у каждой задачи считаем своё поддерево
+    const kids = {}, seen = new Set(roots);
+    let level = roots;
+    for (let depth = 1; level.length && depth <= 6; depth++) {
+      const rows = (await run(T('tasks').select('id,parent_id,unit_id,status,due_date,archived').in('parent_id', level).order('id')))
+        .filter(r => !seen.has(r.id) || roots.includes(r.id));
+      rows.forEach(r => { (kids[r.parent_id] || (kids[r.parent_id] = [])).push(r); });
+      level = rows.filter(r => !seen.has(r.id)).map(r => r.id);
+      level.forEach(id => seen.add(id));
+    }
+    for (const root of roots) {
+      const s = { total: 0, done: 0, overdue: 0 };
+      const stack = [...(kids[root] || [])];
+      for (let guard = 0; stack.length && guard < 5000; guard++) {
+        const r = stack.pop();
+        stack.push(...(kids[r.id] || []));
+        if (r.archived || !U[r.unit_id]) continue;
+        s.total++;
+        if (kindOf(U[r.unit_id].st, r.status) === 'done') s.done++; else if (r.due_date && r.due_date < day) s.overdue++;
+      }
+      if (s.total) stats[root] = s;
+    }
+    if (withParent.length) {
+      const rows = await run(T('tasks').select('id,unit_id,num,title,kind').in('id', [...new Set(withParent.map(t => t.parent_id))]));
+      const P = Object.fromEntries(rows.map(r => [r.id, r]));
+      for (const t of withParent) {
+        const r = P[t.parent_id], u = r && U[r.unit_id];
+        if (r && u) parents[t.id] = { id: r.id, key: `${u.key}-${r.num}`, title: r.title, kind: r.kind || '', unit: { id: u.id, name: u.name, color: u.color } };
+      }
+    }
+    return { stats, parents };
+  }
+
   const unitFields = async unitId => [...await globalFields(), ...await ownFields(unitId)];
   const templates = async () => (await all(() => T('task_templates').select('*').order('ord').order('id'))).map(templateOut);
   const linkFields = async () => (await all(() => T('link_fields').select('*').order('ord').order('id'))).map(linkFieldOut);
@@ -643,18 +699,19 @@ export function createBackend(db, opts = {}) {
         unitFields(unit.id),
         all(() => T('tasks').select('*').eq('unit_id', unit.id).order('id')),
         rpc('comment_counts', { p_unit: unit.id }),
-        all(() => T('units').select('id,name,key,color,archived').order('ord').order('id')),
+        all(() => T('units').select('id,name,key,color,archived,parent_id').order('ord').order('id')),
         people(), departments(), unitMembers(unit.id),
         all(() => T('task_links').select('task_id,field_id,url').eq('unit_id', unit.id).order('task_id').order('field_id')),
       ]);
       const cc = Object.fromEntries((counts || []).map(c => [c.task_id, Number(c.n)]));
       const lk = {};
       links.forEach(l => { (lk[l.task_id] || (lk[l.task_id] = {}))[l.field_id] = l.url; });
+      const tree = await treeInfo(tasks.filter(t => !t.archived), today(p.today));
       return {
         unit: unitOut(unit),
         fields,
-        tasks: tasks.map(t => ({ ...taskOut(t), commentCount: cc[t.id] || 0, links: lk[t.id] || {} })),
-        units: units.map(u => ({ ...u, archived: !!u.archived })),
+        tasks: tasks.map(t => ({ ...taskOut(t), commentCount: cc[t.id] || 0, links: lk[t.id] || {}, tree: tree.stats[t.id] || null, parent: tree.parents[t.id] || null })),
+        units: units.map(({ parent_id: pid, ...u }) => ({ ...u, archived: !!u.archived, parentId: pid || '' })),
         people: ppl,
         departments: depts,
         members,
@@ -700,6 +757,17 @@ export function createBackend(db, opts = {}) {
       if ('color' in p) upd.color = color(p.color, u.color);
       if ('description' in p) upd.description = str(p.description, 1000);
       if ('settings' in p) upd.settings = storedSettings(p.settings);
+      if ('parentId' in p) {
+        // родитель — другой юнит и не потомок этого (без циклов)
+        let pid = str(p.parentId, 40);
+        if (pid) {
+          const all_ = await all(() => T('units').select('id,parent_id').order('id'));
+          const parentOf = Object.fromEntries(all_.map(x => [x.id, x.parent_id || '']));
+          if (!(pid in parentOf)) fail('Юнит не найден', 'NOT_FOUND');
+          for (let x = pid, i = 0; x && i < 50; x = parentOf[x], i++) if (x === u.id) fail('Юнит не может быть внутри самого себя');
+        }
+        upd.parent_id = pid;
+      }
       if ('archived' in p) {
         upd.archived = !!p.archived;
         if (upd.archived !== !!u.archived) upd.archived_at = upd.archived ? now() : '';
@@ -772,6 +840,7 @@ export function createBackend(db, opts = {}) {
         due_date: date(p.dueDate), ord: (await maxOrd('tasks', { unit_id: unit.id, status })) + 1,
         fields: cleanFieldValues(p.fields, false), checklist: cleanChecklist(p.checklist),
         archived: false, done_at: kindOf(st, status) === 'done' ? ts : '', created_by: actor(ctx), created_at: ts, updated_at: ts,
+        parent_id: p.parentId ? (await findTask(p.parentId)).id : '', kind: TASK_KINDS.includes(p.kind) ? p.kind : '',
       };
       await run(T('tasks').insert(task));
       await log([{ unitId: unit.id, taskId: task.id, action: 'create', to: task.title }], ctx);
@@ -883,6 +952,42 @@ export function createBackend(db, opts = {}) {
         return taskOut(saved[0]); // из базы: исполнителя мог сменить триггер ревью
       }
       return taskOut(t);
+    },
+
+    /**
+     * Дерево задачи: цепочка родителей (от верхнего) и все потомки ниже — с юнитом, этапом и этапами юнита
+     * (для жизненного цикла). Видно только то, что пускают правила доступа.
+     */
+    async getTaskTree(p) {
+      const root = await findTask(p.id);
+      const unitRows = await all(() => T('units').select('id,name,key,color,settings,parent_id').order('id'));
+      const U = Object.fromEntries(unitRows.map(u => [u.id, { ...u, st: unitSettings(u.settings) }]));
+      const brief = r => {
+        const u = U[r.unit_id];
+        const col = u ? columnOf(u.st, r.status) : { name: r.status, kind: 'todo', color: '' };
+        return {
+          id: r.id, key: u ? `${u.key}-${r.num}` : '', title: r.title, kind: r.kind || '', parentId: r.parent_id || '',
+          unit: u ? { id: u.id, name: u.name, color: u.color } : null, status: r.status,
+          statusName: col.name, statusKind: col.kind, statusColor: col.color || '',
+          assigneeId: r.assignee_id, dueDate: r.due_date, archived: !!r.archived,
+          stages: u && r.kind ? u.st.columns.map(c => ({ id: c.id, name: c.name, kind: c.kind, color: c.color || '' })) : null,
+        };
+      };
+      const ancestors = [];
+      for (let pid = root.parent_id, i = 0; pid && i < 10; i++) {
+        const a = await one('tasks', pid);
+        if (!a) break;
+        ancestors.unshift(brief(a));
+        pid = a.parent_id;
+      }
+      const descendants = [];
+      let level = [root.id];
+      for (let depth = 1; level.length && depth <= 6; depth++) {
+        const rows = await run(T('tasks').select('*').in('parent_id', level).order('created_at').order('id'));
+        rows.forEach(r => descendants.push({ ...brief(r), depth }));
+        level = rows.map(r => r.id);
+      }
+      return { task: brief(root), ancestors, descendants };
     },
 
     /** Забрать задачу из ревью (тот, кто отправил): обратно в колонку перед ревью, исполнитель — снова он. */

@@ -1,6 +1,6 @@
 import {
   S, LS, taskById, personById, activeFields, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDateTime, relTime, addDays,
-  unitById, safeUrl, visibleLinkFields, whoName, teamById, activeTeams, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, fmtValue,
+  unitById, safeUrl, visibleLinkFields, TASK_KINDS, KIND_COLORS, descendantUnits, whoName, teamById, activeTeams, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, fmtValue,
 } from '../state.js';
 import { $, h, append, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, fill } from '../ui.js';
 import { call, send } from '../api.js';
@@ -94,6 +94,7 @@ function buildPanel(t) {
         h('span', null, 'На ревью у ' + ((personById(t.assigneeId) || {}).name || 'ревьюера') + '. Что-то забыли?'),
         h('button', { class: 'btn sm', onclick: () => recallReview(t) }, icon('back', 13), 'Забрать из ревью'))
       : !editable && h('div', { class: 'readonly-note' }, icon('alert', 14), 'Только просмотр: менять можно свои задачи'),
+    treeBlock(t, staff),
     !B.description.hidden && descriptionBlock(t, B.description.label, editable),
     linksBlock(t, editable),
     checklistBlock(t, editable),
@@ -118,6 +119,69 @@ function buildPanel(t) {
   return h('aside', { class: 'panel' + (cardCenter() ? ' center' : ''), role: 'dialog', 'aria-label': taskKey(t) },
     head,
     h('div', { class: 'panel-body' }, main, sideBlock(t, { staff, editable })));
+}
+
+/**
+ * Связи по иерархии: откуда задача (цепочка родителей), этап приложения, апдейты/реджекты и подзадачи ниже.
+ * Админам — «+ Апдейт», «+ Реджект» (у приложения) и «Разбить на задачи» в юниты ниже.
+ */
+function treeBlock(t, staff) {
+  const box = h('div', { class: 'tree-block' });
+  const u = S.board.unit;
+  const below = descendantUnits(u.id);
+  const brief = { id: t.id, title: t.title, key: taskKey(t) };
+  const reload = () => load();
+  const add = (kind, unitId, unitIds) => openCreateTask({ unitId, unitIds, kind, parent: brief, title: kind && t.kind === 'app' ? TASK_KINDS[kind].label + ' · ' + t.title : '', onCreated: reload });
+  const actions = staff && h('div', { class: 'tree-actions' },
+    t.kind === 'app' && h('button', { class: 'btn sm', onclick: () => add('update', u.id) }, icon('refresh', 13), 'Апдейт'),
+    t.kind === 'app' && h('button', { class: 'btn sm', onclick: () => add('reject', u.id) }, icon('alert', 13), 'Реджект'),
+    h('button', { class: 'btn sm', onclick: () => add('', below[0] ? below[0].id : u.id, below.length ? [...below.map(x => x.id), u.id] : null) },
+      icon('tree', 13), below.length ? 'Разбить на задачи' : 'Подзадача'));
+
+  const kindTag = k => TASK_KINDS[k] && h('span', { class: 'kind-tag', style: { '--kc': TASK_KINDS[k].color } }, TASK_KINDS[k].short);
+  const statusChip = n => h('span', { class: 'chip st-chip', style: { '--sc': n.statusColor || KIND_COLORS[n.statusKind] } }, n.statusName);
+  const row = n => h('button', { class: 'tree-row', style: { '--depth': n.depth - 1 }, onclick: () => peekTask(n.unit.id, n.id) },
+    h('span', { class: 'dot', style: { background: n.statusColor || KIND_COLORS[n.statusKind] } }),
+    kindTag(n.kind),
+    h('span', { class: 'tree-title' + (n.statusKind === 'done' ? ' done' : '') }, n.title),
+    n.unit && n.unit.id !== u.id && h('span', { class: 'unit-chip' }, h('span', { class: 'unit-dot', style: { background: n.unit.color, margin: 0 } }), n.unit.name),
+    statusChip(n),
+    n.assigneeId && avatar(personById(n.assigneeId), 'sm'));
+  /** Жизненный цикл: этапы (колонки юнита) карточки-приложения, текущий подсвечен. */
+  const stepper = n => h('div', { class: 'stepper' }, n.stages.map(s => {
+    const i = n.stages.findIndex(x => x.id === n.status), j = n.stages.indexOf(s);
+    return h('span', { class: 'step' + (j < i ? ' past' : j === i ? ' now' : ''), style: { '--sc': s.color || KIND_COLORS[s.kind] } }, s.name);
+  }));
+
+  async function load() {
+    let tree;
+    try { tree = await call('getTaskTree', { id: t.id }); } catch (e) { return; }
+    if (S.panelTaskId !== t.id) return;
+    const d = tree.descendants.filter(n => !n.archived);
+    const ups = d.filter(n => n.kind === 'update' || n.kind === 'reject');
+    const tasks = d.filter(n => !n.kind);
+    // этап приложения: своя колонка (если это карточка-приложение) или карточка-приложение уровнем ниже
+    const life = t.kind === 'app' ? null : d.find(n => n.kind === 'app' && n.depth === 1);
+    const done = tasks.filter(n => n.statusKind === 'done').length;
+    const empty = !tree.ancestors.length && !d.length && !t.kind;
+    fill(box,
+      tree.ancestors.length > 0 && h('div', { class: 'tree-up' }, icon('tree', 13),
+        tree.ancestors.map((a, i) => [i > 0 && h('span', { class: 'muted' }, '›'),
+          h('button', { class: 'link-btn', title: a.unit ? a.unit.name : '', onclick: () => peekTask(a.unit.id, a.id) }, kindTag(a.kind), a.title)])),
+      !empty && h('div', { class: 'tree-head' },
+        h('span', { class: 'sub-title', style: { margin: 0 } }, t.kind === 'app' || life ? 'Жизненный цикл' : 'Подзадачи'),
+        tasks.length > 0 && h('span', { class: 'muted' }, `${done} из ${tasks.length} задач готово`),
+        h('span', { class: 'spacer' }), actions),
+      life && h('div', { class: 'life' }, h('div', { class: 'life-label' }, 'Этап у ', h('b', null, life.unit.name), ':'), stepper(life),
+        h('button', { class: 'link-btn', onclick: () => peekTask(life.unit.id, life.id) }, 'Открыть карточку ' + life.key)),
+      tasks.length > 0 && h('div', { class: 'progress tree-progress' }, h('div', { style: { width: Math.round(done / tasks.length * 100) + '%' } })),
+      ups.length > 0 && h('div', { class: 'tree-group' }, h('div', { class: 'tree-group-title' }, 'Апдейты и реджекты'), ups.map(n => h('div', null, row(n), n.stages && h('div', { class: 'tree-step' }, stepper(n))))),
+      d.filter(n => n.kind === 'app' && n !== life).map(row),
+      tasks.length > 0 && h('div', { class: 'tree-group' }, h('div', { class: 'tree-group-title' }, 'Задачи'), tasks.map(row)),
+      empty && staff && h('div', { class: 'tree-empty' }, actions));
+  }
+  load();
+  return box;
 }
 
 /** Перейти на доску юнита (из карточки, открытой поверх дашборда — с этой же задачей). */
@@ -592,16 +656,18 @@ export function openCreateTask(opts = {}) {
     toast('Сначала создайте юнит');
     return openCreateUnit();
   }
-  const inBoard = !!S.board && (!opts.unitId || opts.unitId === S.board.unit.id);
+  // opts.parent — родительская задача (декомпозиция вниз), opts.kind — тип карточки, opts.unitIds — из каких юнитов выбирать
+  const pool = opts.unitIds ? units.filter(u => opts.unitIds.includes(u.id)) : units;
+  const inBoard = !!S.board && (!opts.unitId || opts.unitId === S.board.unit.id) && !opts.unitIds;
   // С дашборда для конкретного человека — его первый юнит, исполнитель и позиция подставлены
   const ownUnit = opts.assigneeId && units.find(u => (u.members || []).includes(opts.assigneeId));
-  let unit = inBoard ? S.board.unit : unitById(opts.unitId) || ownUnit || units[0];
+  let unit = inBoard ? S.board.unit : unitById(opts.unitId) || ownUnit || pool[0] || units[0];
   const draft = {
     status: opts.status || '', assigneeId: opts.assigneeId || '', dueDate: '', fields: {}, links: {}, teamId: '',
     departmentId: opts.departmentId || (S.filters.depts.length === 1 && inBoard ? S.filters.depts[0] : ''),
   };
 
-  const title = autosize(h('textarea', { class: 'inp title-field', rows: 1, placeholder: 'Что нужно сделать?', maxlength: 500 }));
+  const title = autosize(h('textarea', { class: 'inp title-field', rows: 1, placeholder: 'Что нужно сделать?', maxlength: 500, value: opts.title || '' }));
   title.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submitBtn().click(); } });
   const desc = autosize(h('textarea', { class: 'inp', rows: 3, placeholder: 'Описание (необязательно)', maxlength: 20000 }));
   const more = h('label', { class: 'chk hint' }, h('input', { type: 'checkbox' }), 'Создать ещё одну');
@@ -643,7 +709,7 @@ export function openCreateTask(opts = {}) {
       !inBoard && field('Юнит', h('select', {
         class: 'inp', value: unit.id,
         onchange: e => { unit = unitById(e.target.value); drawProps(); },
-      }, units.map(u => h('option', { value: u.id }, u.name + ' · ' + u.key)))),
+      }, pool.map(u => h('option', { value: u.id }, u.name + ' · ' + u.key)))),
       field(B.status.label, h('select', { class: 'inp', value: draft.status || unit.settings.columns[0].id, onchange: e => { draft.status = e.target.value; } },
         unit.settings.columns.map(c => h('option', { value: c.id }, c.name)))),
       field('Команда', teamSelect(draft.teamId, v => {
@@ -683,10 +749,14 @@ export function openCreateTask(opts = {}) {
   };
   drawLinks();
 
+  const kind = TASK_KINDS[opts.kind];
   const close = modal({
-    title: 'Новая задача',
+    title: kind ? 'Новый ' + kind.label.toLowerCase() : opts.parent ? 'Подзадача' : 'Новая задача',
     wide: true,
-    body: [tplRow, title, h('div', { style: { height: '10px' } }), desc, h('div', { style: { height: '14px' } }), props, linksBox],
+    body: [
+      opts.parent && h('div', { class: 'parent-note' }, icon('tree', 13), 'Часть «', h('b', null, opts.parent.title), '»',
+        h('span', { class: 'muted' }, ' · ' + opts.parent.key)),
+      tplRow, title, h('div', { style: { height: '10px' } }), desc, h('div', { style: { height: '14px' } }), props, linksBox],
     footLeft: more,
     actions: [
       { label: 'Отмена' },
@@ -695,7 +765,10 @@ export function openCreateTask(opts = {}) {
           const text = title.value.trim();
           if (!text) { title.focus(); return; }
           const { links, ...rest } = draft;
-          const task = await send('createTask', { unitId: unit.id, title: text, description: desc.value, ...rest });
+          const task = await send('createTask', {
+            unitId: unit.id, title: text, description: desc.value, ...rest,
+            parentId: opts.parent ? opts.parent.id : '', kind: opts.kind || '',
+          });
           // ссылки — отдельной таблицей, после создания задачи
           task.links = {};
           for (const [fieldId, url] of Object.entries(links)) {
@@ -715,7 +788,7 @@ export function openCreateTask(opts = {}) {
             return;
           }
           close();
-          if (S.board && S.board.unit.id === unit.id) {
+          if (S.board && S.board.unit.id === unit.id && !opts.parent) {
             toast('Создана ' + key, { action: { label: 'Открыть', run: () => navigate({ unit: unit.id, mode: S.route.mode, task: task.id }) } });
           } else {
             // Не уводим со страницы: задачу можно открыть поверх
