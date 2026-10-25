@@ -506,6 +506,7 @@ export function createBackend(db, opts = {}) {
       ]);
       const U = Object.fromEntries(units.filter(u => !u.archived).map(u => [u.id, { ...u, st: unitSettings(u.settings) }]));
       const byPerson = {};
+      const byPersonUnit = {}; // человек → юнит → счётчики (для фильтра «Загрузки» по юниту)
       const byPosition = {};
       const overdue = [], unassignedTasks = [], noPositionTasks = [];
       let unassigned = 0, noPosition = 0;
@@ -522,6 +523,7 @@ export function createBackend(db, opts = {}) {
           if (late) c.overdue++;
         };
         const brief = { id: t.id, key: `${u.key}-${t.num}`, title: t.title, dueDate: t.due_date, assigneeId: t.assignee_id, departmentId: t.department_id || '', unit: { id: u.id, name: u.name, color: u.color } };
+        if (t.assignee_id) bump(byPersonUnit[t.assignee_id] || (byPersonUnit[t.assignee_id] = {}), t.unit_id);
         if (t.assignee_id) bump(byPerson, t.assignee_id); else { unassigned++; unassignedTasks.push(brief); }
         if (t.department_id) bump(byPosition, t.department_id); else { noPosition++; noPositionTasks.push(brief); }
         if (late) overdue.push(brief);
@@ -535,7 +537,7 @@ export function createBackend(db, opts = {}) {
       return {
         byPerson, byPosition, unassigned, noPosition,
         overdue: overdue.slice(0, 10), overdueTotal: overdue.length,
-        unassignedTasks: unassignedTasks.sort(byDue).slice(0, 15), noPositionTasks: noPositionTasks.sort(byDue).slice(0, 15), unitMembers,
+        byPersonUnit, unassignedTasks: unassignedTasks.sort(byDue).slice(0, 15), noPositionTasks: noPositionTasks.sort(byDue).slice(0, 15), unitMembers,
         peopleNoPosition: active.filter(x => x.access === 'member' && !x.positionId).map(x => x.id),
         peopleNoLogin: active.filter(x => !x.linked).map(x => x.id),
         unitsNoTeam: Object.values(U).filter(u => !teamUnits.has(u.id)).map(u => u.id),

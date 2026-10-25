@@ -509,8 +509,13 @@ export function openCreateTask(opts = {}) {
     return openCreateUnit();
   }
   const inBoard = !!S.board && (!opts.unitId || opts.unitId === S.board.unit.id);
-  let unit = inBoard ? S.board.unit : unitById(opts.unitId) || units[0];
-  const draft = { status: opts.status || '', assigneeId: '', departmentId: S.filters.depts.length === 1 && inBoard ? S.filters.depts[0] : '', dueDate: '', fields: {} };
+  // С дашборда для конкретного человека — его первый юнит, исполнитель и позиция подставлены
+  const ownUnit = opts.assigneeId && units.find(u => (u.members || []).includes(opts.assigneeId));
+  let unit = inBoard ? S.board.unit : unitById(opts.unitId) || ownUnit || units[0];
+  const draft = {
+    status: opts.status || '', assigneeId: opts.assigneeId || '', dueDate: '', fields: {},
+    departmentId: opts.departmentId || (S.filters.depts.length === 1 && inBoard ? S.filters.depts[0] : ''),
+  };
 
   const title = autosize(h('textarea', { class: 'inp title-field', rows: 1, placeholder: 'Что нужно сделать?', maxlength: 500 }));
   title.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submitBtn().click(); } });
@@ -536,8 +541,9 @@ export function openCreateTask(opts = {}) {
   };
   drawProps();
 
+  const forWho = opts.assigneeId && personById(opts.assigneeId);
   const close = modal({
-    title: 'Новая задача',
+    title: 'Новая задача' + (forWho ? ' · ' + forWho.name : ''),
     wide: true,
     body: [title, h('div', { style: { height: '10px' } }), desc, h('div', { style: { height: '14px' } }), props],
     footLeft: more,
@@ -563,7 +569,9 @@ export function openCreateTask(opts = {}) {
           if (S.board && S.board.unit.id === unit.id) {
             toast('Создана ' + key, { action: { label: 'Открыть', run: () => navigate({ unit: unit.id, mode: S.route.mode, task: task.id }) } });
           } else {
-            navigate({ unit: unit.id, mode: 'board', task: task.id });
+            // Не уводим со страницы: задачу можно открыть поверх
+            toast('Создана ' + key, { action: { label: 'Открыть', run: () => peekTask(unit.id, task.id) } });
+            if (opts.onCreated) opts.onCreated(task);
           }
         },
       },

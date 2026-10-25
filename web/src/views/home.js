@@ -1,7 +1,7 @@
 import { S, greeting, me, personById, plural, emptyCounts, isStaff, deptById, todayStr, fmtDate, activeDepts, ACCESS_LABELS } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, toast, menu, closeMenu } from '../ui.js';
 import { call } from '../api.js';
-import { currentView, link, navigate, taskLink } from '../router.js';
+import { currentView, link, navigate, taskLink, rerender } from '../router.js';
 import { renderSidebar } from './sidebar.js';
 import { openCreateTask, peekTask } from './task.js';
 import { openCreateUnit, unitMenu } from './units.js';
@@ -219,52 +219,83 @@ function attItem({ n, forms, rows, row, tone = 'warn', icon: ic = 'alert', open 
   return el;
 }
 
-/** Загрузка: открытые задачи по людям. Клик по строке — задачи человека прямо здесь. */
-export function workloadBlock(ov, { all = false } = {}) {
-  const rows = S.people.filter(p => p.active && p.access === 'member')
-    .map(p => ({ p, c: ov.byPerson[p.id] || { open: 0, inProgress: 0, overdue: 0 } }))
-    .sort((a, b) => b.c.open - a.c.open || b.c.overdue - a.c.overdue);
-  let expanded = all;
-  const max = Math.max(1, ...rows.map(r => r.c.open));
-  const pos = activeDepts().map(d => ({ d, c: ov.byPosition[d.id] || { open: 0, overdue: 0 } })).filter(x => x.c.open);
-  const body = h('div', { class: 'card-box load' });
-  const head = h('div', { class: 'section-head' }, h('h2', null, 'Загрузка команды'));
-  const opened = new Set();
+const loadFilter = { pos: '', unit: '' };
 
-  const personRow = ({ p, c }) => {
-    const wrap = h('div', { class: 'load-item' });
+/** Загрузка: открытые задачи по людям, фильтр по позиции и юниту. Клик по строке — задачи человека здесь же, «+» — дать задачу. */
+export function workloadBlock(ov, { all = false } = {}) {
+  const flt = loadFilter; // общий на сессию: после создания задачи страница перерисуется, фильтр останется
+  let expanded = all;
+  const opened = new Set();
+  const body = h('div', { class: 'card-box load' });
+  const head = h('div', { class: 'section-head' });
+  const zero = { open: 0, inProgress: 0, overdue: 0 };
+  const units = S.units.filter(u => !u.archived);
+  const countsOf = p => flt.unit ? ((ov.byPersonUnit[p.id] || {})[flt.unit] || zero) : (ov.byPerson[p.id] || zero);
+  const give = p => openCreateTask({ assigneeId: p.id, departmentId: p.positionId || '', unitId: flt.unit || undefined, onCreated: () => rerender() });
+
+  const personRow = ({ p, c }, max) => {
+    const wrap = h('div', { class: 'load-item' + (opened.has(p.id) ? ' open' : '') });
     const tasks = h('div', { class: 'load-tasks' });
-    const toggle = async () => {
-      if (opened.has(p.id)) { opened.delete(p.id); wrap.classList.remove('open'); fill(tasks); return; }
-      opened.add(p.id); wrap.classList.add('open');
+    const loadTasks = async () => {
       fill(tasks, h('div', { class: 'boot', style: { padding: '8px' } }, h('span', { class: 'spinner' })));
       try {
-        const list = (await call('queryTasks', { assigneeId: p.id, limit: 200 })).filter(t => t.statusKind !== 'done');
+        const list = (await call('queryTasks', { assigneeId: p.id, limit: 200 })).filter(t => t.statusKind !== 'done' && (!flt.unit || t.unit.id === flt.unit));
         if (!opened.has(p.id)) return;
-        fill(tasks, list.length ? taskGroups(list) : h('p', { class: 'muted', style: { margin: '4px 0' } }, 'Открытых задач нет'));
+        fill(tasks, list.length ? taskGroups(list) : h('p', { class: 'muted', style: { margin: '4px 0' } }, 'Открытых задач нет'),
+          h('button', { class: 'btn ghost sm', style: { marginTop: '6px' }, onclick: () => give(p) }, icon('plus', 13), 'Дать задачу'));
       } catch (e) { showErr(e); }
     };
+    const toggle = () => {
+      if (opened.has(p.id)) { opened.delete(p.id); wrap.classList.remove('open'); fill(tasks); return; }
+      opened.add(p.id); wrap.classList.add('open'); loadTasks();
+    };
+    if (opened.has(p.id)) loadTasks();
     wrap.append(
-      h('button', { class: 'load-row', onclick: toggle, title: `Открыто ${c.open}, в работе ${c.inProgress}, просрочено ${c.overdue}` },
-        avatar(p, 'sm'),
-        h('span', { class: 'load-name' }, p.name, h('small', null, personCaption(p))),
-        h('div', { class: 'load-bar' },
-          h('div', { class: 'load-fill', style: { width: (c.open / max) * 100 + '%' } },
-            h('div', { class: 'load-progress', style: { width: c.open ? (c.inProgress / c.open) * 100 + '%' : 0 } }))),
-        h('span', { class: 'load-num' }, c.open),
-        h('span', { class: 'load-late' + (c.overdue ? '' : ' zero') }, c.overdue ? c.overdue + ' просроч.' : '')),
+      h('div', { class: 'load-line' },
+        h('button', { class: 'load-row', onclick: toggle, title: `Открыто ${c.open}, в работе ${c.inProgress}, просрочено ${c.overdue}` },
+          avatar(p, 'sm'),
+          h('span', { class: 'load-name' }, p.name, h('small', null, personCaption(p))),
+          h('div', { class: 'load-bar' },
+            h('div', { class: 'load-fill', style: { width: (c.open / max) * 100 + '%' } },
+              h('div', { class: 'load-progress', style: { width: c.open ? (c.inProgress / c.open) * 100 + '%' : 0 } }))),
+          h('span', { class: 'load-num' }, c.open),
+          h('span', { class: 'load-late' + (c.overdue ? '' : ' zero') }, c.overdue ? c.overdue + ' просроч.' : '')),
+        h('button', { class: 'icon-btn sm load-add', title: 'Дать задачу: ' + p.name, onclick: () => give(p) }, icon('plus', 15))),
       tasks);
     return wrap;
   };
 
+  const pick = (anchor, key, title, allLabel, options) => menu(anchor, [
+    { title },
+    { label: allLabel, icon: flt[key] ? null : 'check', action: () => { flt[key] = ''; draw(); } },
+    ...options.map(([v, t]) => ({ label: t, icon: flt[key] === v ? 'check' : null, action: () => { flt[key] = v; draw(); } })),
+  ]);
+  const filterBtn = (key, title, allLabel, options) => {
+    const cur = options.find(o => o[0] === flt[key]);
+    return h('button', { class: 'btn ghost sm' + (cur ? ' on' : ''), onclick: e => { e.stopPropagation(); pick(e.currentTarget, key, title, allLabel, options); } },
+      cur ? cur[1] : allLabel, icon('chevron', 12));
+  };
+
   const draw = () => {
+    const rows = S.people.filter(p => p.active && p.access === 'member')
+      .filter(p => !flt.pos || p.positionId === flt.pos)
+      .filter(p => !flt.unit || (ov.unitMembers[flt.unit] || []).includes(p.id))
+      .map(p => ({ p, c: countsOf(p) }))
+      .sort((a, b) => b.c.open - a.c.open || b.c.overdue - a.c.overdue);
+    const max = Math.max(1, ...rows.map(r => r.c.open));
     const shown = expanded ? rows : rows.slice(0, 6);
+    const pos = activeDepts().map(d => ({ d, c: ov.byPosition[d.id] || zero })).filter(x => x.c.open);
     fill(head, h('h2', null, 'Загрузка команды'),
-      rows.length > 6 && h('button', { class: 'btn ghost sm', onclick: () => { expanded = !expanded; draw(); } }, expanded ? 'Свернуть' : 'Все ' + rows.length));
+      h('div', { class: 'row', style: { gap: '4px' } },
+        filterBtn('pos', 'Позиция', 'Все позиции', activeDepts().map(d => [d.id, d.name])),
+        filterBtn('unit', 'Юнит', 'Все юниты', units.map(u => [u.id, u.name])),
+        rows.length > 6 && h('button', { class: 'btn ghost sm', onclick: () => { expanded = !expanded; draw(); } }, expanded ? 'Свернуть' : 'Все ' + rows.length)));
     fill(body,
-      shown.length ? shown.map(personRow) : h('p', { class: 'muted', style: { margin: 0 } }, 'Участников пока нет'),
-      pos.length > 0 && h('div', { class: 'load-pos' }, pos.map(({ d, c }) => h('span', { class: 'chip', style: { background: `color-mix(in srgb, ${d.color} 16%, transparent)`, color: d.color } },
-        d.name + ': ' + c.open + (c.overdue ? ' · ' + c.overdue + ' просроч.' : '')))));
+      shown.length ? shown.map(r => personRow(r, max)) : h('p', { class: 'muted', style: { margin: 0 } }, flt.pos || flt.unit ? 'Никого по этим фильтрам' : 'Участников пока нет'),
+      !flt.unit && !flt.pos && pos.length > 0 && h('div', { class: 'load-pos' }, pos.map(({ d, c }) => h('button', {
+        class: 'chip', title: 'Показать только ' + d.name, onclick: () => { flt.pos = d.id; draw(); },
+        style: { background: `color-mix(in srgb, ${d.color} 16%, transparent)`, color: d.color },
+      }, d.name + ': ' + c.open + (c.overdue ? ' · ' + c.overdue + ' просроч.' : '')))));
   };
   draw();
   return h('section', null, head, body);

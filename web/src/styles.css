@@ -619,3 +619,9 @@ body.login-page #shell { display: block; }
 .st-row { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto; gap: 8px; font-size: 13px; }
 .st-row .ft-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .st-who { font-size: 12px; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.load-line { display: flex; align-items: center; gap: 4px; }
+.load-line .load-row { flex: 1; min-width: 0; }
+.load-add { opacity: 0; transition: opacity .12s; }
+.load-item:hover .load-add, .load-item.open .load-add, .load-add:focus-visible { opacity: 1; }
+@media (hover: none) { .load-add { opacity: 1; } }
+.load-pos .chip { border: 0; cursor: pointer; font: inherit; font-size: 12px; }
