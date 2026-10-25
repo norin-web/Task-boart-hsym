@@ -401,9 +401,9 @@ function sideBlock(t, { staff, editable }) {
       const before = t.departmentId;
       patchTask(t, { assigneeId: v }).then(() => { if (t.departmentId !== before) refreshPanel(t); });
     }), {
-      after: S.meId && t.assigneeId !== S.meId && h('button', {
-        class: 'link-btn prop-hint', onclick: () => { patchTask(t, { assigneeId: S.meId }); refreshPanel(t); },
-      }, 'Назначить на меня'),
+      after: S.meId && t.assigneeId !== S.meId && h('div', { class: 'quick-chips' }, h('button', {
+        class: 'quick-chip', onclick: () => { patchTask(t, { assigneeId: S.meId }); refreshPanel(t); },
+      }, icon('user', 12), 'Назначить на меня')),
     });
   }
 
@@ -420,14 +420,14 @@ function sideBlock(t, { staff, editable }) {
     const info = dueInfo(t.dueDate, taskDone(t));
     const setDue = v => { patchTask(t, { dueDate: v }); refreshPanel(t); };
     prop(B.dueDate.label, h('input', { class: 'inp', type: 'date', value: t.dueDate, onchange: e => setDue(e.target.value) }), {
-      after: h('div', { class: 'prop-hint row', style: { gap: '10px' } },
-        info && info.hint && h('span', { class: info.cls === 'overdue' ? 'prop-hint overdue' : 'muted', style: { margin: 0 } }, info.hint),
+      after: h('div', { class: 'quick-chips' },
+        info && info.hint && h('span', { class: 'quick-note' + (info.cls === 'overdue' ? ' overdue' : '') }, info.hint),
         !t.dueDate && [
-          h('button', { class: 'link-btn', onclick: () => setDue(addDays(0)) }, 'Сегодня'),
-          h('button', { class: 'link-btn', onclick: () => setDue(addDays(1)) }, 'Завтра'),
-          h('button', { class: 'link-btn', onclick: () => setDue(addDays(7)) }, 'Через неделю'),
+          h('button', { class: 'quick-chip', onclick: () => setDue(addDays(0)) }, 'Сегодня'),
+          h('button', { class: 'quick-chip', onclick: () => setDue(addDays(1)) }, 'Завтра'),
+          h('button', { class: 'quick-chip', onclick: () => setDue(addDays(7)) }, 'Через неделю'),
         ],
-        t.dueDate && h('button', { class: 'link-btn', onclick: () => setDue('') }, 'Убрать')),
+        t.dueDate && h('button', { class: 'quick-chip', title: 'Убрать срок', onclick: () => setDue('') }, icon('x', 11), 'Убрать')),
     });
   }
 

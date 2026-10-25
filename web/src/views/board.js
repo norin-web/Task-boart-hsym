@@ -335,7 +335,7 @@ function taskCard(t, inLane) {
   ].filter(Boolean);
 
   return h('article', {
-    class: 'card' + (t.archived ? ' archived' : '') + (t._temp ? ' temp' : '') + (canEditTask(t) ? '' : ' locked'), dataset: { id: t.id }, tabindex: '0',
+    class: 'card' + (t.archived ? ' archived' : '') + (taskDone(t) ? ' done' : '') + (t._temp ? ' temp' : '') + (canEditTask(t) ? '' : ' locked'), dataset: { id: t.id }, tabindex: '0',
     onclick: () => { if (!t._temp) navigate({ unit: S.board.unit.id, mode: S.route.mode, task: t.id }); },
     onkeydown: e => { if (e.key === 'Enter' && !t._temp) navigate({ unit: S.board.unit.id, mode: S.route.mode, task: t.id }); },
     oncontextmenu: e => { if (t._temp) return; e.preventDefault(); cardMenu({ x: e.clientX, y: e.clientY }, t); },
@@ -530,11 +530,9 @@ function submitQuick(status, dept) {
 
 function renderList(container) {
   const B = S.board.unit.settings.builtins;
-  const colIndex = id => columns().indexOf(colById(id));
   const cols = [
     { key: 'key', label: 'Ключ', val: t => t.num, cell: t => h('span', { class: 'key-badge' }, taskKey(t)) },
     { key: 'title', label: B.title.label, cls: 't-title', val: t => t.title.toLowerCase(), cell: t => t.title },
-    { key: 'status', label: B.status.label, val: t => colIndex(t.status) * 1e9 + t.order, cell: t => h('span', { class: 'badge' }, statusDot(colColor(colById(t.status)), 7), colName(t.status)) },
     !B.department.hidden && {
       key: 'dept', label: B.department.label, val: t => (deptById(t.departmentId) || { order: 1e9 }).order,
       cell: t => deptChip(t.departmentId) || h('span', { class: 'muted' }, '—'),
@@ -554,12 +552,19 @@ function renderList(container) {
     { key: 'updated', label: 'Обновлена', val: t => t.updatedAt, cell: t => h('span', { class: 'muted' }, relTime(t.updatedAt)) },
   ].filter(Boolean);
 
+  // Задачи сгруппированы по колонкам доски (в их порядке); сортировка по заголовку — внутри группы
   const sort = S.listSort;
-  const col = cols.find(c => c.key === sort.key) || cols[2];
+  const col = cols.find(c => c.key === sort.key) || { val: t => t.order };
   const tasks = filterTasks().sort((a, b) => {
     const x = col.val(a), y = col.val(b);
     return (x < y ? -1 : x > y ? 1 : 0) * sort.dir;
   });
+  const groups = columns().map(c => ({ c, list: tasks.filter(t => colById(t.status) === c) })).filter(g => g.list.length);
+  const taskRow = t => h('tr', {
+    class: (t.archived ? 'archived' : '') + (taskDone(t) ? ' done' : ''),
+    onclick: () => { if (!t._temp) navigate({ unit: S.board.unit.id, mode: 'list', task: t.id }); },
+    oncontextmenu: e => { e.preventDefault(); cardMenu({ x: e.clientX, y: e.clientY }, t); },
+  }, cols.map(c => h('td', { class: c.cls || '' }, c.cell(t))));
 
   fill(container, h('div', { class: 'page', style: { maxWidth: 'none' } },
     tasks.length
@@ -567,11 +572,10 @@ function renderList(container) {
         h('thead', null, h('tr', null, cols.map(c => h('th', {
           onclick: () => { S.listSort = { key: c.key, dir: sort.key === c.key ? -sort.dir : 1 }; renderTasks(); },
         }, c.label, sort.key === c.key ? (sort.dir > 0 ? ' ↑' : ' ↓') : '')))),
-        h('tbody', null, tasks.map(t => h('tr', {
-          class: t.archived ? 'archived' : '',
-          onclick: () => { if (!t._temp) navigate({ unit: S.board.unit.id, mode: 'list', task: t.id }); },
-          oncontextmenu: e => { e.preventDefault(); cardMenu({ x: e.clientX, y: e.clientY }, t); },
-        }, cols.map(c => h('td', { class: c.cls || '' }, c.cell(t))))))))
+        groups.map(({ c, list }) => h('tbody', { class: 'grp' },
+          h('tr', { class: 'grp-head' }, h('td', { colspan: cols.length },
+            h('span', { class: 'grp-name' }, statusDot(colColor(c), 8), c.name), h('span', { class: 'grp-count' }, list.length))),
+          list.map(taskRow)))))
       : h('div', { class: 'card-box empty-state' },
         h('h2', null, S.board.tasks.length ? 'Ничего не найдено' : 'Задач пока нет'),
         h('p', null, S.board.tasks.length ? 'Попробуйте изменить фильтры.' : 'Создайте первую задачу в этом юните.'),
