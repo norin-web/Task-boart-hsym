@@ -176,6 +176,8 @@ create table if not exists notifications (
   read_at   text not null default ''
 );
 create index if not exists notifications_person on notifications(person_id, read_at);
+-- К чему относится уведомление о сроке: дата срока (новый срок — новое уведомление)
+alter table notifications add column if not exists ref text not null default '';
 
 -- ---------- атомарные операции ----------
 
@@ -475,6 +477,36 @@ begin
 end $$;
 drop trigger if exists notify_assignee on tasks;
 create trigger notify_assignee after insert or update on tasks for each row execute function notify_assignee();
+
+-- Сроки своих задач: просрочено (kind 'overdue') и срок сегодня/завтра ('due_soon'). Зовёт приложение вошедшего
+-- (пульс и загрузка уведомлений) с его сегодняшней датой — без крона. На каждый срок — одно уведомление.
+create or replace function scan_due(p_today text) returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_me text := my_person_id();
+  v_at text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+  v_tomorrow text;
+begin
+  if v_me is null or p_today !~ '^\d{4}-\d{2}-\d{2}$' then return; end if;
+  v_tomorrow := to_char(p_today::date + 1, 'YYYY-MM-DD');
+  with due as (
+    select t.id, t.due_date, case when t.due_date < p_today then 'overdue' else 'due_soon' end as kind
+      from tasks t join units u on u.id = t.unit_id
+     where t.assignee_id = v_me and not t.archived and not u.archived and t.due_date <> '' and t.due_date <= v_tomorrow
+       and not exists (select 1 from jsonb_array_elements(u.settings -> 'columns') c
+                        where c ->> 'id' = t.status and c ->> 'kind' = 'done')
+  ), fresh as (
+    select d.* from due d
+     where not exists (select 1 from notifications n
+                        where n.person_id = v_me and n.task_id = d.id and n.kind = d.kind and n.ref = d.due_date)
+  ), cleared as (
+    -- просрочка заменяет непрочитанное «срок скоро» по той же задаче
+    delete from notifications n using fresh f
+     where f.kind = 'overdue' and n.person_id = v_me and n.task_id = f.id and n.kind = 'due_soon' and n.read_at = ''
+  )
+  insert into notifications (id, person_id, task_id, kind, actor_id, at, ref)
+  select 'n_' || substr(md5(random()::text || clock_timestamp()::text || f.id), 1, 12), v_me, f.id, f.kind, '', v_at, f.due_date
+    from fresh f;
+end $$;
 
 -- Отметка «был в приложении» — только себе.
 create or replace function touch_presence() returns void language sql security definer set search_path = public as $$

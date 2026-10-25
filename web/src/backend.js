@@ -1091,8 +1091,9 @@ export function createBackend(db, opts = {}) {
     /* ---------- присутствие и уведомления ---------- */
 
     /** Пульс раз в минуту: отметить «я в приложении», вернуть, кто когда был, и число непрочитанных уведомлений. */
-    async heartbeat() {
+    async heartbeat(p) {
       await rpc('touch_presence', {});
+      if (p.today) await rpc('scan_due', { p_today: today(p.today) });
       const [seen, unread] = await Promise.all([
         all(() => T('people').select('id,last_seen_at').order('id')),
         run(T('notifications').select('id').eq('read_at', '').limit(100)),
@@ -1101,7 +1102,8 @@ export function createBackend(db, opts = {}) {
     },
 
     /** Непрочитанные уведомления вошедшего — с задачей и юнитом (скрытые от него задачи пропускаются). */
-    async getNotifications() {
+    async getNotifications(p) {
+      if (p.today) await rpc('scan_due', { p_today: today(p.today) });
       const rows = await run(T('notifications').select('*').eq('read_at', '').order('at', { ascending: false }).limit(50));
       if (!rows.length) return [];
       const tasks = await run(T('tasks').select('id,unit_id,num,title,status,due_date,archived').in('id', [...new Set(rows.map(r => r.task_id))]));
@@ -1110,7 +1112,7 @@ export function createBackend(db, opts = {}) {
       return rows.filter(r => TT[r.task_id] && !TT[r.task_id].archived && U[TT[r.task_id].unit_id]).map(r => {
         const t = TT[r.task_id], u = U[t.unit_id];
         return {
-          id: r.id, kind: r.kind, actorId: r.actor_id, at: r.at, taskId: t.id, title: t.title, dueDate: t.due_date,
+          id: r.id, kind: r.kind, actorId: r.actor_id, at: r.at, ref: r.ref || '', taskId: t.id, title: t.title, dueDate: t.due_date,
           key: `${u.key}-${t.num}`, unit: { id: u.id, name: u.name, color: u.color },
         };
       });

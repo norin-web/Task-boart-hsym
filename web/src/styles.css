@@ -872,3 +872,8 @@ table.tasks tr.grp-more .old-done { width: auto; margin: 0; }
 
 .readonly-note.recall { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .readonly-note.recall .btn { margin-left: auto; }
+
+.news-kind.overdue { background: var(--danger-soft); color: var(--danger); }
+.news-kind.soon { background: var(--warn-soft); color: var(--warn); }
+.news-dot.overdue { background: var(--danger); }
+.news-dot.due_soon { background: var(--warn); }

@@ -14,7 +14,7 @@ import { openPeople } from './people.js';
 /* ---------- «Новое для вас»: задачи, которые на меня назначили ---------- */
 
 async function loadNotes() {
-  S.notes = await call('getNotifications', {}).catch(() => []);
+  S.notes = await call('getNotifications', { today: todayStr() }).catch(() => []);
   S.unread = S.notes.length;
   renderUnread();
 }
@@ -74,11 +74,13 @@ function newsBlock() {
     h('span', { class: 'news-dot' + (n.kind !== 'assigned' ? ' ' + n.kind : '') }),
     n.kind === 'review' && h('span', { class: 'news-kind review', title: 'Задача пришла вам на ревью' }, icon('eye', 12), 'Ревью'),
     n.kind === 'returned' && h('span', { class: 'news-kind returned', title: 'Ревьюер вернул задачу вам' }, icon('back', 12), 'Вернули'),
+    n.kind === 'overdue' && h('span', { class: 'news-kind overdue', title: 'Срок прошёл' }, icon('alert', 12), 'Просрочено'),
+    n.kind === 'due_soon' && h('span', { class: 'news-kind soon', title: 'Срок скоро' }, icon('clock', 12), n.dueDate === todayStr() ? 'Срок сегодня' : 'Срок завтра'),
     h('span', { class: 'key-badge' }, n.key),
     h('span', { class: 'news-title' }, n.title),
     due && h('span', { class: 'due ' + due.cls, title: due.hint }, icon('calendar', 12), due.text),
     h('span', { class: 'news-meta' }, h('span', { class: 'unit-dot', style: { background: n.unit.color } }), n.unit.name,
-      ' · ', noteText(n.kind, by), ' · ', relTime(n.at)));
+      ...(n.actorId || !['overdue', 'due_soon'].includes(n.kind) ? [' · ', noteText(n.kind, by)] : []), ' · ', relTime(n.at)));
   };
   const readAll = () => {
     S.notes = [];

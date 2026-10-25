@@ -1,5 +1,5 @@
 import './styles.css';
-import { S, me, setMe } from './state.js';
+import { S, me, setMe, todayStr } from './state.js';
 import { $, h, icon, fill, closeMenu, closeNav, isMenuOpen, isModalOpen, refreshPresence } from './ui.js';
 import { call } from './api.js';
 import { initBackend, mode, supabase, localLogin } from './data.js';
@@ -70,7 +70,7 @@ function startPulse() {
   const pulse = async () => {
     if (document.hidden) return;
     try {
-      const r = await call('heartbeat', {});
+      const r = await call('heartbeat', { today: todayStr() });
       S.people.forEach(p => { if (p.id in r.seen) p.lastSeenAt = r.seen[p.id]; });
       refreshPresence();
       if (r.unread !== S.unread) {

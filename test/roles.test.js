@@ -324,6 +324,37 @@ test('чеклист перед «готово» и поля, обязатель
   assert.equal(ok.fields[ch.id], 'ASO');
 });
 
+test('уведомления о сроках: просрочено и срок скоро — по одному на срок', async () => {
+  const api = await setup();
+  const { designer, dev, t1, t2 } = await team(api);
+  await api('updateTask', { id: t1.id, patch: { dueDate: '2026-10-20' } }); // просрочена
+  await api('updateTask', { id: t2.id, patch: { dueDate: '2026-10-26' } }); // завтра
+  const today = '2026-10-25';
+  await api.as(designer, async () => {
+    await api('readNotifications', {});
+    await api('heartbeat', { today });
+    await api('heartbeat', { today }); // повторный пульс не дублирует
+    const n = await api('getNotifications', { today });
+    assert.deepEqual(n.map(x => [x.taskId, x.kind, x.ref]), [[t1.id, 'overdue', '2026-10-20']]);
+    await api('readNotifications', {});
+    assert.equal((await api('getNotifications', { today })).length, 0); // прочитано — не возвращается
+  });
+  await api.as(dev, async () => {
+    await api('readNotifications', {});
+    assert.deepEqual((await api('getNotifications', { today })).map(x => x.kind), ['due_soon']);
+    assert.deepEqual((await api('getNotifications', { today: '2026-10-27' })).map(x => x.kind), ['overdue']); // «скоро» заменено
+  });
+  await api('updateTask', { id: t1.id, patch: { dueDate: '2026-10-22' } }); // новый срок — новое уведомление
+  await api.as(designer, async () => {
+    assert.equal((await api('getNotifications', { today })).length, 1);
+  });
+  await api('updateTask', { id: t2.id, patch: { status: 'done' } });
+  await api.as(dev, async () => {
+    await api('readNotifications', {});
+    assert.equal((await api('getNotifications', { today: '2026-11-01' })).length, 0); // выполненные не напоминают
+  });
+});
+
 test('профили: свой профиль, роли меняет только супер-админ', async () => {
   const api = await setup();
   const { admin, mod, designer, dev } = await team(api);
