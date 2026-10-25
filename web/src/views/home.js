@@ -38,6 +38,25 @@ function fadeOut(el) {
   }, 220);
 }
 
+/** «на ревью от Дмитрия» / «вернул(а) с ревью Мария» / «назначил(а) Анна». */
+function noteText(kind, by) {
+  const who = by && by.id !== S.meId ? by.name.split(' ')[0] : '';
+  if (kind === 'review') return who ? 'на ревью · отправил(а) ' + who : 'на ревью';
+  if (kind === 'returned') return who ? 'вернул(а) с ревью ' + who : 'вернули с ревью';
+  return who ? 'назначил(а) ' + who : 'назначено';
+}
+
+/** Пульс увидел новые уведомления: блок на главной обновляется сам (без перезагрузки страницы). */
+export async function refreshNews() {
+  if (currentView() !== 'home') return;
+  await loadNotes();
+  const old = document.querySelector('.news-sec');
+  const fresh = newsBlock();
+  if (old && fresh) old.replaceWith(fresh);
+  else if (old) old.remove();
+  else if (fresh) rerender(); // блока не было — перерисуем главную, он встанет наверх по раскладке
+}
+
 const NEWS_BLOCK = {
   id: 'news', title: 'Новое для вас', col: 'full', first: true, empty: 'Появится, когда на вас назначат задачу',
   render: () => newsBlock(),
@@ -56,7 +75,7 @@ function newsBlock() {
     h('span', { class: 'news-title' }, n.title),
     due && h('span', { class: 'due ' + due.cls, title: due.hint }, icon('calendar', 12), due.text),
     h('span', { class: 'news-meta' }, h('span', { class: 'unit-dot', style: { background: n.unit.color } }), n.unit.name,
-      ' · ', by ? 'назначил(а) ' + by.name.split(' ')[0] : 'назначено', ' · ', relTime(n.at)));
+      ' · ', noteText(n.kind, by), ' · ', relTime(n.at)));
   };
   const readAll = () => {
     S.notes = [];

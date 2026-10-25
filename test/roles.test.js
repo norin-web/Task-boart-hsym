@@ -258,9 +258,23 @@ test('ревью: автоназначение ревьюера по позиц�
   const hist = (await api('getTaskExtras', { taskId: t2.id })).activity.filter(a => a.field === 'assigneeId').map(a => a.toText);
   assert.deepEqual(hist, ['Разраб', 'Дизайнер']);
 
-  // дизайнерская задача → ревьюер по умолчанию (модератор); свой же ревьюер — без переназначения
+  // исполнитель получил уведомление о возврате с ревью
+  await api.as(dev, async () => {
+    const n = (await api('getNotifications', {})).find(x => x.taskId === t2.id);
+    assert.equal(n.kind, 'returned');
+    assert.equal(n.actorId, designer.id);
+  });
+  // дизайнерская задача → ревьюер по умолчанию (модератор)
   await api.as(designer, async () => {
     assert.equal((await api('updateTask', { id: t1.id, patch: { status: 'review' } })).assigneeId, mod.id);
+  });
+  // модератор сам перенёс задачу на ревью, а ревьюер — он же: уведомление всё равно приходит
+  await api.as(mod, async () => {
+    await api('updateTask', { id: t1.id, patch: { status: 'in_progress' } });
+    const own = await api('createTask', { unitId: A.id, title: 'Своя', assigneeId: designer.id, departmentId: 'd_qa' });
+    await api('updateTask', { id: own.id, patch: { status: 'review' } });
+    const n = (await api('getNotifications', {})).find(x => x.taskId === own.id);
+    assert.equal(n && n.kind, 'review');
   });
 });
 

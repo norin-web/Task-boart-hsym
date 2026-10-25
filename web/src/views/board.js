@@ -7,7 +7,7 @@ import {
 import { $, h, icon, avatar, topbar, menu, closeMenu, modal, field, confirmDlg, promptDlg, toast, showErr, statusDot, fill } from '../ui.js';
 import { call, send } from '../api.js';
 import { navigate, link } from '../router.js';
-import { updateSidebarCounts } from './sidebar.js';
+import { updateSidebarCounts, renderUnread } from './sidebar.js';
 import { openTask, closePanel, openCreateTask, duplicateTask, deleteTaskUndoable, refreshPanel } from './task.js';
 
 let sortables = [];
@@ -636,6 +636,8 @@ export function patchTask(t, patch, opts = {}) {
   return send('updateTask',
     () => ({ id: t.id, patch, expectedUpdatedAt: opts.noCheck ? null : t.updatedAt }),
     real => {
+      // Сервер мог назначить задачу на меня сам (ревью) — счётчик новых сразу, не дожидаясь пульса
+      if (real.assigneeId === S.meId && t.assigneeId !== S.meId) { S.unread += 1; renderUnread(); }
       Object.assign(t, real);
       if (S.board && S.board.unit.id === unitId) renderTasks();
       if (S.panelTaskId === t.id) refreshPanel(t, { soft: true });

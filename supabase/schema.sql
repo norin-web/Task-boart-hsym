@@ -399,17 +399,24 @@ create trigger review_assign before update on tasks for each row execute functio
 
 -- Назначили задачу — уведомление новому исполнителю (кроме случая, когда назначил сам себя);
 -- у прежнего исполнителя непрочитанное уведомление по этой задаче снимается.
+-- Автоназначение ревью (kind 'review') и возврат с ревью ('returned') уведомляют всегда — даже если перенёс сам.
 create or replace function notify_assignee() returns trigger language plpgsql security definer set search_path = public as $$
 declare
   v_actor text := coalesce(my_person_id(), '');
   v_old text := case when tg_op = 'UPDATE' then old.assignee_id else '' end;
+  v_kind text := 'assigned';
 begin
   if new.assignee_id is not distinct from v_old then return new; end if;
+  if tg_op = 'UPDATE' and new.status is distinct from old.status then
+    if new.review_from <> '' and old.review_from = '' then v_kind := 'review';
+    elsif old.review_from <> '' and new.review_from = '' and new.assignee_id = old.review_from then v_kind := 'returned';
+    end if;
+  end if;
   if v_old <> '' then delete from notifications where task_id = new.id and person_id = v_old and read_at = ''; end if;
-  if new.assignee_id <> '' and new.assignee_id <> v_actor then
+  if new.assignee_id <> '' and (new.assignee_id <> v_actor or v_kind <> 'assigned') then
     delete from notifications where task_id = new.id and person_id = new.assignee_id and read_at = '';
     insert into notifications (id, person_id, task_id, kind, actor_id, at)
-    values ('n_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), new.assignee_id, new.id, 'assigned', v_actor,
+    values ('n_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), new.assignee_id, new.id, v_kind, v_actor,
             to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'));
   end if;
   return new;

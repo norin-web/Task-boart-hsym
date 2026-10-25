@@ -7,6 +7,7 @@ import { LS, isStaff } from './state.js';
 import { parseLocation, render } from './router.js';
 import { openPalette, isPaletteOpen } from './views/palette.js';
 import { renderUnread } from './views/sidebar.js';
+import { refreshNews } from './views/home.js';
 import { openCreateTask, closeTask } from './views/task.js';
 import { openShortcuts } from './views/people.js';
 
@@ -72,7 +73,12 @@ function startPulse() {
       const r = await call('heartbeat', {});
       S.people.forEach(p => { if (p.id in r.seen) p.lastSeenAt = r.seen[p.id]; });
       refreshPresence();
-      if (r.unread !== S.unread) { S.unread = r.unread; renderUnread(); }
+      if (r.unread !== S.unread) {
+        const more = r.unread > S.unread;
+        S.unread = r.unread;
+        renderUnread();
+        if (more) refreshNews().catch(() => {});
+      }
     } catch { /* сеть моргнула — следующий пульс через минуту */ }
   };
   pulse();
