@@ -885,3 +885,6 @@ table.tasks tr.grp-more .old-done { width: auto; margin: 0; }
 .tpl-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; border: 0; background: transparent; font: inherit; color: var(--text); text-align: left; padding: 4px 6px; cursor: pointer; }
 .tpl-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tpl-meta { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+
+.news-kind.approved { background: var(--ok-soft); color: var(--ok); }
+.news-dot.approved { background: var(--ok); }

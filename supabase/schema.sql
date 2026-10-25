@@ -466,7 +466,8 @@ end $$;
 
 -- Назначили задачу — уведомление новому исполнителю (кроме случая, когда назначил сам себя);
 -- у прежнего исполнителя непрочитанное уведомление по этой задаче снимается.
--- Автоназначение ревью (kind 'review') и возврат с ревью ('returned') уведомляют всегда — даже если перенёс сам.
+-- Автоназначение ревью (kind 'review'), возврат с ревью ('returned') и закрытие по ревью ('approved') —
+-- тоже уведомления исполнителю; на ревью уведомляют всегда, даже если перенёс сам.
 create or replace function notify_assignee() returns trigger language plpgsql security definer set search_path = public as $$
 declare
   v_actor text := coalesce(my_person_id(), '');
@@ -476,7 +477,11 @@ begin
   if new.assignee_id is not distinct from v_old then return new; end if;
   if tg_op = 'UPDATE' and new.status is distinct from old.status then
     if new.review_from <> '' and old.review_from = '' then v_kind := 'review';
-    elsif old.review_from <> '' and new.review_from = '' and new.assignee_id = old.review_from then v_kind := 'returned';
+    elsif old.review_from <> '' and new.review_from = '' and new.assignee_id = old.review_from then
+      -- ревьюер принял работу (перенёс в «готово») — «закрыта по ревью», иначе — «вернули»
+      v_kind := case when exists (select 1 from units u, jsonb_array_elements(u.settings -> 'columns') c
+                                   where u.id = new.unit_id and c ->> 'id' = new.status and c ->> 'kind' = 'done')
+                     then 'approved' else 'returned' end;
     end if;
   end if;
   if v_old <> '' then delete from notifications where task_id = new.id and person_id = v_old and read_at = ''; end if;

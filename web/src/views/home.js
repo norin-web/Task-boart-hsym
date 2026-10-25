@@ -44,6 +44,7 @@ function noteText(kind, by) {
   // тип (ревью / возврат) виден плашкой слева — здесь только кто
   if (kind === 'review') return who ? 'отправил(а) ' + who : 'от вас';
   if (kind === 'returned') return who ? 'вернул(а) ' + who : 'вернули';
+  if (kind === 'approved') return who ? 'принял(а) ' + who : 'принято';
   return who ? 'назначил(а) ' + who : 'назначено';
 }
 
@@ -67,13 +68,14 @@ function newsBlock() {
   if (!S.notes.length) return null;
   const row = n => {
     const by = personById(n.actorId);
-    const due = dueInfo(n.dueDate, false);
+    const due = dueInfo(n.dueDate, n.kind === 'approved'); // закрытая — срок без тревоги
     return h('button', {
       class: 'news-row', dataset: { noteTask: n.taskId }, onclick: () => peekTask(n.unit.id, n.taskId),
     },
     h('span', { class: 'news-dot' + (n.kind !== 'assigned' ? ' ' + n.kind : '') }),
     n.kind === 'review' && h('span', { class: 'news-kind review', title: 'Задача пришла вам на ревью' }, icon('eye', 12), 'Ревью'),
     n.kind === 'returned' && h('span', { class: 'news-kind returned', title: 'Ревьюер вернул задачу вам' }, icon('back', 12), 'Вернули'),
+    n.kind === 'approved' && h('span', { class: 'news-kind approved', title: 'Ревьюер принял работу — задача закрыта' }, icon('done', 12), 'Закрыта по ревью'),
     n.kind === 'overdue' && h('span', { class: 'news-kind overdue', title: 'Срок прошёл' }, icon('alert', 12), 'Просрочено'),
     n.kind === 'due_soon' && h('span', { class: 'news-kind soon', title: 'Срок скоро' }, icon('clock', 12), n.dueDate === todayStr() ? 'Срок сегодня' : 'Срок завтра'),
     h('span', { class: 'key-badge' }, n.key),

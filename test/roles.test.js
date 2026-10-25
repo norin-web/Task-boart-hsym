@@ -276,14 +276,21 @@ test('ревью: автоназначение ревьюера по позиц�
   await api.as(designer, async () => {
     assert.equal((await api('getNotifications', {})).filter(n => n.taskId === t2.id).length, 0); // у ревьюера снялось
   });
+  // ревьюер вернул на доработку — «вернули»
+  await api.as(dev, () => api('updateTask', { id: t2.id, patch: { status: 'review' } }));
+  await api.as(designer, () => api('updateTask', { id: t2.id, patch: { status: 'in_progress' } }));
+  await api.as(dev, async () => {
+    assert.equal((await api('getNotifications', {})).find(x => x.taskId === t2.id).kind, 'returned');
+    await api('readNotifications', {});
+  });
   // снова на ревью и возврат ревьюером — для проверки ниже
   await api.as(dev, () => api('updateTask', { id: t2.id, patch: { status: 'review' } }));
   await api.as(designer, () => api('updateTask', { id: t2.id, patch: { status: 'done' } }));
 
-  // исполнитель получил уведомление о возврате с ревью
+  // ревьюер перенёс в «готово» — исполнителю «закрыта по ревью», а не «вернули»
   await api.as(dev, async () => {
     const n = (await api('getNotifications', {})).find(x => x.taskId === t2.id);
-    assert.equal(n.kind, 'returned');
+    assert.equal(n.kind, 'approved');
     assert.equal(n.actorId, designer.id);
   });
   // дизайнерская задача → ревьюер по умолчанию (модератор)
