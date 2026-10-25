@@ -495,7 +495,6 @@ export function deptSelect(value, onChange) {
  */
 export function assigneeSelect(value, onChange, { ids, unitId, teamId } = {}) {
   const team = ids || S.board.members.map(m => m.personId);
-  const deptOf = id => { const p = personById(id); const d = p && deptById(p.positionId); return d ? ' · ' + d.name : ''; };
   // teamId — показываем только людей этой команды; текущий исполнитель остаётся в списке
   const ofTeam = p => !teamId || (p.teamIds || []).includes(teamId);
   const people = team.map(personById).filter(p => p && ((p.active && ofTeam(p)) || p.id === value));
@@ -508,7 +507,7 @@ export function assigneeSelect(value, onChange, { ids, unitId, teamId } = {}) {
         const added = await addMemberDialog(unitId || S.board.unit.id);
         if (added) {
           value = added;
-          e.target.insertBefore(h('option', { value: added }, personById(added).name + deptOf(added)), e.target.querySelector('option[value="__add"]'));
+          e.target.insertBefore(h('option', { value: added }, personById(added).name), e.target.querySelector('option[value="__add"]'));
           e.target.value = added;
           onChange(added);
         }
@@ -519,7 +518,7 @@ export function assigneeSelect(value, onChange, { ids, unitId, teamId } = {}) {
     },
   },
   h('option', { value: '' }, '— не назначен —'),
-  people.map(p => h('option', { value: p.id }, p.name + deptOf(p.id))),
+  people.map(p => h('option', { value: p.id }, p.name)),
   outsider && h('option', { value: outsider.id }, outsider.name + ' (не в команде)'),
   h('option', { value: '__add' }, '＋ Добавить в команду…'));
   return sel;
