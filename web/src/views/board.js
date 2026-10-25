@@ -393,11 +393,6 @@ function taskCard(t, inLane) {
     onkeydown: e => { if (e.key === 'Enter' && !t._temp) navigate({ unit: S.board.unit.id, mode: S.route.mode, task: t.id }); },
     oncontextmenu: e => { if (t._temp) return; e.preventDefault(); cardMenu({ x: e.clientX, y: e.clientY }, t); },
   },
-  // Тип карточки и «↑ родитель» (иерархия): откуда пришла задача
-  (TASK_KINDS[t.kind] || t.parent) && h('div', { class: 'card-up' },
-    TASK_KINDS[t.kind] && h('span', { class: 'kind-tag', style: { '--kc': TASK_KINDS[t.kind].color } }, TASK_KINDS[t.kind].short),
-    // название как у родителя (карточка-приложение) — показываем, откуда пришла: юнит родителя
-    t.parent && h('span', { class: 'card-parent', title: t.parent.unit.name + ' · ' + t.parent.key }, '↑ ', t.parent.title === t.title ? t.parent.unit.name : t.parent.title)),
   // Ключ задачи на доске не показываем — он в открытой карточке
   h('div', { class: 'card-top' },
     prio && prio.top && h('span', { class: 'prio-ic', title: 'Приоритет: ' + prio.opt.name }, icon('prio', 14)),
@@ -408,8 +403,14 @@ function taskCard(t, inLane) {
       class: 'icon-btn sm card-more', title: 'Действия',
       onclick: e => { e.stopPropagation(); cardMenu(e.currentTarget, t); },
     }, icon('more'))),
-  chips.length > 0 && h('div', { class: 'chips' }, chips),
-  (foot.length > 0 || person) && h('div', { class: 'card-foot' }, foot, h('span', { class: 'spacer' }), person && avatar(person, 'sm')));
+  // «↑ откуда»: родитель (иерархия); у карточки-приложения название как у родителя — тогда юнит родителя
+  t.parent && h('div', { class: 'card-parent', title: t.parent.unit.name + ' · ' + t.parent.key },
+    icon('tree', 11), t.parent.title === t.title ? 'из ' + t.parent.unit.name : t.parent.title),
+  // тип, позиция, поля и аватар — одной строкой; срок, чеклист, подзадачи, ссылки — строкой ниже, если есть
+  (TASK_KINDS[t.kind] || chips.length > 0 || (person && !foot.length)) && h('div', { class: 'chips card-row' },
+    TASK_KINDS[t.kind] && h('span', { class: 'kind-tag', style: { '--kc': TASK_KINDS[t.kind].color } }, TASK_KINDS[t.kind].short),
+    chips, !foot.length && person && [h('span', { class: 'spacer' }), avatar(person, 'sm')]),
+  foot.length > 0 && h('div', { class: 'card-foot' }, foot, h('span', { class: 'spacer' }), person && avatar(person, 'sm')));
 }
 
 export function fieldChip(f, t) {
