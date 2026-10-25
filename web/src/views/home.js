@@ -111,7 +111,7 @@ export function attentionBlock(ov) {
     row: (t, done) => {
       const team = (ov.unitMembers[t.unit.id] || []).map(personById).filter(p => p && p.active);
       return [taskRef(t), quickSelect(team.length ? 'Назначить…' : 'В юните нет команды', team.map(p => [p.id, p.name]),
-        v => call('updateTask', { id: t.id, patch: { assigneeId: v } }).then(() => done('Назначено: ' + name(v))))];
+        v => call('updateTask', { id: t.id, patch: { assigneeId: v } }).then(() => { t.assigneeId = v; done('Назначено: ' + name(v)); }))];
     },
   }));
 
@@ -138,6 +138,22 @@ export function attentionBlock(ov) {
           u.members = [...(u.members || []), v];
           done(name(v) + ' в команде ' + u.name);
         }))],
+  }));
+
+  // Участники без открытых задач — свободные руки. Можно сразу дать задачу без исполнителя из их юнитов.
+  const idle = members.filter(p => !(ov.byPerson[p.id] || {}).open);
+  items.push(attItem({
+    n: idle.length, rows: idle, tone: 'info', icon: 'user',
+    forms: ['участник без задач', 'участника без задач', 'участников без задач'],
+    row: (p, done) => {
+      const free = ov.unassignedTasks.filter(t => (ov.unitMembers[t.unit.id] || []).includes(p.id) && !t.assigneeId);
+      return [h('span', { class: 'att-who' }, avatar(p, 'sm'), p.name, h('small', { class: 'muted' }, personCaption(p))),
+        quickSelect(free.length ? 'Дать задачу…' : 'Свободных задач нет', free.map(t => [t.id, t.key + ' ' + t.title]),
+          v => call('updateTask', { id: v, patch: { assigneeId: p.id } }).then(() => {
+            ov.unassignedTasks.find(t => t.id === v).assigneeId = p.id;
+            done('Задача назначена: ' + p.name);
+          }))];
+    },
   }));
 
   if (mode === 'supabase' && ov.peopleNoLogin.length) items.push(h('button', { class: 'att-item att-info att-simple', onclick: openPeople },
@@ -171,7 +187,7 @@ function quickSelect(placeholder, options, onPick) {
 }
 
 /** Пункт «Требует внимания»: заголовок со счётчиком, по клику — строки с быстрыми действиями. */
-function attItem({ n, forms, rows, row, tone = 'warn', open = false }) {
+function attItem({ n, forms, rows, row, tone = 'warn', icon: ic = 'alert', open = false }) {
   if (!n) return null;
   let count = n;
   let left = rows.slice();
@@ -183,7 +199,7 @@ function attItem({ n, forms, rows, row, tone = 'warn', open = false }) {
     }
     fill(el,
       h('button', { class: 'att-head', onclick: () => { open = !open; draw(); } },
-        icon('alert', 15), h('span', null, h('b', null, count), ' ' + plural(count, forms)),
+        icon(ic, 15), h('span', null, h('b', null, count), ' ' + plural(count, forms)),
         h('span', { class: 'att-chev' + (open ? ' on' : '') }, icon('chevron', 14))),
       open && h('div', { class: 'att-list' },
         left.map(r => {

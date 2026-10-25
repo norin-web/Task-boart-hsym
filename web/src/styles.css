@@ -611,3 +611,5 @@ body.login-page #shell { display: block; }
 .chip-x:hover { color: var(--text); background: var(--border); }
 .feed-filters:empty { display: none; }
 @media (max-width: 640px) { .att-row { flex-wrap: wrap; } .att-row .inp.sm { max-width: none; flex: 1; } .load-tasks:not(:empty) { padding-left: 0; } }
+.att-info > .att-head > .i:first-child { color: var(--st-progress); }
+.att-who small { font-weight: 400; }
