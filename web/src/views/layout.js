@@ -1,9 +1,8 @@
 /** Настраиваемая раскладка страницы: порядок блоков, видимость и колонка. Хранится в people.prefs у каждого своя. */
 import { S, me } from '../state.js';
-import { h, icon, modal, fill, showErr } from '../ui.js';
+import Sortable from 'sortablejs';
+import { h, icon, fill, showErr } from '../ui.js';
 import { call } from '../api.js';
-
-const COLS = [['left', 'Слева'], ['right', 'Справа'], ['full', 'Во всю ширину']];
 
 /** Сохранённая раскладка, дополненная блоками по умолчанию (новые блоки появляются в конце). */
 function current(key, defs) {
@@ -54,37 +53,81 @@ export function renderLayout(key, defs) {
   return out;
 }
 
-/** Окно «Настроить главную»: показать/скрыть, порядок стрелками, колонка. Изменения применяются сразу. */
-export function openLayoutEditor(key, defs, onChange) {
+/**
+ * Режим настройки прямо на странице: видны области «Сверху на всю ширину», «Левая», «Правая» и лоток скрытых.
+ * Блоки перетаскиваются за шапку между областями; глаз — скрыть/показать. Каждое изменение сохраняется сразу.
+ */
+export function editLayout(key, defs, container, onDone) {
   let L = current(key, defs);
-  const list = h('div', { class: 'layout-list' });
   const byId = Object.fromEntries(defs.map(d => [d.id, d]));
-  const apply = () => { save(key, L); draw(); onChange(); };
-  const move = (i, dir) => {
-    const j = i + dir;
-    if (j < 0 || j >= L.order.length) return;
-    [L.order[i], L.order[j]] = [L.order[j], L.order[i]];
-    apply();
+  const zones = {
+    full: h('div', { class: 'lz-list', dataset: { zone: 'full' } }),
+    left: h('div', { class: 'lz-list', dataset: { zone: 'left' } }),
+    right: h('div', { class: 'lz-list', dataset: { zone: 'right' } }),
+    hidden: h('div', { class: 'lz-list lz-tray', dataset: { zone: 'hidden' } }),
   };
-  const draw = () => fill(list, L.order.map((id, i) => {
-    const shown = !L.hidden.includes(id);
-    return h('div', { class: 'layout-row' + (shown ? '' : ' off') },
-      h('label', { class: 'chk' }, h('input', {
-        type: 'checkbox', checked: shown,
-        onchange: e => { L.hidden = e.target.checked ? L.hidden.filter(x => x !== id) : [...L.hidden, id]; apply(); },
-      }), byId[id].title),
-      h('select', { class: 'inp sm', value: L.cols[id], disabled: !shown, onchange: e => { L.cols[id] = e.target.value; apply(); } },
-        COLS.map(([v, t]) => h('option', { value: v }, t))),
-      h('button', { class: 'icon-btn sm', title: 'Выше', disabled: i === 0, onclick: () => move(i, -1) }, h('span', { class: 'rot-up' }, icon('chevron', 14))),
-      h('button', { class: 'icon-btn sm', title: 'Ниже', disabled: i === L.order.length - 1, onclick: () => move(i, 1) }, icon('chevron', 14)));
-  }));
-  draw();
-  modal({
-    title: 'Настроить главную',
-    body: [h('p', { class: 'hint', style: { marginTop: 0 } }, 'Только для вас. Изменения видны сразу.'), list],
-    footLeft: h('button', {
-      class: 'link-btn', onclick: () => { L = current('__none', defs); save(key, null); draw(); onChange(); },
-    }, 'Как было по умолчанию'),
-    actions: [{ label: 'Готово', primary: true }],
-  });
+  const sortables = [];
+
+  // Раскладка из DOM: порядок — сверху, слева, справа, затем скрытые
+  const collect = () => {
+    const order = [], hidden = [], cols = { ...L.cols };
+    for (const z of ['full', 'left', 'right', 'hidden']) {
+      for (const el of zones[z].querySelectorAll(':scope > .lb')) {
+        const id = el.dataset.id;
+        order.push(id);
+        if (z === 'hidden') hidden.push(id); else cols[id] = z;
+      }
+    }
+    L = { order, hidden, cols };
+    save(key, L);
+    markEmpty();
+  };
+  const markEmpty = () => Object.values(zones).forEach(z => z.classList.toggle('empty', !z.querySelector('.lb')));
+
+  const block = id => {
+    const d = byId[id];
+    const isHidden = () => el.parentElement === zones.hidden;
+    const el = h('div', { class: 'lb', dataset: { id } },
+      h('div', { class: 'lb-head' },
+        h('span', { class: 'lb-grip' }, icon('grip', 14)),
+        h('span', { class: 'lb-title' }, d.title),
+        h('button', {
+          class: 'icon-btn sm', title: 'Скрыть / показать',
+          onclick: () => {
+            if (isHidden()) (L.cols[id] === 'full' ? zones.full : L.cols[id] === 'right' ? zones.right : zones.left).append(el);
+            else zones.hidden.append(el);
+            collect();
+          },
+        }, icon('eye', 14))),
+      h('div', { class: 'lb-preview', inert: true }, d.render()));
+    return el;
+  };
+
+  const fillZones = () => {
+    Object.values(zones).forEach(z => fill(z));
+    for (const id of L.order) (L.hidden.includes(id) ? zones.hidden : zones[L.cols[id]] || zones.left).append(block(id));
+    markEmpty();
+  };
+  fillZones();
+
+  const zone = (z, title, hint) => h('div', { class: 'lz lz-' + z }, h('div', { class: 'lz-label' }, title, hint && h('span', null, hint)), zones[z]);
+  const done = () => { sortables.forEach(x => x.destroy()); onDone(); };
+  fill(container,
+    h('div', { class: 'lz-bar' },
+      icon('layers', 16),
+      h('div', { class: 'lz-bar-text' }, h('b', null, 'Настройка главной'), h('span', null, 'Тяните блоки за шапку между областями. Глаз — убрать в скрытые. Сохраняется сразу, только для вас.')),
+      h('button', { class: 'btn ghost sm', onclick: () => { L = current('__none', defs); save(key, null); fillZones(); } }, 'По умолчанию'),
+      h('button', { class: 'btn primary sm', onclick: done }, 'Готово')),
+    zone('full', 'Сверху, на всю ширину'),
+    h('div', { class: 'lz-grid' }, zone('left', 'Левая колонка', 'широкая'), zone('right', 'Правая колонка', 'узкая')),
+    h('div', { class: 'lz-note' }, icon('alert', 13), 'На узком экране и телефоне колонки встают друг под другом: сначала левая, потом правая.'),
+    zone('hidden', 'Скрытые блоки', 'перетащите сюда, чтобы убрать с главной'));
+
+  for (const z of Object.values(zones)) {
+    sortables.push(Sortable.create(z, {
+      group: 'layout', animation: 160, handle: '.lb-head', draggable: '.lb',
+      ghostClass: 'lb-ghost', fallbackClass: 'lb-drag', forceFallback: true, fallbackTolerance: 4,
+      onEnd: collect,
+    }));
+  }
 }

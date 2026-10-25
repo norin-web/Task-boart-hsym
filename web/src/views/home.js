@@ -8,7 +8,7 @@ import { openCreateUnit, unitMenu } from './units.js';
 import { mode } from '../data.js';
 import { taskGroups, unitGroups, loadMyTasks, personCaption } from './my.js';
 import { activityFeed } from './feed.js';
-import { renderLayout, openLayoutEditor } from './layout.js';
+import { renderLayout, editLayout } from './layout.js';
 import { openPeople } from './people.js';
 
 /** Локальный режим: заполнить пустую базу демо-командами и перезагрузить. */
@@ -86,7 +86,7 @@ export async function renderHome() {
         h('h1', { class: 'row', style: { gap: '10px' } }, greeting() + (person ? ', ' + person.name.split(' ')[0] : ''), roleBadge(person)),
         h('p', null, dateStr[0].toUpperCase() + dateStr.slice(1) + ' · ' + summary(st))),
       h('div', { class: 'row' },
-        h('button', { class: 'btn ghost', title: 'Настроить главную под себя', onclick: () => openLayoutEditor('home', BLOCKS, draw) }, icon('layers', 15), 'Настроить'),
+        h('button', { class: 'btn ghost', title: 'Настроить главную под себя', onclick: () => editLayout('home', BLOCKS, page, draw) }, icon('layers', 15), 'Настроить'),
         h('button', { class: 'btn', onclick: () => navigate({ view: 'my' }) }, icon('user', 15), 'Мои задачи'))),
     renderLayout('home', BLOCKS));
   draw();
@@ -425,7 +425,7 @@ async function renderMemberHome() {
       h('div', null,
         h('h1', null, greeting() + (person ? ', ' + person.name.split(' ')[0] : '')),
         h('p', null, dateStr[0].toUpperCase() + dateStr.slice(1) + (pos ? ' · ' + pos.name : ''))),
-      h('button', { class: 'btn ghost', title: 'Настроить дашборд под себя', onclick: () => openLayoutEditor('memberHome', BLOCKS, draw) }, icon('layers', 15), 'Настроить')),
+      h('button', { class: 'btn ghost', title: 'Настроить дашборд под себя', onclick: () => editLayout('memberHome', BLOCKS, page, draw) }, icon('layers', 15), 'Настроить')),
     renderLayout('memberHome', BLOCKS));
   draw();
 }
