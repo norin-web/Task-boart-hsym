@@ -629,3 +629,16 @@ body.login-page #shell { display: block; }
 .uc-add { opacity: 0; transition: opacity .12s; }
 .unit-card:hover .uc-add { opacity: 1; }
 @media (hover: none) { .uc-add { opacity: 1; } }
+
+/* Мои задачи по юнитам */
+.my-summary { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; font-size: 13px; color: var(--muted); margin-bottom: 18px; }
+.my-summary b { color: var(--text); }
+.my-summary .warn-text b { color: inherit; }
+.my-summary .dot { margin-right: 6px; }
+.ugroup { margin-bottom: 22px; }
+.ugroup-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 14px; flex-wrap: wrap; }
+.ugroup-head .count { color: var(--muted); font-size: 12px; }
+.ugroup-head .spacer { flex: 1; }
+.ugroup-head .link-btn { font-size: 12px; }
+.trow.done { opacity: .6; }
+.trow.done .t-title { text-decoration: line-through; }
