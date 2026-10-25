@@ -35,7 +35,9 @@ export const S = {
   collapsedLanes: new Set(),
   panelTaskId: null,
   listSort: { key: 'status', dir: 1 },
-  showOldDone: '',          // юнит, где сейчас показаны давно выполненные
+  showOldDone: '',
+  notes: [],                // непрочитанные уведомления («на вас назначили задачу»)
+  unread: 0,          // юнит, где сейчас показаны давно выполненные
   showArchivedUnits: false,
   meId: LS.get('meId', ''),
 };
@@ -126,6 +128,10 @@ export function fmtDateTime(iso) {
   if (isNaN(d)) return '';
   return d.toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
+
+/** В сети: пульс был за последние 2,5 минуты (приложение шлёт его раз в минуту). */
+export const isOnline = p => !!(p && p.lastSeenAt && Date.now() - Date.parse(p.lastSeenAt) < 150e3);
+export const presenceText = p => (isOnline(p) ? 'в сети' : p && p.lastSeenAt ? 'был(а) в сети ' + relTime(p.lastSeenAt) : 'ещё не заходил(а)');
 
 export function relTime(iso) {
   const d = new Date(iso);

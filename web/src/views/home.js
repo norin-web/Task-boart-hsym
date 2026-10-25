@@ -1,8 +1,8 @@
-import { S, greeting, me, personById, plural, emptyCounts, isStaff, deptById, todayStr, fmtDate, activeDepts, ACCESS_LABELS } from '../state.js';
+import { S, greeting, me, personById, plural, emptyCounts, isStaff, deptById, todayStr, fmtDate, activeDepts, ACCESS_LABELS, relTime, dueInfo } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, toast, menu, closeMenu } from '../ui.js';
 import { call } from '../api.js';
 import { currentView, link, navigate, taskLink, rerender } from '../router.js';
-import { renderSidebar } from './sidebar.js';
+import { renderSidebar, renderUnread } from './sidebar.js';
 import { openCreateTask, peekTask } from './task.js';
 import { openCreateUnit, unitMenu } from './units.js';
 import { mode } from '../data.js';
@@ -10,6 +10,68 @@ import { taskGroups, unitGroups, loadMyTasks, personCaption } from './my.js';
 import { activityFeed } from './feed.js';
 import { renderLayout, editLayout } from './layout.js';
 import { openPeople } from './people.js';
+
+/* ---------- «Новое для вас»: задачи, которые на меня назначили ---------- */
+
+async function loadNotes() {
+  S.notes = await call('getNotifications', {}).catch(() => []);
+  S.unread = S.notes.length;
+  renderUnread();
+}
+
+/** Отметить прочитанным по задаче (открыли её) — строка в блоке плавно исчезает. */
+export function readNote(taskId) {
+  if (!S.notes.some(n => n.taskId === taskId)) return;
+  S.notes = S.notes.filter(n => n.taskId !== taskId);
+  S.unread = Math.max(0, S.unread - 1);
+  renderUnread();
+  document.querySelectorAll(`[data-note-task="${CSS.escape(taskId)}"]`).forEach(fadeOut);
+  call('readNotifications', { taskId }).catch(showErr);
+}
+
+function fadeOut(el) {
+  el.classList.add('gone');
+  setTimeout(() => {
+    const box = el.closest('.news');
+    el.remove();
+    if (box && !box.querySelector('.news-row')) box.closest('section').remove();
+  }, 220);
+}
+
+const NEWS_BLOCK = {
+  id: 'news', title: 'Новое для вас', col: 'full', first: true, empty: 'Появится, когда на вас назначат задачу',
+  render: () => newsBlock(),
+};
+
+function newsBlock() {
+  if (!S.notes.length) return null;
+  const row = n => {
+    const by = personById(n.actorId);
+    const due = dueInfo(n.dueDate, false);
+    return h('button', {
+      class: 'news-row', dataset: { noteTask: n.taskId }, onclick: () => peekTask(n.unit.id, n.taskId),
+    },
+    h('span', { class: 'news-dot' }),
+    h('span', { class: 'key-badge' }, n.key),
+    h('span', { class: 'news-title' }, n.title),
+    due && h('span', { class: 'due ' + due.cls, title: due.hint }, icon('calendar', 12), due.text),
+    h('span', { class: 'news-meta' }, h('span', { class: 'unit-dot', style: { background: n.unit.color } }), n.unit.name,
+      ' · ', by ? 'назначил(а) ' + by.name.split(' ')[0] : 'назначено', ' · ', relTime(n.at)));
+  };
+  const readAll = () => {
+    S.notes = [];
+    S.unread = 0;
+    renderUnread();
+    call('readNotifications', {}).catch(showErr);
+    sec.querySelectorAll('.news-row').forEach(fadeOut);
+  };
+  const sec = h('section', { class: 'news-sec' },
+    h('div', { class: 'section-head' },
+      h('h2', null, 'Новое для вас', h('span', { class: 'news-count' }, S.notes.length)),
+      h('button', { class: 'btn ghost sm', onclick: readAll }, icon('check', 14), 'Просмотрено всё')),
+    h('div', { class: 'news card-box' }, S.notes.map(row)));
+  return sec;
+}
 
 /** Локальный режим: заполнить пустую базу демо-командами и перезагрузить. */
 export async function fillDemo(btn) {
@@ -39,6 +101,7 @@ export async function renderHome() {
     [d, ov] = await Promise.all([
       call('getHome', { today: todayStr() }),
       call('getOverview', { today: todayStr() }),
+      loadNotes(),
     ]);
   } catch (e) {
     showErr(e);
@@ -69,6 +132,7 @@ export async function renderHome() {
 
   // Блоки главной: каждый может скрыть, переставить и поменять колонку (кнопка «Настроить»)
   const BLOCKS = [
+    NEWS_BLOCK,
     { id: 'stats', title: 'Статистика задач', col: 'full', render: () => h('div', { class: 'stats' },
       stat('К выполнению', st.todo, 'circle', 'var(--st-todo)', t => t.statusKind === 'todo'),
       stat('В работе', st.in_progress, 'progress', 'var(--st-progress)', t => t.statusKind === 'progress'),
@@ -388,7 +452,7 @@ async function renderMemberHome() {
   fill($('#main'), topbar([h('h1', null, 'Мой дашборд')], []), h('div', { class: 'view-body' }, page));
   let d, tasks;
   try {
-    [d, tasks] = await Promise.all([call('getHome', { today: new Date().toISOString().slice(0, 10) }), loadMyTasks()]);
+    [d, tasks] = await Promise.all([call('getHome', { today: new Date().toISOString().slice(0, 10) }), loadMyTasks(), loadNotes()]);
   } catch (e) {
     showErr(e);
     return;
@@ -407,6 +471,7 @@ async function renderMemberHome() {
   const dateStr = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
 
   const BLOCKS = [
+    NEWS_BLOCK,
     { id: 'stats', title: 'Статистика', col: 'full', render: () => h('div', { class: 'stats' },
       stat('Мои открытые задачи', open.length, 'circle', 'var(--st-progress)'),
       stat('Просрочено', overdue, 'alert', 'var(--danger)'),

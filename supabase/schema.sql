@@ -148,6 +148,18 @@ create table if not exists task_links (
 );
 create index if not exists task_links_unit on task_links(unit_id);
 
+-- Уведомления человеку (пока одно: «на вас назначили задачу»). Пишет только триггер; читает и отмечает — сам человек.
+create table if not exists notifications (
+  id        text primary key,
+  person_id text not null references people(id) on delete cascade,
+  task_id   text not null references tasks(id) on delete cascade,
+  kind      text not null default 'assigned',
+  actor_id  text not null default '',
+  at        text not null,
+  read_at   text not null default ''
+);
+create index if not exists notifications_person on notifications(person_id, read_at);
+
 -- ---------- атомарные операции ----------
 
 -- Следующий номер задачи в юните (DEV-1, DEV-2…) без гонок.
@@ -173,6 +185,8 @@ alter table people add column if not exists access text not null default 'member
 alter table people add column if not exists position_id text not null default '';
 -- Личные настройки интерфейса (раскладка главной и т.п.); человек меняет только свои
 alter table people add column if not exists prefs jsonb not null default '{}';
+-- Когда человек последний раз был в приложении (онлайн-метка)
+alter table people add column if not exists last_seen_at text not null default '';
 do $$ begin
   alter table people add constraint people_access_check check (access in ('superadmin', 'moderator', 'member'));
 exception when duplicate_object then null; end $$;
@@ -301,6 +315,32 @@ drop trigger if exists sync_link_unit on tasks;
 create trigger sync_link_unit after update of unit_id on tasks for each row
   when (new.unit_id is distinct from old.unit_id) execute function sync_link_unit();
 
+-- Назначили задачу — уведомление новому исполнителю (кроме случая, когда назначил сам себя);
+-- у прежнего исполнителя непрочитанное уведомление по этой задаче снимается.
+create or replace function notify_assignee() returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_actor text := coalesce(my_person_id(), '');
+  v_old text := case when tg_op = 'UPDATE' then old.assignee_id else '' end;
+begin
+  if new.assignee_id is not distinct from v_old then return new; end if;
+  if v_old <> '' then delete from notifications where task_id = new.id and person_id = v_old and read_at = ''; end if;
+  if new.assignee_id <> '' and new.assignee_id <> v_actor then
+    delete from notifications where task_id = new.id and person_id = new.assignee_id and read_at = '';
+    insert into notifications (id, person_id, task_id, kind, actor_id, at)
+    values ('n_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), new.assignee_id, new.id, 'assigned', v_actor,
+            to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'));
+  end if;
+  return new;
+end $$;
+drop trigger if exists notify_assignee on tasks;
+create trigger notify_assignee after insert or update of assignee_id on tasks for each row execute function notify_assignee();
+
+-- Отметка «был в приложении» — только себе.
+create or replace function touch_presence() returns void language sql security definer set search_path = public as $$
+  update people set last_seen_at = to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+   where user_id = auth.uid() and active;
+$$;
+
 -- Автор комментария и записи в истории — всегда вошедший пользователь, а не то, что прислал браузер.
 create or replace function guard_author() returns trigger language plpgsql set search_path = public as $$
 begin
@@ -423,7 +463,7 @@ alter function comment_counts(text) set search_path = public;
 do $$
 declare t text;
 begin
-  foreach t in array array['units', 'fields', 'people', 'departments', 'unit_members', 'tasks', 'comments', 'activity', 'link_fields', 'task_links'] loop
+  foreach t in array array['units', 'fields', 'people', 'departments', 'unit_members', 'tasks', 'comments', 'activity', 'link_fields', 'task_links', 'notifications'] loop
     execute format('alter table %I enable row level security', t);
     execute format('drop policy if exists team_all on %I', t);
   end loop;
@@ -493,6 +533,13 @@ create policy task_links_write on task_links for all to authenticated
   using (can_see_link(field_id) and exists (select 1 from tasks t where t.id = task_id and (is_staff() or t.assignee_id = my_person_id())))
   with check (can_see_link(field_id) and exists (select 1 from tasks t where t.id = task_id and t.unit_id = task_links.unit_id
     and (is_staff() or t.assignee_id = my_person_id())));
+
+-- Уведомления: только свои; создаёт их триггер.
+drop policy if exists notifications_own on notifications;
+create policy notifications_own on notifications for select to authenticated using (person_id = my_person_id());
+drop policy if exists notifications_read on notifications;
+create policy notifications_read on notifications for update to authenticated
+  using (person_id = my_person_id()) with check (person_id = my_person_id());
 
 -- Комментарии: видны вместе с задачей; писать — администраторы и исполнитель; править/удалять — автор или администратор.
 drop policy if exists comments_read on comments;

@@ -1,11 +1,12 @@
 import './styles.css';
 import { S, me, setMe } from './state.js';
-import { $, h, icon, fill, closeMenu, closeNav, isMenuOpen, isModalOpen } from './ui.js';
+import { $, h, icon, fill, closeMenu, closeNav, isMenuOpen, isModalOpen, refreshPresence } from './ui.js';
 import { call } from './api.js';
 import { initBackend, mode, supabase, localLogin } from './data.js';
 import { LS, isStaff } from './state.js';
 import { parseLocation, render } from './router.js';
 import { openPalette, isPaletteOpen } from './views/palette.js';
+import { renderUnread } from './views/sidebar.js';
 import { openCreateTask, closeTask } from './views/task.js';
 import { openShortcuts } from './views/people.js';
 
@@ -60,6 +61,23 @@ async function boot() {
   }
   S.route = parseLocation();
   render();
+  startPulse();
+}
+
+/** Пульс раз в минуту (пока вкладка открыта): «я в сети», кто ещё в сети, сколько новых уведомлений. */
+function startPulse() {
+  const pulse = async () => {
+    if (document.hidden) return;
+    try {
+      const r = await call('heartbeat', {});
+      S.people.forEach(p => { if (p.id in r.seen) p.lastSeenAt = r.seen[p.id]; });
+      refreshPresence();
+      if (r.unread !== S.unread) { S.unread = r.unread; renderUnread(); }
+    } catch { /* сеть моргнула — следующий пульс через минуту */ }
+  };
+  pulse();
+  setInterval(pulse, 60e3);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) pulse(); });
 }
 
 /** Вошёл, но в команде его нет (или отключён администратором). */

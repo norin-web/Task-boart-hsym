@@ -9,6 +9,7 @@ import { renderTasks, patchTask, reloadBoard, loadBoard } from './board.js';
 import { addMemberDialog } from './people.js';
 import { openCreateUnit } from './units.js';
 import { activityText } from './feed.js';
+import { readNote } from './home.js';
 
 /* ================= Панель задачи ================= */
 
@@ -53,6 +54,7 @@ export function openTask(id) {
     return closeTask();
   }
   S.panelTaskId = id;
+  readNote(id);
   fill($('#panel-root'),
     h('div', { class: 'panel-backdrop' + (cardCenter() ? ' center' : ''), onclick: closeTask }),
     buildPanel(t));

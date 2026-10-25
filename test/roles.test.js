@@ -145,6 +145,47 @@ test('ссылки: видимость по позициям проверяет 
   assert.ok(!(await api('bootstrap', {})).linkFields.some(f => f.id === 'lf_drive'));
 });
 
+test('уведомления о назначении и онлайн-метка', async () => {
+  const api = await setup();
+  const { admin, designer, dev, A } = await team(api);
+  // team() назначала задачи системой — начинаем с чистого листа
+  await api.as(designer, () => api('readNotifications', {}));
+  await api.as(dev, () => api('readNotifications', {}));
+  let t;
+  await api.as(admin, async () => {
+    t = await api('createTask', { unitId: A.id, title: 'Новая иконка', assigneeId: designer.id });
+    await api('createTask', { unitId: A.id, title: 'Сам себе', assigneeId: admin.id });
+  });
+  await api.as(designer, async () => {
+    const list = await api('getNotifications', {});
+    assert.deepEqual(list.map(n => [n.taskId, n.actorId, n.key]), [[t.id, admin.id, 'ALP-' + t.num]]);
+    assert.equal((await api('heartbeat', {})).unread, 1);
+  });
+  await api.as(admin, async () => {
+    assert.equal((await api('getNotifications', {})).length, 0); // себе не уведомляем
+    await api('updateTask', { id: t.id, patch: { assigneeId: dev.id } }); // переназначили — у дизайнера снялось
+  });
+  await api.as(designer, async () => {
+    assert.equal((await api('getNotifications', {})).length, 0);
+  });
+  await api.as(dev, async () => {
+    assert.equal((await api('getNotifications', {}))[0].taskId, t.id);
+    assert.equal(await api('readNotifications', { taskId: t.id }), 1);
+    assert.equal((await api('heartbeat', {})).unread, 0);
+    const hb = await api('heartbeat', {});
+    assert.ok(hb.seen[dev.id] > '2020');
+    assert.equal(hb.seen[designer.id] > '2020', true); // дизайнер тоже заходил выше
+    assert.equal(hb.seen[admin.id] || '', ''); // админ heartbeat не слал
+  });
+  // чужие уведомления не видны и не отмечаются
+  await api.as(admin, () => api('createTask', { unitId: A.id, title: 'Ещё', assigneeId: dev.id }));
+  await api.as(designer, async () => {
+    assert.equal((await api('getNotifications', {})).length, 0);
+    assert.equal(await api('readNotifications', {}), 0);
+  });
+  assert.equal((await api.as(dev, () => api('getNotifications', {}))).length, 1);
+});
+
 test('профили: свой профиль, роли меняет только супер-админ', async () => {
   const api = await setup();
   const { admin, mod, designer, dev } = await team(api);

@@ -190,6 +190,7 @@ export const ACCESS = ['superadmin', 'moderator', 'member'];
 const personOut = r => ({
   id: r.id, name: r.name, email: r.email, role: r.role || '', color: r.color || '', active: !!r.active,
   access: r.access || 'member', positionId: r.position_id || '', linked: !!r.user_id, prefs: json(r.prefs, {}) || {},
+  lastSeenAt: r.last_seen_at || '',
 });
 const deptOut = r => ({ id: r.id, name: r.name, color: r.color, order: r.ord, archived: !!r.archived });
 export const LINK_KINDS = ['figma', 'github', 'drive', 'meta', 'link'];
@@ -1047,6 +1048,41 @@ export function createBackend(db, opts = {}) {
     },
 
     /** Личные настройки интерфейса: сливаем переданные ключи с сохранёнными. */
+    /* ---------- присутствие и уведомления ---------- */
+
+    /** Пульс раз в минуту: отметить «я в приложении», вернуть, кто когда был, и число непрочитанных уведомлений. */
+    async heartbeat() {
+      await rpc('touch_presence', {});
+      const [seen, unread] = await Promise.all([
+        all(() => T('people').select('id,last_seen_at').order('id')),
+        run(T('notifications').select('id').eq('read_at', '').limit(100)),
+      ]);
+      return { seen: Object.fromEntries(seen.map(r => [r.id, r.last_seen_at || ''])), unread: unread.length };
+    },
+
+    /** Непрочитанные уведомления вошедшего — с задачей и юнитом (скрытые от него задачи пропускаются). */
+    async getNotifications() {
+      const rows = await run(T('notifications').select('*').eq('read_at', '').order('at', { ascending: false }).limit(50));
+      if (!rows.length) return [];
+      const tasks = await run(T('tasks').select('id,unit_id,num,title,status,due_date,archived').in('id', [...new Set(rows.map(r => r.task_id))]));
+      const units = await run(T('units').select('id,name,key,color').in('id', [...new Set(tasks.map(t => t.unit_id))]));
+      const TT = Object.fromEntries(tasks.map(t => [t.id, t])), U = Object.fromEntries(units.map(u => [u.id, u]));
+      return rows.filter(r => TT[r.task_id] && !TT[r.task_id].archived && U[TT[r.task_id].unit_id]).map(r => {
+        const t = TT[r.task_id], u = U[t.unit_id];
+        return {
+          id: r.id, kind: r.kind, actorId: r.actor_id, at: r.at, taskId: t.id, title: t.title, dueDate: t.due_date,
+          key: `${u.key}-${t.num}`, unit: { id: u.id, name: u.name, color: u.color },
+        };
+      });
+    },
+
+    /** Отметить прочитанными: все или по одной задаче (taskId). База даёт менять только свои. */
+    async readNotifications(p) {
+      let q = T('notifications').update({ read_at: now() }).eq('read_at', '');
+      if (p.taskId) q = q.eq('task_id', String(p.taskId));
+      return (await run(q.select('id'))).length;
+    },
+
     /* ---------- ссылки в карточке ---------- */
 
     async createLinkField(p) {

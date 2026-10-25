@@ -1,5 +1,5 @@
 /** UI-примитивы: DOM-хелпер, иконки, модалки, меню, тосты. */
-import { PALETTE, colorFor, initials, safeUrl } from './state.js';
+import { PALETTE, colorFor, initials, safeUrl, isOnline, presenceText, personById } from './state.js';
 
 export const $ = (sel, root) => (root || document).querySelector(sel);
 
@@ -126,7 +126,20 @@ export function field(label, control, hint) {
 
 export function avatar(p, size) {
   if (!p) return h('span', { class: 'avatar empty' + (size ? ' ' + size : ''), title: 'Не назначено' }, icon('user', size === 'sm' ? 11 : 13));
-  return h('span', { class: 'avatar' + (size ? ' ' + size : ''), title: p.name, style: { background: p.color || colorFor(p.id) } }, initials(p.name));
+  return h('span', {
+    class: 'avatar' + (size ? ' ' + size : '') + (isOnline(p) ? ' online' : ''), title: p.name + ' · ' + presenceText(p),
+    dataset: { pid: p.id }, style: { background: p.color || colorFor(p.id) },
+  }, initials(p.name));
+}
+
+/** Обновить онлайн-точки на уже нарисованных аватарах (без перерисовки страницы). */
+export function refreshPresence() {
+  document.querySelectorAll('.avatar[data-pid]').forEach(el => {
+    const p = personById(el.dataset.pid);
+    if (!p) return;
+    el.classList.toggle('online', isOnline(p));
+    el.title = p.name + ' · ' + presenceText(p);
+  });
 }
 
 /** Текст с кликабельными http(s)-ссылками. */

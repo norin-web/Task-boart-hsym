@@ -9,7 +9,8 @@ function current(key, defs) {
   const saved = ((me() || {}).prefs || {})[key] || {};
   const known = new Set(defs.map(d => d.id));
   const order = (saved.order || []).filter(id => known.has(id));
-  defs.forEach(d => { if (!order.includes(d.id)) order.push(d.id); });
+  // Новые блоки — в конец; помеченные first (важные уведомления) — в начало
+  defs.forEach(d => { if (!order.includes(d.id)) d.first ? order.unshift(d.id) : order.push(d.id); });
   return {
     order,
     hidden: (saved.hidden || []).filter(id => known.has(id)),
@@ -99,7 +100,7 @@ export function editLayout(key, defs, container, onDone) {
             collect();
           },
         }, icon('eye', 14))),
-      h('div', { class: 'lb-preview', inert: true }, d.render()));
+      h('div', { class: 'lb-preview', inert: true }, d.render() || h('p', { class: 'muted', style: { margin: '4px 0' } }, d.empty || 'Пока пусто')));
     return el;
   };
 

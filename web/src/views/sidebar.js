@@ -30,6 +30,14 @@ function cycleTheme() {
 
 /* ---------- сайдбар ---------- */
 
+/** Счётчик новых назначений у «Главной» — обновляется на месте. */
+export function renderUnread() {
+  const b = $('#unread-badge');
+  if (!b) return;
+  b.textContent = S.unread > 99 ? '99+' : S.unread || '';
+  b.hidden = !S.unread;
+}
+
 function unitItem(u, r) {
   const n = openCount(u);
   const overdue = u.counts && u.counts.overdue;
@@ -53,7 +61,8 @@ export function renderSidebar() {
   fill($('#sidebar'),
     h('div', { class: 'brand' }, h('div', { class: 'brand-logo' }, icon('check', 16)), h('span', null, 'Tasks')),
     h('button', { class: 'search-btn', onclick: openPalette }, icon('search', 15), h('span', null, 'Поиск'), h('kbd', null, isMac ? '⌘K' : 'Ctrl K')),
-    link({ view: 'home' }, { class: 'nav-item' + (!r.unit && (!r.view || r.view === 'home') ? ' active' : '') }, icon('home'), h('span', { class: 'nav-label' }, staff ? 'Главная' : 'Мой дашборд')),
+    link({ view: 'home' }, { class: 'nav-item' + (!r.unit && (!r.view || r.view === 'home') ? ' active' : '') }, icon('home'), h('span', { class: 'nav-label' }, staff ? 'Главная' : 'Мой дашборд'),
+      h('span', { class: 'nav-badge', id: 'unread-badge', title: 'Новые задачи на вас', hidden: !S.unread }, S.unread || '')),
     staff && link({ view: 'my' }, { class: 'nav-item' + (r.view === 'my' ? ' active' : '') }, icon('user'), h('span', { class: 'nav-label' }, 'Мои задачи')),
     staff && link({ view: 'admin' }, { class: 'nav-item' + (r.view === 'admin' ? ' active' : '') }, icon('settings'), h('span', { class: 'nav-label' }, 'Панель админа')),
     h('div', { class: 'nav-section' },
