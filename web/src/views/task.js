@@ -514,30 +514,29 @@ function sideBlock(t, { staff, editable }) {
       onchange: e => { dot.style.background = colColor(colById(e.target.value)); patchTask(t, { status: e.target.value }); },
     }, u.settings.columns.map(c => h('option', { value: c.id }, c.name)))));
 
+  // Порядок: Статус → Команда → Исполнитель (только люди выбранной команды) → Срок → Приоритет и поля.
+  // Позиция в карточке не показывается — её ставит исполнитель (основная позиция), видимость считается по ней.
+  {
+    const tm = teamById(t.teamId);
+    if (staff) prop('Команда', teamSelect(t.teamId, v => patchTask(t, { teamId: v }).then(() => refreshPanel(t))));
+    else if (tm) prop('Команда', ro(h('span', { class: 'chip dept-chip', style: { background: `color-mix(in srgb, ${tm.color} 16%, transparent)`, color: tm.color } }, tm.name)));
+  }
+
   if (!B.assignee.hidden && !staff) {
     const p = personById(t.assigneeId);
     prop(B.assignee.label, ro(p && h('span', { class: 'row', style: { gap: '6px', flexWrap: 'nowrap' } }, avatar(p, 'sm'), p.name)));
   } else if (!B.assignee.hidden) {
     prop(B.assignee.label, assigneeSelect(t.assigneeId, v => {
-      const before = t.departmentId;
-      patchTask(t, { assigneeId: v }).then(() => { if (t.departmentId !== before) refreshPanel(t); });
-    }), {
+      const p = personById(v);
+      // команды ещё нет — берём первую команду исполнителя
+      const patch = { assigneeId: v };
+      if (p && !t.teamId && (p.teamIds || []).length) patch.teamId = p.teamIds[0];
+      patchTask(t, patch).then(() => refreshPanel(t));
+    }, { teamId: t.teamId }), {
       after: S.meId && t.assigneeId !== S.meId && h('div', { class: 'quick-chips' }, h('button', {
         class: 'quick-chip', onclick: () => { patchTask(t, { assigneeId: S.meId }); refreshPanel(t); },
       }, icon('user', 12), 'Назначить на меня')),
     });
-  }
-
-  {
-    const tm = teamById(t.teamId);
-    if (staff || tm) prop('Команда', staff ? teamSelect(t.teamId, v => patchTask(t, { teamId: v }))
-      : ro(h('span', { class: 'chip dept-chip', style: { background: `color-mix(in srgb, ${tm.color} 16%, transparent)`, color: tm.color } }, tm.name)));
-  }
-
-  if (!B.department.hidden) {
-    const d = deptById(t.departmentId);
-    prop(B.department.label, staff ? deptSelect(t.departmentId, v => patchTask(t, { departmentId: v }))
-      : ro(d && h('span', { class: 'chip dept-chip', style: { background: `color-mix(in srgb, ${d.color} 16%, transparent)`, color: d.color } }, d.name)));
   }
 
   if (!B.dueDate.hidden && !staff) {
@@ -559,7 +558,8 @@ function sideBlock(t, { staff, editable }) {
   }
 
   const blocking = missingNext(t);
-  activeFields().forEach(f => {
+  // приоритет — сразу после срока, остальные поля — следом
+  [...activeFields()].sort((a, b) => (b.role === 'priority') - (a.role === 'priority')).forEach(f => {
     const v = t.fields[f.id];
     prop(f.name, editable && (staff || !f.staffOnly)
       ? fieldInput(f, v, val => patchTask(t, { fields: { [f.id]: isEmpty(val) ? null : val } }))
@@ -633,8 +633,8 @@ export function assigneeSelect(value, onChange, { ids, unitId, teamId } = {}) {
     },
   },
   h('option', { value: '' }, '— не назначен —'),
-  people.map(p => h('option', { value: p.id }, p.name)),
-  outsider && h('option', { value: outsider.id }, outsider.name + ' (не в команде)'),
+  people.map(p => h('option', { value: p.id }, p.name + (ofTeam(p) ? '' : ' (не из этой команды)'))),
+  outsider && h('option', { value: outsider.id }, outsider.name + ' (не в юните)'),
   h('option', { value: '__add' }, '＋ Добавить в команду…'));
   return sel;
 }
@@ -788,9 +788,9 @@ export function openCreateTask(opts = {}) {
         if (p && !(p.positionIds || [p.positionId]).includes(draft.departmentId)) draft.departmentId = p.positionId;
         drawProps();
       }, { ...(inBoard ? {} : { ids: unit.members || [], unitId: unit.id }), teamId: draft.teamId })),
-      !B.department.hidden && field(B.department.label, deptSelect(draft.departmentId, v => { draft.departmentId = v; })),
+      // позицию не спрашиваем — её подставит исполнитель (или шаблон)
       !B.dueDate.hidden && field(B.dueDate.label, h('input', { class: 'inp', type: 'date', value: draft.dueDate, onchange: e => { draft.dueDate = e.target.value; } })),
-      inBoard && activeFields().map(f => field(f.name + (f.required || f.requiredOnCreate ? ' *' : ''),
+      inBoard && [...activeFields()].sort((a, b) => (b.role === 'priority') - (a.role === 'priority')).map(f => field(f.name + (f.required || f.requiredOnCreate ? ' *' : ''),
         fieldInput(f, draft.fields[f.id], v => { if (isEmpty(v)) delete draft.fields[f.id]; else draft.fields[f.id] = v; }))),
       !inBoard && h('div', { class: 'hint', style: { gridColumn: '1 / -1' } }, 'Дополнительные поля юнита можно заполнить в карточке после создания.'));
   };

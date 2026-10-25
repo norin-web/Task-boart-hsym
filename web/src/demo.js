@@ -71,6 +71,9 @@ const UNITS = [
   },
 ];
 
+/** Команда демо-человека по позиции (ASO — своя команда, если она есть). */
+const personTeam = (positionId, teams) => ({ d_ios: 't_ios', d_design: 't_design', d_qa: 't_qa', d_aso: teams.has('t_aso') ? 't_aso' : 't_other' })[positionId] || 't_other';
+
 /** Заполняет пустую локальную базу и делает текущим пользователем Анну (супер-админ). */
 export async function seedDemo() {
   const annaId = await asSystem(seed);
@@ -87,8 +90,10 @@ async function seed() {
 
   const P = {};
   const U = {};
+  const teams = new Set(((await api('bootstrap', {})).teams || []).map(t => t.id));
   for (const [key, name, role, email, access, positionId] of PEOPLE) {
-    P[key] = await api('createPerson', { name, role, email: email + '@example.com', access, positionId });
+    const team = access === 'member' ? personTeam(positionId, teams) : 't_product';
+    P[key] = await api('createPerson', { name, role, email: email + '@example.com', access, positionId: positionId || 'd_po', teamIds: teams.has(team) ? [team] : [] });
   }
 
   for (const def of UNITS) {
@@ -156,13 +161,12 @@ export async function seedPeople() {
     };
     const boot = await api('bootstrap', {});
     const teams = new Set((boot.teams || []).map(t => t.id));
-    const TEAM = { d_ios: 't_ios', d_design: 't_design', d_aso: teams.has('t_aso') ? 't_aso' : 't_other', d_qa: 't_qa' };
     const have = new Set(boot.people.map(p => (p.email || '').toLowerCase()));
     const added = [];
     for (const [, name, role, email, access, positionId] of PEOPLE) {
       const mail = email + '@example.com';
       if (have.has(mail)) continue;
-      const team = access === 'member' ? TEAM[positionId] : 't_product';
+      const team = access === 'member' ? personTeam(positionId, teams) : 't_product';
       added.push(await api('createPerson', {
         name, role, email: mail, access, positionId: positionId || 'd_po', teamIds: teams.has(team) ? [team] : [],
       }));
