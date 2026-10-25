@@ -33,6 +33,7 @@ class Query {
   eq(c, v) { this.filters.push([c, '=', v]); return this; }
   neq(c, v) { this.filters.push([c, '<>', v]); return this; }
   lt(c, v) { this.filters.push([c, '<', v]); return this; }
+  gt(c, v) { this.filters.push([c, '>', v]); return this; }
   in(c, list) { this.filters.push([c, 'in', list]); return this; }
   order(c, { ascending = true } = {}) { this.orders.push(`${ident(c)} ${ascending ? 'asc' : 'desc'}`); return this; }
   limit(n) { this.lim = n; return this; }

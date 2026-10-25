@@ -1,4 +1,4 @@
-import { S, greeting, me, personById, relTime, plural, emptyCounts, isStaff, deptById } from '../state.js';
+import { S, greeting, me, personById, plural, emptyCounts, isStaff, deptById, todayStr, fmtDate, activeDepts, ACCESS_LABELS } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill } from '../ui.js';
 import { call } from '../api.js';
 import { currentView, link, navigate } from '../router.js';
@@ -7,6 +7,7 @@ import { openCreateTask } from './task.js';
 import { openCreateUnit, unitMenu } from './units.js';
 import { mode } from '../data.js';
 import { taskGroups, loadMyTasks, personCaption } from './my.js';
+import { activityFeed } from './feed.js';
 
 /** Локальный режим: заполнить пустую базу демо-командами и перезагрузить. */
 export async function fillDemo(btn) {
@@ -27,13 +28,17 @@ export async function renderHome() {
   const page = h('div', { class: 'page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
   fill($('#main'),
     topbar([h('h1', null, 'Главная')], [
+      h('button', { class: 'btn', onclick: () => navigate({ view: 'admin' }) }, icon('settings', 15), h('span', { class: 'btn-label' }, 'Панель админа')),
       h('button', { class: 'btn primary', onclick: () => openCreateTask() }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Задача')),
     ]),
     h('div', { class: 'view-body' }, page));
 
-  let d;
+  let d, ov;
   try {
-    d = await call('getHome', { today: new Date().toISOString().slice(0, 10) });
+    [d, ov] = await Promise.all([
+      call('getHome', { today: todayStr() }),
+      call('getOverview', { today: todayStr() }),
+    ]);
   } catch (e) {
     showErr(e);
     return;
@@ -49,12 +54,12 @@ export async function renderHome() {
   const st = d.stats;
   const dateStr = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
 
-  fill(page, 
+  fill(page,
     h('div', { class: 'hero' },
       h('div', null,
-        h('h1', null, greeting() + (person ? ', ' + person.name.split(' ')[0] : '')),
+        h('h1', { class: 'row', style: { gap: '10px' } }, greeting() + (person ? ', ' + person.name.split(' ')[0] : ''), roleBadge(person)),
         h('p', null, dateStr[0].toUpperCase() + dateStr.slice(1) + ' · ' + summary(st))),
-      units.length > 0 && h('div', { class: 'row' },
+      h('div', { class: 'row' },
         h('button', { class: 'btn', onclick: () => navigate({ view: 'my' }) }, icon('user', 15), 'Мои задачи'))),
 
     h('div', { class: 'stats' },
@@ -64,22 +69,73 @@ export async function renderHome() {
       stat('Сделано за 7 дней', st.doneWeek, 'done', 'var(--st-done)')),
 
     h('div', { class: 'home-grid' },
-      h('section', null,
-        h('div', { class: 'section-head' }, h('h2', null, 'Юниты'),
-          h('button', { class: 'btn ghost sm', onclick: openCreateUnit }, icon('plus', 14), 'Новый')),
-        units.length
-          ? h('div', { class: 'unit-grid' }, units.map(unitCard), h('button', { class: 'unit-card add', onclick: openCreateUnit }, icon('plus', 18), 'Новый юнит'))
-          : h('div', { class: 'card-box empty-state' },
-            h('h2', null, 'Создайте первый юнит'),
-            h('p', null, 'Юнит — это команда: своя доска и задачи, участники из разных отделов (ASO, Design, iOS…).'),
-            h('div', { class: 'row', style: { justifyContent: 'center' } },
-              h('button', { class: 'btn primary', onclick: openCreateUnit }, icon('plus', 15), 'Создать юнит'),
-              mode === 'local' && h('button', { class: 'btn', onclick: e => fillDemo(e.currentTarget) }, icon('layers', 15), 'Заполнить демо-данными')))),
-      h('section', null,
-        h('div', { class: 'section-head' }, h('h2', null, 'Последние события')),
-        d.activity.length
-          ? h('div', { class: 'feed' }, d.activity.map(feedItem))
-          : h('div', { class: 'feed' }, h('div', { class: 'empty-state', style: { padding: '28px 16px' } }, 'Здесь появятся изменения в задачах')))));
+      h('div', { class: 'home-col' },
+        attentionBlock(ov),
+        workloadBlock(ov),
+        h('section', null,
+          h('div', { class: 'section-head' }, h('h2', null, 'Юниты'),
+            h('button', { class: 'btn ghost sm', onclick: openCreateUnit }, icon('plus', 14), 'Новый')),
+          units.length
+            ? h('div', { class: 'unit-grid' }, units.map(unitCard), h('button', { class: 'unit-card add', onclick: openCreateUnit }, icon('plus', 18), 'Новый юнит'))
+            : h('div', { class: 'card-box empty-state' },
+              h('h2', null, 'Создайте первый юнит'),
+              h('p', null, 'Юнит — это команда: своя доска и задачи, участники из разных отделов (ASO, Design, iOS…).'),
+              h('div', { class: 'row', style: { justifyContent: 'center' } },
+                h('button', { class: 'btn primary', onclick: openCreateUnit }, icon('plus', 15), 'Создать юнит'),
+                mode === 'local' && h('button', { class: 'btn', onclick: e => fillDemo(e.currentTarget) }, icon('layers', 15), 'Заполнить демо-данными'))))),
+      activityFeed({ limit: 15 })));
+}
+
+/** Бейдж роли текущего человека. */
+export function roleBadge(p) {
+  if (!p) return null;
+  return h('span', { class: 'role-badge role-' + p.access }, ACCESS_LABELS[p.access]);
+}
+
+/** Что требует внимания администратора — каждый пункт кликабелен. */
+export function attentionBlock(ov) {
+  const items = [];
+  const name = id => (personById(id) || { name: '—' }).name;
+  if (ov.overdueTotal) items.push(h('div', { class: 'att-item att-danger' },
+    h('div', { class: 'att-head' }, icon('alert', 15), h('b', null, ov.overdueTotal + ' ' + plural(ov.overdueTotal, ['просроченная задача', 'просроченные задачи', 'просроченных задач']))),
+    h('div', { class: 'att-list' }, ov.overdue.slice(0, 5).map(t => link({ unit: t.unit.id, mode: 'board', task: t.id }, { class: 'att-task' },
+      h('span', { class: 'key-badge' }, t.key), h('span', { class: 'ft-title' }, t.title),
+      h('span', { class: 'muted' }, t.assigneeId ? name(t.assigneeId) : 'без исполнителя'),
+      h('span', { class: 'due overdue' }, fmtDate(t.dueDate)))))));
+  const simple = (n, text, onclick, tone = 'warn') => n > 0 && items.push(h('button', { class: 'att-item att-' + tone + ' att-simple', onclick },
+    icon(tone === 'info' ? 'user' : 'alert', 15), h('span', null, h('b', null, n), ' ' + text), icon('arrow', 14)));
+  simple(ov.unassigned, plural(ov.unassigned, ['задача без исполнителя', 'задачи без исполнителя', 'задач без исполнителя']), () => navigate({ view: 'admin', tab: 'overview' }));
+  simple(ov.noPosition, plural(ov.noPosition, ['задача без позиции — участники её не видят', 'задачи без позиции — участники их не видят', 'задач без позиции — участники их не видят']), () => navigate({ view: 'admin', tab: 'overview' }));
+  simple(ov.peopleNoPosition.length, plural(ov.peopleNoPosition.length, ['участник без позиции', 'участника без позиции', 'участников без позиции']), () => navigate({ view: 'admin', tab: 'people' }));
+  simple(ov.unitsNoTeam.length, plural(ov.unitsNoTeam.length, ['юнит без команды', 'юнита без команды', 'юнитов без команды']), () => navigate({ view: 'admin', tab: 'units' }));
+  if (mode === 'supabase') simple(ov.peopleNoLogin.length, plural(ov.peopleNoLogin.length, ['человек без входа', 'человека без входа', 'человек без входа']), () => navigate({ view: 'admin', tab: 'people' }), 'info');
+  return h('section', null,
+    h('div', { class: 'section-head' }, h('h2', null, 'Требует внимания')),
+    items.length ? h('div', { class: 'att' }, items) : h('div', { class: 'card-box att-ok' }, icon('done', 16), 'Всё в порядке: просрочек и пробелов нет'));
+}
+
+/** Загрузка: открытые задачи по людям (кто перегружен, у кого просрочки). */
+export function workloadBlock(ov, { all = false } = {}) {
+  const rows = S.people.filter(p => p.active && p.access === 'member')
+    .map(p => ({ p, c: ov.byPerson[p.id] || { open: 0, inProgress: 0, overdue: 0 } }))
+    .sort((a, b) => b.c.open - a.c.open || b.c.overdue - a.c.overdue);
+  const shown = all ? rows : rows.slice(0, 6);
+  const max = Math.max(1, ...rows.map(r => r.c.open));
+  const pos = activeDepts().map(d => ({ d, c: ov.byPosition[d.id] || { open: 0, overdue: 0 } })).filter(x => x.c.open);
+  return h('section', null,
+    h('div', { class: 'section-head' }, h('h2', null, 'Загрузка команды'),
+      !all && rows.length > 6 && h('button', { class: 'btn ghost sm', onclick: () => navigate({ view: 'admin' }) }, 'Все ' + rows.length)),
+    h('div', { class: 'card-box load' },
+      shown.length ? shown.map(({ p, c }) => h('div', { class: 'load-row' },
+        avatar(p, 'sm'),
+        h('span', { class: 'load-name' }, p.name, h('small', null, personCaption(p))),
+        h('div', { class: 'load-bar', title: `Открыто ${c.open}, в работе ${c.inProgress}, просрочено ${c.overdue}` },
+          h('div', { class: 'load-fill', style: { width: (c.open / max) * 100 + '%' } },
+            h('div', { class: 'load-progress', style: { width: c.open ? (c.inProgress / c.open) * 100 + '%' : 0 } }))),
+        h('span', { class: 'load-num' }, c.open),
+        h('span', { class: 'load-late' + (c.overdue ? '' : ' zero') }, c.overdue ? c.overdue + ' просроч.' : ''))) : h('p', { class: 'muted', style: { margin: 0 } }, 'Участников пока нет'),
+      pos.length > 0 && h('div', { class: 'load-pos' }, pos.map(({ d, c }) => h('span', { class: 'chip', style: { background: `color-mix(in srgb, ${d.color} 16%, transparent)`, color: d.color } },
+        d.name + ': ' + c.open + (c.overdue ? ' · ' + c.overdue + ' просроч.' : ''))))));
 }
 
 function summary(st) {
@@ -123,33 +179,6 @@ function unitCard(u) {
       h('div', { class: 'progress', title: 'Выполнено ' + pct + '%' }, h('div', { style: { width: pct + '%' } }))));
 }
 
-export function activityText(a) {
-  switch (a.action) {
-    case 'create': return 'создание задачи';
-    case 'comment': return 'комментарий: «' + (a.toText.length > 90 ? a.toText.slice(0, 90) + '…' : a.toText) + '»';
-    case 'archive': return 'задача в архиве';
-    case 'unarchive': return 'задача возвращена из архива';
-    case 'move': return 'перенос ' + a.fromText + ' → ' + a.toText;
-    case 'delete': return 'удаление задачи «' + a.fromText + '»';
-    case 'update':
-      if (a.field === 'description') return a.label.toLowerCase() + ' изменено';
-      return a.label + ': ' + a.fromText + ' → ' + a.toText;
-    default: return a.action;
-  }
-}
-
-function feedItem(a) {
-  const p = personById(a.actorId);
-  return h('div', { class: 'feed-item' },
-    avatar(p, 'sm'),
-    h('div', { class: 'feed-body' },
-      h('div', { class: 'feed-text' }, h('b', null, p ? p.name : 'Кто-то'), ' · ', activityText(a)),
-      a.task && a.unit && link({ unit: a.unit.id, mode: 'board', task: a.task.id }, { class: 'feed-task' },
-        h('span', { class: 'unit-dot', style: { background: a.unit.color, margin: 0 } }),
-        h('span', { class: 'key-badge' }, a.task.key),
-        h('span', { class: 'ft-title' }, a.task.title)),
-      h('div', { class: 'feed-when' }, relTime(a.at))));
-}
 
 /** Дашборд участника: его юниты (доска и бэклог своей позиции) и его задачи. */
 async function renderMemberHome() {

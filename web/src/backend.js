@@ -299,10 +299,10 @@ export function createBackend(db, opts = {}) {
   async function log(entries, ctx) {
     if (!entries.length) return;
     const by = actor(ctx);
-    const at = now();
+    // У каждой записи своё время (монотонное) — постраничная лента не теряет записи на границе
     await run(T('activity').insert(entries.map(e => ({
       id: uid('a'), unit_id: e.unitId || '', task_id: e.taskId || '', action: e.action, field: e.field || '',
-      from_val: logVal(e.from), to_val: logVal(e.to), actor_id: by, at,
+      from_val: logVal(e.from), to_val: logVal(e.to), actor_id: by, at: now(),
     }))));
   }
 
@@ -358,7 +358,7 @@ export function createBackend(db, opts = {}) {
       all(() => T('people').select('id,name').order('id')),
       all(() => T('fields').select('*').order('id')),
       all(() => T('departments').select('id,name').order('id')),
-      taskIds.length ? run(T('tasks').select('id,unit_id,num,title').in('id', taskIds)) : [],
+      taskIds.length ? run(T('tasks').select('id,unit_id,num,title,department_id').in('id', taskIds)) : [],
     ]);
     const index = list => Object.fromEntries(list.map(r => [r.id, r]));
     const U = index(units), P = index(peopleRows), F = index(fields), D = index(depts), TT = index(tasks);
@@ -396,7 +396,7 @@ export function createBackend(db, opts = {}) {
         id: a.id, action: a.action, field: a.field, actorId: a.actor_id, at: a.at,
         label, fromText: text(fromText), toText: text(toText),
         unit: u ? { id: u.id, name: u.name, key: u.key, color: u.color } : null,
-        task: t ? { id: t.id, title: t.title, key: `${U[t.unit_id] ? U[t.unit_id].key : '?'}-${t.num}` } : null,
+        task: t ? { id: t.id, title: t.title, key: `${U[t.unit_id] ? U[t.unit_id].key : '?'}-${t.num}`, departmentId: t.department_id || '' } : null,
       };
     });
   }
@@ -464,6 +464,77 @@ export function createBackend(db, opts = {}) {
         stats.doneWeek += u.doneWeek;
       }
       return { units: units.map(({ doneWeek, ...u }) => u), people: ppl, departments: depts, stats, activity: await enrichActivity(log) };
+    },
+
+    /**
+     * Лента событий с фильтрами: unitId, actorId, departmentId (позиция задачи), kind, since (скрыть старее), before (страница).
+     * kind: create | status | assign | comment | fields | move | delete | archive.
+     */
+    async getActivity(p) {
+      const limit = Math.min(Math.max(Number(p.limit) || 30, 1), 100);
+      const build = () => {
+        let q = T('activity').select('*');
+        if (p.unitId) q = q.eq('unit_id', String(p.unitId));
+        if (p.actorId) q = q.eq('actor_id', String(p.actorId));
+        switch (p.kind) {
+          case 'create': case 'comment': case 'move': case 'delete': q = q.eq('action', p.kind); break;
+          case 'archive': q = q.in('action', ['archive', 'unarchive']); break;
+          case 'status': q = q.eq('action', 'update').eq('field', 'status'); break;
+          case 'assign': q = q.eq('action', 'update').eq('field', 'assigneeId'); break;
+          case 'fields': q = q.eq('action', 'update').neq('field', 'status').neq('field', 'assigneeId'); break;
+          default: break;
+        }
+        if (p.since) q = q.gt('at', String(p.since));
+        if (p.before) q = q.lt('at', String(p.before));
+        return q.order('at', { ascending: false });
+      };
+      // Позиция задачи известна только после обогащения — берём с запасом и фильтруем
+      const rows = await run(build().limit(p.departmentId ? limit * 4 : limit + 1));
+      let items = await enrichActivity(rows);
+      if (p.departmentId) items = items.filter(a => a.task && a.task.departmentId === p.departmentId);
+      return { items: items.slice(0, limit), more: items.length > limit || (!!p.departmentId && rows.length === limit * 4) };
+    },
+
+    /** Сводка для администраторов: загрузка людей и позиций, просрочки, что требует внимания. */
+    async getOverview(p) {
+      const day = today(p.today);
+      const [units, tasks, ppl, members] = await Promise.all([
+        all(() => T('units').select('id,key,name,color,settings,archived').order('id')),
+        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,department_id,due_date').eq('archived', false).order('id')),
+        people(),
+        all(() => T('unit_members').select('unit_id,person_id').order('unit_id')),
+      ]);
+      const U = Object.fromEntries(units.filter(u => !u.archived).map(u => [u.id, { ...u, st: unitSettings(u.settings) }]));
+      const byPerson = {};
+      const byPosition = {};
+      const overdue = [];
+      let unassigned = 0, noPosition = 0;
+      for (const t of tasks) {
+        const u = U[t.unit_id];
+        if (!u) continue;
+        const kind = kindOf(u.st, t.status);
+        if (kind === 'done') continue;
+        const late = !!t.due_date && t.due_date < day;
+        const bump = (map, key) => {
+          const c = map[key] || (map[key] = { open: 0, inProgress: 0, overdue: 0 });
+          c.open++;
+          if (kind === 'progress') c.inProgress++;
+          if (late) c.overdue++;
+        };
+        if (t.assignee_id) bump(byPerson, t.assignee_id); else unassigned++;
+        if (t.department_id) bump(byPosition, t.department_id); else noPosition++;
+        if (late) overdue.push({ id: t.id, key: `${u.key}-${t.num}`, title: t.title, dueDate: t.due_date, assigneeId: t.assignee_id, unit: { id: u.id, name: u.name, color: u.color } });
+      }
+      overdue.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+      const teamUnits = new Set(members.map(m => m.unit_id));
+      const active = ppl.filter(x => x.active);
+      return {
+        byPerson, byPosition, unassigned, noPosition,
+        overdue: overdue.slice(0, 10), overdueTotal: overdue.length,
+        peopleNoPosition: active.filter(x => x.access === 'member' && !x.positionId).map(x => x.id),
+        peopleNoLogin: active.filter(x => !x.linked).map(x => x.id),
+        unitsNoTeam: Object.values(U).filter(u => !teamUnits.has(u.id)).map(u => u.id),
+      };
     },
 
     /** Задачи из всех активных юнитов: поиск (q) или «мои задачи» (assigneeId). */

@@ -8,7 +8,7 @@ import { navigate } from '../router.js';
 import { renderTasks, patchTask, reloadBoard } from './board.js';
 import { addMemberDialog } from './people.js';
 import { openCreateUnit } from './units.js';
-import { activityText } from './home.js';
+import { activityText } from './feed.js';
 
 /* ================= Панель задачи ================= */
 

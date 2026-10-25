@@ -18,8 +18,10 @@ export function openPalette() {
     isStaff() && { label: 'Новый юнит', icon: 'folder', run: openCreateUnit },
     { label: 'Главная', icon: 'home', run: () => navigate({ view: 'home' }) },
     isStaff() && { label: 'Мои задачи', icon: 'user', run: () => navigate({ view: 'my' }) },
-    isStaff() && { label: 'Люди и доступы', icon: 'users', run: openPeople },
-    isStaff() && { label: 'Позиции', icon: 'layers', run: openDepartments },
+    isStaff() && { label: 'Панель админа', icon: 'settings', run: () => navigate({ view: 'admin' }) },
+    isStaff() && { label: 'Люди и доступы', icon: 'users', run: () => navigate({ view: 'admin', tab: 'people' }) },
+    isStaff() && { label: 'Позиции', icon: 'layers', run: () => navigate({ view: 'admin', tab: 'positions' }) },
+    isStaff() && { label: 'Журнал событий', icon: 'clock', run: () => navigate({ view: 'admin', tab: 'journal' }) },
     { label: 'Горячие клавиши', icon: 'keyboard', hint: '?', run: openShortcuts },
     mode === 'local' && isStaff() && !S.units.length && { label: 'Заполнить демо-данными', icon: 'layers', run: () => fillDemo() },
   ].filter(Boolean);

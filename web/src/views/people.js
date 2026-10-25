@@ -43,7 +43,17 @@ function showCredentials(person, password) {
 /* ================= Люди и доступы (модераторы и супер-админы) ================= */
 
 export function openPeople() {
+  modal({ title: 'Люди и доступы', wide: true, body: peopleManager(), actions: [{ label: 'Готово', primary: true, action: c => c() }], onClose: rerender });
+}
+
+/**
+ * Управление людьми: позиции, роли (только супер-админ), вход и доступ. filter — функция-фильтр списка.
+ * Возвращает элемент (используется в окне и в панели админа).
+ */
+export function peopleManager({ search = false } = {}) {
   const box = h('div', { class: 'rows people-list' });
+  let q = '';
+  let accessFilter = '';
   const save = (p, patch) => send('updatePerson', { id: p.id, ...patch })
     .then(saved => { Object.assign(p, saved); draw(); })
     .catch(e => { showErr(e); draw(); });
@@ -74,7 +84,11 @@ export function openPeople() {
   };
 
   const head = h('div', { class: 'access-row access-head' }, h('span'), h('span', null, 'Человек'), h('span', null, 'Позиция'), h('span', null, 'Роль'), h('span'));
-  const draw = () => fill(box, S.people.length ? [head, ...S.people.map(row)] : h('p', { class: 'muted', style: { padding: '12px 14px', margin: 0 } }, 'Пока никого нет'));
+  const visible = () => S.people.filter(p => (!q || (p.name + ' ' + p.email).toLowerCase().includes(q)) && (!accessFilter || (accessFilter === 'nopos' ? p.access === 'member' && !p.positionId : accessFilter === 'nologin' ? !p.linked : accessFilter === 'off' ? !p.active : p.access === accessFilter)));
+  const draw = () => {
+    const list = visible();
+    fill(box, list.length ? [head, ...list.map(row)] : h('p', { class: 'muted', style: { padding: '12px 14px', margin: 0 } }, S.people.length ? 'Никого не найдено' : 'Пока никого нет'));
+  };
 
   // Добавить человека
   const name = h('input', { class: 'inp', placeholder: 'Имя и фамилия' });
@@ -102,24 +116,28 @@ export function openPeople() {
     draw();
   };
   draw();
-  modal({
-    title: 'Люди и доступы',
-    wide: true,
-    body: [
-      h('p', { class: 'hint', style: { marginTop: 0 } },
-        isSuper() ? 'Позиция определяет, какие задачи участник видит в своих юнитах. Роли меняет только супер-админ.'
-          : 'Позиция определяет, какие задачи участник видит в своих юнитах. Роли назначает супер-админ.'),
-      box,
-      h('div', { class: 'sub-title' }, 'Добавить человека'),
-      h('div', { class: 'add-person' }, name, email, pos, acc,
-        h('button', { class: 'btn primary', onclick: () => add().catch(showErr) }, icon('plus', 14), 'Добавить')),
-      h('p', { class: 'hint' }, mode === 'supabase'
-        ? 'С email — сразу создастся вход с временным паролем. Без email — только профиль (вход можно создать позже в меню ⋯).'
-        : 'Локальный режим: входа нет, проверяйте роли через «Войти как…» в меню профиля.'),
-    ],
-    actions: [{ label: 'Готово', primary: true, action: c => c() }],
-    onClose: rerender,
-  });
+  const toolbar = search && h('div', { class: 'row', style: { marginBottom: '10px' } },
+    h('input', { class: 'inp', type: 'search', placeholder: 'Поиск по имени или email', style: { maxWidth: '280px' }, oninput: ev => { q = ev.target.value.trim().toLowerCase(); draw(); } }),
+    h('select', { class: 'inp', style: { width: 'auto' }, onchange: ev => { accessFilter = ev.target.value; draw(); } },
+      h('option', { value: '' }, 'Все'),
+      Object.entries(ACCESS_LABELS).map(([k, v]) => h('option', { value: k }, v)),
+      h('option', { value: 'nopos' }, 'Участники без позиции'),
+      mode === 'supabase' && h('option', { value: 'nologin' }, 'Без входа'),
+      h('option', { value: 'off' }, 'Отключённые')));
+  const el = h('div', null,
+    h('p', { class: 'hint', style: { marginTop: 0 } },
+      isSuper() ? 'Позиция определяет, какие задачи участник видит в своих юнитах. Роли меняет только супер-админ.'
+        : 'Позиция определяет, какие задачи участник видит в своих юнитах. Роли назначает супер-админ.'),
+    toolbar,
+    box,
+    h('div', { class: 'sub-title' }, 'Добавить человека'),
+    h('div', { class: 'add-person' }, name, email, pos, acc,
+      h('button', { class: 'btn primary', onclick: () => add().catch(showErr) }, icon('plus', 14), 'Добавить')),
+    h('p', { class: 'hint' }, mode === 'supabase'
+      ? 'С email — сразу создастся вход с временным паролем. Без email — только профиль (вход можно создать позже в меню ⋯).'
+      : 'Локальный режим: входа нет, проверяйте роли через «Войти как…» в меню профиля.'));
+  el.refresh = draw;
+  return el;
 
   function accountDialog(p) {
     const em = h('input', { class: 'inp', type: 'email', value: p.email, placeholder: 'email' });
@@ -282,6 +300,11 @@ export function applyMembers(unitId, list) {
 /* ================= Позиции (общий справочник) ================= */
 
 export function openDepartments() {
+  modal({ title: 'Позиции', body: positionsManager(), actions: [{ label: 'Готово', primary: true, action: c => c() }], onClose: rerender });
+}
+
+/** Справочник позиций: название, цвет, порядок, скрыть/удалить. Возвращает элемент. */
+export function positionsManager() {
   const box = h('div', { class: 'rows people-list' });
   const draw = () => fill(box, S.departments.length ? [...S.departments].sort((a, b) => a.order - b.order).map(row) : h('p', { class: 'muted', style: { padding: '12px 14px', margin: 0 } }, 'Позиций нет'));
   const save = (d, patch) => send('updateDepartment', { id: d.id, ...patch }).then(saved => { Object.assign(d, saved); draw(); }).catch(showErr);
@@ -319,17 +342,11 @@ export function openDepartments() {
   };
   name.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); add().catch(showErr); } });
   draw();
-  modal({
-    title: 'Позиции',
-    body: [
-      h('p', { class: 'hint', style: { marginTop: 0 } }, 'Позиция есть у каждого участника и у каждой задачи. Участник видит в своих юнитах только задачи своей позиции.'),
-      box,
-      h('div', { class: 'sub-title' }, 'Добавить позицию'),
-      h('div', { class: 'row', style: { flexWrap: 'nowrap' } }, name, h('button', { class: 'btn primary', onclick: () => add().catch(showErr) }, icon('plus', 14), 'Добавить')),
-    ],
-    actions: [{ label: 'Готово', primary: true, action: c => c() }],
-    onClose: rerender,
-  });
+  return h('div', null,
+    h('p', { class: 'hint', style: { marginTop: 0 } }, 'Позиция есть у каждого участника и у каждой задачи. Участник видит в своих юнитах только задачи своей позиции.'),
+    box,
+    h('div', { class: 'sub-title' }, 'Добавить позицию'),
+    h('div', { class: 'row', style: { flexWrap: 'nowrap' } }, name, h('button', { class: 'btn primary', onclick: () => add().catch(showErr) }, icon('plus', 14), 'Добавить')));
 }
 
 export function openShortcuts() {

@@ -2,6 +2,7 @@
  * Маршруты (в hash — GitHub Pages не умеет отдавать index.html на любые пути):
  *   #/                       главная
  *   #/my                     мои задачи
+ *   #/admin[?tab=…]          панель админа (модераторы и супер-админы)
  *   #/u/:unit[/list|/settings][?task=:id]
  */
 import { S, freshFilters, isStaff } from './state.js';
@@ -9,6 +10,7 @@ import { $, h, fill, closeMenu, closeNav, showErr } from './ui.js';
 import { renderSidebar } from './views/sidebar.js';
 import { renderHome } from './views/home.js';
 import { renderMy } from './views/my.js';
+import { renderAdmin } from './views/admin.js';
 import { renderBoardView, loadBoard } from './views/board.js';
 import { renderSettings } from './views/settings.js';
 import { openTask, closePanel } from './views/task.js';
@@ -21,6 +23,7 @@ export function parseLocation() {
   const path = (rawPath || '/').replace(/\/+$/, '') || '/';
   const task = new URLSearchParams(query || '').get('task');
   if (path === '/my') return { view: 'my' };
+  if (path === '/admin') return { view: 'admin', tab: new URLSearchParams(query || '').get('tab') || 'overview' };
   const m = /^\/u\/([\w-]+)(?:\/(list|settings))?$/.exec(path);
   if (m) return { unit: m[1], mode: m[2] || 'board', task: task || null };
   return { view: 'home' };
@@ -28,6 +31,7 @@ export function parseLocation() {
 
 export function routeUrl(r) {
   if (r.unit) return '#/u/' + r.unit + (r.mode && r.mode !== 'board' ? '/' + r.mode : '') + (r.task ? '?task=' + encodeURIComponent(r.task) : '');
+  if (r.view === 'admin') return '#/admin' + (r.tab && r.tab !== 'overview' ? '?tab=' + r.tab : '');
   return r.view === 'my' ? '#/my' : '#/';
 }
 
@@ -67,11 +71,12 @@ export async function render() {
   if (!r.unit) {
     closePanel();
     S.board = null;
-    const key = r.view === 'my' ? 'my' : 'home';
+    if (r.view === 'admin' && !isStaff()) return navigate({ view: 'home' }, { replace: true });
+    const key = r.view === 'my' ? 'my' : r.view === 'admin' ? 'admin:' + (r.tab || 'overview') : 'home';
     if (rendered !== key) {
       rendered = key;
-      document.title = (key === 'my' ? 'Мои задачи' : 'Главная') + ' · Tasks';
-      if (key === 'my') renderMy(); else renderHome();
+      document.title = (r.view === 'my' ? 'Мои задачи' : r.view === 'admin' ? 'Панель админа' : 'Главная') + ' · Tasks';
+      if (r.view === 'my') renderMy(); else if (r.view === 'admin') renderAdmin(r.tab || 'overview'); else renderHome();
     }
     return;
   }

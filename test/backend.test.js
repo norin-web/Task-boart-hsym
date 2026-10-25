@@ -113,6 +113,20 @@ test('чеклист, срок, комментарии, главная, поис
   assert.equal(found[0].key, 'OPS-1');
   assert.equal(found[0].statusName, 'To Do');
 
+  // лента с фильтрами и сводка
+  const feed = await api('getActivity', { kind: 'comment' });
+  assert.ok(feed.items.length >= 2 && feed.items.every(a => a.action === 'comment'));
+  assert.equal((await api('getActivity', { unitId: 'nope' })).items.length, 0);
+  assert.equal((await api('getActivity', { since: new Date(Date.now() + 864e5).toISOString() })).items.length, 0);
+  const page1 = await api('getActivity', { limit: 2 });
+  assert.equal(page1.items.length, 2);
+  assert.equal(page1.more, true);
+  const page2 = await api('getActivity', { limit: 2, before: page1.items[1].at });
+  assert.ok(page2.items.every(a => a.at < page1.items[1].at));
+  const ov = await api('getOverview', { today: '2026-09-24' });
+  assert.equal(ov.overdueTotal, 1);
+  assert.equal(ov.overdue[0].key, 'OPS-1');
+  assert.equal(ov.unassigned, 1);
   await api('deleteTask', { id: t.id });
   assert.equal((await api('getTaskExtras', { taskId: t.id })).comments.length, 0);
   assert.ok((await api('getHome', {})).activity.some(a => a.action === 'delete' && a.fromText === 'Проверить бэкап'));
