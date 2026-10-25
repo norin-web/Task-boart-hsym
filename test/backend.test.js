@@ -376,6 +376,10 @@ test('All Apps: приложения, этап у модераторов, апд
   const api = await setup();
   await api('createUnit', { name: 'Команда', key: 'TM' });
   const { ceoId, modId } = await api('setupHierarchy', {});
+  // «без участников» — только нижний юнит, не App/Managers
+  const ov = await api('getOverview', { today: '2026-10-25' });
+  assert.ok(!ov.unitsNoTeam.includes(ceoId) && !ov.unitsNoTeam.includes(modId));
+  assert.equal(ov.unitsNoTeam.length, 1);
   const ceo = (await api('getBoard', { unitId: ceoId })).unit;
   assert.deepEqual(ceo.settings.columns.map(c => c.kind), ['todo', 'progress', 'live']); // без «готово»
   const app = await api('createTask', { unitId: ceoId, title: 'Sleep Sounds' });

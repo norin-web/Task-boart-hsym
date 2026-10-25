@@ -661,7 +661,7 @@ export function createBackend(db, opts = {}) {
     async getOverview(p) {
       const day = today(p.today);
       const [units, tasks, ppl, members] = await Promise.all([
-        all(() => T('units').select('id,key,name,color,settings,archived').order('id')),
+        all(() => T('units').select('id,key,name,color,settings,archived,parent_id').order('id')),
         all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,department_id,due_date').eq('archived', false).order('id')),
         people(),
         all(() => T('unit_members').select('unit_id,person_id').order('unit_id')),
@@ -701,7 +701,8 @@ export function createBackend(db, opts = {}) {
         overdue: overdue.slice(0, 10), overdueTotal: overdue.length,
         byPersonUnit, unassignedTasks: unassignedTasks.sort(byDue).slice(0, 15), noPositionTasks: noPositionTasks.sort(byDue).slice(0, 15), unitMembers,
         peopleNoLogin: active.filter(x => !x.linked).map(x => x.id),
-        unitsNoTeam: Object.values(U).filter(u => !teamUnits.has(u.id)).map(u => u.id),
+        // без участников — только юниты нижнего уровня: в верхних (App, Managers, MVP с командами внутри) работают админы
+        unitsNoTeam: Object.values(U).filter(u => !teamUnits.has(u.id) && !Object.values(U).some(c => c.parent_id === u.id)).map(u => u.id),
       };
     },
 

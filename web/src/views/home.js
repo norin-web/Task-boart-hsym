@@ -222,12 +222,12 @@ export function attentionBlock(ov) {
 
   items.push(attItem({
     n: ov.unitsNoTeam.length, rows: ov.unitsNoTeam.map(id => S.units.find(u => u.id === id)).filter(Boolean),
-    forms: ['юнит без команды', 'юнита без команды', 'юнитов без команды'],
+    forms: ['юнит без участников', 'юнита без участников', 'юнитов без участников'],
     row: (u, done) => [h('span', { class: 'att-who' }, h('span', { class: 'unit-dot', style: { background: u.color, margin: 0 } }), u.name),
       quickSelect(members.length ? 'Добавить участника…' : 'Нет участников', members.map(p => [p.id, p.name + (deptById(p.positionId) ? ' · ' + deptById(p.positionId).name : '')]),
         v => call('setMember', { unitId: u.id, personId: v, departmentId: personById(v).positionId || '' }).then(() => {
           u.members = [...(u.members || []), v];
-          done(name(v) + ' в команде ' + u.name);
+          done(name(v) + ' — в юните ' + u.name);
         }))],
   }));
 
