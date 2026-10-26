@@ -6,7 +6,7 @@
  *   #/admin[?tab=…]          панель админа (модераторы и супер-админы)
  *   #/u/:unit[/list|/settings|/overview][?task=:id]
  */
-import { S, isStaff, isSuper, loadBoardView, ceoDefault } from './state.js';
+import { S, isStaff, isSuper, myAccess, loadBoardView, ceoDefault } from './state.js';
 import { $, h, fill, closeMenu, closeNav, showErr } from './ui.js';
 import { renderSidebar } from './views/sidebar.js';
 import { renderHome } from './views/home.js';
@@ -14,6 +14,7 @@ import { renderMy } from './views/my.js';
 import { renderMyBoard } from './views/myboard.js';
 import { renderApps } from './views/apps.js';
 import { renderCeoHome } from './views/ceo.js';
+import { renderPmHome } from './views/pm.js';
 import { renderDev } from './views/dev.js';
 import { renderAdmin } from './views/admin.js';
 import { renderBoardView, loadBoard } from './views/board.js';
@@ -106,9 +107,9 @@ export async function render() {
     const key = ['my', 'myboard', 'apps', 'dev'].includes(view) ? view : view === 'admin' ? 'admin:' + (r.tab || 'overview') : 'home';
     if (rendered !== key) {
       rendered = key;
-      document.title = ({ my: 'Мои задачи', myboard: 'Моя доска', admin: 'Панель админа', apps: 'Приложения', dev: 'Режим разработчика' }[view] || (isSuper() ? 'Дашборд' : 'Главная')) + ' · Tasks';
+      document.title = ({ my: 'Мои задачи', myboard: 'Моя доска', admin: 'Панель админа', apps: 'Приложения', dev: 'Режим разработчика' }[view] || (isStaff() ? 'Дашборд' : 'Главная')) + ' · Tasks';
       if (view === 'my') renderMy(); else if (view === 'myboard') renderMyBoard(); else if (view === 'apps') renderApps(); else if (view === 'dev') renderDev();
-      else if (view === 'admin') renderAdmin(r.tab || 'overview'); else if (isSuper()) renderCeoHome(); else renderHome();
+      else if (view === 'admin') renderAdmin(r.tab || 'overview'); else if (isSuper()) renderCeoHome(); else if (myAccess() === 'moderator') renderPmHome(); else renderHome();
     }
     return;
   }

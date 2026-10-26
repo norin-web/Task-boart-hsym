@@ -27,7 +27,7 @@ export const LS = {
 export function loadBoardView(unitId) {
   const v = (LS.get('boardView', {}) || {})[unitId] || {};
   S.filters = { ...freshFilters(), ...(v.filters || {}), q: '' };
-  S.lanes = v.lanes === true || v.lanes === 'kind' ? v.lanes : false;
+  S.lanes = v.lanes === true || v.lanes === 'kind' || v.lanes === 'app' ? v.lanes : false;
 }
 export function saveBoardView(unitId) {
   const all = LS.get('boardView', {}) || {};
@@ -35,7 +35,7 @@ export function saveBoardView(unitId) {
   all[unitId] = { filters, lanes: S.lanes };
   LS.set('boardView', all);
 }
-export const freshFilters = () => ({ q: '', assignees: [], depts: [], overdue: false, archived: false, opts: [] });
+export const freshFilters = () => ({ q: '', assignees: [], depts: [], overdue: false, archived: false, opts: [], app: '' });
 
 export const S = {
   units: [],

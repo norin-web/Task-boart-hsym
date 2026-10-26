@@ -154,6 +154,8 @@ export function unitSettings(raw) {
     hideDoneDays: Math.max(0, Math.min(365, parseInt(s.hideDoneDays, 10) || 0)),
     review: reviewSettings(s.review, columns),
     checklistBeforeDone: !!s.checklistBeforeDone,
+    // свой флоу юнита по типам запроса (нет типа — флоу студии по умолчанию)
+    flows: Object.fromEntries(Object.keys(REQUEST_TYPES).filter(k => s.flows && Array.isArray(s.flows[k])).map(k => [k, cleanFlow(s.flows[k])])),
   };
 }
 
@@ -166,6 +168,7 @@ function storedSettings(s) {
     hideDoneDays: full.hideDoneDays,
     review: full.review,
     checklistBeforeDone: full.checklistBeforeDone,
+    flows: full.flows,
   };
 }
 
@@ -225,7 +228,7 @@ const taskOut = r => ({
   assigneeId: r.assignee_id, departmentId: r.department_id || '', dueDate: r.due_date, order: r.ord,
   fields: json(r.fields, {}), checklist: json(r.checklist, []), archived: !!r.archived, doneAt: r.done_at,
   reviewFrom: r.review_from || '', reviewerId: r.reviewer_id || '', teamId: r.team_id || '',
-  parentId: r.parent_id || '', kind: r.kind || '',
+  parentId: r.parent_id || '', kind: r.kind || '', startedAt: r.started_at || '',
   appId: r.app_id || '', requestType: r.request_type || '', step: r.step || '', dependsOn: json(r.depends_on, []) || [], isTest: !!r.is_test,
   createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at,
 });
@@ -468,9 +471,11 @@ export function createBackend(db, opts = {}) {
       if (kindOf(st, fresh.status) !== 'done') await methods.updateTask({ id: t.id, patch: { assigneeId: pms.length ? pms[0].id : '' } }, ctx);
     }
   }
-  const flows = async () => {
+  /** Флоу по типам запроса: свой у юнита (настройки юнита), иначе студии (app_settings.flows), иначе по умолчанию. */
+  const flows = async unitId => {
     const saved = (await setting('flows')) || {};
-    return Object.fromEntries(Object.keys(REQUEST_TYPES).map(k => [k, k in saved ? cleanFlow(saved[k]) : DEFAULT_FLOWS[k]]));
+    const own = unitId ? unitSettings((await findUnit(unitId)).settings).flows : {};
+    return Object.fromEntries(Object.keys(REQUEST_TYPES).map(k => [k, own[k] || (k in saved ? cleanFlow(saved[k]) : DEFAULT_FLOWS[k])]));
   };
   const templates = async () => (await all(() => T('task_templates').select('*').order('ord').order('id'))).map(templateOut);
   const linkFields = async () => (await all(() => T('link_fields').select('*').order('ord').order('id'))).map(linkFieldOut);
@@ -953,7 +958,7 @@ export function createBackend(db, opts = {}) {
         parent_id: p.parentId ? (await findTask(p.parentId)).id : '', kind: TASK_KINDS.includes(p.kind) ? p.kind : '',
         app_id: str(p.appId, 40), request_type: p.kind === 'request' && REQUEST_TYPES[p.requestType] ? p.requestType : '',
         step: str(p.step, 30), depends_on: (Array.isArray(p.dependsOn) ? p.dependsOn : []).map(x => str(x, 40)).filter(Boolean).slice(0, 20),
-        is_test: !!p.test,
+        is_test: !!p.test, started_at: kindOf(st, status) === 'todo' ? '' : ts,
       };
       await run(T('tasks').insert(task));
       await log([{ unitId: unit.id, taskId: task.id, action: 'create', to: task.title }], ctx);
@@ -989,6 +994,7 @@ export function createBackend(db, opts = {}) {
         if (patch.status !== t.status) {
           change('status', t.status, patch.status);
           const wasDone = kindOf(st, t.status) === 'done', nowDone = kindOf(st, patch.status) === 'done';
+          if (!t.started_at && kindOf(st, patch.status) !== 'todo') t.started_at = now(); // впервые взяли в работу (раньше «готово»)
           if (nowDone && !wasDone) t.done_at = now();
           if (!nowDone) t.done_at = '';
           t.status = patch.status;
@@ -1054,7 +1060,7 @@ export function createBackend(db, opts = {}) {
         const saved = await run(T('tasks').update({
           title: t.title, description: t.description, status: t.status, assignee_id: t.assignee_id, department_id: t.department_id, team_id: t.team_id || '',
           due_date: t.due_date, ord: t.ord, fields: t.fields, checklist: t.checklist, archived: t.archived,
-          done_at: t.done_at, updated_at: t.updated_at,
+          done_at: t.done_at, updated_at: t.updated_at, started_at: t.started_at || '',
         }).eq('id', t.id).eq('updated_at', r.updated_at).select('*'));
         if (!saved.length) {
           const fresh = await one('tasks', t.id);
@@ -1359,13 +1365,22 @@ export function createBackend(db, opts = {}) {
     },
 
     /** Флоу декомпозиции по типу запроса: сохранённый в настройках или по умолчанию. */
-    async getFlows() {
-      return flows();
+    /** Флоу юнита (unitId) или студии по умолчанию. */
+    async getFlows(p) {
+      return flows(p.unitId ? String(p.unitId) : '');
     },
 
+    /** Сохранить флоу типа запроса: у юнита (unitId — правят CEO и PM юнита) или студии (без unitId — только CEO). */
     async saveFlow(p) {
       if (!REQUEST_TYPES[p.type]) fail('Неизвестный тип запроса');
-      const all = { ...(await flows()), [p.type]: cleanFlow(p.steps) };
+      const steps = cleanFlow(p.steps);
+      if (p.unitId) {
+        const u = await findUnit(p.unitId);
+        const st = unitSettings(u.settings);
+        await methods.updateUnit({ id: u.id, settings: { ...st, flows: { ...st.flows, [p.type]: steps } } });
+        return flows(u.id);
+      }
+      const all = { ...(await flows()), [p.type]: steps };
       await run(T('app_settings').upsert({ key: 'flows', value: all, updated_at: now() }, { onConflict: 'key' }));
       return all;
     },
@@ -1464,6 +1479,79 @@ export function createBackend(db, opts = {}) {
       return appOut({ ...a, ...upd });
     },
 
+    /**
+     * Дашборд PM по его юнитам (CEO — по всем; видимость решает база): входящие от CEO (запросы без разбивки),
+     * приложения по этапам (открытые запросы с этапами), проблемы (просрочено, без движения, без исполнителя,
+     * долго на ревью, готово к релизу) и команда с KPI за период (week / month / quarter).
+     */
+    async getPmDashboard(p) {
+      const day = today(p.today);
+      const periodDays = { week: 7, month: 30, quarter: 90 }[p.period] || 30;
+      const from = new Date(Date.now() - periodDays * 864e5).toISOString();
+      const [units, tasks, members, ppl, apps, staleRow] = await Promise.all([
+        all(() => T('units').select('id,name,key,color,settings').eq('archived', false).order('ord').order('id')),
+        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,due_date,archived,kind,request_type,step,parent_id,app_id,depends_on,created_at,updated_at,done_at,started_at,department_id')
+          .eq('archived', false).order('created_at').order('id')),
+        all(() => T('unit_members').select('unit_id,person_id').order('unit_id')),
+        people(),
+        all(() => T('apps').select('id,name,color,unit_id,status,priority,is_test').order('id')),
+        setting('staleDays'),
+      ]);
+      const U = Object.fromEntries(units.map(u => [u.id, { ...u, st: unitSettings(u.settings) }]));
+      const A = Object.fromEntries(apps.map(a => [a.id, { id: a.id, name: a.name, color: a.color, unitId: a.unit_id, status: a.status, priority: a.priority || '', isTest: !!a.is_test }]));
+      const own = tasks.filter(t => U[t.unit_id]);
+      const kindOfRow = t => kindOf(U[t.unit_id].st, t.status);
+      const done = t => kindOfRow(t) === 'done';
+      const byId = Object.fromEntries(own.map(t => [t.id, t]));
+      const blocked = t => !done(t) && (json(t.depends_on, []) || []).some(id => byId[id] && !done(byId[id]));
+      const staleBefore = new Date(Date.now() - Math.max(1, Number(staleRow) || 7) * 864e5).toISOString();
+      const reviewBefore = new Date(Date.now() - 2 * 864e5).toISOString();
+      const key = t => `${U[t.unit_id].key}-${t.num}`;
+      const brief = t => ({ id: t.id, unitId: t.unit_id, key: key(t), title: t.title, assigneeId: t.assignee_id, dueDate: t.due_date,
+        updatedAt: t.updated_at, step: t.step || '', type: t.request_type || '', kind: kindOfRow(t), done: done(t), blocked: blocked(t), app: A[t.app_id] || null });
+      const kids = id => own.filter(t => t.parent_id === id && t.kind !== 'request');
+
+      const requests = own.filter(t => t.kind === 'request' && !done(t));
+      const inbox = requests.filter(r => !kids(r.id).length).map(brief);
+      const pipeline = requests.filter(r => kids(r.id).length).map(r => {
+        const stages = kids(r.id).map(brief);
+        const release = stages.find(s => s.step === 'release');
+        return { ...brief(r), type: r.request_type, stages,
+          progress: Math.round(stages.filter(s => s.done).length / stages.length * 100),
+          releaseReady: !!(release && !release.assigneeId && !release.blocked && !release.done) };
+      });
+
+      const problems = [];
+      for (const t of own.filter(x => !done(x))) {
+        const b = brief(t);
+        const review = U[t.unit_id].st.review.column;
+        if (t.step === 'release' && !t.assignee_id) { if (!b.blocked) problems.push({ type: 'release', task: b }); continue; }
+        if (t.due_date && t.due_date < day) problems.push({ type: 'overdue', task: b });
+        else if (review && t.status === review && t.updated_at < reviewBefore) problems.push({ type: 'review', task: b });
+        else if (!b.blocked && t.updated_at < staleBefore) problems.push({ type: 'stale', task: b });
+        if (!t.assignee_id && t.kind !== 'request') problems.push({ type: 'unassigned', task: b });
+      }
+      const rank = { overdue: 0, release: 1, review: 2, unassigned: 3, stale: 4 };
+      problems.sort((x, y) => rank[x.type] - rank[y.type] || (x.task.dueDate || x.task.updatedAt).localeCompare(y.task.dueDate || y.task.updatedAt));
+
+      // команда: участники этих юнитов, кроме CEO и PM
+      const ids = new Set(members.filter(m => U[m.unit_id]).map(m => m.person_id));
+      const team = ppl.filter(x => x.active && ids.has(x.id) && !['superadmin', 'moderator'].includes(x.access)).map(x => {
+        const mine = own.filter(t => t.assignee_id === x.id);
+        const closed = mine.filter(t => done(t) && t.done_at >= from);
+        const withDue = closed.filter(t => t.due_date);
+        const onTime = withDue.filter(t => t.done_at.slice(0, 10) <= t.due_date).length;
+        const spans = closed.map(t => (Date.parse(t.done_at) - Date.parse(t.started_at || t.created_at)) / 864e5).filter(d => d >= 0);
+        return {
+          personId: x.id, done: closed.length, onTime: withDue.length ? Math.round(onTime / withDue.length * 100) : null,
+          inProgress: mine.filter(t => kindOfRow(t) === 'progress').length,
+          overdue: mine.filter(t => !done(t) && t.due_date && t.due_date < day).length,
+          avgDays: spans.length ? Math.round(spans.reduce((a, b) => a + b, 0) / spans.length * 10) / 10 : null,
+        };
+      });
+      return { inbox, pipeline, problems, team, period: { days: periodDays, from } };
+    },
+
     /** Поля приложения (быстрый доступ на карточке): ссылки и тексты. */
     async getAppFields() {
       return appFields();
@@ -1547,19 +1635,24 @@ export function createBackend(db, opts = {}) {
       if (r.kind !== 'request') fail('Разложить по флоу можно только запрос');
       const existing = await run(T('tasks').select('id').eq('parent_id', r.id).eq('kind', 'stage').limit(1));
       if (existing.length) fail('Запрос уже разложен по этапам');
-      const steps = (await flows())[r.request_type] || [];
-      if (!steps.length) fail('Для этого типа запроса нет флоу — создайте задачи вручную');
+      // план из окна предпросмотра (этапы, исполнители, сроки) или флоу юнита по умолчанию
+      const plan = Array.isArray(p.plan) ? p.plan : null;
+      const steps = plan ? cleanFlow(plan) : (await flows(r.unit_id))[r.request_type] || [];
+      if (!steps.length) fail(plan ? 'Оставьте хотя бы один этап' : 'Для этого типа запроса нет флоу — создайте задачи вручную');
+      const extra = Object.fromEntries((plan || []).map(x => [x && x.key, x || {}]));
       const people = await unitPeople(r.unit_id);
       const pick = positionId => {
         const withPos = people.filter(x => x.positionIds.includes(positionId));
         return (withPos.find(x => x.access === 'lead') || withPos[0] || {}).id || '';
       };
+      const who = st => (st.release ? '' : extra[st.key] && 'assigneeId' in extra[st.key] ? str(extra[st.key].assigneeId, 40) : pick(st.positionId));
+      const due = st => (extra[st.key] && 'dueDate' in extra[st.key] ? date(extra[st.key].dueDate) : r.due_date);
       const ids = {}, created = [];
       const prio = (json(r.fields, {}) || {})[PRIORITY_FIELD]; // приоритет запроса — этапам
       for (const st of steps) {
         const t = await methods.createTask({
           unitId: r.unit_id, title: `${st.title} · ${r.title.replace(/^New App:\s*/, '')}`, parentId: r.id, kind: 'stage', step: st.key,
-          appId: r.app_id, departmentId: st.positionId, assigneeId: st.release ? '' : pick(st.positionId), dueDate: r.due_date,
+          appId: r.app_id, departmentId: st.positionId, assigneeId: who(st), dueDate: due(st),
           dependsOn: st.dependsOn.map(k => ids[k]).filter(Boolean), test: !!r.is_test, fields: prio ? { [PRIORITY_FIELD]: prio } : {},
         }, ctx);
         ids[st.key] = t.id;

@@ -456,6 +456,8 @@ alter table tasks add column if not exists request_type text not null default ''
 alter table tasks add column if not exists step text not null default '';
 alter table tasks add column if not exists depends_on jsonb not null default '[]';
 alter table tasks add column if not exists is_test boolean not null default false;
+-- Когда задачу впервые взяли в работу (для KPI: среднее время задачи — от «в работе» до «готово»)
+alter table tasks add column if not exists started_at text not null default '';
 create index if not exists tasks_app on tasks(app_id);
 
 -- Статусы приложения по умолчанию; kind связывает статус с ходом работ (dev / release / review / live / reject, '' — свой).

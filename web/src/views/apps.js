@@ -357,7 +357,7 @@ function requestCard(r, refresh) {
         h('div', { class: 'rq-stages' }, r.stages.map(s => stageRow(r, s, manage, refresh)))]
       : h('div', { class: 'rq-empty' },
         h('span', { class: 'muted' }, 'PM ещё не разложил задачу по этапам.'),
-        manage && h('button', { class: 'btn primary sm', onclick: () => decompose(r.id).then(refresh) }, icon('tree', 13), 'Разложить по флоу')));
+        manage && h('button', { class: 'btn primary sm', onclick: () => openDecomposeDialog(r).then(ok => ok && refresh()) }, icon('tree', 13), 'Разложить по флоу')));
 }
 
 function stageRow(r, s, manage, refresh) {
@@ -373,12 +373,92 @@ function stageRow(r, s, manage, refresh) {
       : p ? avatar(p, 'sm') : h('span', { class: 'muted rq-who' }, s.step === 'release' ? 'RM' : '—'));
 }
 
-/** PM: разложить запрос по флоу (этапы с зависимостями и исполнителями). */
-export async function decompose(requestId) {
-  try {
-    const made = await send('decomposeRequest', { taskId: requestId });
-    toast(`Создано ${made.length} ${plural(made.length, ['этап', 'этапа', 'этапов'])}`);
-  } catch (e) { showErr(e); }
+/**
+ * PM: разложить запрос по флоу юнита — окно предпросмотра: какие этапы оставить, исполнитель и срок каждого,
+ * свой этап (после какого). req: { id, unitId, type, title, dueDate }. Возвращает true, если этапы созданы.
+ */
+export async function openDecomposeDialog(req) {
+  let flow;
+  try { flow = (await call('getFlows', { unitId: req.unitId }))[req.type] || []; } catch (e) { showErr(e); return false; }
+  const u = unitById(req.unitId);
+  const team = ((u && u.members) || []).map(personById).filter(p => p && p.active);
+  const steps = flow.map(st => ({ ...st, on: true, assigneeId: st.release ? '' : suggest(st.positionId), dueDate: req.dueDate || '' }));
+  function suggest(positionId) {
+    const withPos = team.filter(p => (p.positionIds || []).includes(positionId));
+    return (withPos.find(p => p.access === 'lead') || withPos[0] || {}).id || '';
+  }
+  const body = h('div', { class: 'dc-list' });
+  const deptName = id => (S.departments.find(d => d.id === id) || {}).name || '—';
+  const peopleOptions = (positionId, value) => {
+    const fit = team.filter(p => (p.positionIds || []).includes(positionId));
+    const rest = team.filter(p => !fit.includes(p));
+    return [h('option', { value: '' }, '— без исполнителя —'),
+      fit.length && h('optgroup', { label: deptName(positionId) }, fit.map(p => h('option', { value: p.id, selected: p.id === value }, p.name + (p.access === 'lead' ? ' · лид' : '')))),
+      rest.length && h('optgroup', { label: 'Остальные в юните' }, rest.map(p => h('option', { value: p.id, selected: p.id === value }, p.name)))];
+  };
+  const draw = () => {
+    const on = steps.filter(s => s.on);
+    const titleOf = k => (steps.find(s => s.key === k) || {}).title;
+    fill(body, steps.map(st => {
+      const deps = st.dependsOn.filter(k => on.some(s => s.key === k)).map(titleOf);
+      return h('div', { class: 'dc-row' + (st.on ? '' : ' off') },
+        h('label', { class: 'dc-on', title: st.on ? 'Убрать этап' : 'Вернуть этап' }, h('input', { type: 'checkbox', checked: st.on, 'aria-label': 'Этап «' + st.title + '»', onchange: e => { st.on = e.target.checked; draw(); } })),
+        h('div', { class: 'dc-main' },
+          h('input', { class: 'inp sm dc-title', value: st.title, maxlength: 120, disabled: !st.on, 'aria-label': 'Название этапа', oninput: e => { st.title = e.target.value; } }),
+          h('span', { class: 'dc-meta muted' }, deptName(st.positionId), deps.length ? ' · после: ' + deps.join(', ') : ' · сразу', st.release ? ' · последним' : '')),
+        st.release
+          ? h('span', { class: 'dc-rm muted' }, icon('rocket', 13), 'RM — после «Передать в релиз»')
+          : h('select', { class: 'inp sm', disabled: !st.on, 'aria-label': 'Исполнитель', onchange: e => { st.assigneeId = e.target.value; } }, peopleOptions(st.positionId, st.assigneeId)),
+        h('input', { class: 'inp sm', type: 'date', value: st.dueDate, disabled: !st.on, 'aria-label': 'Срок', onchange: e => { st.dueDate = e.target.value; } }));
+    }));
+  };
+  draw();
+  // свой этап: название, позиция, после какого (по умолчанию — сразу); встаёт перед релизом, релиз ждёт и его
+  const addStep = () => {
+    const title = h('input', { class: 'inp', maxlength: 120, placeholder: 'Например, Промо-ролик' });
+    const pos = h('select', { class: 'inp' }, S.departments.filter(d => !d.archived).map(d => h('option', { value: d.id }, d.name)));
+    const after = h('select', { class: 'inp' }, h('option', { value: '' }, 'Сразу, параллельно'), steps.filter(s => s.on && !s.release).map(s => h('option', { value: s.key }, 'После «' + s.title + '»')));
+    modal({
+      title: 'Свой этап',
+      body: [field('Название', title), h('div', { class: 'grid2' }, field('Позиция', pos), field('Когда', after))],
+      actions: [{ label: 'Отмена' }, {
+        label: 'Добавить', primary: true,
+        action: close => {
+          if (!title.value.trim()) { title.focus(); return; }
+          const key = 'x' + Date.now().toString(36);
+          const st = { key, title: title.value.trim(), positionId: pos.value, dependsOn: after.value ? [after.value] : [], release: false, on: true, assigneeId: suggest(pos.value), dueDate: req.dueDate || '' };
+          const ri = steps.findIndex(s => s.release);
+          if (ri >= 0) { steps.splice(ri, 0, st); steps[ri + 1].dependsOn = [...steps[ri + 1].dependsOn, key]; } else steps.push(st);
+          close();
+          draw();
+        },
+      }],
+    });
+  };
+  return new Promise(resolve => {
+    let done = false;
+    modal({
+      title: 'Разложить по этапам · ' + req.title,
+      wide: true,
+      body: [h('p', { class: 'hint', style: { marginTop: 0 } }, 'Флоу юнита «' + (u ? u.name : '') + '». Уберите лишнее, назначьте исполнителей и сроки — этапы появятся у команды. Следующий этап ждёт, пока не закроют предыдущие.'),
+        body, h('button', { class: 'btn sm', onclick: addStep }, icon('plus', 13), 'Свой этап')],
+      footLeft: u && h('span', { class: 'muted dc-foot' }, 'Флоу юнита — в его настройках'),
+      actions: [{ label: 'Отмена' }, {
+        label: 'Разложить', primary: true,
+        action: async close => {
+          const on = steps.filter(s => s.on);
+          if (!on.length) return toast('Оставьте хотя бы один этап', { type: 'error' });
+          const keys = new Set(on.map(s => s.key));
+          const plan = on.map(s => ({ key: s.key, title: s.title.trim() || 'Этап', positionId: s.positionId, dependsOn: s.dependsOn.filter(k => keys.has(k)), release: s.release, assigneeId: s.assigneeId, dueDate: s.dueDate }));
+          const made = await send('decomposeRequest', { taskId: req.id, plan });
+          done = true;
+          close();
+          toast(`Создано ${made.length} ${plural(made.length, ['этап', 'этапа', 'этапов'])}`);
+        },
+      }],
+      onClose: () => resolve(done),
+    });
+  });
 }
 
 /** PM: передать этап «Релиз» релиз-менеджеру юнита (когда закрыты все этапы). */

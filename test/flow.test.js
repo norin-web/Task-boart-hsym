@@ -246,3 +246,72 @@ test('дашборд CEO: портфель, требует внимания, р�
   assert.ok(d.recent.some(x => x.type === 'live' && x.app.id === a3.id));
   assert.equal(d.staleDays, 7);
 });
+
+test('PM: свой флоу у юнита; разбивка по плану из окна — этапы, исполнители, сроки', async () => {
+  const api = await setup();
+  const { ceo, pm, pmRf, ios, aso, gold, rf } = await studio(api);
+  // PM Gold настраивает свой флоу «Апдейт»: без дизайна; чужой юнит — нельзя
+  await api.as(pm, async () => {
+    const f = await api('saveFlow', { unitId: gold.id, type: 'update', steps: [
+      { key: 'ios', title: 'iOS', positionId: 'd_ios' }, { key: 'qa', title: 'QA', positionId: 'd_qa', dependsOn: ['ios'] },
+      { key: 'release', title: 'Релиз', positionId: 'd_release', dependsOn: ['ios', 'qa'], release: true }] });
+    assert.deepEqual(f.update.map(s => s.key), ['ios', 'qa', 'release']);
+    assert.deepEqual(f.new_app.map(s => s.key), ['design', 'ios', 'qa', 'meta', 'release']); // остальные — по умолчанию
+    await assert.rejects(() => api('saveFlow', { unitId: rf.id, type: 'update', steps: [] }), e => e.code === 'NOT_FOUND' || forbidden(e));
+  });
+  await api.as(pmRf, async () => assert.equal((await api('getFlows', { unitId: rf.id })).update.length, 4)); // у RF — по умолчанию
+  const { app } = await api.as(ceo, () => api('createApp', { name: 'A', unitId: gold.id }));
+  const upd = await api.as(ceo, () => api('createRequest', { appId: app.id, type: 'update' }));
+  assert.deepEqual((await api.as(pm, () => api('decomposeRequest', { taskId: upd.id }))).map(t => t.step), ['ios', 'qa', 'release']);
+  // New App по плану: без меты, свой этап, другой исполнитель и срок
+  const req = (await api.as(ceo, () => api('createRequest', { appId: app.id, type: 'new_app', title: 'New App 2' })));
+  const plan = [
+    { key: 'design', title: 'Дизайн', positionId: 'd_design', assigneeId: '', dueDate: '2030-01-10' },
+    { key: 'ios', title: 'iOS', positionId: 'd_ios', dependsOn: ['design'], assigneeId: ios.id, dueDate: '2030-01-20' },
+    { key: 'promo', title: 'Промо-ролик', positionId: 'd_aso', dependsOn: [], assigneeId: aso.id },
+    { key: 'release', title: 'Релиз', positionId: 'd_release', dependsOn: ['design', 'ios', 'promo'], release: true, assigneeId: ios.id },
+  ];
+  const made = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: req.id, plan }))).map(t => [t.step, t]));
+  assert.deepEqual(Object.keys(made), ['design', 'ios', 'promo', 'release']);
+  assert.equal(made.design.assigneeId, '');
+  assert.equal(made.design.dueDate, '2030-01-10');
+  assert.equal(made.ios.assigneeId, ios.id);
+  assert.equal(made.release.assigneeId, ''); // релиз — только через «Передать в релиз»
+  assert.equal(made.release.dependsOn.length, 3);
+});
+
+test('дашборд PM: входящие, этапы, проблемы, KPI команды за период', async () => {
+  const api = await setup();
+  const { ceo, pm, lead, ios, gold } = await studio(api);
+  const day = new Date().toISOString().slice(0, 10);
+  const { request: inboxReq } = await api.as(ceo, () => api('createApp', { name: 'Inbox', unitId: gold.id }));
+  const { request: r } = await api.as(ceo, () => api('createApp', { name: 'Work', unitId: gold.id }));
+  const st = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: r.id }))).map(t => [t.step, t]));
+  // дизайн — в срок; iOS — после срока; ещё одна задача iOS просрочена и висит
+  await api.as(pm, () => api('updateTask', { id: st.design.id, patch: { dueDate: '2099-01-01' } }));
+  await api.as(lead, () => api('updateTask', { id: st.design.id, patch: { status: 'in_progress' } }));
+  await api.as(lead, () => api('updateTask', { id: st.design.id, patch: { status: 'done' } }));
+  await api.as(pm, () => api('updateTask', { id: st.ios.id, patch: { dueDate: '2020-01-01' } }));
+  await api.as(ios, () => api('updateTask', { id: st.ios.id, patch: { status: 'in_progress' } }));
+  await api.as(ios, () => api('updateTask', { id: st.ios.id, patch: { status: 'done' } }));
+  const late = await api.as(pm, () => api('createTask', { unitId: gold.id, title: 'Краш', assigneeId: ios.id, dueDate: '2020-01-01' }));
+  await api.as(pm, () => api('createTask', { unitId: gold.id, title: 'Ничья' }));
+  const d = await api.as(pm, () => api('getPmDashboard', { today: day, period: 'week' }));
+  assert.deepEqual(d.inbox.map(x => x.id), [inboxReq.id]);
+  assert.equal(d.inbox[0].app.name, 'Inbox');
+  const w = d.pipeline.find(x => x.id === r.id);
+  assert.equal(w.stages.length, 5);
+  assert.equal(w.progress, 40);
+  assert.equal(w.releaseReady, false);
+  assert.ok(d.problems.some(x => x.type === 'overdue' && x.task.id === late.id));
+  assert.ok(d.problems.some(x => x.type === 'unassigned' && x.task.title === 'Ничья'));
+  const k = Object.fromEntries(d.team.map(x => [x.personId, x]));
+  assert.equal(k[lead.id].done, 1);
+  assert.equal(k[lead.id].onTime, 100);
+  assert.equal(k[ios.id].done, 1);
+  assert.equal(k[ios.id].onTime, 0);
+  assert.equal(k[ios.id].overdue, 1);
+  assert.ok(k[ios.id].avgDays >= 0);
+  assert.ok(!(pm.id in k)); // PM в KPI команды не входит
+  assert.equal(d.period.days, 7);
+});

@@ -1,6 +1,6 @@
 import Sortable from 'sortablejs';
 import {
-  S, taskById, personById, activeFields, missingFor, missingNext, priorityOf, byPriority, visibleLinkFields, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder,
+  S, taskById, appById, personById, activeFields, missingFor, missingNext, priorityOf, byPriority, visibleLinkFields, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder,
   between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, relTime, unitById, emptyCounts, freshFilters, saveBoardView,
   activeDepts, deptById, KINDS, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS,
 } from '../state.js';
@@ -66,7 +66,7 @@ export function renderTasks() {
   if (!el || !S.board) return;
   saveBoardView(S.board.unit.id); // любое изменение фильтров/дорожек приходит сюда — запоминаем для этой доски
   if (S.route.mode === 'list') renderList(el);
-  else if (S.lanes && isStaff() && (S.lanes !== 'kind' || S.board.tasks.some(t => t.kind === 'request'))) renderLanes(el);
+  else if (S.lanes && isStaff() && (S.lanes !== 'kind' || S.board.tasks.some(t => t.kind === 'request')) && (S.lanes !== 'app' || S.board.tasks.some(t => t.appId))) renderLanes(el);
   else renderColumns(el);
   syncCounts();
 }
@@ -125,7 +125,11 @@ function filterRest() {
 
   const optFields = activeFields().filter(x => (x.type === 'select' || x.type === 'multiselect') && x.options.length);
   const optCount = f.opts.length;
-  const active = !!(f.q || f.assignees.length || f.depts.length || f.overdue || f.archived || optCount);
+  const active = !!(f.q || f.assignees.length || f.depts.length || f.overdue || f.archived || optCount || f.app);
+  // приложения, по которым есть задачи на этой доске
+  const apps = [...new Set(S.board.tasks.filter(t => t.appId && !t.archived).map(t => t.appId))].map(appById).filter(Boolean)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const appNow = appById(f.app);
 
   return [
     avatars,
@@ -134,6 +138,12 @@ function filterRest() {
       class: 'fchip' + (optCount ? ' on' : ''),
       onclick: e => { e.stopPropagation(); fieldFilterMenu(e.currentTarget, optFields); },
     }, icon('filter', 13), 'Поля', optCount > 0 && h('span', { class: 'n' }, optCount)),
+    apps.length > 0 && h('button', {
+      class: 'fchip' + (appNow ? ' on' : ''), title: 'Показать задачи одного приложения',
+      onclick: e => { e.stopPropagation(); menu(e.currentTarget, [{ title: 'Приложение' },
+        { label: 'Все приложения', icon: appNow ? null : 'check', action: () => set('app', '') },
+        ...apps.map(a => ({ label: a.name, icon: f.app === a.id ? 'check' : 'app', action: () => set('app', a.id) }))]); },
+    }, icon('app', 13), appNow ? appNow.name : 'Приложение'),
     !B.dueDate.hidden && h('button', { class: 'fchip' + (f.overdue ? ' on' : ''), onclick: () => set('overdue', !f.overdue) }, icon('alert', 13), 'Просроченные'),
     h('button', { class: 'fchip' + (f.archived ? ' on' : ''), onclick: () => set('archived', !f.archived) }, icon('archive', 13), 'Архив'),
     S.route.mode === 'board' && isStaff() && !B.department.hidden && h('button', {
@@ -143,7 +153,11 @@ function filterRest() {
     S.route.mode === 'board' && isStaff() && S.board.tasks.some(t => t.kind === 'request') && h('button', {
       class: 'fchip' + (S.lanes === 'kind' ? ' on' : ''), title: 'Запросы CEO — отдельной дорожкой над задачами',
       onclick: () => { S.lanes = S.lanes === 'kind' ? false : 'kind'; renderTasks(); drawFilterRest(); },
-    }, icon('app', 13), 'По типу'),
+    }, icon('zap', 13), 'По типу'),
+    S.route.mode === 'board' && isStaff() && apps.length > 0 && h('button', {
+      class: 'fchip' + (S.lanes === 'app' ? ' on' : ''), title: 'Каждое приложение — своя дорожка с его задачами по колонкам',
+      onclick: () => { S.lanes = S.lanes === 'app' ? false : 'app'; renderTasks(); drawFilterRest(); },
+    }, icon('rows', 13), 'По приложениям'),
     active && h('button', {
       class: 'link-btn', onclick: () => {
         S.filters = freshFilters();
@@ -209,6 +223,7 @@ export function filterTasks(opts = {}) {
     if (f.assignees.length && !f.assignees.includes(t.assigneeId || NO_DEPT)) return false;
     if (f.depts.length && !f.depts.includes(t.departmentId)) return false;
     if (f.overdue && !isOverdue(t, today)) return false;
+    if (f.app && t.appId !== f.app) return false;
     for (const fid in groups) {
       const v = t.fields[fid];
       const vals = Array.isArray(v) ? v : v ? [v] : [];
@@ -283,13 +298,18 @@ function renderLanes(board) {
   board.classList.add('lanes');
   const cols = columns();
   const tasks = filterTasks();
-  // Дорожки по типу (запросы CEO / задачи и этапы) или по отделам
-  const byKind = S.lanes === 'kind';
+  // Дорожки по типу (запросы CEO / задачи и этапы), по приложениям или по отделам
+  const byKind = S.lanes === 'kind', byApp = S.lanes === 'app';
   const laneKind = t => (t.kind === 'request' ? 'request' : '');
   let lanes, orphan = [];
   if (byKind) {
     lanes = [{ id: 'request', name: TASK_KINDS.request.plural, color: TASK_KINDS.request.color },
       { id: '', name: 'Задачи', color: 'var(--border-strong)' }].filter(l => tasks.some(t => laneKind(t) === l.id));
+  } else if (byApp) {
+    lanes = [...new Set(tasks.map(t => t.appId).filter(Boolean))].map(id => appById(id) || { id, name: 'Приложение', color: '' })
+      .sort((a, b) => a.name.localeCompare(b.name)).map(a => ({ id: a.id, name: a.name, color: a.color || 'var(--border-strong)' }));
+    orphan = tasks.filter(t => !t.appId);
+    if (orphan.length) lanes.push({ id: '', name: 'Без приложения', color: 'var(--border-strong)' });
   } else {
     lanes = activeDepts().map(d => ({ id: d.id, name: d.name, color: d.color }))
       .filter(l => !S.filters.depts.length || S.filters.depts.includes(l.id));
@@ -303,7 +323,8 @@ function renderLanes(board) {
     h('div', { class: 'lane-col-head add' }, addColumnBtn()));
 
   for (const lane of lanes) {
-    const inLane = byKind ? tasks.filter(t => laneKind(t) === lane.id) : lane.id ? tasks.filter(t => t.departmentId === lane.id) : orphan;
+    const inLane = byKind ? tasks.filter(t => laneKind(t) === lane.id) : byApp ? (lane.id ? tasks.filter(t => t.appId === lane.id) : orphan)
+      : lane.id ? tasks.filter(t => t.departmentId === lane.id) : orphan;
     const collapsed = S.collapsedLanes.has(lane.id);
     grid.append(h('button', {
       class: 'lane-head' + (collapsed ? ' collapsed' : ''), style: { gridColumn: '1 / -1' },
@@ -314,8 +335,8 @@ function renderLanes(board) {
       const items = inLane.filter(t => colById(t.status).id === col.id).sort(byPriority());
       grid.append(h('div', { class: 'lane-cell' },
         // в дорожках по типу перенос между дорожками тип не меняет — список как у колонки
-        makeList(items, col.id, byKind ? null : lane.id, null),
-        !byKind && quickAddEl(col.id, lane.id, true)));
+        makeList(items, col.id, byKind || byApp ? null : lane.id, null),
+        !byKind && !byApp && quickAddEl(col.id, lane.id, true)));
     }
     grid.append(h('div'));
   }

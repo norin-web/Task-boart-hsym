@@ -5,6 +5,7 @@ import { send } from '../api.js';
 import { link } from '../router.js';
 import { renderSidebar } from './sidebar.js';
 import { archiveUnit, deleteUnit } from './units.js';
+import { flowSection } from './flows.js';
 import { addMemberDialog, applyMembers, openDepartments, positionChips } from './people.js';
 
 export function renderSettings() {
@@ -46,6 +47,7 @@ export function renderSettings() {
         st.builtins[r.k].label = r.label.value.trim() || st.builtins[r.k].label;
         if (r.hidden) st.builtins[r.k].hidden = r.hidden.checked;
       });
+      st.flows = u.settings.flows; // флоу сохраняется отдельно (своя кнопка) — берём свежий
       const saved = await send('updateUnit', { id: u.id, name: name.value, key: key.value, color: color.value(), description: desc.value, settings: st, statusRemap: remap });
       if (orphans.length) orphans.forEach(t => { t.status = remap[t.status]; });
       Object.assign(u, saved);
@@ -108,6 +110,8 @@ export function renderSettings() {
         h('div', { class: 'row', style: { marginTop: '16px' } }, h('button', { class: 'btn primary', onclick: e => save(e.currentTarget) }, 'Сохранить изменения'))),
 
       teamSection(),
+
+      flowSection(u),
 
       h('section', { class: 'card-box' },
         h('div', { class: 'section-head', style: { marginBottom: '4px' } },
