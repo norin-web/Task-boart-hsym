@@ -46,6 +46,8 @@ export const S = {
   templates: [],            // шаблоны задач (общие)
   apps: [],                 // приложения (сущности): юнит, статус
   appStatuses: [],          // настраиваемые статусы приложения { id, name, color, kind }
+  appFields: [],            // поля приложения (быстрый доступ): { id, name, kind: link | text }
+  priorityOptions: [],      // варианты общего «Приоритета» (от низкого к высокому) — у задач и приложений
   realMeId: '',             // режим разработчика: кто вошёл на самом деле (meId — «смотрю как»)
   session: null,            // сессия Supabase Auth (в локальном режиме — null)
   board: null,              // { unit, fields, tasks, units, people }
@@ -95,6 +97,7 @@ export const ceoDefault = () => ceoMode() === 'default';
 export const isDev = () => !!(personById(S.realMeId || S.meId) || {}).isDev;
 export const appById = id => (id ? S.apps.find(a => a.id === id) : null);
 export const appStatusById = id => S.appStatuses.find(x => x.id === id) || null;
+export const prioById = id => (id ? S.priorityOptions.find(o => o.id === id) : null);
 /** Может ли текущий человек работать с задачей (свои задачи у участника). */
 export const canEditTask = t => isStaff() || (!!S.meId && t.assigneeId === S.meId);
 export const activeFields = () => (S.board ? S.board.fields.filter(f => !f.archived).sort(byOrder) : []);

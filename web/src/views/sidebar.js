@@ -74,9 +74,9 @@ export function renderSidebar() {
       [['default', 'Default', 'Приложения и приоритеты — без деталей разработки'], ['admin', 'Admin', 'Всё: юниты, доски, задачи, панель админа']].map(([m, label, hint]) =>
         h('button', { class: ceoMode() === m ? 'on' : '', role: 'radio', 'aria-checked': String(ceoMode() === m), title: hint, onclick: () => setCeoMode(m) }, label)))),
     h('button', { class: 'search-btn', onclick: openPalette }, icon('search', 15), h('span', null, 'Поиск'), h('kbd', null, isMac ? '⌘K' : 'Ctrl K')),
-    !lite && navLink({ view: 'home' }, 'home', staff ? 'Главная' : 'Мой дашборд',
-      h('span', { class: 'nav-badge', id: 'unread-badge', title: 'Новые задачи на вас', hidden: !S.unread }, S.unread || '')),
-    navLink({ view: 'apps' }, 'app', 'Приложения', lite && h('span', { class: 'nav-badge', id: 'unread-badge', title: 'Новое для вас', hidden: !S.unread }, S.unread || '')),
+    navLink({ view: 'home' }, 'home', ceo ? 'Дашборд' : staff ? 'Главная' : 'Мой дашборд',
+      h('span', { class: 'nav-badge', id: 'unread-badge', title: 'Новое для вас', hidden: !S.unread }, S.unread || '')),
+    navLink({ view: 'apps' }, 'app', 'Приложения'),
     !lite && navLink({ view: 'myboard' }, 'board', 'Моя доска'),
     !lite && staff && navLink({ view: 'my' }, 'user', 'Мои задачи'),
     !lite && staff && navLink({ view: 'admin' }, 'settings', 'Панель админа'),
@@ -123,7 +123,7 @@ async function setCeoMode(m) {
   renderSidebar(); // переключатель отзывается сразу
   // сохраняем до перерисовки: экраны перечитывают людей с сервера и не должны получить старый режим
   try { await send('setMyPrefs', { personId: p.id, prefs: { ceoMode: m } }); } catch (e) { showErr(e); }
-  if (m === 'default' && (S.route.unit || ['my', 'myboard', 'admin', 'home'].includes(S.route.view))) navigate({ view: 'apps' });
+  if (m === 'default' && (S.route.unit || ['my', 'myboard', 'admin'].includes(S.route.view))) navigate({ view: 'home' });
   else rerender();
 }
 

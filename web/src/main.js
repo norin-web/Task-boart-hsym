@@ -77,6 +77,8 @@ async function boot() {
     S.templates = d.templates || [];
     S.apps = d.apps || [];
     S.appStatuses = d.appStatuses || [];
+    S.appFields = d.appFields || [];
+    S.priorityOptions = d.priorityOptions || [];
     if (mode === 'local') {
       // локально «Войти как» меняет и права; режим разработчика остаётся за тем, у кого он включён
       const dev = S.people.find(p => p.isDev);

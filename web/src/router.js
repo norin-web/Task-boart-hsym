@@ -6,13 +6,14 @@
  *   #/admin[?tab=…]          панель админа (модераторы и супер-админы)
  *   #/u/:unit[/list|/settings|/overview][?task=:id]
  */
-import { S, isStaff, loadBoardView, ceoDefault } from './state.js';
+import { S, isStaff, isSuper, loadBoardView, ceoDefault } from './state.js';
 import { $, h, fill, closeMenu, closeNav, showErr } from './ui.js';
 import { renderSidebar } from './views/sidebar.js';
 import { renderHome } from './views/home.js';
 import { renderMy } from './views/my.js';
 import { renderMyBoard } from './views/myboard.js';
 import { renderApps } from './views/apps.js';
+import { renderCeoHome } from './views/ceo.js';
 import { renderDev } from './views/dev.js';
 import { renderAdmin } from './views/admin.js';
 import { renderBoardView, loadBoard } from './views/board.js';
@@ -91,9 +92,9 @@ export async function render() {
   closeNav();
   renderSidebar();
 
-  // CEO в режиме Default: только приложения — доски, «мои» и панель админа не показываем; задача — поверх
+  // CEO в режиме Default: дашборд и приложения — доски, «мои» и панель админа не показываем; задача — поверх
   if (ceoDefault() && (r.unit || ['my', 'myboard', 'admin'].includes(r.view))) {
-    navigate({ view: 'apps' }, { replace: true });
+    navigate({ view: 'home' }, { replace: true });
     if (r.unit && r.task) peekTask(r.unit, r.task);
     return;
   }
@@ -101,13 +102,13 @@ export async function render() {
     closePanel();
     S.board = null;
     if (r.view === 'admin' && !isStaff()) return navigate({ view: 'home' }, { replace: true });
-    const view = ceoDefault() && !['apps', 'dev'].includes(r.view) ? 'apps' : r.view; // главная CEO в Default — приложения
+    const view = r.view;
     const key = ['my', 'myboard', 'apps', 'dev'].includes(view) ? view : view === 'admin' ? 'admin:' + (r.tab || 'overview') : 'home';
     if (rendered !== key) {
       rendered = key;
-      document.title = ({ my: 'Мои задачи', myboard: 'Моя доска', admin: 'Панель админа', apps: 'Приложения', dev: 'Режим разработчика' }[view] || 'Главная') + ' · Tasks';
+      document.title = ({ my: 'Мои задачи', myboard: 'Моя доска', admin: 'Панель админа', apps: 'Приложения', dev: 'Режим разработчика' }[view] || (isSuper() ? 'Дашборд' : 'Главная')) + ' · Tasks';
       if (view === 'my') renderMy(); else if (view === 'myboard') renderMyBoard(); else if (view === 'apps') renderApps(); else if (view === 'dev') renderDev();
-      else if (view === 'admin') renderAdmin(r.tab || 'overview'); else renderHome();
+      else if (view === 'admin') renderAdmin(r.tab || 'overview'); else if (isSuper()) renderCeoHome(); else renderHome();
     }
     return;
   }

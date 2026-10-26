@@ -180,3 +180,69 @@ test('статусы приложения и флоу настраиваются
     assert.equal((await api('decomposeRequest', { taskId: r2.id })).length, 2);
   });
 });
+
+test('CEO: приоритет приложения → запросу → этапам; перенос приложения в другой юнит вместе с задачами', async () => {
+  const api = await setup();
+  const { ceo, pm, pmRf, gold, rf } = await studio(api);
+  await api.as(ceo, () => assert.rejects(() => api('createApp', { name: 'X', unitId: gold.id, priority: 'nope' }), /приоритета/));
+  const { app, request } = await api.as(ceo, () => api('createApp', { name: 'Sleep', unitId: gold.id, priority: 'o_high' }));
+  assert.equal(app.priority, 'o_high');
+  assert.equal(request.fields.f_priority, 'o_high');
+  const stages = await api.as(pm, () => api('decomposeRequest', { taskId: request.id }));
+  assert.ok(stages.every(t => t.fields.f_priority === 'o_high'));
+  // апдейт с другим приоритетом
+  const upd = await api.as(ceo, () => api('createRequest', { appId: app.id, type: 'update', priority: 'o_critical' }));
+  assert.equal(upd.fields.f_priority, 'o_critical');
+  // перенос: все задачи приложения — в RF, открытые запросы — PM RF
+  const moved = await api.as(ceo, () => api('updateApp', { id: app.id, unitId: rf.id, priority: 'o_low' }));
+  assert.equal(moved.unitId, rf.id);
+  assert.equal(moved.priority, 'o_low');
+  const rows = (await api.pg.query('select unit_id, kind, assignee_id from tasks where app_id = $1', [app.id])).rows;
+  assert.ok(rows.every(r => r.unit_id === rf.id));
+  assert.ok(rows.filter(r => r.kind === 'request').every(r => r.assignee_id === pmRf.id));
+  await api.as(pm, async () => assert.deepEqual(await api('listApps', {}), []));
+});
+
+test('поля приложения: ссылки и тексты, неизвестные не сохраняются', async () => {
+  const api = await setup();
+  const { ceo, gold } = await studio(api);
+  await api.as(ceo, async () => {
+    const fields = await api('getAppFields', {});
+    assert.deepEqual(fields.map(f => f.id), ['appstore', 'asc', 'figma', 'drive']);
+    await api('saveAppFields', { fields: [...fields, { name: 'Bundle ID', kind: 'text' }] });
+    const bundle = (await api('getAppFields', {})).find(f => f.name === 'Bundle ID');
+    const { app } = await api('createApp', { name: 'A', unitId: gold.id });
+    const a = await api('updateApp', { id: app.id, info: { appstore: 'apps.apple.com/app/id1', [bundle.id]: 'com.x.a', hack: 'x' } });
+    assert.deepEqual(a.info, { appstore: 'https://apps.apple.com/app/id1', [bundle.id]: 'com.x.a' });
+    await assert.rejects(() => api('updateApp', { id: app.id, info: { figma: 'javascript:alert(1)' } }), /https/);
+    const b = await api('updateApp', { id: app.id, info: { appstore: '' } });
+    assert.deepEqual(b.info, { [bundle.id]: 'com.x.a' });
+  });
+});
+
+test('дашборд CEO: портфель, требует внимания, работы в ходу, недавно вышло', async () => {
+  const api = await setup();
+  const { ceo, pm, lead, gold } = await studio(api);
+  const day = new Date().toISOString().slice(0, 10);
+  const { app: a1, request: r1 } = await api.as(ceo, () => api('createApp', { name: 'Sleep', unitId: gold.id, dueDate: '2020-01-01' }));
+  const { app: a2 } = await api.as(ceo, () => api('createApp', { name: 'Weather', unitId: gold.id }));
+  const { app: a3 } = await api.as(ceo, () => api('createApp', { name: 'Fit', unitId: gold.id }));
+  await api.as(ceo, () => api('updateApp', { id: a2.id, status: 'reject' }));
+  await api.as(ceo, () => api('updateApp', { id: a3.id, status: 'live' }));
+  const st = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: r1.id }))).map(t => [t.step, t]));
+  await api.as(lead, () => api('updateTask', { id: st.design.id, patch: { status: 'in_progress' } }));
+  // этап мета давно никто не трогал
+  await api.pg.query("update tasks set updated_at = '2020-01-01T00:00:00.000Z', due_date = '' where id = $1", [st.meta.id]);
+  const d = await api.as(ceo, () => api('getCeoDashboard', { today: day }));
+  assert.deepEqual(d.portfolio.byStatus.reject, [a2.id]);
+  assert.equal(d.portfolio.byUnit[gold.id].dev, 1);
+  const types = d.attention.map(x => x.type);
+  assert.equal(types[0], 'reject');
+  assert.ok(types.includes('overdue')); // срок запроса прошёл
+  assert.ok(d.attention.some(x => x.type === 'stale' && x.task.id === st.meta.id));
+  assert.ok(d.attention.some(x => x.type === 'waiting')); // запросы Weather и Fit PM ещё не разложил
+  const sleep = d.inProgress.find(x => x.app.id === a1.id);
+  assert.equal(sleep.current.step, 'design'); // текущий этап — тот, что в работе
+  assert.ok(d.recent.some(x => x.type === 'live' && x.app.id === a3.id));
+  assert.equal(d.staleDays, 7);
+});

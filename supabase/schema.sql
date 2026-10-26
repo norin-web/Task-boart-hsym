@@ -444,6 +444,9 @@ create table if not exists apps (
   updated_at text not null
 );
 create index if not exists apps_unit on apps(unit_id);
+-- Приоритет приложения (вариант общего поля «Приоритет»: o_low / o_medium / o_high / o_critical) и когда сменился статус
+alter table apps add column if not exists priority text not null default '';
+alter table apps add column if not exists status_at text not null default '';
 
 -- Задачи 2.0: приложение; запрос CEO (kind request, request_type new_app / update / other);
 -- этап декомпозиции (kind stage, step — ключ этапа флоу: design / ios / qa / meta / release…);
@@ -463,6 +466,16 @@ insert into app_settings (key, value, updated_at) values ('appStatuses', '[
   {"id": "live", "name": "В сторе", "color": "#0d9488", "kind": "live"},
   {"id": "reject", "name": "Реджект", "color": "#ef4444", "kind": "reject"}
 ]'::jsonb, '') on conflict (key) do nothing;
+
+-- Поля приложения (быстрый доступ на карточке): ссылки и тексты; значения — в apps.info { id поля → значение }.
+insert into app_settings (key, value, updated_at) values ('appFields', '[
+  {"id": "appstore", "name": "App Store", "kind": "link"},
+  {"id": "asc", "name": "App Store Connect", "kind": "link"},
+  {"id": "figma", "name": "Figma", "kind": "link"},
+  {"id": "drive", "name": "Google Drive", "kind": "link"}
+]'::jsonb, '') on conflict (key) do nothing;
+-- «Требует внимания» у CEO: работа без изменений столько дней
+insert into app_settings (key, value, updated_at) values ('staleDays', '7'::jsonb, '') on conflict (key) do nothing;
 
 -- Задача закрыта: её колонка — «готово».
 create or replace function task_done(p_task text) returns boolean

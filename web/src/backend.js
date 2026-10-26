@@ -36,6 +36,8 @@ export const DEFAULT_FLOWS = {
 };
 /** Статусы приложения по умолчанию (настраиваются; kind связывает статус с ходом работ). */
 export const APP_STATUS_KINDS = ['dev', 'release', 'review', 'live', 'reject', ''];
+/** Общее поле «Приоритет» (создаёт schema.sql): им же задаётся приоритет приложений и запросов CEO. */
+const PRIORITY_FIELD = 'f_priority';
 export const PALETTE = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6', '#14b8a6', '#64748b', '#84cc16'];
 
 export function defaultSettings() {
@@ -259,8 +261,22 @@ function cleanStages(list) {
 }
 const appOut = r => ({
   id: r.id, unitId: r.unit_id, name: r.name, color: r.color || '', status: r.status, info: json(r.info, {}) || {},
+  priority: r.priority || '', statusAt: r.status_at || '',
   order: r.ord, archived: !!r.archived, isTest: !!r.is_test, createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at,
 });
+
+/** Поля приложения: { id, name, kind: link | text }. */
+function cleanAppFields(list) {
+  const seen = new Set();
+  return (Array.isArray(list) ? list : []).slice(0, 30).map(x => {
+    const name = str(x && x.name, 40);
+    if (!name) return null;
+    let id = /^[a-z0-9_]{1,40}$/.test((x && x.id) || '') ? x.id : uid('af').toLowerCase();
+    if (seen.has(id)) id = uid('af').toLowerCase();
+    seen.add(id);
+    return { id, name, kind: x.kind === 'text' ? 'text' : 'link' };
+  }).filter(Boolean);
+}
 
 /** Статусы приложения: { id, name, color, kind }, хотя бы один. */
 function cleanAppStatuses(list) {
@@ -434,6 +450,24 @@ export function createBackend(db, opts = {}) {
     const list = cleanAppStatuses(await setting('appStatuses'));
     return list.length ? list : cleanAppStatuses([{ id: 'dev', name: 'В разработке', kind: 'dev' }]);
   };
+  const appFields = async () => cleanAppFields(await setting('appFields'));
+  /** Приоритет — вариант общего поля «Приоритет» (o_low…o_critical); пусто — без приоритета. */
+  async function validPriority(v) {
+    if (!v) return '';
+    const f = await one('fields', PRIORITY_FIELD);
+    return f && (json(f.options, []) || []).some(o => o.id === v) ? String(v) : fail('Нет такого приоритета');
+  }
+  /** Приложение переехало в другой юнит: его задачи — туда же (колонка того же типа), открытые запросы — PM нового юнита. */
+  async function moveAppTasks(a, unitId, ctx) {
+    const rows = await all(() => T('tasks').select('id,kind,status,unit_id').eq('app_id', a.id).order('created_at').order('id'));
+    for (const t of rows) if (t.unit_id !== unitId) await methods.moveTask({ id: t.id, unitId }, ctx);
+    const pms = await unitPeople(unitId, 'moderator');
+    const st = unitSettings((await findUnit(unitId)).settings);
+    for (const t of rows.filter(x => x.kind === 'request')) {
+      const fresh = await findTask(t.id);
+      if (kindOf(st, fresh.status) !== 'done') await methods.updateTask({ id: t.id, patch: { assigneeId: pms.length ? pms[0].id : '' } }, ctx);
+    }
+  }
   const flows = async () => {
     const saved = (await setting('flows')) || {};
     return Object.fromEntries(Object.keys(REQUEST_TYPES).map(k => [k, k in saved ? cleanFlow(saved[k]) : DEFAULT_FLOWS[k]]));
@@ -652,11 +686,12 @@ export function createBackend(db, opts = {}) {
     /* ---------- общие данные, главная, поиск ---------- */
 
     async bootstrap(p) {
-      const [units, ppl, depts, lf, tpl, tm, apps, statuses] = await Promise.all([unitsWithCounts(today(p.today)), people(), departments(), linkFields(), templates(), teams(),
-        all(() => T('apps').select('*').order('ord').order('id')), appStatuses()]);
+      const [units, ppl, depts, lf, tpl, tm, apps, statuses, afields, gfields] = await Promise.all([unitsWithCounts(today(p.today)), people(), departments(), linkFields(), templates(), teams(),
+        all(() => T('apps').select('*').order('ord').order('id')), appStatuses(), appFields(), globalFields()]);
+      const prio = gfields.find(f => f.role === 'priority');
       return {
         units: units.map(({ doneWeek, ...u }) => u), people: ppl, departments: depts, linkFields: lf, templates: tpl, teams: tm,
-        apps: apps.map(appOut), appStatuses: statuses,
+        apps: apps.map(appOut), appStatuses: statuses, appFields: afields, priorityOptions: prio ? prio.options : [],
       };
     },
 
@@ -1345,7 +1380,7 @@ export function createBackend(db, opts = {}) {
       const apps = (await run(q.order('ord').order('created_at'))).map(appOut);
       if (!apps.length) return [];
       const [tasks, units] = await Promise.all([
-        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,due_date,archived,kind,request_type,step,parent_id,app_id,depends_on')
+        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,due_date,archived,kind,request_type,step,parent_id,app_id,depends_on,fields,created_at,updated_at,done_at')
           .in('app_id', apps.map(a => a.id)).eq('archived', false).order('created_at').order('id')),
         all(() => T('units').select('id,key,settings').order('id')),
       ]);
@@ -1361,7 +1396,9 @@ export function createBackend(db, opts = {}) {
           return {
             id: r.id, unitId: r.unit_id, key: U[r.unit_id] ? `${U[r.unit_id].key}-${r.num}` : '', title: r.title, type: r.request_type,
             assigneeId: r.assignee_id, dueDate: r.due_date, done: doneRow(r), statusKind: kindOfRow(r),
-            stages: stages.map(t => ({ id: t.id, step: t.step, title: t.title, assigneeId: t.assignee_id, kind: kindOfRow(t),
+            priority: (json(r.fields, {}) || {})[PRIORITY_FIELD] || '', createdAt: r.created_at, updatedAt: r.updated_at, doneAt: r.done_at || '',
+            stages: stages.map(t => ({ id: t.id, unitId: t.unit_id, step: t.step, title: t.title, assigneeId: t.assignee_id, kind: kindOfRow(t),
+              dueDate: t.due_date, updatedAt: t.updated_at,
               done: doneRow(t), blocked: !doneRow(t) && (json(t.depends_on, []) || []).some(id => { const d = own.find(x => x.id === id); return d && !doneRow(d); }) })),
             progress: stages.length ? Math.round((done.length / stages.length) * 100) : 0,
           };
@@ -1382,29 +1419,105 @@ export function createBackend(db, opts = {}) {
         id: uid('app'), unit_id: unit.id, name: req(str(p.name, 120), 'Название'), color: color(p.color, PALETTE[Math.floor(Math.random() * PALETTE.length)]),
         status: (statuses.find(x => x.kind === 'dev') || statuses[0]).id, info: {}, ord: (await maxOrd('apps', { unit_id: unit.id })) + 1,
         archived: false, is_test: !!p.test, created_by: actor(ctx), created_at: ts, updated_at: ts,
+        priority: await validPriority(p.priority), status_at: ts,
       };
       await run(T('apps').insert(app));
       const request = await methods.createRequest({
         appId: app.id, type: 'new_app', title: str(p.requestTitle, 500) || `New App: ${app.name}`, description: p.description,
-        pmId: p.pmId, dueDate: p.dueDate,
+        pmId: p.pmId, dueDate: p.dueDate, priority: app.priority,
       }, ctx);
       return { app: appOut(app), request };
     },
 
-    /** Поправить приложение: название, цвет, статус, инфо; юнит — только CEO (проверяет база). */
-    async updateApp(p) {
+    /**
+     * Поправить приложение: название, цвет, статус, приоритет, порядок (order — приоритет внутри колонки канбана), инфо-поля.
+     * Юнит — только CEO (проверяет база): задачи приложения переезжают с ним, открытые запросы — PM нового юнита.
+     */
+    async updateApp(p, ctx) {
       const a = (await one('apps', p.id)) || fail('Приложение не найдено', 'NOT_FOUND');
       const upd = {};
       if ('name' in p) upd.name = req(str(p.name, 120), 'Название');
       if ('color' in p) upd.color = color(p.color, a.color);
-      if ('status' in p) upd.status = (await appStatuses()).some(x => x.id === p.status) ? p.status : fail('Нет такого статуса');
-      if ('unitId' in p) upd.unit_id = (await findUnit(p.unitId)).id;
-      if ('info' in p) upd.info = { ...(json(a.info, {}) || {}), ...Object.fromEntries(Object.entries(p.info || {}).map(([k, v]) => [str(k, 40), str(v, 2000)])) };
+      if ('status' in p && p.status !== a.status) {
+        upd.status = (await appStatuses()).some(x => x.id === p.status) ? p.status : fail('Нет такого статуса');
+        upd.status_at = now();
+      }
+      if ('priority' in p) upd.priority = await validPriority(p.priority);
+      if ('order' in p && Number.isFinite(Number(p.order))) upd.ord = Number(p.order);
+      if ('unitId' in p && p.unitId !== a.unit_id) upd.unit_id = (await findUnit(p.unitId)).id;
+      if ('info' in p) {
+        const known = new Set((await appFields()).map(f => f.id));
+        const info = { ...(json(a.info, {}) || {}) };
+        for (const [k, v] of Object.entries(p.info || {})) {
+          if (!known.has(k)) continue;
+          const f = (await appFields()).find(x => x.id === k);
+          const val = f.kind === 'link' ? linkUrl(v) : str(v, 500);
+          if (val) info[k] = val; else delete info[k];
+        }
+        upd.info = info;
+      }
       if ('archived' in p) upd.archived = !!p.archived;
       if (!Object.keys(upd).length) return appOut(a);
       upd.updated_at = now();
       await updateOne('apps', a.id, upd);
+      if (upd.unit_id) await moveAppTasks(a, upd.unit_id, ctx);
       return appOut({ ...a, ...upd });
+    },
+
+    /** Поля приложения (быстрый доступ на карточке): ссылки и тексты. */
+    async getAppFields() {
+      return appFields();
+    },
+
+    async saveAppFields(p) {
+      const list = cleanAppFields(p.fields);
+      await run(T('app_settings').upsert({ key: 'appFields', value: list, updated_at: now() }, { onConflict: 'key' }));
+      return list;
+    },
+
+    /**
+     * Дашборд CEO: портфель по статусам (и по юнитам), что требует внимания (реджекты, просрочки, без движения
+     * staleDays дней, запрос без разбивки или без PM), работы в ходу (открытые запросы с текущим этапом), недавно вышло (14 дней).
+     */
+    async getCeoDashboard(p) {
+      const day = today(p.today);
+      const [apps, statuses, staleRow] = await Promise.all([methods.listApps({}), appStatuses(), setting('staleDays')]);
+      const staleDays = Math.max(1, Number(staleRow) || 7);
+      const staleBefore = new Date(Date.now() - staleDays * 864e5).toISOString();
+      const recentFrom = new Date(Date.now() - 14 * 864e5).toISOString();
+      const kindOfStatus = id => (statuses.find(x => x.id === id) || {}).kind || '';
+      const brief = a => ({ id: a.id, name: a.name, color: a.color, unitId: a.unitId, status: a.status, priority: a.priority, isTest: a.isTest });
+      const portfolio = { byStatus: {}, byUnit: {} };
+      for (const a of apps) {
+        (portfolio.byStatus[a.status] || (portfolio.byStatus[a.status] = [])).push(a.id);
+        const u = portfolio.byUnit[a.unitId] || (portfolio.byUnit[a.unitId] = {});
+        u[a.status] = (u[a.status] || 0) + 1;
+      }
+      const attention = [], inProgress = [], recent = [];
+      for (const a of apps) {
+        if (kindOfStatus(a.status) === 'reject') attention.push({ type: 'reject', app: brief(a), at: a.statusAt });
+        if (kindOfStatus(a.status) === 'live' && a.statusAt >= recentFrom) recent.push({ type: 'live', app: brief(a), at: a.statusAt });
+        for (const r of a.requests) {
+          if (r.done) {
+            if (r.doneAt >= recentFrom) recent.push({ type: 'done', app: brief(a), request: r, at: r.doneAt });
+            continue;
+          }
+          const open = [r, ...r.stages.filter(s => !s.done)];
+          for (const t of open) {
+            const ref = { id: t.id, title: t.title, assigneeId: t.assigneeId, dueDate: t.dueDate, updatedAt: t.updatedAt };
+            if (t.dueDate && t.dueDate < day) attention.push({ type: 'overdue', app: brief(a), request: r, task: ref, at: t.dueDate });
+            else if (!t.blocked && t.updatedAt && t.updatedAt < staleBefore) attention.push({ type: 'stale', app: brief(a), request: r, task: ref, at: t.updatedAt });
+          }
+          if (!r.assigneeId) attention.push({ type: 'nopm', app: brief(a), request: r, at: r.createdAt });
+          else if (!r.stages.length) attention.push({ type: 'waiting', app: brief(a), request: r, at: r.createdAt });
+          const current = r.stages.find(s => !s.done && !s.blocked && s.kind !== 'todo') || r.stages.find(s => !s.done && !s.blocked) || null;
+          inProgress.push({ app: brief(a), request: r, current });
+        }
+      }
+      const rank = { reject: 0, overdue: 1, nopm: 2, waiting: 3, stale: 4 };
+      attention.sort((x, y) => rank[x.type] - rank[y.type] || String(x.at).localeCompare(String(y.at)));
+      recent.sort((x, y) => String(y.at).localeCompare(String(x.at)));
+      return { portfolio, attention, inProgress, recent, staleDays, statuses };
     },
 
     /**
@@ -1416,9 +1529,11 @@ export function createBackend(db, opts = {}) {
       const type = REQUEST_TYPES[p.type] ? p.type : 'other';
       const pms = await unitPeople(a.unit_id, 'moderator');
       const pmId = p.pmId && pms.some(x => x.id === p.pmId) ? p.pmId : pms.length ? pms[0].id : '';
+      const prio = await validPriority('priority' in p ? p.priority : a.priority);
       return methods.createTask({
         unitId: a.unit_id, title: str(p.title, 500) || `${REQUEST_TYPES[type]}: ${a.name}`, description: p.description,
         assigneeId: pmId, dueDate: p.dueDate, kind: 'request', requestType: type, appId: a.id, test: !!a.is_test,
+        fields: prio ? { [PRIORITY_FIELD]: prio } : {},
       }, ctx);
     },
 
@@ -1440,11 +1555,12 @@ export function createBackend(db, opts = {}) {
         return (withPos.find(x => x.access === 'lead') || withPos[0] || {}).id || '';
       };
       const ids = {}, created = [];
+      const prio = (json(r.fields, {}) || {})[PRIORITY_FIELD]; // приоритет запроса — этапам
       for (const st of steps) {
         const t = await methods.createTask({
           unitId: r.unit_id, title: `${st.title} · ${r.title.replace(/^New App:\s*/, '')}`, parentId: r.id, kind: 'stage', step: st.key,
           appId: r.app_id, departmentId: st.positionId, assigneeId: st.release ? '' : pick(st.positionId), dueDate: r.due_date,
-          dependsOn: st.dependsOn.map(k => ids[k]).filter(Boolean), test: !!r.is_test,
+          dependsOn: st.dependsOn.map(k => ids[k]).filter(Boolean), test: !!r.is_test, fields: prio ? { [PRIORITY_FIELD]: prio } : {},
         }, ctx);
         ids[st.key] = t.id;
         created.push(t);

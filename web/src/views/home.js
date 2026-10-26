@@ -13,7 +13,7 @@ import { openPeople } from './people.js';
 
 /* ---------- «Новое для вас»: задачи, которые на меня назначили ---------- */
 
-async function loadNotes() {
+export async function loadNotes() {
   S.notes = await call('getNotifications', { today: todayStr() }).catch(() => []);
   S.unread = S.notes.length;
   renderUnread();
@@ -64,7 +64,7 @@ const NEWS_BLOCK = {
   render: () => newsBlock(),
 };
 
-function newsBlock() {
+export function newsBlock() {
   if (!S.notes.length) return null;
   const row = n => {
     const by = personById(n.actorId);

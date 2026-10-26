@@ -119,7 +119,8 @@ async function runProcess(api, P, U, test) {
 
   // ВЕРХ — CEO: Sleep Sounds (Gold), New App в самом разгаре.
   // СЕРЕДИНА — PM Олег раскладывает по флоу. НИЗ — дизайнер сдаёт на ревью лиду, ASO параллельно, iOS/QA/релиз ждут.
-  const sleep = await app('Sleep Sounds', 'GLD', '#6366f1', { dueDate: day(40), description: 'Звуки для сна: подписка, 30 звуков на старте, виджет. Рынки — US, UK.' });
+  const sleep = await app('Sleep Sounds', 'GLD', '#6366f1', { dueDate: day(40), priority: 'o_high', description: 'Звуки для сна: подписка, 30 звуков на старте, виджет. Рынки — US, UK.' });
+  await act('anna', 'updateApp', { id: sleep.app.id, info: { figma: 'https://figma.com/design/sleep-sounds', drive: 'https://drive.google.com/drive/folders/sleep-sounds' } });
   apps++;
   const s1 = await steps(sleep.request.id, 'oleg');
   await set(s1.design.id, { assigneeId: P.julia.id, checklist: cl(['Онбординг', 1], ['Пейволл', 1], ['Плеер', 1], ['Виджет']) }, 'oleg');
@@ -135,7 +136,8 @@ async function runProcess(api, P, U, test) {
   const s0 = await steps(fit.request.id, 'oleg');
   await ship(s0, 'oleg', true);
   await move(fit.request.id, 'done', 'oleg');
-  await act('anna', 'updateApp', { id: fit.app.id, status: 'live' });
+  await act('anna', 'updateApp', { id: fit.app.id, status: 'live', priority: 'o_medium',
+    info: { appstore: 'https://apps.apple.com/app/id1000000001', asc: 'https://appstoreconnect.apple.com/apps/1000000001', figma: 'https://figma.com/design/fitness-coach' } });
   const upd = await act('anna', 'createRequest', { appId: fit.app.id, type: 'update', title: 'Апдейт 3.5: персональный план', dueDate: day(14),
     description: 'Персональный план тренировок на онбординге, новые достижения.' });
   const s2 = await steps(upd.id, 'oleg');
@@ -145,7 +147,7 @@ async function runProcess(api, P, U, test) {
   await move(s2.ios.id, 'in_progress', 'alex');
 
   // Calm Rain (MVP): всё сделано — PM Катя передала релиз, RM Сергей выпускает
-  const calm = await app('Calm Rain', 'MVP', '#14b8a6', { dueDate: day(3), description: 'Звуки дождя: один экран, подписка.' });
+  const calm = await app('Calm Rain', 'MVP', '#14b8a6', { dueDate: day(3), priority: 'o_high', description: 'Звуки дождя: один экран, подписка.' });
   apps++;
   const s3 = await steps(calm.request.id, 'kate');
   await ship(s3, 'kate', false);
@@ -163,7 +165,8 @@ async function runProcess(api, P, U, test) {
   apps++;
   await ship(await steps(wx.request.id, 'kate'), 'kate', true);
   await move(wx.request.id, 'done', 'kate');
-  await act('anna', 'updateApp', { id: wx.app.id, status: 'reject' });
+  await act('anna', 'updateApp', { id: wx.app.id, status: 'reject', priority: 'o_critical',
+    info: { asc: 'https://appstoreconnect.apple.com/apps/1000000002' } });
   const rej = await act('anna', 'createRequest', { appId: wx.app.id, type: 'other', title: 'Реджект: Guideline 3.1.2 — условия подписки', dueDate: day(-1),
     description: 'Apple: нет ссылок на условия подписки на пейволле. Исправить и отправить заново.' });
   await move(rej.id, 'in_progress', 'kate');
