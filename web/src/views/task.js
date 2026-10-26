@@ -1,6 +1,6 @@
 import {
-  S, LS, plural, taskById, personById, activeFields, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDateTime, relTime, addDays,
-  unitById, safeUrl, visibleLinkFields, TASK_KINDS, KIND_COLORS, descendantUnits, childUnits, whoName, teamById, activeTeams, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, fmtValue,
+  S, LS,  taskById, personById, activeFields, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDateTime, relTime, addDays,
+  unitById, safeUrl, visibleLinkFields, REQUEST_TYPES, appById, isSuper, ceoDefault, KIND_COLORS, whoName, teamById, activeTeams, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, fmtValue,
 } from '../state.js';
 import { $, h, append, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, fill } from '../ui.js';
 import { call, send } from '../api.js';
@@ -94,7 +94,7 @@ function buildPanel(t) {
         h('span', null, 'На ревью у ' + ((personById(t.assigneeId) || {}).name || 'ревьюера') + '. Что-то забыли?'),
         h('button', { class: 'btn sm', onclick: () => recallReview(t) }, icon('back', 13), 'Забрать из ревью'))
       : !editable && h('div', { class: 'readonly-note' }, icon('alert', 14), 'Только просмотр: менять можно свои задачи'),
-    treeBlock(t, staff),
+    t.kind === 'request' || t.kind === 'stage' ? flowBlock(t) : treeBlock(t),
     !B.description.hidden && descriptionBlock(t, B.description.label, editable),
     linksBlock(t, editable),
     checklistBlock(t, editable),
@@ -107,7 +107,7 @@ function buildPanel(t) {
       h('span', { class: 'key-badge' }, taskKey(t)),
       t.archived && h('span', { class: 'badge' }, 'в архиве')),
     h('span', { class: 'spacer' }),
-    S.peek && h('button', { class: 'btn ghost sm', title: 'Перейти на доску юнита с этой задачей', onclick: () => openUnitBoard(t) }, icon('board', 14), 'Открыть доску'),
+    S.peek && !ceoDefault() && h('button', { class: 'btn ghost sm', title: 'Перейти на доску юнита с этой задачей', onclick: () => openUnitBoard(t) }, icon('board', 14), 'Открыть доску'),
     h('button', {
       class: 'icon-btn', title: cardCenter() ? 'Открывать карточки справа' : 'Открывать карточки по центру',
       onclick: () => { LS.set('cardMode', cardCenter() ? 'side' : 'center'); openTask(t.id); },
@@ -121,130 +121,88 @@ function buildPanel(t) {
     h('div', { class: 'panel-body' }, main, sideBlock(t, { staff, editable })));
 }
 
-/**
- * Дочерняя карточка задачи доски: апдейт / реджект (kind, в этом же юните) или задача в юнит ниже ('' — «Разбить на задачи»).
- */
-export function openDecompose(t, kind, onCreated) {
-  const u = S.board.unit;
-  const below = descendantUnits(u.id);
-  const parent = { id: t.id, title: t.title, key: taskKey(t) };
-  if (kind) return openCreateTask({ unitId: u.id, kind, parent, title: t.kind === 'app' ? TASK_KINDS[kind].label + ' · ' + t.title : '', onCreated });
-  return openCreateTask({ unitId: below[0] ? below[0].id : u.id, unitIds: below.length ? below.map(x => x.id) : null, parent, onCreated });
-}
-
-/**
- * «Разбить на задачи»: меню — куда (юниты ниже) и набор задач (создаются сразу все) или одна задача вручную.
- * Выбранный юнит запоминается.
- */
-/** Юнит, куда этот юнит передаёт задачи вниз как есть (App → Managers), или null. */
-export const handoffUnit = u => (u && u.settings && u.settings.handoff && u.settings.handoff.unitId && unitById(u.settings.handoff.unitId)) || null;
-
-/** Передать задачу вниз копией как есть (без разбивки на задачи). */
-export async function handOff(t, onDone) {
-  try {
-    const r = await send('handoffTask', { id: t.id });
-    const u = unitById(r.unitId);
-    toast('Передано в «' + (u ? u.name : '') + '»', { action: { label: 'Открыть', run: () => peekTask(r.unitId, r.copyId) } });
-    if (onDone) onDone();
-  } catch (e) { showErr(e); }
-}
-
-export function decomposeMenu(anchor, t, onCreated) {
-  // «Куда» — юниты уровнем ниже (MVP, а не команды внутри него: набор сам раскладывает задачи по командам)
-  const direct = childUnits(S.board.unit.id);
-  const below = direct.length ? direct : descendantUnits(S.board.unit.id);
-  if (!below.length) {
-    return toast(`Ниже «${S.board.unit.name}» нет юнитов. У команды: меню юнита → «Входит в…» → ${S.board.unit.name}`, { type: 'error' });
-  }
-  let unitId = below.some(u => u.id === LS.get('decompUnit', '')) ? LS.get('decompUnit', '') : below[0].id;
-  const parent = { id: t.id, title: t.title, key: taskKey(t) };
-  const units = h('div', { class: 'dm-units' });
-  const drawUnits = () => fill(units, below.map(u => h('button', {
-    class: 'dm-unit' + (u.id === unitId ? ' on' : ''),
-    onclick: e => { e.stopPropagation(); unitId = u.id; LS.set('decompUnit', unitId); drawUnits(); },
-  }, h('span', { class: 'unit-dot', style: { background: u.color, margin: 0 } }), u.name)));
-  drawUnits();
-  const apply = async set => {
-    try {
-      const made = await send('applyTaskSet', { setId: set.id, parentId: t.id, unitId });
-      const u = unitById(unitId);
-      toast(`Создано ${made.length} ${plural(made.length, ['задача', 'задачи', 'задач'])} в «${u ? u.name : ''}»`, {
-        action: { label: 'Отменить', run: () => Promise.all(made.map(x => send('deleteTask', { id: x.id }))).then(() => onCreated && onCreated()).catch(showErr) },
-      });
-      if (onCreated) onCreated();
-    } catch (e) { showErr(e); }
-  };
-  const sets = [...S.taskSets].sort((a, b) => (a.order || 0) - (b.order || 0));
-  menu(anchor, [
-    { title: 'Куда' },
-    units,
-    { sep: true },
-    { title: 'Набор задач' },
-    ...sets.map(s => ({ label: h('span', { class: 'fm-row' }, s.name, h('span', { class: 'muted' }, s.items.length + ' ' + plural(s.items.length, ['задача', 'задачи', 'задач']))), icon: 'layers', action: () => apply(s) })),
-    !sets.length && h('div', { class: 'muted', style: { padding: '4px 10px 6px', fontSize: '12.5px' } }, 'Наборов пока нет'),
-    { sep: true },
-    { label: 'Одна задача вручную…', icon: 'plus', action: () => openCreateTask({ unitId, unitIds: below.map(x => x.id), parent, onCreated }) },
-    { label: 'Настроить наборы', icon: 'settings', action: () => navigate({ view: 'admin', tab: 'automations' }) },
-  ]);
-}
-
-/**
- * Связи по иерархии: откуда задача (цепочка родителей), этап приложения, апдейты/реджекты и подзадачи ниже.
- * Админам — «+ Апдейт», «+ Реджект» (у приложения) и «Разбить на задачи» в юниты ниже.
- */
-function treeBlock(t, staff) {
+/** Связи задачи: откуда она (цепочка родителей) и подзадачи с прогрессом. Пусто — блока нет. */
+function treeBlock(t) {
   const box = h('div', { class: 'tree-block' });
   const u = S.board.unit;
-  const below = descendantUnits(u.id);
-  const reload = () => load();
-  const actions = staff && h('div', { class: 'tree-actions' },
-    t.kind === 'app' && h('button', { class: 'btn sm', onclick: () => openDecompose(t, 'update', reload) }, icon('refresh', 13), 'Апдейт'),
-    t.kind === 'app' && h('button', { class: 'btn sm', onclick: () => openDecompose(t, 'reject', reload) }, icon('alert', 13), 'Реджект'),
-    // из юнита приложений (App) — передача вниз копией как есть, разбивка — уже у Managers в юниты ниже
-    handoffUnit(u) ? h('button', { class: 'btn sm', onclick: () => handOff(t, reload) }, icon('arrow', 13), 'Передать в «' + handoffUnit(u).name + '»')
-      : below.length > 0 && h('button', { class: 'btn sm', onclick: e => { e.stopPropagation(); decomposeMenu(e.currentTarget, t, reload); } }, icon('tree', 13), 'Разбить на задачи', icon('chevron', 12)));
-
-  const kindTag = k => TASK_KINDS[k] && h('span', { class: 'kind-tag', style: { '--kc': TASK_KINDS[k].color } }, TASK_KINDS[k].short);
   const statusChip = n => h('span', { class: 'chip st-chip', style: { '--sc': n.statusColor || KIND_COLORS[n.statusKind] } }, n.statusName);
   const row = n => h('button', { class: 'tree-row', style: { '--depth': n.depth - 1 }, onclick: () => peekTask(n.unit.id, n.id) },
     h('span', { class: 'dot', style: { background: n.statusColor || KIND_COLORS[n.statusKind] } }),
-    kindTag(n.kind),
     h('span', { class: 'tree-title' + (n.statusKind === 'done' ? ' done' : '') }, n.title),
     n.unit && n.unit.id !== u.id && h('span', { class: 'unit-chip' }, h('span', { class: 'unit-dot', style: { background: n.unit.color, margin: 0 } }), n.unit.name),
     statusChip(n),
     n.assigneeId && avatar(personById(n.assigneeId), 'sm'));
-  /** Жизненный цикл: этапы (колонки юнита) карточки-приложения, текущий подсвечен. */
-  const stepper = n => h('div', { class: 'stepper' }, n.stages.map(s => {
-    const i = n.stages.findIndex(x => x.id === n.status), j = n.stages.indexOf(s);
-    return h('span', { class: 'step' + (j < i ? ' past' : j === i ? ' now' : ''), style: { '--sc': s.color || KIND_COLORS[s.kind] } }, s.name);
-  }));
-
   async function load() {
     let tree;
-    try { tree = await call('getTaskTree', { id: t.id }); } catch (e) { return; }
+    try { tree = await call('getTaskTree', { id: t.id }); } catch { return; }
     if (S.panelTaskId !== t.id) return;
-    const d = tree.descendants.filter(n => !n.archived);
-    const ups = d.filter(n => n.kind === 'update' || n.kind === 'reject');
-    const tasks = d.filter(n => !n.kind);
-    // этап приложения: своя колонка (если это карточка-приложение) или карточка-приложение уровнем ниже
-    const life = t.kind === 'app' ? null : d.find(n => n.kind === 'app' && n.depth === 1);
+    const tasks = tree.descendants.filter(n => !n.archived);
     const done = tasks.filter(n => n.statusKind === 'done').length;
-    const empty = !tree.ancestors.length && !d.length && !t.kind;
     fill(box,
       tree.ancestors.length > 0 && h('div', { class: 'tree-up' }, icon('tree', 13),
         tree.ancestors.map((a, i) => [i > 0 && h('span', { class: 'muted' }, '›'),
-          h('button', { class: 'link-btn', title: a.unit ? a.unit.name : '', onclick: () => peekTask(a.unit.id, a.id) }, kindTag(a.kind), a.title)])),
-      !empty && h('div', { class: 'tree-head' },
-        h('span', { class: 'sub-title', style: { margin: 0 } }, t.kind === 'app' || life ? 'Жизненный цикл' : 'Подзадачи'),
-        tasks.length > 0 && h('span', { class: 'muted' }, `${done} из ${tasks.length} задач готово`),
-        h('span', { class: 'spacer' }), actions),
-      life && h('div', { class: 'life' }, h('div', { class: 'life-label' }, 'Этап у ', h('b', null, life.unit.name), ':'), stepper(life),
-        h('button', { class: 'link-btn', onclick: () => peekTask(life.unit.id, life.id) }, 'Открыть карточку ' + life.key)),
+          h('button', { class: 'link-btn', title: a.unit ? a.unit.name : '', onclick: () => peekTask(a.unit.id, a.id) }, a.title)])),
+      tasks.length > 0 && h('div', { class: 'tree-head' },
+        h('span', { class: 'sub-title', style: { margin: 0 } }, 'Подзадачи'),
+        h('span', { class: 'muted' }, `${done} из ${tasks.length} готово`)),
       tasks.length > 0 && h('div', { class: 'progress tree-progress' }, h('div', { style: { width: Math.round(done / tasks.length * 100) + '%' } })),
-      ups.length > 0 && h('div', { class: 'tree-group' }, h('div', { class: 'tree-group-title' }, 'Апдейты и реджекты'), ups.map(n => h('div', null, row(n), n.stages && h('div', { class: 'tree-step' }, stepper(n))))),
-      d.filter(n => n.kind === 'app' && n !== life).map(row),
-      tasks.length > 0 && h('div', { class: 'tree-group' }, h('div', { class: 'tree-group-title' }, 'Задачи'), tasks.map(row)),
-      empty && staff && h('div', { class: 'tree-empty' }, actions));
+      tasks.length > 0 && h('div', { class: 'tree-group' }, tasks.map(row)));
+  }
+  load();
+  return box;
+}
+
+/**
+ * Tasks 2.0: запрос CEO — приложение, этапы флоу (состояние, блокировки), «Разложить по флоу»;
+ * этап — к какому запросу относится, чего ждёт, у релиза — «Передать в релиз» (когда всё закрыто).
+ */
+function flowBlock(t) {
+  const box = h('div', { class: 'tree-block flow-block' });
+  const app = appById(t.appId);
+  const manage = isSuper() || (isStaff() && (S.board.members || []).some(m => m.personId === S.meId)); // CEO или PM юнита
+  const appTag = app && h('span', { class: 'flow-app' }, h('span', { class: 'uc-icon xs', style: { background: app.color } }, app.name.slice(0, 2).toUpperCase()), app.name);
+  const reload = () => { load(); reloadBoard().catch(() => {}); };
+  const stateOf = (n, all) => {
+    if (n.statusKind === 'done') return 'done';
+    const blocked = (n.dependsOn || []).some(id => { const d = all.find(x => x.id === id); return d && d.statusKind !== 'done'; });
+    return blocked ? 'blocked' : n.statusKind === 'todo' ? 'todo' : 'progress';
+  };
+  const LABEL = { done: 'готово', progress: 'в работе', blocked: 'ждёт предыдущих', todo: 'не начато' };
+  const ICON = { done: 'check', progress: 'progress', blocked: 'lock', todo: 'circle' };
+  const stageRow = (n, all) => {
+    const st = stateOf(n, all);
+    const releaseReady = n.step === 'release' && !n.assigneeId && st !== 'blocked' && st !== 'done';
+    return h('div', { class: 'rq-stage st-' + st + (n.id === t.id ? ' current' : '') },
+      h('span', { class: 'rq-ic', title: LABEL[st] }, icon(ICON[st], 13)),
+      h('button', { class: 'link-btn rq-stitle', onclick: () => peekTask(n.unit.id, n.id) }, n.title.split(' · ')[0]),
+      h('span', { class: 'muted rq-state' }, LABEL[st]),
+      releaseReady && manage
+        ? h('button', { class: 'btn primary sm', onclick: () => import('./apps.js').then(m => m.sendRelease(n.id)).then(reload) }, icon('rocket', 13), 'Передать в релиз')
+        : n.assigneeId ? avatar(personById(n.assigneeId), 'sm') : h('span', { class: 'muted rq-who' }, n.step === 'release' ? 'RM' : '—'));
+  };
+  async function load() {
+    let tree;
+    try { tree = await call('getTaskTree', { id: t.kind === 'stage' && t.parentId ? t.parentId : t.id }); } catch { return; }
+    if (S.panelTaskId !== t.id) return;
+    const req = tree.task;
+    const stages = tree.descendants.filter(n => n.depth === 1 && n.kind === 'stage' && !n.archived);
+    const done = stages.filter(n => stateOf(n, stages) === 'done').length;
+    const me = stages.find(n => n.id === t.id);
+    const waits = me && stateOf(me, stages) === 'blocked'
+      ? stages.filter(n => (me.dependsOn || []).includes(n.id) && stateOf(n, stages) !== 'done').map(n => n.title.split(' · ')[0]) : [];
+    fill(box,
+      h('div', { class: 'tree-head' },
+        h('span', { class: 'sub-title', style: { margin: 0 } }, t.kind === 'request' ? (REQUEST_TYPES[t.requestType] || 'Запрос') + ' · этапы' : 'Этап запроса'),
+        appTag, stages.length > 0 && h('span', { class: 'muted' }, `${done} из ${stages.length} готово`)),
+      t.kind === 'stage' && h('div', { class: 'tree-up' }, icon('tree', 13),
+        h('button', { class: 'link-btn', onclick: () => peekTask(req.unit.id, req.id) }, req.title)),
+      waits.length > 0 && h('div', { class: 'readonly-note flow-wait' }, icon('lock', 14),
+        h('span', null, 'Этап заблокирован: сначала закройте ', h('b', null, waits.join(', ')), '. До этого его нельзя сдвинуть из «не начато».')),
+      stages.length > 0 && h('div', { class: 'progress' }, h('div', { style: { width: Math.round(done / stages.length * 100) + '%' } })),
+      stages.length > 0 && h('div', { class: 'rq-stages' }, stages.map(n => stageRow(n, stages))),
+      t.kind === 'request' && !stages.length && h('div', { class: 'rq-empty' },
+        h('span', { class: 'muted' }, manage ? 'Разложите задачу по этапам флоу: дизайн → iOS → QA, мета параллельно, релиз последним.' : 'PM ещё не разложил задачу по этапам.'),
+        manage && h('button', { class: 'btn primary sm', onclick: () => import('./apps.js').then(m => m.decompose(t.id)).then(reload) }, icon('tree', 13), 'Разложить по флоу')));
   }
   load();
   return box;
@@ -485,7 +443,6 @@ function discussionBlock(t, editable) {
 
   const history = () => (data.activity.length
     ? h('div', { class: 'timeline' }, data.activity.map(a => {
-      const p = personById(a.actorId);
       return h('div', { class: 'tl-item' },
         h('span', { class: 'tl-dot' }),
         h('div', null,
@@ -716,18 +673,17 @@ export function fieldInput(f, v, onChange) {
 /* ================= Создание задачи ================= */
 
 export function openCreateTask(opts = {}) {
-  if (!isStaff()) return toast('Создавать задачи могут модераторы и администраторы');
+  if (!isStaff()) return toast('Создавать задачи могут CEO и PM');
   const units = S.units.filter(u => !u.archived);
   if (!units.length) {
     toast('Сначала создайте юнит');
     return openCreateUnit();
   }
-  // opts.parent — родительская задача (декомпозиция вниз), opts.kind — тип карточки, opts.unitIds — из каких юнитов выбирать
-  const pool = opts.unitIds ? opts.unitIds.map(id => units.find(u => u.id === id)).filter(Boolean) : units; // юниты ниже — первыми
-  const inBoard = !!S.board && (!opts.unitId || opts.unitId === S.board.unit.id) && !opts.unitIds;
+  // opts.parent — родительская задача (подзадача: например, ручная задача под запросом CEO)
+  const inBoard = !!S.board && (!opts.unitId || opts.unitId === S.board.unit.id);
   // С дашборда для конкретного человека — его первый юнит, исполнитель и позиция подставлены
   const ownUnit = opts.assigneeId && units.find(u => (u.members || []).includes(opts.assigneeId));
-  let unit = inBoard ? S.board.unit : unitById(opts.unitId) || ownUnit || pool[0] || units[0];
+  let unit = inBoard ? S.board.unit : unitById(opts.unitId) || ownUnit || units[0];
   const draft = {
     status: opts.status || '', assigneeId: opts.assigneeId || '', dueDate: '', fields: {}, links: {}, teamId: '',
     departmentId: opts.departmentId || (S.filters.depts.length === 1 && inBoard ? S.filters.depts[0] : ''),
@@ -769,23 +725,13 @@ export function openCreateTask(opts = {}) {
     tplNote);
   const props = h('div', { class: 'grid2' });
 
-  // Декомпозиция (есть родитель): только «куда», название и описание — остальное раздают в юните, куда упадёт задача
-  const compact = !!opts.parent;
   const drawProps = () => {
     const B = unit.settings.builtins;
-    if (compact) {
-      fill(props, h('div', { style: { gridColumn: '1 / -1' } },
-        pool.length > 1 || !inBoard
-          ? field(opts.kind ? 'Юнит' : 'Куда передать', h('select', { class: 'inp', value: unit.id, onchange: e => { unit = unitById(e.target.value); } },
-            pool.map(u => h('option', { value: u.id }, u.name))), !opts.kind && 'Исполнителя, позицию и срок назначат в этом юните.')
-          : !opts.kind && h('p', { class: 'hint', style: { margin: 0 } }, 'Ниже этого юнита ещё нет команд — задача останется здесь. Команды ставятся ниже в их настройках: «Входит в».')));
-      return;
-    }
     fill(props, 
       !inBoard && field('Юнит', h('select', {
         class: 'inp', value: unit.id,
         onchange: e => { unit = unitById(e.target.value); drawProps(); },
-      }, pool.map(u => h('option', { value: u.id }, u.name + ' · ' + u.key)))),
+      }, units.map(u => h('option', { value: u.id }, u.name + ' · ' + u.key)))),
       field(B.status.label, h('select', { class: 'inp', value: draft.status || unit.settings.columns[0].id, onchange: e => { draft.status = e.target.value; } },
         unit.settings.columns.map(c => h('option', { value: c.id }, c.name)))),
       field('Команда', teamSelect(draft.teamId, v => {
@@ -823,16 +769,15 @@ export function openCreateTask(opts = {}) {
           oninput: e => { if (e.target.value.trim()) draft.links[f.id] = e.target.value.trim(); else delete draft.links[f.id]; },
         }))))));
   };
-  if (!compact) drawLinks();
+  drawLinks();
 
-  const kind = TASK_KINDS[opts.kind];
   const close = modal({
-    title: kind ? 'Новый ' + kind.label.toLowerCase() : opts.parent ? 'Задача в юнит ниже' : 'Новая задача',
-    wide: !compact,
+    title: opts.parent ? 'Подзадача' : 'Новая задача',
+    wide: true,
     body: [
       opts.parent && h('div', { class: 'parent-note' }, icon('tree', 13), 'Часть «', h('b', null, opts.parent.title), '»',
         h('span', { class: 'muted' }, ' · ' + opts.parent.key)),
-      !compact && tplRow, title, h('div', { style: { height: '10px' } }), desc, h('div', { style: { height: '14px' } }), props, linksBox],
+      tplRow, title, h('div', { style: { height: '10px' } }), desc, h('div', { style: { height: '14px' } }), props, linksBox],
     footLeft: more,
     actions: [
       { label: 'Отмена' },
@@ -842,8 +787,8 @@ export function openCreateTask(opts = {}) {
           if (!text) { title.focus(); return; }
           const { links, ...rest } = draft;
           const task = await send('createTask', {
-            unitId: unit.id, title: text, description: desc.value, ...(compact ? {} : rest),
-            parentId: opts.parent ? opts.parent.id : '', kind: opts.kind || '',
+            unitId: unit.id, title: text, description: desc.value, ...rest,
+            parentId: opts.parent ? opts.parent.id : '', appId: opts.parent && opts.parent.appId ? opts.parent.appId : '',
           });
           // ссылки — отдельной таблицей, после создания задачи
           task.links = {};

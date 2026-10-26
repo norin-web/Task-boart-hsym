@@ -6,12 +6,14 @@
  *   #/admin[?tab=…]          панель админа (модераторы и супер-админы)
  *   #/u/:unit[/list|/settings|/overview][?task=:id]
  */
-import { S, isStaff, loadBoardView } from './state.js';
+import { S, isStaff, loadBoardView, ceoDefault } from './state.js';
 import { $, h, fill, closeMenu, closeNav, showErr } from './ui.js';
 import { renderSidebar } from './views/sidebar.js';
 import { renderHome } from './views/home.js';
 import { renderMy } from './views/my.js';
 import { renderMyBoard } from './views/myboard.js';
+import { renderApps } from './views/apps.js';
+import { renderDev } from './views/dev.js';
 import { renderAdmin } from './views/admin.js';
 import { renderBoardView, loadBoard } from './views/board.js';
 import { renderSettings } from './views/settings.js';
@@ -26,6 +28,8 @@ export function parseLocation() {
   const task = new URLSearchParams(query || '').get('task');
   if (path === '/my') return { view: 'my' };
   if (path === '/board') return { view: 'myboard' };
+  if (path === '/apps') return { view: 'apps' };
+  if (path === '/dev') return { view: 'dev' };
   if (path === '/admin') return { view: 'admin', tab: new URLSearchParams(query || '').get('tab') || 'overview' };
   const m = /^\/u\/([\w-]+)(?:\/(list|settings|overview))?$/.exec(path);
   if (m) return { unit: m[1], mode: m[2] || 'board', task: task || null };
@@ -35,7 +39,7 @@ export function parseLocation() {
 export function routeUrl(r) {
   if (r.unit) return '#/u/' + r.unit + (r.mode && r.mode !== 'board' ? '/' + r.mode : '') + (r.task ? '?task=' + encodeURIComponent(r.task) : '');
   if (r.view === 'admin') return '#/admin' + (r.tab && r.tab !== 'overview' ? '?tab=' + r.tab : '');
-  return r.view === 'my' ? '#/my' : r.view === 'myboard' ? '#/board' : '#/';
+  return r.view === 'my' ? '#/my' : r.view === 'myboard' ? '#/board' : r.view === 'apps' ? '#/apps' : r.view === 'dev' ? '#/dev' : '#/';
 }
 
 export function navigate(r, { replace = false } = {}) {
@@ -87,15 +91,23 @@ export async function render() {
   closeNav();
   renderSidebar();
 
+  // CEO в режиме Default: только приложения — доски, «мои» и панель админа не показываем; задача — поверх
+  if (ceoDefault() && (r.unit || ['my', 'myboard', 'admin'].includes(r.view))) {
+    navigate({ view: 'apps' }, { replace: true });
+    if (r.unit && r.task) peekTask(r.unit, r.task);
+    return;
+  }
   if (!r.unit) {
     closePanel();
     S.board = null;
     if (r.view === 'admin' && !isStaff()) return navigate({ view: 'home' }, { replace: true });
-    const key = r.view === 'my' || r.view === 'myboard' ? r.view : r.view === 'admin' ? 'admin:' + (r.tab || 'overview') : 'home';
+    const view = ceoDefault() && !['apps', 'dev'].includes(r.view) ? 'apps' : r.view; // главная CEO в Default — приложения
+    const key = ['my', 'myboard', 'apps', 'dev'].includes(view) ? view : view === 'admin' ? 'admin:' + (r.tab || 'overview') : 'home';
     if (rendered !== key) {
       rendered = key;
-      document.title = (r.view === 'my' ? 'Мои задачи' : r.view === 'myboard' ? 'Моя доска' : r.view === 'admin' ? 'Панель админа' : 'Главная') + ' · Tasks';
-      if (r.view === 'my') renderMy(); else if (r.view === 'myboard') renderMyBoard(); else if (r.view === 'admin') renderAdmin(r.tab || 'overview'); else renderHome();
+      document.title = ({ my: 'Мои задачи', myboard: 'Моя доска', admin: 'Панель админа', apps: 'Приложения', dev: 'Режим разработчика' }[view] || 'Главная') + ' · Tasks';
+      if (view === 'my') renderMy(); else if (view === 'myboard') renderMyBoard(); else if (view === 'apps') renderApps(); else if (view === 'dev') renderDev();
+      else if (view === 'admin') renderAdmin(r.tab || 'overview'); else renderHome();
     }
     return;
   }

@@ -45,7 +45,6 @@ function noteText(kind, by) {
   if (kind === 'review') return who ? 'отправил(а) ' + who : 'от вас';
   if (kind === 'returned') return who ? 'вернул(а) ' + who : 'вернули';
   if (kind === 'approved') return who ? 'принял(а) ' + who : 'принято';
-  if (kind === 'handoff') return who ? 'передал(а) ' + who : 'передано';
   return who ? 'назначил(а) ' + who : 'назначено';
 }
 
@@ -77,7 +76,6 @@ function newsBlock() {
     n.kind === 'review' && h('span', { class: 'news-kind review', title: 'Задача пришла вам на ревью' }, icon('eye', 12), 'Ревью'),
     n.kind === 'returned' && h('span', { class: 'news-kind returned', title: 'Ревьюер вернул задачу вам' }, icon('back', 12), 'Вернули'),
     n.kind === 'approved' && h('span', { class: 'news-kind approved', title: 'Ревьюер принял работу — задача закрыта' }, icon('done', 12), 'Закрыта по ревью'),
-    n.kind === 'handoff' && h('span', { class: 'news-kind handoff', title: 'Сверху передали в работу — разложите на задачи' }, icon('app', 12), 'Новое приложение'),
     n.kind === 'overdue' && h('span', { class: 'news-kind overdue', title: 'Срок прошёл' }, icon('alert', 12), 'Просрочено'),
     n.kind === 'due_soon' && h('span', { class: 'news-kind soon', title: 'Срок скоро' }, icon('clock', 12), n.dueDate === todayStr() ? 'Срок сегодня' : 'Срок завтра'),
     h('span', { class: 'key-badge' }, n.key),
@@ -154,7 +152,7 @@ export async function renderHome() {
       ? h('div', { class: 'unit-grid' }, units.map(unitCard), h('button', { class: 'unit-card add', onclick: openCreateUnit }, icon('plus', 18), 'Новый юнит'))
       : h('div', { class: 'card-box empty-state' },
         h('h2', null, 'Создайте первый юнит'),
-        h('p', null, 'Юнит — это команда: своя доска и задачи, участники из разных отделов (ASO, Design, iOS…).'),
+        h('p', null, 'Юнит — направление студии (Gold, RF, MVP…): его приложения, PM, RM, лиды и сотрудники.'),
         h('div', { class: 'row', style: { justifyContent: 'center' } },
           h('button', { class: 'btn primary', onclick: openCreateUnit }, icon('plus', 15), 'Создать юнит'),
           mode === 'local' && h('button', { class: 'btn', onclick: e => fillDemo(e.currentTarget) }, icon('layers', 15), 'Заполнить демо-данными'))));
@@ -165,7 +163,7 @@ export async function renderHome() {
     { id: 'stats', title: 'Статистика задач', col: 'full', render: () => h('div', { class: 'stats' },
       stat('К выполнению', st.todo, 'circle', 'var(--st-todo)', t => t.statusKind === 'todo'),
       stat('В работе', st.in_progress, 'progress', 'var(--st-progress)', t => t.statusKind === 'progress'),
-      stat('Просрочено', st.overdue, 'alert', 'var(--danger)', t => t.statusKind !== 'done' && t.statusKind !== 'live' && t.dueDate && t.dueDate < todayStr()),
+      stat('Просрочено', st.overdue, 'alert', 'var(--danger)', t => t.statusKind !== 'done' && t.dueDate && t.dueDate < todayStr()),
       stat('Сделано за 7 дней', st.doneWeek, 'done', 'var(--st-done)', t => t.statusKind === 'done' && t.doneAt && t.doneAt >= weekAgo())) },
     { id: 'attention', title: 'Требует внимания', col: 'left', render: () => attentionBlock(ov) },
     { id: 'workload', title: 'Загрузка команды', col: 'left', render: () => workloadBlock(ov) },
@@ -424,7 +422,7 @@ function stat(label, value, ic, color, pick) {
 
 function statRow(t) {
   const due = t.dueDate && fmtDate(t.dueDate);
-  const late = t.statusKind !== 'done' && t.statusKind !== 'live' && t.dueDate && t.dueDate < todayStr();
+  const late = t.statusKind !== 'done' && t.dueDate && t.dueDate < todayStr();
   const p = personById(t.assigneeId);
   return h('button', { class: 'menu-item st-row', onclick: () => { closeMenu(); peekTask(t.unit.id, t.id); } },
     h('span', { class: 'unit-dot', style: { background: t.unit.color, margin: 0 } }),

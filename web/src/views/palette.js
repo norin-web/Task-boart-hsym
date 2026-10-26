@@ -4,7 +4,7 @@ import { call } from '../api.js';
 import { navigate } from '../router.js';
 import { openCreateTask, peekTask } from './task.js';
 import { openCreateUnit } from './units.js';
-import { openPeople, openShortcuts, openDepartments } from './people.js';
+import { openShortcuts } from './people.js';
 import { mode } from '../data.js';
 import { fillDemo } from './home.js';
 

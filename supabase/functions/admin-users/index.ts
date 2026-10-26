@@ -13,7 +13,7 @@ const CORS = {
 };
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
-const ACCESS = ['superadmin', 'moderator', 'member'];
+const ACCESS = ['superadmin', 'moderator', 'rm', 'lead', 'member']; // CEO, PM, RM, Lead, сотрудник
 const nowIso = () => new Date().toISOString();
 const newId = () => 'p_' + crypto.randomUUID().replace(/-/g, '').slice(0, 12);
 

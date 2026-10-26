@@ -1,184 +1,197 @@
 /**
- * Демо-данные для локального режима: 6 человек, 3 команды, 17 задач; иерархия Компания → Модераторы → команды с приложением.
- * В режиме Supabase не используется — там данные команды настоящие.
+ * Демо-процесс (Tasks 2.0): рабочий процесс по иерархии — CEO ставит приложения, PM раскладывают их по этапам,
+ * лиды и сотрудники делают и ревьюят, RM выпускает. Задействованы все роли и позиции, все состояния задач:
+ * не начато, в работе, на ревью, готово, заблокировано, релиз у RM; статусы приложений — от разработки до реджекта.
+ *   seedDemo()    — пустая локальная база: юниты Gold / RF / MVP, люди и процесс (обычные данные).
+ *   seedProcess() — режим разработчика: тот же процесс поверх текущей базы, всё с пометкой «тест»
+ *                   (недостающих людей и юниты добавляет). Только локальный режим.
  */
 import { getBackend, asSystem } from './data.js';
 import { LS } from './state.js';
 
-const D = { aso: 'd_aso', design: 'd_design', ios: 'd_ios', qa: 'd_qa', other: 'd_other' };
 const day = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 const cl = (...items) => items.map(([text, done]) => ({ text, done: !!done }));
 
-// ключ, имя, должность, email, роль, позиция
+// ключ, имя, должность, email, роль, позиция, команда, юниты
 const PEOPLE = [
-  ['anna', 'Анна Смирнова', 'Head of Product', 'anna', 'superadmin', ''],
-  ['oleg', 'Олег Никитин', 'Руководитель направления', 'oleg', 'moderator', ''],
-  ['dima', 'Дмитрий Козлов', 'iOS-разработчик', 'dima', 'member', 'd_ios'],
-  ['masha', 'Мария Иванова', 'Дизайнер', 'maria', 'member', 'd_design'],
-  ['pavel', 'Павел Орлов', 'ASO-специалист', 'pavel', 'member', 'd_aso'],
-  ['ira', 'Ирина Белова', 'Тестировщик', 'irina', 'member', 'd_qa'],
+  ['anna', 'Анна Смирнова', 'CEO', 'anna', 'superadmin', 'd_po', 't_product', []],
+  ['oleg', 'Олег Никитин', 'PM', 'oleg', 'moderator', 'd_po', 't_product', ['GLD']],
+  ['kate', 'Екатерина Соколова', 'PM', 'kate', 'moderator', 'd_po', 't_product', ['RF', 'MVP']],
+  ['sergey', 'Сергей Волков', 'Release Manager', 'sergey', 'rm', 'd_release', 't_release', ['GLD', 'RF', 'MVP']],
+  ['masha', 'Мария Иванова', 'Lead Design', 'maria', 'lead', 'd_design', 't_design', ['GLD', 'RF', 'MVP']],
+  ['dima', 'Дмитрий Козлов', 'Lead iOS', 'dima', 'lead', 'd_ios', 't_ios', ['GLD', 'RF', 'MVP']],
+  ['alex', 'Алексей Морозов', 'iOS-разработчик', 'alex', 'member', 'd_ios', 't_ios', ['GLD', 'RF', 'MVP']],
+  ['julia', 'Юлия Павлова', 'Дизайнер', 'julia', 'member', 'd_design', 't_design', ['GLD', 'RF', 'MVP']],
+  ['ira', 'Ирина Белова', 'Тестировщик', 'irina', 'member', 'd_qa', 't_qa', ['GLD', 'RF', 'MVP']],
+  ['pavel', 'Павел Орлов', 'ASO-специалист', 'pavel', 'member', 'd_aso', 't_aso', ['GLD', 'RF', 'MVP']],
 ];
 
 const UNITS = [
-  {
-    unit: { name: 'Alpha', key: 'ALP', color: '#6366f1', description: 'Команда фитнес-приложения: рост и удержание' },
-    columns: [
-      { id: 'todo', name: 'To Do', kind: 'todo' },
-      { id: 'in_progress', name: 'In Progress', kind: 'progress' },
-      { id: 'review', name: 'Review', kind: 'progress', color: '#8b5cf6' },
-      { id: 'done', name: 'Done', kind: 'done' },
-    ],
-    team: [['dima', 'ios'], ['masha', 'design'], ['pavel', 'aso'], ['ira', 'qa']],
-    tasks: [
-      { title: 'Обновить скриншоты в App Store под iOS 26', status: 'in_progress', who: 'masha', due: 3, prio: 'High',
-        desc: 'Новый стиль Liquid Glass. Нужны 6.9" и 6.5" размеры, RU и EN.\nРеференсы: https://example.com/refs',
-        cl: cl(['Концепт первого экрана', 1], ['Отрисовать 5 экранов', 1], ['Локализация EN'], ['Экспорт во всех размерах']),
-        comments: [['pavel', 'Первый экран — оффер со скидкой, по тестам он лучше конвертит'], ['masha', 'Ок, пересоберу к среде']] },
-      { title: 'Семантика: новые ключи для US', who: 'pavel', status: 'todo', due: -2, prio: 'High', dept: 'aso' },
-      { title: 'A/B-тест иконки', status: 'review', who: 'pavel', due: 5, prio: 'Medium',
-        cl: cl(['Три варианта иконки', 1], ['Запустить Product Page Optimization', 1], ['Собрать результаты']) },
-      { title: 'Экран онбординга: персональный план', status: 'in_progress', who: 'dima', due: 6, prio: 'High',
-        cl: cl(['Вёрстка SwiftUI', 1], ['Анимации'], ['Аналитика событий']), comments: [['anna', 'Не забудь событие onboarding_completed']] },
-      { title: 'Макеты paywall v2', status: 'review', who: 'masha', due: 1, prio: 'Medium' },
-      { title: 'Падение при открытии истории тренировок', status: 'todo', who: 'dima', due: -1, prio: 'High',
-        desc: 'Crashlytics: EXC_BAD_ACCESS в HistoryViewModel, 2.3% сессий на iOS 26.0.' },
-      { title: 'Ответы на отзывы за сентябрь', status: 'done', who: 'pavel', prio: 'Low' },
-      { title: 'Проверить онбординг на iPhone SE', status: 'todo', who: 'ira', due: 4, prio: 'Medium', comments: [['ira', 'Нужна тестовая сборка']] },
-      { title: 'Релиз 3.4 в App Store', status: 'done', who: 'dima', prio: 'High' },
-    ],
-  },
-  {
-    unit: { name: 'Bravo', key: 'BRV', color: '#ec4899', description: 'Команда медитаций: новый продукт с нуля' },
-    team: [['dima', 'ios'], ['masha', 'design'], ['pavel', 'aso']],
-    tasks: [
-      { title: 'MVP: плеер медитаций', status: 'in_progress', who: 'dima', due: 9, prio: 'High',
-        cl: cl(['Фоновое воспроизведение', 1], ['Таймер сна'], ['Виджет на экран блокировки']) },
-      { title: 'Дизайн-система: цвета и типографика', status: 'in_progress', who: 'masha', due: 4, prio: 'Medium' },
-      { title: 'Название и ключевые слова для стора', status: 'todo', who: 'pavel', due: 12, prio: 'Medium' },
-      { title: 'Тест-план для MVP', status: 'todo', dept: 'qa', due: 7, prio: 'Low' },
-      { title: 'Подписки: StoreKit 2', status: 'todo', who: 'dima', prio: 'High' },
-      { title: 'Исследование конкурентов', status: 'done', who: 'pavel', prio: 'Medium' },
-    ],
-  },
-  {
-    unit: { name: 'Charlie', key: 'CHR', color: '#10b981', description: 'Команда поддержки и развития старых приложений' },
-    team: [['dima', 'ios'], ['ira', 'qa']],
-    tasks: [
-      { title: 'Обновить SDK аналитики во всех приложениях', status: 'in_progress', who: 'dima', due: 2, prio: 'Medium' },
-      { title: 'Регресс перед релизом 2.8', status: 'todo', who: 'ira', due: 10, prio: 'Medium' },
-      { title: 'Миграция на Swift 6', status: 'todo', prio: 'Medium', dept: 'ios' },
-    ],
-  },
+  { name: 'Gold', key: 'GLD', color: '#d97706', description: 'Флагманские приложения: рост и удержание' },
+  { name: 'RF', key: 'RF', color: '#0ea5e9', description: 'Приложения для рынка RF' },
+  { name: 'MVP', key: 'MVP', color: '#10b981', description: 'Новые продукты: быстрые запуски' },
 ];
 
-/** Команда демо-человека по позиции (ASO — своя команда, если она есть). */
-const personTeam = (positionId, teams) => ({ d_ios: 't_ios', d_design: 't_design', d_qa: 't_qa', d_aso: teams.has('t_aso') ? 't_aso' : 't_other' })[positionId] || 't_other';
-
-/** Заполняет пустую локальную базу и делает текущим пользователем Анну (супер-админ). */
-export async function seedDemo() {
-  const annaId = await asSystem(seed);
-  LS.set('localActor', annaId);
-}
-
-async function seed() {
+const makeApi = () => {
   const backend = getBackend();
-  const api = async (method, payload, actorId = '') => {
+  return async (method, payload, actorId = '') => {
     const r = await backend.call(method, payload, { actorId });
     if (!r.ok) throw new Error(`${method}: ${r.error}`);
     return r.data;
   };
+};
 
-  const P = {};
-  const U = {};
-  const teams = new Set(((await api('bootstrap', {})).teams || []).map(t => t.id));
-  for (const [key, name, role, email, access, positionId] of PEOPLE) {
-    const team = access === 'member' ? personTeam(positionId, teams) : 't_product';
-    P[key] = await api('createPerson', { name, role, email: email + '@example.com', access, positionId: positionId || 'd_po', teamIds: teams.has(team) ? [team] : [] });
-  }
-
-  for (const def of UNITS) {
-    const u = await api('createUnit', def.unit);
-    if (def.columns) await api('updateUnit', { id: u.id, settings: { ...u.settings, columns: def.columns } });
-    for (const [who, dept] of def.team) await api('setMember', { unitId: u.id, personId: P[who].id, departmentId: D[dept] });
-    const prio = (await api('getBoard', { unitId: u.id })).fields.find(f => f.name === 'Приоритет');
-    const opt = name => prio.options.find(o => o.name === name).id;
-    for (const t of def.tasks) {
-      const task = await api('createTask', {
-        unitId: u.id, title: t.title, description: t.desc || '', status: t.status || 'todo',
-        assigneeId: t.who ? P[t.who].id : '', departmentId: t.dept ? D[t.dept] : '',
-        dueDate: t.due === undefined ? '' : day(t.due), fields: t.prio ? { [prio.id]: opt(t.prio) } : {}, checklist: t.cl || [],
-      }, P.anna.id);
-      for (const [who, text] of t.comments || []) await api('addComment', { taskId: task.id, text }, P[who].id);
-    }
-    U[def.unit.key] = u;
-  }
-
-  // Иерархия: Компания (приложения) → Модераторы (жизненный цикл) → команды Alpha/Bravo/Charlie
-  const ceo = await api('createUnit', { name: 'Компания', key: 'CEO', color: '#0f766e', description: 'Приложения компании: идея → в работу → запущено' });
-  const mod = await api('createUnit', { name: 'Модераторы', key: 'MOD', color: '#7c3aed', description: 'Жизненный цикл приложений, апдейты и реджекты' });
-  await api('updateUnit', { id: mod.id, parentId: ceo.id, settings: { ...mod.settings, columns: [
-    { id: 'brief', name: 'Бриф', kind: 'todo' }, { id: 'design', name: 'Дизайн', kind: 'progress', color: '#ec4899' },
-    { id: 'dev', name: 'Разработка', kind: 'progress', color: '#3b82f6' }, { id: 'qa', name: 'Тест', kind: 'progress', color: '#f59e0b' },
-    { id: 'store', name: 'Ревью стора', kind: 'progress', color: '#8b5cf6' }, { id: 'live', name: 'Релиз', kind: 'done' },
-  ] } });
-  await api('updateUnit', { id: ceo.id, settings: { ...ceo.settings,
-    columns: [{ id: 'idea', name: 'To Do', kind: 'todo' }, { id: 'go', name: 'In Progress', kind: 'progress' }, { id: 'launched', name: 'In Store', kind: 'live' }],
-    handoff: { column: 'go', unitId: mod.id } } });
-  for (const key of ['ALP', 'BRV', 'CHR']) await api('updateUnit', { id: U[key].id, parentId: mod.id });
-
-  const app = await api('createTask', { unitId: ceo.id, title: 'Sleep Sounds — новое приложение', status: 'idea', dueDate: day(45),
-    description: 'Звуки для сна: подписка, 30 звуков на старте, виджет. Рынки — US, UK.' }, P.anna.id);
-  await api('createTask', { unitId: ceo.id, title: 'Медитации для детей', status: 'idea', description: 'Идея на следующий квартал.' }, P.anna.id);
-  await api('updateTask', { id: app.id, patch: { status: 'go' } }, P.anna.id); // → карточка у модераторов
-  const card = (await api('getBoard', { unitId: mod.id })).tasks.find(t => t.parentId === app.id);
-  await api('updateTask', { id: card.id, patch: { status: 'design', assigneeId: P.oleg.id } }, P.oleg.id);
-  const kids = [
-    { unitId: U.ALP.id, title: 'Макеты онбординга и пейволла', assigneeId: P.masha.id, departmentId: D.design, status: 'in_progress', dueDate: day(4) },
-    { unitId: U.ALP.id, title: 'Каркас приложения и плеер', assigneeId: P.dima.id, departmentId: D.ios, dueDate: day(10) },
-    { unitId: U.BRV.id, title: 'Семантика и название для стора', assigneeId: P.pavel.id, departmentId: D.aso, status: 'done' },
-  ];
-  for (const k of kids) await api('createTask', { ...k, parentId: card.id }, P.oleg.id);
-  const upd = await api('createTask', { unitId: mod.id, title: 'Апдейт 1.1 · Sleep Sounds', kind: 'update', parentId: card.id, status: 'brief',
-    description: 'Таймер сна и новые звуки дождя.' }, P.oleg.id);
-  await api('createTask', { unitId: U.ALP.id, title: 'Таймер сна', parentId: upd.id, assigneeId: P.dima.id, departmentId: D.ios, dueDate: day(20) }, P.oleg.id);
-  await api('createTask', { unitId: mod.id, title: 'Реджект: Guideline 3.1.2 (подписка)', kind: 'reject', parentId: card.id, status: 'dev', dueDate: day(-1),
-    description: 'Нет ссылок на условия подписки на пейволле.' }, P.oleg.id);
-  return P.anna.id;
+/** Пустая локальная база: всё с нуля; после заполнения вы входите как Анна (CEO), режим разработчика — аккаунт «Разработчик». */
+export async function seedDemo() {
+  const annaId = await asSystem(async () => {
+    const api = makeApi();
+    const P = await addPeople(api);
+    const U = {};
+    for (const def of UNITS) U[def.key] = await api('createUnit', def);
+    await setupUnits(api, P, U);
+    await runProcess(api, P, U, false);
+    return P.anna.id;
+  });
+  LS.set('localActor', annaId);
 }
 
 /**
- * Тестовые люди в уже собранную базу (ничего не стирая): 6 демо-человек с позициями и командами.
- * Юниты-команды получают людей сами (по команде); обычные юниты нижнего уровня — всех участников.
- * Уже существующих (по email) пропускает. Возвращает число добавленных.
+ * Режим разработчика: демо-процесс поверх текущей базы — тестовые приложения и задачи (удаляются кнопкой
+ * «Удалить тестовые данные»). Недостающих людей и юниты Gold / RF / MVP добавляет. Возвращает число приложений.
  */
-export async function seedPeople() {
+export async function seedProcess() {
   return asSystem(async () => {
-    const backend = getBackend();
-    const api = async (method, payload) => {
-      const r = await backend.call(method, payload, {});
-      if (!r.ok) throw new Error(`${method}: ${r.error}`);
-      return r.data;
-    };
-    const boot = await api('bootstrap', {});
-    const teams = new Set((boot.teams || []).map(t => t.id));
-    const have = new Set(boot.people.map(p => (p.email || '').toLowerCase()));
-    const added = [];
-    for (const [, name, role, email, access, positionId] of PEOPLE) {
-      const mail = email + '@example.com';
-      if (have.has(mail)) continue;
-      const team = access === 'member' ? personTeam(positionId, teams) : 't_product';
-      added.push(await api('createPerson', {
-        name, role, email: mail, access, positionId: positionId || 'd_po', teamIds: teams.has(team) ? [team] : [],
-      }));
-    }
-    // обычные юниты без подъюнитов и не команды — всем участникам, чтобы им было что открыть
-    const units = boot.units.filter(u => !u.archived);
-    const leaves = units.filter(u => !u.teamId && !units.some(c => c.parentId === u.id));
-    for (const u of leaves) {
-      for (const p of added.filter(x => x.access === 'member')) {
-        await api('setMember', { unitId: u.id, personId: p.id, departmentId: p.positionId });
-      }
-    }
-    return added.length;
+    const api = makeApi();
+    const P = await addPeople(api);
+    const have = Object.fromEntries((await api('bootstrap', {})).units.filter(u => !u.archived).map(u => [u.key, u]));
+    const U = {};
+    for (const def of UNITS) U[def.key] = have[def.key] || await api('createUnit', def);
+    await setupUnits(api, P, U);
+    return runProcess(api, P, U, true);
   });
 }
+
+/** Люди процесса: существующие (по email) берутся как есть, недостающие создаются. { ключ → человек } */
+async function addPeople(api) {
+  const boot = await api('bootstrap', {});
+  const teams = new Set((boot.teams || []).map(t => t.id));
+  const byEmail = Object.fromEntries(boot.people.map(p => [(p.email || '').toLowerCase(), p]));
+  const P = {};
+  for (const [key, name, role, email, access, positionId, team] of PEOPLE) {
+    const mail = email + '@example.com';
+    P[key] = byEmail[mail] || await api('createPerson', { name, role, email: mail, access, positionId, teamIds: teams.has(team) ? [team] : [] });
+  }
+  return P;
+}
+
+/** Состав юнитов и ревью: дизайн проверяет лид дизайна, iOS — лид iOS, остальное — PM юнита. */
+async function setupUnits(api, P, U) {
+  for (const [key, , , , , positionId, , units] of PEOPLE) {
+    for (const k of units) await api('setMember', { unitId: U[k].id, personId: P[key].id, departmentId: positionId });
+  }
+  const pm = { GLD: P.oleg.id, RF: P.kate.id, MVP: P.kate.id };
+  for (const [k, u] of Object.entries(U)) {
+    const st = (await api('getBoard', { unitId: u.id })).unit.settings;
+    if (!st.columns.some(c => c.id === 'review')) continue; // свои колонки юнита не трогаем
+    await api('updateUnit', { id: u.id, settings: { ...st, review: { column: 'review', byPosition: { d_design: P.masha.id, d_ios: P.dima.id }, default: pm[k] } } });
+  }
+}
+
+/**
+ * Сам процесс. test — всё с пометкой «тест» (режим разработчика). Возвращает число созданных приложений.
+ * Кто что делает — от имени этого человека (actorId), права обходит системный режим.
+ */
+async function runProcess(api, P, U, test) {
+  const prio = (await api('getGlobalFields', {})).find(f => f.role === 'priority');
+  const opt = name => (prio ? { [prio.id]: prio.options.find(o => o.name === name).id } : {});
+  const act = (who, method, payload) => api(method, payload, P[who].id);
+  const move = (id, status, who) => act(who, 'updateTask', { id, patch: { status } });
+  const set = (id, patch, who) => act(who, 'updateTask', { id, patch });
+  const app = (name, unit, color, extra = {}) => act('anna', 'createApp', { name, unitId: U[unit].id, color, test, ...extra });
+  const steps = async (requestId, pm) => Object.fromEntries((await act(pm, 'decomposeRequest', { taskId: requestId })).map(t => [t.step, t]));
+  /** Всё до релиза закрыто, PM передал релиз RM; done — RM уже выпустил. */
+  const ship = async (s, pm, done) => {
+    for (const k of ['design', 'ios', 'qa', 'meta']) if (s[k]) await set(s[k].id, { status: 'done' }, s[k].assigneeId ? keyOf(P, s[k].assigneeId) : pm);
+    await act(pm, 'sendToRelease', { taskId: s.release.id });
+    await move(s.release.id, done ? 'done' : 'in_progress', 'sergey');
+  };
+  let apps = 0;
+
+  // ВЕРХ — CEO: Sleep Sounds (Gold), New App в самом разгаре.
+  // СЕРЕДИНА — PM Олег раскладывает по флоу. НИЗ — дизайнер сдаёт на ревью лиду, ASO параллельно, iOS/QA/релиз ждут.
+  const sleep = await app('Sleep Sounds', 'GLD', '#6366f1', { dueDate: day(40), description: 'Звуки для сна: подписка, 30 звуков на старте, виджет. Рынки — US, UK.' });
+  apps++;
+  const s1 = await steps(sleep.request.id, 'oleg');
+  await set(s1.design.id, { assigneeId: P.julia.id, checklist: cl(['Онбординг', 1], ['Пейволл', 1], ['Плеер', 1], ['Виджет']) }, 'oleg');
+  await move(s1.design.id, 'in_progress', 'julia');
+  await move(s1.design.id, 'review', 'julia'); // → ревью у лида дизайна (Мария)
+  await act('julia', 'addComment', { taskId: s1.design.id, text: 'Виджет догоню к четвергу, остальное можно смотреть' });
+  await set(s1.meta.id, { checklist: cl(['Семантика US', 1], ['Название и подзаголовок'], ['Описание']), fields: opt('Medium') }, 'oleg');
+  await move(s1.meta.id, 'in_progress', 'pavel');
+
+  // Fitness Coach (Gold): в сторе, идёт апдейт — дизайн у лида готов, iOS в работе, QA и релиз ждут
+  const fit = await app('Fitness Coach', 'GLD', '#ef4444', { requestTitle: 'Старт приложения' });
+  apps++;
+  const s0 = await steps(fit.request.id, 'oleg');
+  await ship(s0, 'oleg', true);
+  await move(fit.request.id, 'done', 'oleg');
+  await act('anna', 'updateApp', { id: fit.app.id, status: 'live' });
+  const upd = await act('anna', 'createRequest', { appId: fit.app.id, type: 'update', title: 'Апдейт 3.5: персональный план', dueDate: day(14),
+    description: 'Персональный план тренировок на онбординге, новые достижения.' });
+  const s2 = await steps(upd.id, 'oleg');
+  await move(s2.design.id, 'in_progress', 'masha');
+  await move(s2.design.id, 'done', 'masha');
+  await set(s2.ios.id, { assigneeId: P.alex.id, fields: opt('High'), checklist: cl(['Экран плана', 1], ['Достижения'], ['Аналитика']) }, 'oleg');
+  await move(s2.ios.id, 'in_progress', 'alex');
+
+  // Calm Rain (MVP): всё сделано — PM Катя передала релиз, RM Сергей выпускает
+  const calm = await app('Calm Rain', 'MVP', '#14b8a6', { dueDate: day(3), description: 'Звуки дождя: один экран, подписка.' });
+  apps++;
+  const s3 = await steps(calm.request.id, 'kate');
+  await ship(s3, 'kate', false);
+  await set(s3.release.id, { checklist: cl(['Сборка в TestFlight', 1], ['Скриншоты и мета в ASC', 1], ['Отправить на ревью']) }, 'sergey');
+
+  // Meditation Kids (RF): выпущено, на ревью Apple
+  const med = await app('Meditation Kids', 'RF', '#8b5cf6', { requestTitle: 'Старт приложения' });
+  apps++;
+  await ship(await steps(med.request.id, 'kate'), 'kate', true);
+  await move(med.request.id, 'done', 'kate');
+  await act('anna', 'updateApp', { id: med.app.id, status: 'review' });
+
+  // Weather Pro (RF): реджект Apple — CEO ставит задачу, PM отдаёт её лиду iOS (просрочено, не начато)
+  const wx = await app('Weather Pro', 'RF', '#0ea5e9', { requestTitle: 'Старт приложения' });
+  apps++;
+  await ship(await steps(wx.request.id, 'kate'), 'kate', true);
+  await move(wx.request.id, 'done', 'kate');
+  await act('anna', 'updateApp', { id: wx.app.id, status: 'reject' });
+  const rej = await act('anna', 'createRequest', { appId: wx.app.id, type: 'other', title: 'Реджект: Guideline 3.1.2 — условия подписки', dueDate: day(-1),
+    description: 'Apple: нет ссылок на условия подписки на пейволле. Исправить и отправить заново.' });
+  await move(rej.id, 'in_progress', 'kate');
+  await act('kate', 'createTask', { unitId: U.RF.id, title: 'Пейволл: ссылки на условия подписки', parentId: rej.id, appId: wx.app.id,
+    assigneeId: P.dima.id, departmentId: 'd_ios', dueDate: day(-1), fields: opt('Critical'), test });
+
+  // Habit Tracker (MVP): запрос только что пришёл — у PM во входящих, ещё не разложен
+  await app('Habit Tracker', 'MVP', '#10b981', { dueDate: day(60), description: 'Трекер привычек: стрики, напоминания, виджеты.' });
+  apps++;
+
+  // НИЗ — обычные задачи сотрудников во всех состояниях
+  const plain = [
+    ['GLD', 'Регресс перед релизом 3.5', 'ira', 'd_qa', 'todo', 6, 'Medium'],
+    ['GLD', 'Падение при открытии истории тренировок', 'alex', 'd_ios', 'review', 1, 'High'], // → ревью у лида iOS
+    ['GLD', 'Ответы на отзывы за октябрь', 'pavel', 'd_aso', 'done', null, 'Low'],
+    ['RF', 'Локализация скриншотов на RU', 'julia', 'd_design', 'in_progress', 4, 'Medium'],
+    ['RF', 'Тест-план для Meditation Kids 1.1', 'ira', 'd_qa', 'done', null, 'Medium'],
+    ['MVP', 'Исследование конкурентов: трекеры привычек', 'pavel', 'd_aso', 'in_progress', 5, 'Medium'],
+    ['MVP', 'Дизайн-система для новых продуктов', 'masha', 'd_design', 'todo', 12, 'Low'],
+  ];
+  for (const [u, title, who, dept, status, due, p] of plain) {
+    const t = await act('kate', 'createTask', { unitId: U[u].id, title, assigneeId: P[who].id, departmentId: dept, dueDate: due === null ? '' : day(due), fields: opt(p), test });
+    if (status !== 'todo') {
+      if (status !== 'in_progress') await move(t.id, 'in_progress', who);
+      await move(t.id, status, who);
+    }
+  }
+  return apps;
+}
+
+const keyOf = (P, id) => Object.keys(P).find(k => P[k].id === id) || 'anna';

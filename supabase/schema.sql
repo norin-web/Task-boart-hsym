@@ -28,11 +28,19 @@ create table if not exists app_settings (
   updated_at text not null default ''
 );
 
--- Иерархия: юнит → дочерние юниты (CEO → модераторы → команды); задача → дочерние задачи (декомпозиция вниз).
--- kind задачи: '' — обычная, app — приложение, update — апдейт, reject — реджект.
-alter table units add column if not exists parent_id text not null default '';
--- Юнит-команда внутри юнита (Design в MVP): к какой команде справочника относится — туда наборы задач кладут её задачи
-alter table units add column if not exists team_id text not null default '';
+-- Уборка прежней иерархии юнитов (App → Managers → MVP → юниты-команды; 2026-10): юниты теперь плоские
+-- (Gold / RF / MVP), приложения — отдельная сущность (таблица apps). Однократно и безопасно повторять.
+alter table units drop column if exists parent_id;
+alter table units drop column if exists team_id;
+update units set settings = settings - 'handoff' where settings ? 'handoff';
+-- колонки «в сторе» (live) были только у юнита приложений — теперь «В сторе» это статус приложения
+update units set settings = jsonb_set(settings, '{columns}', (
+  select jsonb_agg(case when c ->> 'kind' = 'live' then jsonb_set(c, '{kind}', '"done"') else c end order by i)
+    from jsonb_array_elements(settings -> 'columns') with ordinality x(c, i)))
+ where jsonb_typeof(settings -> 'columns') = 'array'
+   and exists (select 1 from jsonb_array_elements(settings -> 'columns') c where c ->> 'kind' = 'live');
+drop table if exists task_sets;
+delete from app_settings where key in ('taskSetsSeeded', 'appsLiveKind');
 
 create table if not exists fields (
   id           text primary key,
@@ -173,10 +181,13 @@ create table if not exists task_links (
 );
 create index if not exists task_links_unit on task_links(unit_id);
 
--- Уведомления человеку (пока одно: «на вас назначили задачу»). Пишет только триггер; читает и отмечает — сам человек.
+-- Задача → дочерние задачи (запрос CEO → этапы); kind: '' — задача, request — запрос CEO, stage — этап.
 alter table tasks add column if not exists parent_id text not null default '';
 alter table tasks add column if not exists kind text not null default '';
 create index if not exists tasks_parent on tasks(parent_id);
+update tasks set kind = '' where kind in ('app', 'update', 'reject'); -- прежняя иерархия
+
+-- Уведомления человеку (назначение, ревью, сроки). Пишет только триггер; читает и отмечает — сам человек.
 
 create table if not exists notifications (
   id        text primary key,
@@ -207,17 +218,6 @@ create table if not exists task_templates (
 alter table task_templates add column if not exists assignee_id text not null default '';
 alter table task_templates add column if not exists links jsonb not null default '{}';
 alter table task_templates add column if not exists team_id text not null default '';
-
--- Наборы задач для декомпозиции («Новое приложение — полный цикл»): «Разбить на задачи» создаёт сразу все
--- задачи набора в выбранном юните. Ведут администраторы и модераторы, видят все.
--- items: [{ title, teamId, positionId, dueDays (-1 — без срока), description }]
-create table if not exists task_sets (
-  id    text primary key,
-  name  text not null,
-  items jsonb not null default '[]',
-  ord   double precision not null default 0
-);
-
 
 -- ---------- атомарные операции ----------
 
@@ -379,32 +379,13 @@ begin
   return query select * from people where id = v_id;
 end $$;
 
--- Команда ASO (2026-10-26) — нужна наборам задач и командам внутри юнита; ASO-задачи набора — ей
+-- Команда ASO (2026-10-26)
 do $$ begin
   if not exists (select 1 from app_settings where key = 'teamAsoSeeded') then
     insert into teams (id, name, color, ord) values ('t_aso', 'ASO', '#f59e0b', 6) on conflict (id) do nothing;
     insert into app_settings (key, value, updated_at) values ('teamAsoSeeded', 'true'::jsonb, '') on conflict (key) do nothing;
   end if;
 end $$;
-update task_sets s set items = (
-  select jsonb_agg(case when e ->> 'positionId' = 'd_aso' and e ->> 'teamId' = 't_other' then jsonb_set(e, '{teamId}', '"t_aso"') else e end order by i)
-    from jsonb_array_elements(s.items) with ordinality x(e, i))
- where s.id = 'ts_new_app' and exists (select 1 from jsonb_array_elements(s.items) e where e ->> 'positionId' = 'd_aso' and e ->> 'teamId' = 't_other');
-
--- Однократно: набор «Новое приложение — полный цикл» (если его удалят — не возвращается).
-do $$ begin
-  if not exists (select 1 from app_settings where key = 'taskSetsSeeded') then
-    insert into task_sets (id, name, items, ord) values ('ts_new_app', 'Новое приложение — полный цикл', '[
-      {"title": "Дизайн", "teamId": "t_design", "positionId": "d_design", "dueDays": -1, "description": ""},
-      {"title": "Разработка iOS", "teamId": "t_ios", "positionId": "d_ios", "dueDays": -1, "description": ""},
-      {"title": "Тестирование", "teamId": "t_qa", "positionId": "d_qa", "dueDays": -1, "description": ""},
-      {"title": "ASO: стор и метаданные", "teamId": "t_aso", "positionId": "d_aso", "dueDays": -1, "description": ""},
-      {"title": "Релиз", "teamId": "t_release", "positionId": "d_release", "dueDays": -1, "description": ""}
-    ]'::jsonb, 1) on conflict (id) do nothing;
-    insert into app_settings (key, value, updated_at) values ('taskSetsSeeded', 'true'::jsonb, '') on conflict (key) do nothing;
-  end if;
-end $$;
-
 -- Однократно: общий «Приоритет» на все юниты; старые приоритеты юнитов сливаются в него.
 do $$
 declare
@@ -428,6 +409,75 @@ begin
   end if;
 end $$;
 
+-- ---------- Tasks 2.0: роли, приложения, этапы ----------
+-- Роли (people.access) в интерфейсе: superadmin — CEO (всё), moderator — PM (свои юниты), rm — релиз-менеджер,
+-- lead — лид (ревью своей позиции), member — сотрудник. Внутренние значения прежние — права в базе на них опираются.
+alter table people drop constraint if exists people_access_check;
+alter table people add constraint people_access_check check (access in ('superadmin', 'moderator', 'rm', 'lead', 'member'));
+
+-- Режим разработчика: переключение «смотреть как», шорткаты-сценарии и тестовые данные. Флаг ставит только система (SQL).
+alter table people add column if not exists is_dev boolean not null default false;
+create or replace function is_dev() returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce((select is_dev from people where user_id = auth.uid() and active limit 1), false);
+$$;
+
+-- Управляет юнитом: CEO — любым, PM — теми, где он в составе.
+create or replace function can_manage(p_unit text) returns boolean language sql stable set search_path = public as $$
+  select is_superadmin() or (my_access() = 'moderator' and is_unit_member(p_unit));
+$$;
+
+-- Приложение — постоянная сущность: юнит (Gold / RF / MVP), статус из настраиваемого списка (app_settings.appStatuses),
+-- инфо-поля. Задачи по приложению (запросы CEO и этапы) ссылаются на него через tasks.app_id.
+create table if not exists apps (
+  id         text primary key,
+  unit_id    text not null references units(id) on delete cascade,
+  name       text not null,
+  color      text not null default '',
+  status     text not null default '',
+  info       jsonb not null default '{}',
+  ord        double precision not null default 0,
+  archived   boolean not null default false,
+  is_test    boolean not null default false,
+  created_by text not null default '',
+  created_at text not null,
+  updated_at text not null
+);
+create index if not exists apps_unit on apps(unit_id);
+
+-- Задачи 2.0: приложение; запрос CEO (kind request, request_type new_app / update / other);
+-- этап декомпозиции (kind stage, step — ключ этапа флоу: design / ios / qa / meta / release…);
+-- depends_on — этапы, которые нужно закрыть раньше; is_test — создано шорткатом разработчика.
+alter table tasks add column if not exists app_id text not null default '';
+alter table tasks add column if not exists request_type text not null default '';
+alter table tasks add column if not exists step text not null default '';
+alter table tasks add column if not exists depends_on jsonb not null default '[]';
+alter table tasks add column if not exists is_test boolean not null default false;
+create index if not exists tasks_app on tasks(app_id);
+
+-- Статусы приложения по умолчанию; kind связывает статус с ходом работ (dev / release / review / live / reject, '' — свой).
+insert into app_settings (key, value, updated_at) values ('appStatuses', '[
+  {"id": "dev", "name": "В разработке", "color": "#6366f1", "kind": "dev"},
+  {"id": "release", "name": "Релиз", "color": "#8b5cf6", "kind": "release"},
+  {"id": "review", "name": "Ревью Apple", "color": "#f59e0b", "kind": "review"},
+  {"id": "live", "name": "В сторе", "color": "#0d9488", "kind": "live"},
+  {"id": "reject", "name": "Реджект", "color": "#ef4444", "kind": "reject"}
+]'::jsonb, '') on conflict (key) do nothing;
+
+-- Задача закрыта: её колонка — «готово».
+create or replace function task_done(p_task text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from tasks t join units u on u.id = t.unit_id, jsonb_array_elements(u.settings -> 'columns') c
+                  where t.id = p_task and c ->> 'id' = t.status and c ->> 'kind' = 'done');
+$$;
+
+-- Незакрытые этапы, от которых зависит задача (названия через запятую; null — всё закрыто).
+create or replace function open_deps(p_deps jsonb) returns text
+language sql stable security definer set search_path = public as $$
+  select string_agg(t.title, ', ' order by t.title) from tasks t
+   where t.id in (select jsonb_array_elements_text(coalesce(p_deps, '[]'::jsonb))) and not task_done(t.id);
+$$;
+
 -- ---------- проверки на уровне строк ----------
 
 create or replace function guard_tasks() returns trigger language plpgsql set search_path = public as $$
@@ -436,28 +486,45 @@ begin
   if app_system() then return new; end if;
   if tg_op = 'INSERT' then
     new.created_by := coalesce(my_person_id(), '');
-    -- «нужно при создании» — для задач, которые заводят вручную; дочерние (наборы «Разбить на задачи») уточняют потом
+    if new.is_test and not is_dev() then
+      raise exception 'Тестовые данные создаёт только режим разработчика' using errcode = '42501';
+    end if;
+    -- «нужно при создании» — для обычных задач, которые заводят вручную; запросы CEO и их этапы создаёт флоу
     select string_agg(f.name, ', ' order by f.ord) into missing from fields f
-     where new.parent_id = '' and (f.unit_id = new.unit_id or f.unit_id is null) and f.required_on_create and not f.archived
+     where new.parent_id = '' and new.kind = '' and (f.unit_id = new.unit_id or f.unit_id is null) and f.required_on_create and not f.archived
        and coalesce(new.fields -> f.id, 'null'::jsonb) in ('null'::jsonb, '""'::jsonb, '[]'::jsonb, 'false'::jsonb);
     if missing is not null then
       raise exception 'Заполните при создании: %', missing using errcode = 'P0001';
     end if;
     return new;
   end if;
-  if not is_staff() then
+  if new.is_test is distinct from old.is_test and not is_dev() then
+    raise exception 'Тестовые данные меняет только режим разработчика' using errcode = '42501';
+  end if;
+  -- Этап заблокирован, пока не закрыты этапы, от которых он зависит: из «не начато» его не сдвинуть (никому)
+  if new.status is distinct from old.status and new.depends_on <> '[]'::jsonb
+     and coalesce((select c ->> 'kind' from units u, jsonb_array_elements(u.settings -> 'columns') c
+                    where u.id = new.unit_id and c ->> 'id' = new.status), 'todo') <> 'todo' then
+    missing := open_deps(new.depends_on);
+    if missing is not null then
+      raise exception 'Этап заблокирован: сначала закройте «%»', missing using errcode = 'P0001';
+    end if;
+  end if;
+  if not can_manage(new.unit_id) then
     if new.title is distinct from old.title or new.assignee_id is distinct from old.assignee_id
        or new.due_date is distinct from old.due_date or new.unit_id is distinct from old.unit_id
        or new.department_id is distinct from old.department_id or new.archived is distinct from old.archived
        or new.num is distinct from old.num or new.created_by is distinct from old.created_by
        or new.team_id is distinct from old.team_id
-       or new.parent_id is distinct from old.parent_id or new.kind is distinct from old.kind then
-      raise exception 'Недостаточно прав: участник меняет только статус, описание, поля и чеклист своей задачи' using errcode = '42501';
+       or new.parent_id is distinct from old.parent_id or new.kind is distinct from old.kind
+       or new.app_id is distinct from old.app_id or new.step is distinct from old.step
+       or new.depends_on is distinct from old.depends_on or new.request_type is distinct from old.request_type then
+      raise exception 'Недостаточно прав: сотрудник меняет только статус, описание, поля и чеклист своей задачи' using errcode = '42501';
     end if;
     select string_agg(f.name, ', ') into missing from fields f
      where (f.unit_id = new.unit_id or f.unit_id is null) and f.staff_only and (new.fields -> f.id) is distinct from (old.fields -> f.id);
     if missing is not null then
-      raise exception 'Недостаточно прав: «%» меняют только администратор и модератор', missing using errcode = '42501';
+      raise exception 'Недостаточно прав: «%» меняют только CEO и PM', missing using errcode = '42501';
     end if;
     if new.status is distinct from old.status then
       -- поле юнита с колонкой required_from нужно при переносе в неё и правее;
@@ -472,16 +539,16 @@ begin
                   and coalesce((select i from cols where id = new.status), 0) >= coalesce((select i from cols where id = f.required_from), 0))
               or (f.unit_id is null
                   and array_position(array['todo', 'progress', 'done'],
-                                     (select case kind when 'live' then 'done' else kind end from cols where id = new.status))
+                                     (select kind from cols where id = new.status))
                       >= coalesce(array_position(array['todo', 'progress', 'done'], f.required_from), 1)))
          and coalesce(new.fields -> f.id, 'null'::jsonb) in ('null'::jsonb, '""'::jsonb, '[]'::jsonb, 'false'::jsonb);
       if missing is not null then
         raise exception 'Сначала заполните обязательные поля: %', missing using errcode = 'P0001';
       end if;
-      -- юнит может требовать закрытый чеклист перед «готово» (и «в сторе»)
+      -- юнит может требовать закрытый чеклист перед «готово»
       if exists (select 1 from units u, jsonb_array_elements(u.settings -> 'columns') c
                   where u.id = new.unit_id and coalesce((u.settings ->> 'checklistBeforeDone')::boolean, false)
-                    and c ->> 'id' = new.status and c ->> 'kind' in ('done', 'live'))
+                    and c ->> 'id' = new.status and c ->> 'kind' = 'done')
          and exists (select 1 from jsonb_array_elements(new.checklist) i where not coalesce((i ->> 'done')::boolean, false)) then
         raise exception 'Сначала закройте чеклист: в «готово» нельзя с невыполненными пунктами' using errcode = 'P0001';
       end if;
@@ -542,60 +609,21 @@ end $$;
 drop trigger if exists review_assign on tasks;
 create trigger review_assign before update on tasks for each row execute function review_assign();
 
--- Передача вниз (настройка юнита settings.handoff: {column, unitId}): задача пришла в колонку column —
--- в юните unitId появляется дочерняя карточка-приложение (kind app) с тем же названием, описанием, сроком,
--- общими полями и ссылками; модераторам — уведомление «handoff». Один раз на пару «задача — юнит».
--- Передать задачу в юнит ниже (передача вниз юнита): копия как есть — название, описание, срок, чеклист,
--- общие поля и ссылки; kind app, parent — эта задача. Один раз на пару «задача — юнит». Возвращает id копии.
-create or replace function handoff_copy(p_task text) returns text language plpgsql security definer set search_path = public as $$
-declare
-  t tasks;
-  target text;
-  v_id text;
-  v_status text;
-  v_actor text := coalesce(my_person_id(), '');
-  at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
-begin
-  select * into t from tasks where id = p_task;
-  if t.id is null then return null; end if;
-  select coalesce(settings -> 'handoff' ->> 'unitId', '') into target from units where id = t.unit_id;
-  if target = '' or not exists (select 1 from units where id = target and not archived) then return null; end if;
-  select id into v_id from tasks where parent_id = t.id and unit_id = target limit 1;
-  if v_id is not null then return v_id; end if;
-  select settings -> 'columns' -> 0 ->> 'id' into v_status from units where id = target;
-  v_id := 't_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12);
-  perform set_config('app.system', 'on', true);
-  insert into tasks (id, unit_id, num, title, description, status, assignee_id, department_id, due_date, ord,
-                     fields, checklist, archived, done_at, created_by, created_at, updated_at, parent_id, kind)
-  values (v_id, target, next_task_num(target), t.title, t.description, coalesce(v_status, 'todo'), '', '', t.due_date, 0,
-          (select coalesce(jsonb_object_agg(e.key, e.value), '{}'::jsonb) from jsonb_each(t.fields) e
-            where exists (select 1 from fields f where f.id = e.key and f.unit_id is null)),
-          t.checklist, false, '', v_actor, at_, at_, t.id, 'app');
-  insert into task_links (task_id, field_id, unit_id, url, updated_at)
-  select v_id, field_id, target, url, at_ from task_links where task_id = t.id;
-  insert into activity (id, unit_id, task_id, action, field, from_val, to_val, at)
-  values ('a_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), target, v_id, 'create', '', '', to_jsonb(t.title)::text, at_);
-  insert into notifications (id, person_id, task_id, kind, actor_id, at)
-  select 'n_' || substr(md5(random()::text || clock_timestamp()::text || p.id), 1, 12), p.id, v_id, 'handoff', v_actor, at_
-    from people p where p.active and p.access = 'moderator' and p.id <> v_actor;
-  perform set_config('app.system', 'off', true);
-  return v_id;
-end $$;
-
--- Передать вниз вручную (кнопка «Передать в …») — только администраторы.
-create or replace function do_handoff(p_task text) returns text language plpgsql security definer set search_path = public as $$
-begin
-  if not app_system() and not is_staff() then raise exception 'Передавать вниз могут администраторы' using errcode = '42501'; end if;
-  return handoff_copy(p_task);
-end $$;
+-- Прежняя передача вниз (юнит приложений → Managers) — убрана вместе с иерархией юнитов.
+drop trigger if exists handoff_task on tasks;
+drop function if exists handoff_task();
+drop function if exists do_handoff(text);
+drop function if exists handoff_copy(text);
 
 -- Дублировать задачу (администраторы): копия в том же юните и колонке — поля, чеклист, связи; без ревью.
 -- Копия, а не новая задача, поэтому «нужно при создании» не проверяется (значения берутся из оригинала).
 create or replace function duplicate_task(p_task text, p_id text, p_title text, p_ord double precision, p_at text) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  if not app_system() and not is_staff() then raise exception 'Недостаточно прав для этого действия' using errcode = '42501'; end if;
   if not exists (select 1 from tasks where id = p_task) then raise exception 'Задача не найдена' using errcode = 'P0001'; end if;
+  if not app_system() and not exists (select 1 from tasks where id = p_task and can_manage(unit_id)) then
+    raise exception 'Недостаточно прав для этого действия' using errcode = '42501';
+  end if;
   perform set_config('app.system', 'on', true);
   insert into tasks (id, unit_id, num, title, description, status, assignee_id, department_id, due_date, ord,
                      fields, checklist, archived, done_at, created_by, created_at, updated_at, parent_id, kind, team_id)
@@ -604,20 +632,6 @@ begin
     from tasks where id = p_task;
   perform set_config('app.system', 'off', true);
 end $$;
-
--- Задача пришла в колонку передачи (settings.handoff.column) — передаём вниз, кто бы её ни перенёс
--- (участник тоже: колонку ему разрешает юнит).
-create or replace function handoff_task() returns trigger language plpgsql security definer set search_path = public as $$
-declare ho jsonb;
-begin
-  if new.status is not distinct from old.status then return new; end if;
-  select settings -> 'handoff' into ho from units where id = new.unit_id;
-  if coalesce(ho ->> 'column', '') = '' or new.status <> ho ->> 'column' then return new; end if;
-  perform handoff_copy(new.id);
-  return new;
-end $$;
-drop trigger if exists handoff_task on tasks;
-create trigger handoff_task after update of status on tasks for each row execute function handoff_task();
 
 -- «Забрать из ревью»: тот, кто отправил задачу на ревью, возвращает её себе в колонку перед ревью
 -- (что-то забыл). Исполнителем снова становится он — это делает review_assign при выходе из колонки ревью.
@@ -667,12 +681,14 @@ declare
   v_kind text := 'assigned';
 begin
   if new.assignee_id is not distinct from v_old then return new; end if;
+  -- тестовые задачи (шорткаты разработчика) не беспокоят реальных людей
+  if new.is_test and not exists (select 1 from people where id = new.assignee_id and is_dev) then return new; end if;
   if tg_op = 'UPDATE' and new.status is distinct from old.status then
     if new.review_from <> '' and old.review_from = '' then v_kind := 'review';
     elsif old.review_from <> '' and new.review_from = '' and new.assignee_id = old.review_from then
       -- ревьюер принял работу (перенёс в «готово») — «закрыта по ревью», иначе — «вернули»
       v_kind := case when exists (select 1 from units u, jsonb_array_elements(u.settings -> 'columns') c
-                                   where u.id = new.unit_id and c ->> 'id' = new.status and c ->> 'kind' in ('done', 'live'))
+                                   where u.id = new.unit_id and c ->> 'id' = new.status and c ->> 'kind' = 'done')
                      then 'approved' else 'returned' end;
     end if;
   end if;
@@ -702,8 +718,9 @@ begin
     select t.id, t.due_date, case when t.due_date < p_today then 'overdue' else 'due_soon' end as kind
       from tasks t join units u on u.id = t.unit_id
      where t.assignee_id = v_me and not t.archived and not u.archived and t.due_date <> '' and t.due_date <= v_tomorrow
+       and (not t.is_test or is_dev())
        and not exists (select 1 from jsonb_array_elements(u.settings -> 'columns') c
-                        where c ->> 'id' = t.status and c ->> 'kind' in ('done', 'live'))
+                        where c ->> 'id' = t.status and c ->> 'kind' = 'done')
   ), fresh as (
     select d.* from due d
      where not exists (select 1 from notifications n
@@ -753,16 +770,20 @@ begin
   if app_system() then return new; end if;
   if tg_op = 'INSERT' then
     if new.access <> 'member' and not is_superadmin() then
-      raise exception 'Роль модератора или супер-админа назначает только супер-админ' using errcode = '42501';
+      raise exception 'Роли PM, RM, Lead и CEO назначает только CEO' using errcode = '42501';
     end if;
     new.user_id := null;  -- привязку к аккаунту делает только система
+    new.is_dev := false;  -- режим разработчика включает только система
     return new;
+  end if;
+  if new.is_dev is distinct from old.is_dev then
+    raise exception 'Режим разработчика включает только система' using errcode = '42501';
   end if;
   if new.user_id is distinct from old.user_id then
     raise exception 'Привязку к аккаунту меняет только система' using errcode = '42501';
   end if;
   if new.access is distinct from old.access and not is_superadmin() then
-    raise exception 'Роли меняет только супер-админ' using errcode = '42501';
+    raise exception 'Роли меняет только CEO' using errcode = '42501';
   end if;
   if not is_staff() and (new.email is distinct from old.email or new.position_id is distinct from old.position_id
                          or new.extra_positions is distinct from old.extra_positions or new.team_ids is distinct from old.team_ids
@@ -770,11 +791,11 @@ begin
     raise exception 'Email, позицию и доступ меняет администратор' using errcode = '42501';
   end if;
   if old.access = 'superadmin' and not is_superadmin() then
-    raise exception 'Профиль супер-админа меняет только супер-админ' using errcode = '42501';
+    raise exception 'Профиль CEO меняет только CEO' using errcode = '42501';
   end if;
   if old.access = 'superadmin' and old.active and (new.access <> 'superadmin' or not new.active)
      and not exists (select 1 from people where access = 'superadmin' and active and id <> old.id) then
-    raise exception 'Нельзя убрать последнего супер-админа' using errcode = 'P0001';
+    raise exception 'Нельзя убрать последнего CEO' using errcode = 'P0001';
   end if;
   return new;
 end $$;
@@ -787,7 +808,7 @@ create trigger guard_people before insert or update on people for each row execu
 create or replace function delete_unit(p_unit text) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  if not app_system() and not is_staff() then raise exception 'Недостаточно прав' using errcode = '42501'; end if;
+  if not app_system() and not is_superadmin() then raise exception 'Недостаточно прав' using errcode = '42501'; end if;
   delete from activity
    where task_id in (select id from tasks where unit_id = p_unit)
       or (unit_id = p_unit and task_id not in (select id from tasks));
@@ -804,7 +825,7 @@ declare
   n integer := 0;
   u record;
 begin
-  if not app_system() and not is_staff() then return 0; end if;
+  if not app_system() and not is_superadmin() then return 0; end if;
   select coalesce((value #>> '{}')::integer, 0) into days from app_settings where key = 'unitRetentionDays';
   if coalesce(days, 0) <= 0 then return 0; end if;
   cutoff := to_char((now() - make_interval(days => days)) at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
@@ -824,13 +845,13 @@ create or replace function delete_person(p_person text) returns void
 language plpgsql security definer set search_path = public as $$
 declare v people;
 begin
-  if not app_system() and not is_superadmin() then raise exception 'Удалять людей может только супер-админ' using errcode = '42501'; end if;
+  if not app_system() and not is_superadmin() then raise exception 'Удалять людей может только CEO' using errcode = '42501'; end if;
   select * into v from people where id = p_person;
   if v.id is null then raise exception 'Человек не найден' using errcode = 'P0001'; end if;
   if v.id = my_person_id() then raise exception 'Нельзя удалить самого себя' using errcode = 'P0001'; end if;
   if v.access = 'superadmin' and v.active
      and not exists (select 1 from people where access = 'superadmin' and active and id <> v.id) then
-    raise exception 'Нельзя удалить последнего супер-админа' using errcode = 'P0001';
+    raise exception 'Нельзя удалить последнего CEO' using errcode = 'P0001';
   end if;
   perform set_config('app.system', 'on', true);
   update tasks set assignee_id = '' where assignee_id = v.id;
@@ -887,16 +908,37 @@ create table if not exists my_board (
   primary key (person_id, task_id)
 );
 
--- Однократно: у юнитов приложений (с передачей вниз) колонка «готово» становится «в сторе» (live) —
--- приложения в круговороте, их не прячем, не архивируем и не считаем сделанными.
-do $$ begin
-  if not exists (select 1 from app_settings where key = 'appsLiveKind') then
-    update units set settings = jsonb_set(settings, '{columns}', (
-      select jsonb_agg(case when c ->> 'kind' = 'done' then jsonb_set(c, '{kind}', '"live"') else c end order by i)
-        from jsonb_array_elements(settings -> 'columns') with ordinality x(c, i)))
-     where coalesce(settings -> 'handoff' ->> 'unitId', '') <> '' and jsonb_typeof(settings -> 'columns') = 'array';
-    insert into app_settings (key, value, updated_at) values ('appsLiveKind', 'true'::jsonb, '') on conflict (key) do nothing;
+-- Приложение: переносит между юнитами только CEO; тестовые — только режим разработчика.
+create or replace function guard_apps() returns trigger language plpgsql set search_path = public as $$
+begin
+  if app_system() then return new; end if;
+  if tg_op = 'INSERT' then
+    new.created_by := coalesce(my_person_id(), '');
+    if new.is_test and not is_dev() then raise exception 'Тестовые данные создаёт только режим разработчика' using errcode = '42501'; end if;
+    return new;
   end if;
+  if new.unit_id is distinct from old.unit_id and not is_superadmin() then
+    raise exception 'Переносить приложение между юнитами может только CEO' using errcode = '42501';
+  end if;
+  if new.is_test is distinct from old.is_test and not is_dev() then
+    raise exception 'Тестовые данные меняет только режим разработчика' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+drop trigger if exists guard_apps on apps;
+create trigger guard_apps before insert or update on apps for each row execute function guard_apps();
+
+-- Удалить всё, что создали шорткаты разработчика (задачи и приложения с is_test). Возвращает число задач.
+create or replace function delete_test_data() returns integer
+language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  if not app_system() and not is_dev() then raise exception 'Только для режима разработчика' using errcode = '42501'; end if;
+  delete from activity where task_id in (select id from tasks where is_test);
+  delete from tasks where is_test;
+  get diagnostics n = row_count;
+  delete from apps where is_test;
+  return n;
 end $$;
 
 -- ---------- правила доступа (RLS) ----------
@@ -905,7 +947,7 @@ end $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['teams', 'units', 'fields', 'people', 'departments', 'unit_members', 'tasks', 'comments', 'activity', 'link_fields', 'task_links', 'notifications', 'task_templates', 'my_board'] loop
+  foreach t in array array['teams', 'units', 'fields', 'people', 'departments', 'unit_members', 'tasks', 'comments', 'activity', 'link_fields', 'task_links', 'notifications', 'task_templates', 'my_board', 'apps'] loop
     execute format('alter table %I enable row level security', t);
     execute format('drop policy if exists team_all on %I', t);
   end loop;
@@ -919,19 +961,26 @@ create policy settings_write on app_settings for all to authenticated using (is_
 
 -- Юниты, поля, состав: видят администраторы и участники юнита; меняют администраторы.
 drop policy if exists units_read on units;
-create policy units_read on units for select to authenticated using (is_staff() or is_unit_member(id));
+create policy units_read on units for select to authenticated using (is_superadmin() or is_unit_member(id));
 drop policy if exists units_write on units;
-create policy units_write on units for all to authenticated using (is_staff()) with check (is_staff());
+drop policy if exists units_insert on units;
+create policy units_insert on units for insert to authenticated with check (is_superadmin());
+drop policy if exists units_update on units;
+create policy units_update on units for update to authenticated using (can_manage(id)) with check (can_manage(id));
+drop policy if exists units_delete on units;
+create policy units_delete on units for delete to authenticated using (is_superadmin());
 
 drop policy if exists fields_read on fields;
-create policy fields_read on fields for select to authenticated using (is_staff() or unit_id is null or is_unit_member(unit_id));
+create policy fields_read on fields for select to authenticated using (is_superadmin() or unit_id is null or is_unit_member(unit_id));
 drop policy if exists fields_write on fields;
-create policy fields_write on fields for all to authenticated using (is_staff()) with check (is_staff());
+create policy fields_write on fields for all to authenticated
+  using (case when unit_id is null then is_superadmin() else can_manage(unit_id) end)
+  with check (case when unit_id is null then is_superadmin() else can_manage(unit_id) end);
 
 drop policy if exists members_read on unit_members;
-create policy members_read on unit_members for select to authenticated using (is_staff() or is_unit_member(unit_id));
+create policy members_read on unit_members for select to authenticated using (is_superadmin() or is_unit_member(unit_id));
 drop policy if exists members_write on unit_members;
-create policy members_write on unit_members for all to authenticated using (is_staff()) with check (is_staff());
+create policy members_write on unit_members for all to authenticated using (can_manage(unit_id)) with check (can_manage(unit_id));
 
 -- Позиции и люди видны всем вошедшим (имена исполнителей, авторов); меняют администраторы, свой профиль — сам человек.
 drop policy if exists departments_read on departments;
@@ -949,19 +998,20 @@ create policy people_update on people for update to authenticated
 
 -- Задачи: администраторы — все; участник — задачи своей позиции в своих юнитах и свои задачи.
 drop policy if exists tasks_read on tasks;
-create policy tasks_read on tasks for select to authenticated using (
-  is_staff() or assignee_id = my_person_id() or review_from = my_person_id() or reviewer_id = my_person_id()
+-- PM — задачи своих юнитов; тестовые задачи видит только режим разработчика.
+create policy tasks_read on tasks for select to authenticated using ((not is_test or is_dev()) and (
+  can_manage(unit_id) or assignee_id = my_person_id() or review_from = my_person_id() or reviewer_id = my_person_id()
   or (is_unit_member(unit_id) and ((department_id <> '' and department_id = any(my_positions()))
-                                     or (team_id <> '' and team_id = any(my_teams())))));
+                                     or (team_id <> '' and team_id = any(my_teams()))))));
 drop policy if exists tasks_insert on tasks;
-create policy tasks_insert on tasks for insert to authenticated with check (is_staff());
+create policy tasks_insert on tasks for insert to authenticated with check (can_manage(unit_id));
 drop policy if exists tasks_delete on tasks;
-create policy tasks_delete on tasks for delete to authenticated using (is_staff());
+create policy tasks_delete on tasks for delete to authenticated using (can_manage(unit_id));
 drop policy if exists tasks_update on tasks;
 -- После переноса в ревью/из ревью исполнитель меняется триггером — строка остаётся «своей» через review_from / reviewer_id
 create policy tasks_update on tasks for update to authenticated
-  using (is_staff() or assignee_id = my_person_id())
-  with check (is_staff() or assignee_id = my_person_id() or review_from = my_person_id() or reviewer_id = my_person_id());
+  using (can_manage(unit_id) or assignee_id = my_person_id())
+  with check (can_manage(unit_id) or assignee_id = my_person_id() or review_from = my_person_id() or reviewer_id = my_person_id());
 
 -- Поля-ссылки: названия видны всем (без значений), меняет набор только супер-админ.
 drop policy if exists link_fields_read on link_fields;
@@ -975,9 +1025,9 @@ create policy task_links_read on task_links for select to authenticated
   using (can_see_link(field_id) and exists (select 1 from tasks t where t.id = task_id));
 drop policy if exists task_links_write on task_links;
 create policy task_links_write on task_links for all to authenticated
-  using (can_see_link(field_id) and exists (select 1 from tasks t where t.id = task_id and (is_staff() or t.assignee_id = my_person_id())))
+  using (can_see_link(field_id) and exists (select 1 from tasks t where t.id = task_id and (can_manage(t.unit_id) or t.assignee_id = my_person_id())))
   with check (can_see_link(field_id) and exists (select 1 from tasks t where t.id = task_id and t.unit_id = task_links.unit_id
-    and (is_staff() or t.assignee_id = my_person_id())));
+    and (can_manage(t.unit_id) or t.assignee_id = my_person_id())));
 
 -- Команды: видят все, ведут администраторы и модераторы (как позиции).
 drop policy if exists teams_read on teams;
@@ -999,11 +1049,6 @@ begin
 end $$;
 
 -- Шаблоны: видят все вошедшие, ведут администраторы и модераторы.
-alter table task_sets enable row level security;
-drop policy if exists task_sets_read on task_sets;
-create policy task_sets_read on task_sets for select to authenticated using (true);
-drop policy if exists task_sets_write on task_sets;
-create policy task_sets_write on task_sets for all to authenticated using (is_staff()) with check (is_staff());
 drop policy if exists templates_read on task_templates;
 create policy templates_read on task_templates for select to authenticated using (true);
 drop policy if exists templates_write on task_templates;
@@ -1021,32 +1066,44 @@ drop policy if exists notifications_read on notifications;
 create policy notifications_read on notifications for update to authenticated
   using (person_id = my_person_id()) with check (person_id = my_person_id());
 
+-- Приложения: CEO — все; остальные — приложения своих юнитов. Создаёт и удаляет CEO, правит — CEO и PM юнита.
+drop policy if exists apps_read on apps;
+create policy apps_read on apps for select to authenticated
+  using ((not is_test or is_dev()) and (is_superadmin() or is_unit_member(unit_id)));
+drop policy if exists apps_insert on apps;
+create policy apps_insert on apps for insert to authenticated with check (is_superadmin());
+drop policy if exists apps_update on apps;
+create policy apps_update on apps for update to authenticated using (can_manage(unit_id)) with check (can_manage(unit_id));
+drop policy if exists apps_delete on apps;
+create policy apps_delete on apps for delete to authenticated using (is_superadmin());
+
 -- Комментарии: видны вместе с задачей; писать — администраторы и исполнитель; править/удалять — автор или администратор.
 drop policy if exists comments_read on comments;
 create policy comments_read on comments for select to authenticated using (exists (select 1 from tasks t where t.id = task_id));
 drop policy if exists comments_insert on comments;
 create policy comments_insert on comments for insert to authenticated
-  with check (exists (select 1 from tasks t where t.id = task_id and (is_staff() or t.assignee_id = my_person_id())));
+  with check (exists (select 1 from tasks t where t.id = task_id and (can_manage(t.unit_id) or t.assignee_id = my_person_id())));
 drop policy if exists comments_change on comments;
 create policy comments_change on comments for update to authenticated
-  using (is_staff() or author_id = my_person_id()) with check (is_staff() or author_id = my_person_id());
+  using (author_id = my_person_id() or exists (select 1 from tasks t where t.id = task_id and can_manage(t.unit_id)))
+  with check (author_id = my_person_id() or exists (select 1 from tasks t where t.id = task_id and can_manage(t.unit_id)));
 drop policy if exists comments_delete on comments;
-create policy comments_delete on comments for delete to authenticated using (is_staff() or author_id = my_person_id());
+create policy comments_delete on comments for delete to authenticated
+  using (author_id = my_person_id() or exists (select 1 from tasks t where t.id = task_id and can_manage(t.unit_id)));
 
 -- История: только чтение и добавление; удаляется только вместе с юнитом.
 drop policy if exists activity_read on activity;
 create policy activity_read on activity for select to authenticated
-  using (is_staff() or exists (select 1 from tasks t where t.id = task_id));
+  using (is_superadmin() or (task_id = '' and can_manage(unit_id)) or exists (select 1 from tasks t where t.id = task_id));
 drop policy if exists activity_insert on activity;
 -- Записать в историю можно только про задачу, с которой человек работает (исполнитель, отправивший на ревью, ревьюер);
 -- записи без задачи и про чужие задачи — только администраторы.
 create policy activity_insert on activity for insert to authenticated with check (
-  is_staff() or (task_id <> '' and exists (select 1 from tasks t where t.id = task_id and t.unit_id = activity.unit_id
-    and my_person_id() in (t.assignee_id, t.review_from, t.reviewer_id))));
+  is_superadmin() or (task_id = '' and can_manage(unit_id))
+  or (task_id <> '' and exists (select 1 from tasks t where t.id = task_id and t.unit_id = activity.unit_id
+    and (can_manage(t.unit_id) or my_person_id() in (t.assignee_id, t.review_from, t.reviewer_id)))));
 
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
 revoke execute on all functions in schema public from public, anon;
 grant execute on all functions in schema public to authenticated;
--- копия без проверки прав — только для триггера и do_handoff, напрямую не вызывается
-revoke execute on function handoff_copy(text) from authenticated;

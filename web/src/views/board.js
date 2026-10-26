@@ -1,14 +1,14 @@
 import Sortable from 'sortablejs';
 import {
-  S, LS, taskById, personById, activeFields, missingFor, missingNext, priorityOf, byPriority, visibleLinkFields, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder,
+  S, taskById, personById, activeFields, missingFor, missingNext, priorityOf, byPriority, visibleLinkFields, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder,
   between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, relTime, unitById, emptyCounts, freshFilters, saveBoardView,
-  activeDepts, deptById, KINDS, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS, descendantUnits, childUnits,
+  activeDepts, deptById, KINDS, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS,
 } from '../state.js';
 import { $, h, icon, avatar, topbar, menu, closeMenu, modal, field, confirmDlg, promptDlg, toast, showErr, statusDot, fill } from '../ui.js';
 import { call, send } from '../api.js';
 import { navigate, link } from '../router.js';
 import { updateSidebarCounts, renderUnread } from './sidebar.js';
-import { openTask, closePanel, openCreateTask, duplicateTask, deleteTaskUndoable, refreshPanel, openDecompose, decomposeMenu, peekTask, handoffUnit, handOff } from './task.js';
+import { openTask, closePanel, openCreateTask, duplicateTask, deleteTaskUndoable, refreshPanel } from './task.js';
 
 let sortables = [];
 let quickInput = null;
@@ -39,16 +39,13 @@ export function renderBoardView() {
       teamStack(),
     ], [
       h('div', { class: 'seg', role: 'tablist' },
-        childUnits(u.id).length > 0 && link({ unit: u.id, mode: 'overview' }, { class: mode === 'overview' ? 'on' : '', title: 'Задачи команд внутри юнита' }, icon('layers', 15), h('span', { class: 'btn-label' }, 'Сводка')),
         link({ unit: u.id, mode: 'board' }, { class: mode === 'board' ? 'on' : '', title: 'Доска' }, icon('board', 15), h('span', { class: 'btn-label' }, 'Доска')),
         link({ unit: u.id, mode: 'list' }, { class: mode === 'list' ? 'on' : '', title: 'Список' }, icon('list', 15), h('span', { class: 'btn-label' }, 'Список'))),
-      // юнит приложений (с передачей вниз): список всех приложений с этапом, апдейтами и прогрессом
-      isStaff() && u.settings.handoff && u.settings.handoff.unitId && h('button', { class: 'btn', onclick: () => openAllApps(u) }, icon('app', 15), h('span', { class: 'btn-label' }, 'All Apps')),
       isStaff() && link({ unit: u.id, mode: 'settings' }, { class: 'icon-btn', title: 'Настройки юнита' }, icon('settings', 17)),
       isStaff() && h('button', { class: 'btn primary', onclick: () => openCreateTask(), title: 'Новая задача (C)' }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Задача')),
     ]),
-    mode !== 'overview' && filterBar(),
-    h('div', { id: 'tasks', class: mode === 'list' || mode === 'overview' ? 'view-body' : 'board' }));
+    filterBar(),
+    h('div', { id: 'tasks', class: mode === 'list' ? 'view-body' : 'board' }));
   renderTasks();
 }
 
@@ -68,9 +65,8 @@ export function renderTasks() {
   const el = $('#tasks');
   if (!el || !S.board) return;
   saveBoardView(S.board.unit.id); // любое изменение фильтров/дорожек приходит сюда — запоминаем для этой доски
-  if (S.route.mode === 'overview') return renderOverview(el);
   if (S.route.mode === 'list') renderList(el);
-  else if (S.lanes && isStaff() && (S.lanes !== 'kind' || S.board.tasks.some(t => t.kind))) renderLanes(el);
+  else if (S.lanes && isStaff() && (S.lanes !== 'kind' || S.board.tasks.some(t => t.kind === 'request'))) renderLanes(el);
   else renderColumns(el);
   syncCounts();
 }
@@ -144,8 +140,8 @@ function filterRest() {
       class: 'fchip' + (S.lanes === true ? ' on' : ''), title: 'Разложить задачи по отделам',
       onclick: () => { S.lanes = S.lanes === true ? false : true; renderTasks(); drawFilterRest(); },
     }, icon('rows', 13), 'По отделам'),
-    S.route.mode === 'board' && isStaff() && S.board.tasks.some(t => t.kind) && h('button', {
-      class: 'fchip' + (S.lanes === 'kind' ? ' on' : ''), title: 'Приложения, апдейты, реджекты — отдельными дорожками',
+    S.route.mode === 'board' && isStaff() && S.board.tasks.some(t => t.kind === 'request') && h('button', {
+      class: 'fchip' + (S.lanes === 'kind' ? ' on' : ''), title: 'Запросы CEO — отдельной дорожкой над задачами',
       onclick: () => { S.lanes = S.lanes === 'kind' ? false : 'kind'; renderTasks(); drawFilterRest(); },
     }, icon('app', 13), 'По типу'),
     active && h('button', {
@@ -281,53 +277,19 @@ function renderColumns(board) {
   done();
 }
 
-/**
- * Сводка юнита с командами внутри (MVP → Design, iOS…): строки — команды, колонки — «Не начато / В работе / Готово»
- * (у команд колонки свои — показываем их название на карточке). Клик — задача поверх; перетаскивания нет.
- */
-async function renderOverview(el) {
-  const unitId = S.board.unit.id;
-  fill(el, h('div', { class: 'boot' }, h('span', { class: 'spinner' })));
-  let ov;
-  try { ov = await call('getUnitOverview', { unitId, today: todayStr() }); } catch (e) { return showErr(e); }
-  if (!S.board || S.board.unit.id !== unitId || S.route.mode !== 'overview') return;
-  const kinds = ['todo', 'progress', 'done'];
-  const card = (u, t) => {
-    const p = personById(t.assigneeId);
-    const due = dueInfo(t.dueDate, t.statusKind === 'done');
-    return h('button', { class: 'ov-card' + (t.statusKind === 'done' ? ' done' : ''), onclick: () => peekTask(u.id, t.id) },
-      h('div', { class: 'ov-title' }, t.title),
-      t.parent && h('div', { class: 'card-parent' }, icon('tree', 11), t.parent.title),
-      h('div', { class: 'ov-meta' },
-        h('span', { class: 'chip st-chip', style: { '--sc': t.statusColor || KIND_COLORS[t.statusKind] } }, t.statusName),
-        due && h('span', { class: 'due ' + due.cls }, icon('calendar', 11), due.text),
-        h('span', { class: 'spacer' }), p && avatar(p, 'sm')));
-  };
-  fill(el, h('div', { class: 'ov' },
-    h('div', { class: 'ov-head' }, h('span'), kinds.map(k => h('div', { class: 'ov-col-head', style: { '--cc': KIND_COLORS[k] } }, h('span', { class: 'dot', style: { background: KIND_COLORS[k] } }), KIND_LABELS[k]))),
-    ov.units.map(u => {
-      const open = u.tasks.filter(t => t.statusKind !== 'done').length;
-      return h('div', { class: 'ov-row' },
-        h('div', { class: 'ov-unit' },
-          link({ unit: u.id, mode: 'board' }, { class: 'ov-unit-link', title: 'Доска команды' }, h('span', { class: 'unit-dot', style: { background: u.color, margin: 0 } }), u.name, icon('arrow', 12)),
-          h('span', { class: 'muted' }, open ? open + ' в работе и к выполнению' : 'пусто')),
-        kinds.map(k => h('div', { class: 'ov-cell' }, u.tasks.filter(t => t.statusKind === k).map(t => card(u, t)))));
-    }),
-    !ov.units.length && h('div', { class: 'card-box empty-state' }, 'Команд внутри пока нет')));
-}
-
 /** Дорожки: строки по отделам, внутри — те же колонки. */
 function renderLanes(board) {
   const done = beginRender();
   board.classList.add('lanes');
   const cols = columns();
   const tasks = filterTasks();
-  // Дорожки по типу карточки (приложения / апдейты / реджекты / задачи) или по отделам
+  // Дорожки по типу (запросы CEO / задачи и этапы) или по отделам
   const byKind = S.lanes === 'kind';
+  const laneKind = t => (t.kind === 'request' ? 'request' : '');
   let lanes, orphan = [];
   if (byKind) {
-    lanes = [...Object.entries(TASK_KINDS).map(([id, k]) => ({ id, name: k.plural, color: k.color })),
-      { id: '', name: 'Задачи', color: 'var(--border-strong)' }].filter(l => tasks.some(t => (t.kind || '') === l.id));
+    lanes = [{ id: 'request', name: TASK_KINDS.request.plural, color: TASK_KINDS.request.color },
+      { id: '', name: 'Задачи', color: 'var(--border-strong)' }].filter(l => tasks.some(t => laneKind(t) === l.id));
   } else {
     lanes = activeDepts().map(d => ({ id: d.id, name: d.name, color: d.color }))
       .filter(l => !S.filters.depts.length || S.filters.depts.includes(l.id));
@@ -341,7 +303,7 @@ function renderLanes(board) {
     h('div', { class: 'lane-col-head add' }, addColumnBtn()));
 
   for (const lane of lanes) {
-    const inLane = byKind ? tasks.filter(t => (t.kind || '') === lane.id) : lane.id ? tasks.filter(t => t.departmentId === lane.id) : orphan;
+    const inLane = byKind ? tasks.filter(t => laneKind(t) === lane.id) : lane.id ? tasks.filter(t => t.departmentId === lane.id) : orphan;
     const collapsed = S.collapsedLanes.has(lane.id);
     grid.append(h('button', {
       class: 'lane-head' + (collapsed ? ' collapsed' : ''), style: { gridColumn: '1 / -1' },
@@ -413,6 +375,8 @@ function taskCard(t, inLane) {
   const cl = t.checklist || [];
   const clDone = cl.filter(i => i.done).length;
   const due = !B.dueDate.hidden && dueInfo(t.dueDate, taskDone(t));
+  // этап, который ждёт незакрытые предыдущие (зависимости — задачи этого же юнита)
+  const waits = taskDone(t) ? [] : (t.dependsOn || []).map(taskById).filter(d => d && !taskDone(d)).map(d => d.title.split(' · ')[0]);
   const foot = [
     due && h('span', { class: 'due ' + due.cls, title: due.hint }, icon('calendar', 12), due.text),
     t.tree && h('span', { class: 'meta-ic tree-ic' + (t.tree.done === t.tree.total ? ' done' : t.tree.overdue ? ' late' : ''),
@@ -443,12 +407,12 @@ function taskCard(t, inLane) {
       class: 'icon-btn sm card-more', title: 'Действия',
       onclick: e => { e.stopPropagation(); cardMenu(e.currentTarget, t); },
     }, icon('more'))),
-  // «↑ откуда»: родитель (иерархия); у карточки-приложения название как у родителя — тогда юнит родителя
-  t.parent && h('div', { class: 'card-parent', title: t.parent.unit.name + ' · ' + t.parent.key },
-    icon('tree', 11), t.parent.title === t.title ? 'из ' + t.parent.unit.name : t.parent.title),
-  // тип, позиция, поля и аватар — одной строкой; срок, чеклист, подзадачи, ссылки — строкой ниже, если есть
-  (TASK_KINDS[t.kind] || chips.length > 0 || (person && !foot.length)) && h('div', { class: 'chips card-row' },
+  // «↑ откуда»: родитель — запрос CEO у этапа, задача у подзадачи
+  t.parent && h('div', { class: 'card-parent', title: t.parent.unit.name + ' · ' + t.parent.key }, icon('tree', 11), t.parent.title),
+  // тип, «ждёт» (этап заблокирован), позиция, поля и аватар — одной строкой; срок, чеклист, подзадачи, ссылки — строкой ниже
+  (TASK_KINDS[t.kind] || waits.length > 0 || chips.length > 0 || (person && !foot.length)) && h('div', { class: 'chips card-row' },
     TASK_KINDS[t.kind] && h('span', { class: 'kind-tag', style: { '--kc': TASK_KINDS[t.kind].color } }, TASK_KINDS[t.kind].short),
+    waits.length > 0 && h('span', { class: 'wait-tag', title: 'Этап ждёт: ' + waits.join(', ') }, icon('lock', 11), 'ждёт'),
     chips, !foot.length && person && [h('span', { class: 'spacer' }), avatar(person, 'sm')]),
   foot.length > 0 && h('div', { class: 'card-foot' }, foot, h('span', { class: 'spacer' }), person && avatar(person, 'sm')));
 }
@@ -494,11 +458,6 @@ export function cardMenu(anchor, t) {
     ...(!B.department.hidden ? activeDepts().filter(d => d.id !== t.departmentId).map(d => h('button', {
       class: 'menu-item', onclick: () => { closeMenu(); patchTask(t, { departmentId: d.id }); },
     }, h('span', { class: 'dot', style: { background: d.color, margin: '0 4px' } }), d.name)) : []),
-    { sep: true },
-    handoffUnit(S.board.unit) ? { label: 'Передать в «' + handoffUnit(S.board.unit).name + '»', icon: 'arrow', action: () => handOff(t, () => reloadBoard()) }
-      : descendantUnits(S.board.unit.id).length > 0 && { label: 'Разбить на задачи…', icon: 'tree', action: () => setTimeout(() => decomposeMenu(anchor, t, () => reloadBoard()), 0) },
-    t.kind === 'app' && { label: 'Апдейт', icon: 'refresh', action: () => openDecompose(t, 'update', () => reloadBoard()) },
-    t.kind === 'app' && { label: 'Реджект', icon: 'alert', action: () => openDecompose(t, 'reject', () => reloadBoard()) },
     { sep: true },
     !B.assignee.hidden && S.meId && t.assigneeId !== S.meId && { label: 'Назначить на меня', icon: 'user', action: () => patchTask(t, { assigneeId: S.meId }) },
     !B.assignee.hidden && t.assigneeId && { label: 'Снять исполнителя', icon: 'x', action: () => patchTask(t, { assigneeId: '' }) },
@@ -765,52 +724,4 @@ export async function reloadBoard() {
   } catch (e) {
     showErr(e);
   }
-}
-
-/* ================= All Apps ================= */
-
-/**
- * Все приложения юнита — панелью справа: поиск, фильтр по колонке, где сейчас (здесь и у модераторов),
- * апдейты/реджекты, прогресс задач команд. Клик — карточка приложения (жизненный цикл) поверх.
- */
-async function openAllApps(u) {
-  const root = $('#panel-root');
-  let q = '', status = '';
-  const body = h('div', { class: 'up-body aa-body' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' })));
-  const close = () => { document.removeEventListener('keydown', onKey, true); fill(root); };
-  const onKey = e => { if (e.key === 'Escape' && !document.querySelector('.modal')) { e.stopPropagation(); close(); } };
-  document.addEventListener('keydown', onKey, true);
-  fill(root,
-    h('div', { class: 'panel-backdrop', onclick: close }),
-    h('aside', { class: 'panel unit-panel aa-panel', role: 'dialog', 'aria-label': 'All Apps' },
-      h('div', { class: 'panel-head' }, icon('app', 18), h('b', null, 'All Apps'), h('span', { class: 'muted' }, u.name), h('span', { class: 'spacer' }),
-        h('button', { class: 'icon-btn', title: 'Закрыть (Esc)', onclick: close }, icon('x', 18))),
-      body));
-  let apps;
-  try { apps = await call('getApps', { unitId: u.id }); } catch (e) { close(); return showErr(e); }
-  const search = h('input', { class: 'inp', type: 'search', placeholder: 'Найти приложение', oninput: e => { q = e.target.value.trim().toLowerCase(); draw(); } });
-  const list = h('div', { class: 'aa-list' });
-  const chips = h('div', { class: 'quick-chips' });
-  const row = a => h('button', { class: 'aa-row', onclick: () => { close(); peekTask(a.unitId, a.id); } },
-    h('div', { class: 'aa-top' },
-      h('b', { class: 'aa-title' }, a.title),
-      h('span', { class: 'chip st-chip', style: { '--sc': a.status.color || KIND_COLORS[a.status.kind] } }, a.status.name)),
-    h('div', { class: 'aa-meta' },
-      a.stage ? h('span', { title: 'Этап у ' + a.stage.unit }, icon('layers', 12), a.stage.unit + ': ', h('b', null, a.stage.name)) : h('span', { class: 'muted' }, 'ещё не в работе'),
-      a.updates > 0 && h('span', { class: a.updatesOpen ? 'aa-open' : 'muted', title: 'Апдейты (открыто ' + a.updatesOpen + ')' }, icon('refresh', 12), a.updates),
-      a.rejects > 0 && h('span', { class: a.rejectsOpen ? 'warn-text' : 'muted', title: 'Реджекты (открыто ' + a.rejectsOpen + ')' }, icon('alert', 12), a.rejects),
-      a.progress.total > 0 && h('span', { class: 'aa-prog', title: 'Задачи команд: ' + a.progress.done + ' из ' + a.progress.total },
-        h('span', { class: 'progress' }, h('span', { style: { width: Math.round(a.progress.done / a.progress.total * 100) + '%' } })),
-        a.progress.done + '/' + a.progress.total)));
-  const draw = () => {
-    const names = [...new Map(apps.map(a => [a.status.name, a.status])).values()];
-    fill(chips, h('button', { class: 'quick-chip' + (!status ? ' on' : ''), onclick: () => { status = ''; draw(); } }, 'Все · ' + apps.length),
-      names.map(st => h('button', { class: 'quick-chip' + (status === st.name ? ' on' : ''), onclick: () => { status = status === st.name ? '' : st.name; draw(); } },
-        h('span', { class: 'dot', style: { background: st.color || KIND_COLORS[st.kind] } }), st.name + ' · ' + apps.filter(a => a.status.name === st.name).length)));
-    const shown = apps.filter(a => (!status || a.status.name === status) && (!q || a.title.toLowerCase().includes(q)));
-    fill(list, shown.length ? shown.map(row) : h('p', { class: 'muted' }, apps.length ? 'Ничего не найдено' : 'Приложений пока нет'));
-  };
-  draw();
-  fill(body, search, chips, list);
-  search.focus();
 }

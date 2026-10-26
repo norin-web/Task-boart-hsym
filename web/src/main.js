@@ -1,5 +1,5 @@
 import './styles.css';
-import { S, me, setMe, todayStr } from './state.js';
+import { S, setMe, todayStr } from './state.js';
 import { $, h, icon, fill, closeMenu, closeNav, isMenuOpen, isModalOpen, refreshPresence } from './ui.js';
 import { call } from './api.js';
 import { initBackend, mode, supabase, localLogin } from './data.js';
@@ -61,7 +61,9 @@ async function boot() {
     if (mode === 'supabase') {
       const person = await call('whoami', {});
       if (!person || !person.active) return renderNoAccess();
-      setMe(person.id);
+      S.realMeId = person.id;
+      // режим разработчика: «смотреть как» — интерфейс другого человека (права остаются свои)
+      setMe(person.isDev && LS.get('viewAs', '') || person.id);
     } else {
       setMe(await localLogin(LS.get('localActor', '')).catch(() => localLogin('')));
       LS.set('localActor', S.meId);
@@ -73,7 +75,18 @@ async function boot() {
     if (d.teams) S.teams = d.teams;
     S.linkFields = d.linkFields || [];
     S.templates = d.templates || [];
-    S.taskSets = d.taskSets || [];
+    S.apps = d.apps || [];
+    S.appStatuses = d.appStatuses || [];
+    if (mode === 'local') {
+      // локально «Войти как» меняет и права; режим разработчика остаётся за тем, у кого он включён
+      const dev = S.people.find(p => p.isDev);
+      S.realMeId = dev ? dev.id : S.meId;
+    } else if (S.meId !== S.realMeId) {
+      const lens = S.people.find(p => p.id === S.meId && p.active);
+      if (!lens) { LS.set('viewAs', ''); setMe(S.realMeId); }
+      // интерфейс — как у него: только его юниты (CEO видит все)
+      else if (lens.access !== 'superadmin') S.units = S.units.filter(u => (u.members || []).includes(lens.id));
+    }
   } catch (e) {
     return fatal('Не удалось загрузить данные: ' + e.message);
   }
@@ -195,6 +208,12 @@ document.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
     e.preventDefault();
     openPalette();
+    return;
+  }
+  // режим разработчика: ⌥D / Alt+D — панель (смотреть как, шорткаты, тестовые данные)
+  if (e.altKey && e.code === 'KeyD' && !e.metaKey && !e.ctrlKey) {
+    e.preventDefault();
+    import('./views/dev.js').then(m => m.openDevPanel());
     return;
   }
   if (e.key === 'Escape') {

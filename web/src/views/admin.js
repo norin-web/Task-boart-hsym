@@ -3,17 +3,16 @@ import Sortable from 'sortablejs';
 import { AUTO_ARCHIVE, HIDE_DONE } from '../state.js';
 import { reviewSection, openFieldEditor, requiredLabel } from './settings.js';
 import { TYPE_LABELS } from '../state.js';
-import { S, LS, me, byOrder, unitById, emptyCounts, personById, todayStr, isSuper, ACCESS_LABELS, plural, LINK_KINDS, activeDepts, deptById, activeTeams, descendantUnits } from '../state.js';
+import { S, LS, me, byOrder, unitById, emptyCounts, personById, todayStr, isSuper, plural, LINK_KINDS, activeDepts, deptById, activeTeams } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, toast, confirmDlg, menu, modal, field } from '../ui.js';
 import { call, send } from '../api.js';
-import { currentView, link, navigate, rerender } from '../router.js';
+import { currentView, link, rerender } from '../router.js';
 import { renderSidebar } from './sidebar.js';
 import { attentionBlock, workloadBlock, roleBadge } from './home.js';
 import { peopleManager, positionsManager, teamsManager, addPersonDialog, teamChips, positionChips, addMemberDialog } from './people.js';
 import { openCreateTask } from './task.js';
-import { openStructureWizard } from './structure.js';
 import { activityFeed } from './feed.js';
-import { openCreateUnit, unitMenu, archiveUnit, deleteUnit } from './units.js';
+import { openCreateUnit, archiveUnit, deleteUnit } from './units.js';
 
 const TABS = [
   ['overview', 'Обзор', 'home'],
@@ -89,9 +88,10 @@ function overview(d, ov) {
   return h('div', { class: 'admin-overview' },
     h('div', { class: 'kpis' },
       kpi('Людей в команде', active.length, peopleList(active)),
-      kpi(ACCESS_LABELS.superadmin + 'ы', count('superadmin'), peopleList(active.filter(p => p.access === 'superadmin'))),
-      kpi(ACCESS_LABELS.moderator + 'ы', count('moderator'), peopleList(active.filter(p => p.access === 'moderator'))),
-      kpi('Участники', count('member'), peopleList(active.filter(p => p.access === 'member'))),
+      kpi('CEO', count('superadmin'), peopleList(active.filter(p => p.access === 'superadmin'))),
+      kpi('PM', count('moderator'), peopleList(active.filter(p => p.access === 'moderator'))),
+      kpi('RM и лиды', count('rm') + count('lead'), peopleList(active.filter(p => p.access === 'rm' || p.access === 'lead'))),
+      kpi('Сотрудники', count('member'), peopleList(active.filter(p => p.access === 'member'))),
       kpi('Юниты', units.length, unitList)),
     h('div', { class: 'home-grid' },
       h('div', { class: 'home-col' }, attentionBlock(ov), workloadBlock(ov, { all: true })),
@@ -107,10 +107,10 @@ function overview(d, ov) {
         h('section', null,
           h('div', { class: 'section-head' }, h('h2', null, 'Ваши права')),
           h('div', { class: 'card-box rights' },
-            right(true, 'Юниты, команды, задачи, поля и колонки'),
+            right(true, isSuper() ? 'Все юниты: задачи, поля, колонки, состав' : 'Свои юниты: задачи, поля, колонки, состав'),
             right(true, 'Люди: добавление, позиции, вход и отключение'),
-            right(isSuper(), 'Роли: назначение модераторов и супер-админов'),
-            right(isSuper(), 'Профили супер-админов'))))));
+            right(isSuper(), 'Приложения: создание, перенос между юнитами'),
+            right(isSuper(), 'Роли: PM, RM, Lead, CEO'))))));
 }
 
 /** Список у плитки обзора: открывается рядом, закрывается кликом мимо. */
@@ -191,15 +191,13 @@ function unitsTable(ov) {
         rv.length ? h('span', null, rv.map(p => p.name.split(' ')[0]).join(', ')) : h('span', { class: 'muted' }, '—')),
       icon('chevron', 15));
   }) : h('div', { class: 'card-box empty-state' },
-    h('h2', null, 'Структуры пока нет'),
-    h('p', { style: { margin: 0 } }, 'Соберите её по шагам: App → Managers → юниты → команды внутри → люди.'),
-    h('button', { class: 'btn primary', onclick: () => openStructureWizard(() => location.reload()) }, icon('tree', 15), 'Собрать структуру')));
+    h('h2', null, 'Юнитов пока нет'),
+    h('p', { style: { margin: 0 } }, 'Юниты — направления студии (Gold, RF, MVP…): в них приложения, PM, RM, лиды и сотрудники.'),
+    isSuper() && h('button', { class: 'btn primary', onclick: openCreateUnit }, icon('plus', 15), 'Создать юнит')));
   draw();
   return h('div', null,
     h('div', { class: 'section-head' }, unitsSwitch(false), h('div', { class: 'row', style: { gap: '6px' } },
-      units.length > 0 && h('button', { class: 'btn sm', title: 'App → Managers → юниты → команды → люди, по шагам', onclick: () => openStructureWizard(() => location.reload()) },
-        icon('tree', 14), units.some(u => u.parentId) ? 'Изменить структуру' : 'Собрать структуру'),
-      h('button', { class: 'btn primary sm', onclick: openCreateUnit }, icon('plus', 14), 'Юнит'))),
+      isSuper() && h('button', { class: 'btn primary sm', onclick: openCreateUnit }, icon('plus', 14), 'Юнит'))),
     list);
 }
 
@@ -431,7 +429,7 @@ function linkFieldsManager() {
   draw();
   return h('div', null,
     h('h2', { style: { marginTop: 0, fontSize: '16px' } }, 'Ссылки в карточке задачи'),
-    h('p', { class: 'hint', style: { marginTop: 0 } }, 'Общие для всех юнитов. Участник видит поле, только если оно открыто его позиции. Скрытые ссылки не уходят ему даже в браузер.'),
+    h('p', { class: 'hint', style: { marginTop: 0 } }, 'Общие для всех юнитов. Сотрудник видит поле, только если оно открыто его позиции. Скрытые ссылки не уходят ему даже в браузер.'),
     list,
     h('div', { class: 'sub-title' }, 'Добавить поле'),
     h('div', { class: 'lf-add' }, kindBtn, name, h('button', { class: 'btn primary', onclick: () => add().catch(showErr) }, icon('plus', 14), 'Добавить')));
@@ -440,71 +438,6 @@ function linkFieldsManager() {
 /* ---------- шаблоны задач ---------- */
 
 const DUE_DAYS = [[-1, 'Без срока'], [0, 'Сегодня'], [1, 'Завтра'], [2, 'Через 2 дня'], [3, 'Через 3 дня'], [5, 'Через 5 дней'], [7, 'Через неделю'], [14, 'Через 2 недели'], [30, 'Через месяц']];
-
-/** Наборы задач для «Разбить на задачи»: карточка раскладывается сразу на все задачи набора в выбранном юните. */
-function taskSetsManager() {
-  const list = h('div', { class: 'lf-list' });
-  const remove = async s => {
-    if (!(await confirmDlg(`Удалить набор «${s.name}»? Уже созданные по нему задачи останутся.`, { ok: 'Удалить', danger: true }))) return;
-    await send('deleteTaskSet', { id: s.id });
-    S.taskSets = S.taskSets.filter(x => x !== s);
-    draw();
-  };
-  const row = s => h('div', { class: 'lf-row' },
-    h('button', { class: 'tpl-open', onclick: () => editTaskSet(s, draw) },
-      h('span', { class: 'tpl-name' }, s.name),
-      h('span', { class: 'tpl-meta' }, s.items.map(it => {
-        const tm = S.teams.find(x => x.id === it.teamId);
-        return h('span', { class: 'chip', title: tm ? tm.name : '', style: tm ? { background: `color-mix(in srgb, ${tm.color} 16%, transparent)`, color: tm.color } : null }, it.title);
-      }))),
-    h('button', { class: 'icon-btn sm', title: 'Изменить', onclick: () => editTaskSet(s, draw) }, icon('edit', 14)),
-    h('button', { class: 'icon-btn sm', title: 'Удалить', onclick: () => remove(s).catch(showErr) }, icon('trash', 15)));
-  const draw = () => fill(list, S.taskSets.length ? [...S.taskSets].sort(byOrder).map(row) : h('p', { class: 'muted', style: { padding: '12px 14px', margin: 0 } }, 'Наборов пока нет'));
-  draw();
-  return h('div', null,
-    h('div', { class: 'section-head' }, h('h2', { style: { margin: 0, fontSize: '16px' } }, 'Наборы задач'),
-      h('button', { class: 'btn primary sm', onclick: () => editTaskSet(null, draw) }, icon('plus', 14), 'Набор')),
-    h('p', { class: 'hint', style: { marginTop: 0 } }, '«Разбить на задачи» в карточке: выбираете юнит и набор — создаются сразу все задачи набора, каждая со своей командой и позицией. Исполнителей назначают в юните.'),
-    list);
-}
-
-function editTaskSet(s, onSaved) {
-  const name = h('input', { class: 'inp', value: s ? s.name : '', maxlength: 80, placeholder: 'Например, Новое приложение — полный цикл' });
-  const items = s ? s.items.map(it => ({ ...it })) : [{ title: '', teamId: '', positionId: '', dueDays: -1, description: '' }];
-  const rows = h('div', { class: 'set-rows' });
-  const select = (value, options, onChange, empty) => h('select', { class: 'inp sm', value, onchange: e => onChange(e.target.value) },
-    h('option', { value: '' }, empty), options.map(([v, t]) => h('option', { value: String(v) }, t)));
-  const draw = () => fill(rows, items.map((it, i) => h('div', { class: 'set-row', dataset: { i } },
-    h('span', { class: 'drag', title: 'Перетащите, чтобы изменить порядок' }, icon('grip', 15)),
-    h('input', { class: 'inp sm', value: it.title, maxlength: 200, placeholder: 'Задача, например Дизайн', oninput: e => { it.title = e.target.value; } }),
-    select(it.teamId, activeTeams().map(t => [t.id, t.name]), v => { it.teamId = v; }, 'Команда'),
-    select(it.positionId, activeDepts().map(d => [d.id, d.name]), v => { it.positionId = v; }, 'Позиция'),
-    h('select', { class: 'inp sm', value: String(it.dueDays), onchange: e => { it.dueDays = Number(e.target.value); } }, DUE_DAYS.map(([v, t]) => h('option', { value: String(v) }, t))),
-    h('button', { class: 'icon-btn sm', title: 'Убрать', onclick: () => { items.splice(i, 1); draw(); } }, icon('x', 14)))));
-  draw();
-  Sortable.create(rows, {
-    handle: '.drag', animation: 150, forceFallback: true, fallbackTolerance: 4,
-    onEnd: e => { items.splice(e.newIndex, 0, items.splice(e.oldIndex, 1)[0]); draw(); },
-  });
-  modal({
-    title: s ? `Набор «${s.name}»` : 'Новый набор задач', wide: true,
-    body: [
-      field('Название', name),
-      h('div', { class: 'sub-title' }, 'Задачи набора'),
-      h('p', { class: 'hint', style: { marginTop: '-4px' } }, 'К названию добавится название карточки: «Дизайн · New App». Команда и позиция — кому видна задача в юните.'),
-      rows,
-      h('button', { class: 'btn sm', style: { marginTop: '8px' }, onclick: () => { items.push({ title: '', teamId: '', positionId: '', dueDays: -1, description: '' }); draw(); rows.lastChild.querySelector('input').focus(); } }, icon('plus', 13), 'Задача'),
-    ],
-    actions: [{ label: 'Отмена' }, {
-      label: s ? 'Сохранить' : 'Создать набор', primary: true, action: async close => {
-        const saved = await send('saveTaskSet', { id: s ? s.id : '', name: name.value, items: items.filter(it => it.title.trim()) });
-        if (s) Object.assign(s, saved); else S.taskSets.push(saved);
-        close();
-        onSaved();
-      },
-    }],
-  });
-}
 
 /** Шаблоны задач: общие для всех юнитов. Порядок — перетаскиванием, правка — в окне. */
 function templatesManager() {
@@ -643,7 +576,6 @@ function automationsTab() {
   return h('div', { class: 'auto-page' },
     h('div', { class: 'card-box' }, globalFieldsManager()),
     isSuper() && h('div', { class: 'card-box' }, linkFieldsManager()),
-    h('div', { class: 'card-box' }, taskSetsManager()),
     h('div', { class: 'card-box' }, templatesManager()),
     h('div', { class: 'card-box' }, unitRules()),
     h('div', { class: 'card-box' }, autoNotes()));
@@ -678,40 +610,10 @@ function unitRules() {
         : h('span', { class: 'warn-text', title: 'Выберите ревьюеров' }, icon('alert', 13), 'нет ревьюеров'));
   };
   const editReview = u => openReviewEditor(u, draw);
-  /** Передача вниз: задача пришла в колонку — у выбранного юнита появляется карточка-приложение. */
-  const handoffText = u => {
-    const ho = u.settings.handoff || {};
-    const col = ho.column && u.settings.columns.find(c => c.id === ho.column);
-    const to = ho.unitId && unitById(ho.unitId);
-    if (!col || !to) return h('span', { class: 'muted' }, 'выключено');
-    return h('span', { class: 'rv-sum' }, h('b', null, col.name), ' → ', h('span', { class: 'unit-dot', style: { background: to.color, margin: 0 } }), to.name);
-  };
-  const editHandoff = u => {
-    const ho = u.settings.handoff || {};
-    const col = h('select', { class: 'inp', value: ho.column || '' }, h('option', { value: '' }, 'Не передавать'),
-      u.settings.columns.map(c => h('option', { value: c.id }, `Когда задача в «${c.name}»`)));
-    const kids = descendantUnits(u.id);
-    const target = h('select', { class: 'inp', value: ho.unitId || (kids[0] || {}).id || '' },
-      (kids.length ? kids : units().filter(x => x.id !== u.id)).map(x => h('option', { value: x.id }, x.name)));
-    modal({
-      title: `Передача вниз · ${u.name}`,
-      body: [
-        h('p', { class: 'hint', style: { marginTop: 0 } }, 'Задача пришла в выбранную колонку — в юните ниже появляется её карточка-приложение (название, описание, срок, общие поля и ссылки), модераторам — уведомление. Один раз на задачу.'),
-        h('div', { class: 'grid2' }, field('Колонка', col), field('Куда передать', target)),
-        !kids.length && h('p', { class: 'hint' }, 'У юнита нет юнитов ниже — их задают в настройках юнита («Входит в»).'),
-      ],
-      actions: [{ label: 'Отмена' }, {
-        label: 'Сохранить', primary: true,
-        action: async close => { await save(u, { handoff: col.value ? { column: col.value, unitId: target.value } : { column: '', unitId: '' } }); close(); },
-      }],
-    });
-  };
   const row = u => h('div', { class: 'ur-row' },
     h('div', { class: 'ur-unit' }, h('span', { class: 'uc-icon sm', style: { background: u.color } }, u.key.slice(0, 2)), h('b', null, u.name)),
     h('button', { class: 'ur-cell ur-review', title: 'Настроить ревью', onclick: () => editReview(u) }, reviewText(u), icon('edit', 13)),
-    h('button', { class: 'ur-cell ur-review', title: 'Передача задач на уровень ниже', onclick: () => editHandoff(u) },
-      h('span', { class: 'ur-mobile ur-label' }, 'Передать вниз'), handoffText(u), icon('edit', 13)),
-    h('label', { class: 'ur-cell ur-check', title: 'Участник не перенесёт в «готово», пока в чеклисте есть открытые пункты' },
+    h('label', { class: 'ur-cell ur-check', title: 'Сотрудник не перенесёт в «готово», пока в чеклисте есть открытые пункты' },
       h('input', { type: 'checkbox', checked: !!u.settings.checklistBeforeDone, onchange: e => save(u, { checklistBeforeDone: e.target.checked }).catch(showErr) }),
       h('span', { class: 'ur-mobile' }, 'Чеклист перед «готово»')),
     h('div', { class: 'ur-cell' }, h('span', { class: 'ur-mobile ur-label' }, 'Готовые на доске'),
@@ -722,9 +624,9 @@ function unitRules() {
         AUTO_ARCHIVE.map(d => h('option', { value: String(d) }, d ? `через ${d} дн.` : 'выключен')))));
   const draw = () => fill(box,
     h('div', { class: 'section-head' }, h('h2', { style: { margin: 0, fontSize: '16px' } }, 'Правила юнитов')),
-    h('p', { class: 'hint', style: { marginTop: 0 } }, 'Ревью — задача в колонке ревью уходит ревьюеру своей позиции и возвращается исполнителю. Передать вниз — задача из колонки появляется карточкой-приложением у юнита ниже. Чеклист — в «готово» только с закрытым чеклистом. Готовые на доске — сколько дней держать выполненные. Меняется сразу.'),
+    h('p', { class: 'hint', style: { marginTop: 0 } }, 'Ревью — задача в колонке ревью уходит ревьюеру своей позиции и возвращается исполнителю. Чеклист — в «готово» только с закрытым чеклистом. Готовые на доске — сколько дней держать выполненные. Меняется сразу.'),
     units().length ? h('div', { class: 'ur-list' },
-      h('div', { class: 'ur-row ur-head' }, h('span', null, 'Юнит'), h('span', null, 'Ревью'), h('span', null, 'Передать вниз'), h('span', null, 'Чеклист перед «готово»'),
+      h('div', { class: 'ur-row ur-head' }, h('span', null, 'Юнит'), h('span', null, 'Ревью'), h('span', null, 'Чеклист перед «готово»'),
         h('span', null, 'Готовые на доске'), h('span', null, 'Автоархив')),
       units().map(row)) : h('p', { class: 'muted' }, 'Юнитов пока нет'));
   draw();

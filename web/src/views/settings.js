@@ -1,6 +1,6 @@
 import Sortable from 'sortablejs';
-import { S, TYPE_LABELS, PALETTE, unitById, byOrder, descendantUnits, KINDS, KIND_LABELS, KIND_COLORS, colColor, personById, activeDepts, deptById } from '../state.js';
-import { $, h, icon, avatar, field, topbar, menu, closeMenu, modal, confirmDlg, toast, showErr, colorPicker, statusDot, fill } from '../ui.js';
+import { S, TYPE_LABELS, PALETTE, unitById, byOrder, KINDS, KIND_LABELS, KIND_COLORS, colColor, personById, activeDepts } from '../state.js';
+import { $, h, icon, avatar, field, topbar, menu, closeMenu, modal, confirmDlg, toast, showErr, colorPicker, fill } from '../ui.js';
 import { send } from '../api.js';
 import { link } from '../router.js';
 import { renderSidebar } from './sidebar.js';
@@ -16,13 +16,6 @@ export function renderSettings() {
   const key = h('input', { class: 'inp mono', value: u.key, maxlength: 10, oninput: e => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); } });
   const color = colorPicker(u.color);
   const desc = h('textarea', { class: 'inp', rows: 2, value: u.description, maxlength: 1000 });
-  // Уровень в иерархии: юнит внутри другого (CEO → модераторы → команды); себя и своих потомков выбрать нельзя
-  const blocked = new Set([u.id, ...descendantUnits(u.id).map(x => x.id)]);
-  const parent = h('select', { class: 'inp', value: u.parentId || '' }, h('option', { value: '' }, '— верхний уровень —'),
-    S.units.filter(x => !x.archived && !blocked.has(x.id)).sort(byOrder).map(x => h('option', { value: x.id }, x.name)));
-  // Юнит-команда (Design в MVP): к какой команде справочника относится — сюда наборы задач кладут её задачи
-  const team = h('select', { class: 'inp', value: u.teamId || '' }, h('option', { value: '' }, '— не команда —'),
-    (S.teams || []).filter(t => !t.archived).map(t => h('option', { value: t.id }, t.name)));
   const colEditor = columnsEditor(st.columns);
   const builtinRows = Object.entries(st.builtins).map(([k, bi]) => {
     const label = h('input', { class: 'inp', value: bi.label, maxlength: 40 });
@@ -53,7 +46,7 @@ export function renderSettings() {
         st.builtins[r.k].label = r.label.value.trim() || st.builtins[r.k].label;
         if (r.hidden) st.builtins[r.k].hidden = r.hidden.checked;
       });
-      const saved = await send('updateUnit', { id: u.id, name: name.value, key: key.value, color: color.value(), description: desc.value, parentId: parent.value, teamId: team.value, settings: st, statusRemap: remap });
+      const saved = await send('updateUnit', { id: u.id, name: name.value, key: key.value, color: color.value(), description: desc.value, settings: st, statusRemap: remap });
       if (orphans.length) orphans.forEach(t => { t.status = remap[t.status]; });
       Object.assign(u, saved);
       const lu = unitById(u.id);
@@ -100,8 +93,7 @@ export function renderSettings() {
         h('h2', null, 'Основное'),
         h('p', { class: 'hint' }, 'Название, ключ и внешний вид юнита.'),
         h('div', { class: 'grid2' }, field('Название', name), field('Ключ задач', key, 'Номера задач: ' + u.key + '-1, ' + u.key + '-2… При смене ключа номера обновятся.')),
-        h('div', { class: 'grid2' }, field('Цвет', color.el), field('Входит в', parent, 'Задачи этого юнита можно раскладывать в юниты ниже; сверху видно их прогресс.')),
-        field('Это команда', team, 'Если юнит — команда внутри другого (Design в MVP): наборы задач сами положат сюда задачи этой команды.'),
+        field('Цвет', color.el),
         field('Описание', desc),
         h('p', { class: 'hint rules-link' }, icon('progress', 13), 'Ревью, чеклист перед «готово», скрытие и архив выполненных — в ',
           link({ view: 'admin', tab: 'automations' }, null, 'Панели админа → Автоматизации'), '.'),
@@ -244,7 +236,7 @@ export function openFieldEditor(f, { global = !!(f && f.global), columns = [], o
         field('Обязательное для участников', required),
         h('label', { class: 'chk', style: { marginBottom: '10px' } }, showOnCard, 'Показывать на карточке')),
       h('label', { class: 'chk' }, onCreate, 'Нужно уже при создании задачи (без него задачу не создать)'),
-      h('label', { class: 'chk' }, staffOnly, 'Меняют только администратор и модератор (участник видит, но не правит)'),
+      h('label', { class: 'chk' }, staffOnly, 'Меняют только CEO и PM (сотрудник видит, но не правит)'),
     ],
     wide: true,
     actions: [

@@ -8,23 +8,14 @@ export const TYPE_LABELS = {
 export const AUTO_ARCHIVE = [0, 7, 14, 30, 60, 90];
 export const HIDE_DONE = [[0, 'Всегда показывать'], [1, 'Сутки'], [3, '3 дня'], [7, 'Неделю'], [14, '2 недели'], [30, 'Месяц']];
 /** Тип колонки: определяет цвет по умолчанию и смысл («готово» — для прогресса и просрочек). */
-export const KINDS = ['todo', 'progress', 'done', 'live'];
-export const KIND_LABELS = { todo: 'Не начато', progress: 'В работе', done: 'Готово', live: 'В сторе' };
-export const KIND_COLORS = { todo: 'var(--st-todo)', progress: 'var(--st-progress)', done: 'var(--st-done)', live: 'var(--st-live)' };
-/** Тип карточки (иерархия): приложение, апдейт, реджект; '' — обычная задача. */
+export const KINDS = ['todo', 'progress', 'done'];
+export const KIND_LABELS = { todo: 'Не начато', progress: 'В работе', done: 'Готово' };
+export const KIND_COLORS = { todo: 'var(--st-todo)', progress: 'var(--st-progress)', done: 'var(--st-done)' };
+/** Тип карточки: запрос CEO по приложению (метка на доске); этапы и обычные задачи — без метки. */
 export const TASK_KINDS = {
-  app: { label: 'Приложение', plural: 'Приложения', short: 'App', color: '#6366f1', icon: 'app' },
-  update: { label: 'Апдейт', plural: 'Апдейты', short: 'Апдейт', color: '#0ea5e9', icon: 'refresh' },
-  reject: { label: 'Реджект', plural: 'Реджекты', short: 'Реджект', color: '#ef4444', icon: 'alert' },
+  request: { label: 'Запрос CEO', plural: 'Запросы CEO', short: 'Запрос', color: '#0ea5e9', icon: 'zap' },
 };
-/** Дочерние юниты (на уровень ниже) и все потомки юнита. */
-export const childUnits = id => S.units.filter(u => !u.archived && u.parentId === id);
-export function descendantUnits(id) {
-  const out = [];
-  for (let level = childUnits(id); level.length; level = level.flatMap(u => childUnits(u.id))) out.push(...level);
-  return out;
-}
-export const KIND_ICONS = { todo: 'circle', progress: 'progress', done: 'done', live: 'app' };
+export const KIND_ICONS = { todo: 'circle', progress: 'progress', done: 'done' };
 
 /** localStorage с защитой от приватного режима и битых значений. */
 export const LS = {
@@ -53,7 +44,9 @@ export const S = {
   teams: [],                // команды людей (Product Team, UX/UI Designers…)
   linkFields: [],           // поля-ссылки карточки (Figma, GitHub…), общие для всех юнитов
   templates: [],            // шаблоны задач (общие)
-  taskSets: [],             // наборы задач для «Разбить на задачи»
+  apps: [],                 // приложения (сущности): юнит, статус
+  appStatuses: [],          // настраиваемые статусы приложения { id, name, color, kind }
+  realMeId: '',             // режим разработчика: кто вошёл на самом деле (meId — «смотрю как»)
   session: null,            // сессия Supabase Auth (в локальном режиме — null)
   board: null,              // { unit, fields, tasks, units, people }
   route: { view: 'home' },  // { view } | { unit, mode: board|list|settings, task }
@@ -79,12 +72,29 @@ export const me = () => personById(S.meId);
 export const whoName = id => { const p = personById(id); return p ? p.name : id ? 'Удалённый сотрудник' : 'Система'; };
 
 /* ---------- роли ---------- */
-export const ACCESS_LABELS = { superadmin: 'Супер-админ', moderator: 'Модератор', member: 'Участник' };
+/** Роли: внутренние значения в базе прежние, в интерфейсе — CEO / PM / RM / Lead / сотрудник. */
+export const ACCESS_LABELS = { superadmin: 'CEO', moderator: 'PM', rm: 'RM', lead: 'Lead', member: 'Сотрудник' };
+export const ACCESS_HINTS = {
+  superadmin: 'Всё: приложения, приоритеты, задачи PM, роли. Режимы Default и Admin',
+  moderator: 'Свои юниты: запросы CEO, этапы, команда, релиз',
+  rm: 'Релизы своих юнитов — после всех этапов разработки',
+  lead: 'Свои задачи и ревью своей позиции',
+  member: 'Свои задачи в своих юнитах',
+};
+export const REQUEST_TYPES = { new_app: 'New App', update: 'Апдейт', other: 'Задача' };
 export const myAccess = () => (me() || {}).access || 'member';
 /** Модератор или супер-админ: управляет юнитами, задачами и людьми. */
 export const isStaff = () => ['superadmin', 'moderator'].includes(myAccess());
-/** Только супер-админ: роли и доступы. */
+/** Только CEO (супер-админ): роли и доступы, приложения. */
 export const isSuper = () => myAccess() === 'superadmin';
+/** Режим CEO: default — только приложения и верхний уровень; admin — всё. Хранится в профиле. */
+export const ceoMode = () => (isSuper() ? ((me() || {}).prefs || {}).ceoMode === 'admin' ? 'admin' : 'default' : '');
+/** CEO в режиме Default: без юнитов, досок и панели админа. */
+export const ceoDefault = () => ceoMode() === 'default';
+/** Режим разработчика — по тому, кто вошёл, а не за кого смотрит. */
+export const isDev = () => !!(personById(S.realMeId || S.meId) || {}).isDev;
+export const appById = id => (id ? S.apps.find(a => a.id === id) : null);
+export const appStatusById = id => S.appStatuses.find(x => x.id === id) || null;
 /** Может ли текущий человек работать с задачей (свои задачи у участника). */
 export const canEditTask = t => isStaff() || (!!S.meId && t.assigneeId === S.meId);
 export const activeFields = () => (S.board ? S.board.fields.filter(f => !f.archived).sort(byOrder) : []);

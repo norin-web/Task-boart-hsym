@@ -4,12 +4,38 @@
  * Все методы асинхронные: (payload, ctx) → данные; ctx.actorId — id человека, от чьего имени действие.
  */
 
-// live — «в сторе»: живое, но работа не ведётся (не открыто, не сделано, не просрочено, не архивируется)
-export const KINDS = ['todo', 'progress', 'done', 'live'];
-const KIND_COUNT_KEY = { todo: 'todo', progress: 'in_progress', done: 'done', live: 'live' };
+/** Тип колонки: не начато / в работе / готово. Свои колонки встают между ними. */
+export const KINDS = ['todo', 'progress', 'done'];
+const KIND_COUNT_KEY = { todo: 'todo', progress: 'in_progress', done: 'done' };
 export const FIELD_TYPES = ['text', 'longtext', 'number', 'date', 'select', 'multiselect', 'person', 'checkbox', 'url'];
-/** Тип карточки: '' — задача, app — приложение, update — апдейт, reject — реджект. */
-export const TASK_KINDS = ['', 'app', 'update', 'reject'];
+/** Тип карточки: '' — задача; request — запрос CEO по приложению; stage — этап декомпозиции запроса. */
+export const TASK_KINDS = ['', 'request', 'stage'];
+/** Запросы CEO по приложению. */
+export const REQUEST_TYPES = { new_app: 'New App', update: 'Апдейт', other: 'Задача' };
+
+/**
+ * Флоу декомпозиции запроса по умолчанию: этапы с позицией и зависимостями. Следующий этап виден сразу,
+ * но заблокирован (база не даст сдвинуть его из «не начато»), пока не закрыты те, от которых он зависит.
+ * release — последний: исполнителя нет, пока PM не передаст его RM («Передать в релиз»).
+ */
+export const DEFAULT_FLOWS = {
+  new_app: [
+    { key: 'design', title: 'Дизайн', positionId: 'd_design', dependsOn: [] },
+    { key: 'ios', title: 'Разработка iOS', positionId: 'd_ios', dependsOn: ['design'] },
+    { key: 'qa', title: 'Тестирование', positionId: 'd_qa', dependsOn: ['ios'] },
+    { key: 'meta', title: 'Мета (ASO)', positionId: 'd_aso', dependsOn: [] },
+    { key: 'release', title: 'Релиз', positionId: 'd_release', dependsOn: ['design', 'ios', 'qa', 'meta'], release: true },
+  ],
+  update: [
+    { key: 'design', title: 'Дизайн', positionId: 'd_design', dependsOn: [] },
+    { key: 'ios', title: 'Разработка iOS', positionId: 'd_ios', dependsOn: ['design'] },
+    { key: 'qa', title: 'Тестирование', positionId: 'd_qa', dependsOn: ['ios'] },
+    { key: 'release', title: 'Релиз', positionId: 'd_release', dependsOn: ['design', 'ios', 'qa'], release: true },
+  ],
+  other: [],
+};
+/** Статусы приложения по умолчанию (настраиваются; kind связывает статус с ходом работ). */
+export const APP_STATUS_KINDS = ['dev', 'release', 'review', 'live', 'reject', ''];
 export const PALETTE = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6', '#14b8a6', '#64748b', '#84cc16'];
 
 export function defaultSettings() {
@@ -17,6 +43,7 @@ export function defaultSettings() {
     columns: [
       { id: 'todo', name: 'To Do', kind: 'todo', color: '' },
       { id: 'in_progress', name: 'In Progress', kind: 'progress', color: '' },
+      { id: 'review', name: 'Review', kind: 'progress', color: '' },
       { id: 'done', name: 'Done', kind: 'done', color: '' },
     ],
     builtins: {
@@ -63,7 +90,6 @@ const uid = prefix => prefix + '_' + crypto.randomUUID().replace(/-/g, '').slice
 const str = (v, max = 500) => String(v ?? '').trim().slice(0, max);
 const color = (c, fallback) => (/^#[0-9a-fA-F]{6}$/.test(c || '') ? c : fallback);
 const date = v => { const s = String(v || '').slice(0, 10); return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : ''; };
-const addDaysIso = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 const today = d => (/^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : new Date().toISOString().slice(0, 10));
 const req = (v, label) => v || fail(`Поле «${label}» обязательно`);
 const json = (v, fallback) => {
@@ -71,7 +97,7 @@ const json = (v, fallback) => {
   try { return v ? JSON.parse(v) : fallback; } catch { return fallback; }
 };
 const fmtDate = d => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d || ''); return m ? `${m[3]}.${m[2]}.${m[1]}` : ''; };
-const emptyCounts = () => ({ todo: 0, in_progress: 0, done: 0, live: 0, overdue: 0 });
+const emptyCounts = () => ({ todo: 0, in_progress: 0, done: 0, overdue: 0 });
 
 /** Колонка задачи; неизвестный статус (колонку удалили) считается первой колонкой. */
 const columnOf = (settings, status) => settings.columns.find(c => c.id === status) || settings.columns[0];
@@ -126,15 +152,7 @@ export function unitSettings(raw) {
     hideDoneDays: Math.max(0, Math.min(365, parseInt(s.hideDoneDays, 10) || 0)),
     review: reviewSettings(s.review, columns),
     checklistBeforeDone: !!s.checklistBeforeDone,
-    handoff: handoffSettings(s.handoff, columns),
   };
-}
-
-/** Передача вниз: задача пришла в колонку column — в юните unitId появляется карточка-приложение (триггер handoff_task). */
-function handoffSettings(h, columns) {
-  const column = h && columns.some(c => c.id === h.column) ? h.column : '';
-  const unitId = h && typeof h.unitId === 'string' ? h.unitId.slice(0, 40) : '';
-  return { column: unitId ? column : '', unitId: column ? unitId : '' };
 }
 
 function storedSettings(s) {
@@ -146,7 +164,6 @@ function storedSettings(s) {
     hideDoneDays: full.hideDoneDays,
     review: full.review,
     checklistBeforeDone: full.checklistBeforeDone,
-    handoff: full.handoff,
   };
 }
 
@@ -197,7 +214,7 @@ function cleanFieldValues(obj, keepNulls) {
 
 const unitOut = r => ({
   id: r.id, name: r.name, key: r.key, color: r.color, description: r.description,
-  settings: unitSettings(r.settings), nextNum: r.next_num, order: r.ord, archived: !!r.archived, parentId: r.parent_id || '', teamId: r.team_id || '',
+  settings: unitSettings(r.settings), nextNum: r.next_num, order: r.ord, archived: !!r.archived,
   archivedAt: r.archived_at || '', createdAt: r.created_at, updatedAt: r.updated_at,
 });
 
@@ -207,6 +224,7 @@ const taskOut = r => ({
   fields: json(r.fields, {}), checklist: json(r.checklist, []), archived: !!r.archived, doneAt: r.done_at,
   reviewFrom: r.review_from || '', reviewerId: r.reviewer_id || '', teamId: r.team_id || '',
   parentId: r.parent_id || '', kind: r.kind || '',
+  appId: r.app_id || '', requestType: r.request_type || '', step: r.step || '', dependsOn: json(r.depends_on, []) || [], isTest: !!r.is_test,
   createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at,
 });
 
@@ -216,11 +234,12 @@ const fieldOut = r => ({
   staffOnly: !!r.staff_only, role: r.role || '', requiredOnCreate: !!r.required_on_create, order: r.ord, archived: !!r.archived,
 });
 
-export const ACCESS = ['superadmin', 'moderator', 'member'];
+/** Роли: superadmin — CEO, moderator — PM, rm — релиз-менеджер, lead — лид, member — сотрудник. */
+export const ACCESS = ['superadmin', 'moderator', 'rm', 'lead', 'member'];
 const personOut = r => ({
   id: r.id, name: r.name, email: r.email, role: r.role || '', color: r.color || '', active: !!r.active,
   access: r.access || 'member', positionId: r.position_id || '', linked: !!r.user_id, prefs: json(r.prefs, {}) || {},
-  lastSeenAt: r.last_seen_at || '',
+  lastSeenAt: r.last_seen_at || '', isDev: !!r.is_dev,
   extraPositionIds: json(r.extra_positions, []) || [],
   teamIds: json(r.team_ids, []) || [],
   positionIds: [r.position_id || 'd_other', ...(json(r.extra_positions, []) || [])],
@@ -237,6 +256,36 @@ function cleanStages(list) {
     return { id, name: str(c && c.name, 40) || 'Этап', kind: KINDS.includes(c && c.kind) ? c.kind : 'progress', color: color(c && c.color, '') };
   });
   return out;
+}
+const appOut = r => ({
+  id: r.id, unitId: r.unit_id, name: r.name, color: r.color || '', status: r.status, info: json(r.info, {}) || {},
+  order: r.ord, archived: !!r.archived, isTest: !!r.is_test, createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at,
+});
+
+/** Статусы приложения: { id, name, color, kind }, хотя бы один. */
+function cleanAppStatuses(list) {
+  const seen = new Set();
+  return (Array.isArray(list) ? list : []).slice(0, 20).map(x => {
+    const name = str(x && x.name, 40);
+    if (!name) return null;
+    let id = /^[a-z0-9_]{1,40}$/.test((x && x.id) || '') ? x.id : uid('as').toLowerCase();
+    if (seen.has(id)) id = uid('as').toLowerCase();
+    seen.add(id);
+    return { id, name, color: color(x.color, '#64748b'), kind: APP_STATUS_KINDS.includes(x.kind) ? x.kind : '' };
+  }).filter(Boolean);
+}
+
+/** Флоу: этапы { key, title, positionId, dependsOn: [key], release }; зависимости — только на этапы выше по списку. */
+function cleanFlow(list) {
+  const keys = [];
+  return (Array.isArray(list) ? list : []).slice(0, 20).map(x => {
+    const key = /^[a-z0-9_]{1,30}$/.test((x && x.key) || '') && !keys.includes(x.key) ? x.key : null;
+    const title = str(x && x.title, 120);
+    if (!key || !title) return null;
+    const step = { key, title, positionId: str(x.positionId, 40), dependsOn: (Array.isArray(x.dependsOn) ? x.dependsOn : []).filter(k => keys.includes(k)), release: !!x.release };
+    keys.push(key);
+    return step;
+  }).filter(Boolean);
 }
 const deptOut = r => ({ id: r.id, name: r.name, color: r.color, order: r.ord, archived: !!r.archived });
 export const LINK_KINDS = ['figma', 'github', 'drive', 'meta', 'link'];
@@ -256,7 +305,6 @@ const templateOut = r => ({
   dueDays: Number(r.due_days), checklist: json(r.checklist, []) || [], order: r.ord,
   assigneeId: r.assignee_id || '', links: json(r.links, {}) || {}, teamId: r.team_id || '',
 });
-const taskSetOut = r => ({ id: r.id, name: r.name, items: json(r.items, []) || [], order: r.ord });
 const commentOut = r => ({ id: r.id, taskId: r.task_id, text: r.text, authorId: r.author_id, at: r.at, editedAt: r.edited_at });
 
 /* ================= backend ================= */
@@ -356,7 +404,7 @@ export function createBackend(db, opts = {}) {
         if (r.archived || !U[r.unit_id]) continue;
         s.total++;
         const k = kindOf(U[r.unit_id].st, r.status);
-        if (k === 'done') s.done++; else if (k !== 'live' && r.due_date && r.due_date < day) s.overdue++;
+        if (k === 'done') s.done++; else if (r.due_date && r.due_date < day) s.overdue++;
       }
       if (s.total) stats[root] = s;
     }
@@ -371,25 +419,25 @@ export function createBackend(db, opts = {}) {
     return { stats, parents };
   }
 
-  /**
-   * Состав юнитов-команд следует за командами человека: в команде — в составе её юнитов (Design в MVP), вышел — убираем.
-   * before — прежние команды (при создании пусто).
-   */
-  async function syncTeamUnits(personId, teamIds, before, positionId) {
-    const touched = [...new Set([...teamIds, ...before])];
-    if (!touched.length) return;
-    const units = await run(T('units').select('id,team_id').in('team_id', touched).eq('archived', false));
-    for (const u of units) {
-      if (teamIds.includes(u.team_id) && !before.includes(u.team_id)) {
-        await run(T('unit_members').upsert({ unit_id: u.id, person_id: personId, department_id: positionId || '', created_at: now() }, { onConflict: 'unit_id,person_id' }));
-      } else if (!teamIds.includes(u.team_id)) {
-        await run(T('unit_members').delete().eq('unit_id', u.id).eq('person_id', personId));
-      }
-    }
-  }
-
   const unitFields = async unitId => [...await globalFields(), ...await ownFields(unitId)];
-  const taskSets = async () => (await all(() => T('task_sets').select('*').order('ord').order('id'))).map(taskSetOut);
+  /** Состав юнита с ролью (access) и позициями; role — только эта роль. */
+  async function unitPeople(unitId, role) {
+    const ids = (await unitMembers(unitId)).map(m => m.personId);
+    const list = (await people()).filter(x => x.active && ids.includes(x.id));
+    return role ? list.filter(x => x.access === role) : list;
+  }
+  async function setting(key) {
+    const r = await run(T('app_settings').select('value').eq('key', key).maybeSingle());
+    return r ? json(r.value, null) : null;
+  }
+  const appStatuses = async () => {
+    const list = cleanAppStatuses(await setting('appStatuses'));
+    return list.length ? list : cleanAppStatuses([{ id: 'dev', name: 'В разработке', kind: 'dev' }]);
+  };
+  const flows = async () => {
+    const saved = (await setting('flows')) || {};
+    return Object.fromEntries(Object.keys(REQUEST_TYPES).map(k => [k, k in saved ? cleanFlow(saved[k]) : DEFAULT_FLOWS[k]]));
+  };
   const templates = async () => (await all(() => T('task_templates').select('*').order('ord').order('id'))).map(templateOut);
   const linkFields = async () => (await all(() => T('link_fields').select('*').order('ord').order('id'))).map(linkFieldOut);
   const cleanPositions = async list => {
@@ -463,7 +511,7 @@ export function createBackend(db, opts = {}) {
       const kind = kindOf(st, t.status);
       const c = counts[t.unit_id] || (counts[t.unit_id] = { ...emptyCounts(), doneWeek: 0 });
       c[KIND_COUNT_KEY[kind]]++;
-      if (kind !== 'done' && kind !== 'live' && t.due_date && t.due_date < day) c.overdue++;
+      if (kind !== 'done' && t.due_date && t.due_date < day) c.overdue++;
       if (kind === 'done' && weekAgo && t.done_at >= weekAgo) c.doneWeek++;
     }
     return counts;
@@ -604,8 +652,12 @@ export function createBackend(db, opts = {}) {
     /* ---------- общие данные, главная, поиск ---------- */
 
     async bootstrap(p) {
-      const [units, ppl, depts, lf, tpl, tm, sets] = await Promise.all([unitsWithCounts(today(p.today)), people(), departments(), linkFields(), templates(), teams(), taskSets()]);
-      return { units: units.map(({ doneWeek, ...u }) => u), people: ppl, departments: depts, linkFields: lf, templates: tpl, teams: tm, taskSets: sets };
+      const [units, ppl, depts, lf, tpl, tm, apps, statuses] = await Promise.all([unitsWithCounts(today(p.today)), people(), departments(), linkFields(), templates(), teams(),
+        all(() => T('apps').select('*').order('ord').order('id')), appStatuses()]);
+      return {
+        units: units.map(({ doneWeek, ...u }) => u), people: ppl, departments: depts, linkFields: lf, templates: tpl, teams: tm,
+        apps: apps.map(appOut), appStatuses: statuses,
+      };
     },
 
     async getHome(p) {
@@ -661,7 +713,7 @@ export function createBackend(db, opts = {}) {
     async getOverview(p) {
       const day = today(p.today);
       const [units, tasks, ppl, members] = await Promise.all([
-        all(() => T('units').select('id,key,name,color,settings,archived,parent_id').order('id')),
+        all(() => T('units').select('id,key,name,color,settings,archived').order('id')),
         all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,department_id,due_date').eq('archived', false).order('id')),
         people(),
         all(() => T('unit_members').select('unit_id,person_id').order('unit_id')),
@@ -676,7 +728,7 @@ export function createBackend(db, opts = {}) {
         const u = U[t.unit_id];
         if (!u) continue;
         const kind = kindOf(u.st, t.status);
-        if (kind === 'done' || kind === 'live') continue;
+        if (kind === 'done') continue;
         const late = !!t.due_date && t.due_date < day;
         const bump = (map, key) => {
           const c = map[key] || (map[key] = { open: 0, inProgress: 0, overdue: 0 });
@@ -701,8 +753,7 @@ export function createBackend(db, opts = {}) {
         overdue: overdue.slice(0, 10), overdueTotal: overdue.length,
         byPersonUnit, unassignedTasks: unassignedTasks.sort(byDue).slice(0, 15), noPositionTasks: noPositionTasks.sort(byDue).slice(0, 15), unitMembers,
         peopleNoLogin: active.filter(x => !x.linked).map(x => x.id),
-        // без участников — только юниты нижнего уровня: в верхних (App, Managers, MVP с командами внутри) работают админы
-        unitsNoTeam: Object.values(U).filter(u => !teamUnits.has(u.id) && !Object.values(U).some(c => c.parent_id === u.id)).map(u => u.id),
+        unitsNoTeam: Object.values(U).filter(u => !teamUnits.has(u.id)).map(u => u.id),
       };
     },
 
@@ -734,7 +785,7 @@ export function createBackend(db, opts = {}) {
         unitFields(unit.id),
         all(() => T('tasks').select('*').eq('unit_id', unit.id).order('id')),
         rpc('comment_counts', { p_unit: unit.id }),
-        all(() => T('units').select('id,name,key,color,archived,parent_id').order('ord').order('id')),
+        all(() => T('units').select('id,name,key,color,archived').order('ord').order('id')),
         people(), departments(), unitMembers(unit.id),
         all(() => T('task_links').select('task_id,field_id,url').eq('unit_id', unit.id).order('task_id').order('field_id')),
       ]);
@@ -746,7 +797,7 @@ export function createBackend(db, opts = {}) {
         unit: unitOut(unit),
         fields,
         tasks: tasks.map(t => ({ ...taskOut(t), commentCount: cc[t.id] || 0, links: lk[t.id] || {}, tree: tree.stats[t.id] || null, parent: tree.parents[t.id] || null })),
-        units: units.map(({ parent_id: pid, ...u }) => ({ ...u, archived: !!u.archived, parentId: pid || '' })),
+        units: units.map(u => ({ ...u, archived: !!u.archived })),
         people: ppl,
         departments: depts,
         members,
@@ -792,18 +843,6 @@ export function createBackend(db, opts = {}) {
       if ('color' in p) upd.color = color(p.color, u.color);
       if ('description' in p) upd.description = str(p.description, 1000);
       if ('settings' in p) upd.settings = storedSettings(p.settings);
-      if ('teamId' in p) upd.team_id = await validTeam(p.teamId);
-      if ('parentId' in p) {
-        // родитель — другой юнит и не потомок этого (без циклов)
-        let pid = str(p.parentId, 40);
-        if (pid) {
-          const all_ = await all(() => T('units').select('id,parent_id').order('id'));
-          const parentOf = Object.fromEntries(all_.map(x => [x.id, x.parent_id || '']));
-          if (!(pid in parentOf)) fail('Юнит не найден', 'NOT_FOUND');
-          for (let x = pid, i = 0; x && i < 50; x = parentOf[x], i++) if (x === u.id) fail('Юнит не может быть внутри самого себя');
-        }
-        upd.parent_id = pid;
-      }
       if ('archived' in p) {
         upd.archived = !!p.archived;
         if (upd.archived !== !!u.archived) upd.archived_at = upd.archived ? now() : '';
@@ -812,205 +851,6 @@ export function createBackend(db, opts = {}) {
       await updateOne('units', u.id, upd);
       if (upd.settings) await remapStatuses(u.id, unitSettings(u.settings), unitSettings(upd.settings), p.statusRemap || {});
       return unitOut(await findUnit(u.id));
-    },
-
-    /**
-     * Собрать иерархию одним шагом: «Компания» (приложения) → «Модераторы» (жизненный цикл) → все текущие верхние юниты.
-     * Передача вниз: Компания «В работу» → Модераторы. Повторный вызов ничего не дублирует.
-     */
-    async setupHierarchy(p, ctx) {
-      const rows = await all(() => T('units').select('*').eq('archived', false).order('ord').order('id'));
-      if (rows.some(u => u.parent_id)) fail('Структура уже есть — уровни юнитов меняются в их настройках («Входит в»)');
-      const top = rows.filter(u => !u.parent_id);
-      const ceo = await methods.createUnit({ name: 'Компания', key: (await keyTaken('CEO')) ? '' : 'CEO', color: '#0f766e', description: 'Приложения компании: идея → в работу → запущено' }, ctx);
-      const mod = await methods.createUnit({ name: 'Модераторы', key: (await keyTaken('MOD')) ? '' : 'MOD', color: '#7c3aed', description: 'Жизненный цикл приложений, апдейты и реджекты' }, ctx);
-      await methods.updateUnit({ id: mod.id, parentId: ceo.id, settings: { ...mod.settings, columns: [
-        { id: 'brief', name: 'Бриф', kind: 'todo' }, { id: 'design', name: 'Дизайн', kind: 'progress', color: '#ec4899' },
-        { id: 'dev', name: 'Разработка', kind: 'progress', color: '#3b82f6' }, { id: 'qa', name: 'Тест', kind: 'progress', color: '#f59e0b' },
-        { id: 'store', name: 'Ревью стора', kind: 'progress', color: '#8b5cf6' }, { id: 'live', name: 'Релиз', kind: 'done' },
-      ] } });
-      await methods.updateUnit({ id: ceo.id, settings: { ...ceo.settings,
-        // приложения в круговороте: колонки «готово» нет — In Store («в сторе»), пришёл апдейт — снова в работу
-        columns: [{ id: 'idea', name: 'To Do', kind: 'todo' }, { id: 'go', name: 'In Progress', kind: 'progress' }, { id: 'launched', name: 'In Store', kind: 'live' }],
-        handoff: { column: 'go', unitId: mod.id } } });
-      for (const u of top) await methods.updateUnit({ id: u.id, parentId: mod.id });
-      // Компания и Модераторы — первыми в меню
-      const order = [ceo.id, mod.id, ...rows.map(u => u.id)];
-      await methods.reorderUnits({ ids: order });
-      return { ceoId: ceo.id, modId: mod.id };
-    },
-
-    /**
-     * Мастер структуры: App (приложения) → Managers (жизненный цикл) → рабочие юниты → команды внутри → люди в командах.
-     * Создаёт недостающее и обновляет существующее; повторный вызов ничего не дублирует.
-     * p: { app: { id?, name }, managers: { id?, name }, units: [{ id?, name, teams: [teamId] }], detachUnits: [id] (выйти из структуры),
-     *      removeUnits: [id] (в корзину), people: { personId: [teamId] } }
-     */
-    async applyStructure(p, ctx) {
-      const existing = id => id ? one('units', id) : null;
-      // люди по командам — сначала: юниты-команды берут состав из команд людей
-      for (const [personId, teamIds] of Object.entries(p.people || {})) {
-        const person = await one('people', personId);
-        if (!person) continue;
-        const next = await cleanTeams(teamIds);
-        if (JSON.stringify([...next].sort()) !== JSON.stringify([...(json(person.team_ids, []) || [])].sort())) {
-          await methods.updatePerson({ id: personId, teamIds: next });
-        }
-      }
-      // App
-      let ceo = await existing(p.app && p.app.id);
-      const appName = str(p.app && p.app.name, 80) || 'App';
-      if (!ceo) {
-        const made = await methods.createUnit({ name: appName, key: (await keyTaken('CEO')) ? '' : 'CEO', color: '#0f766e', description: 'Приложения: в работе → в сторе → снова в работу' }, ctx);
-        await methods.updateUnit({ id: made.id, settings: { ...made.settings, columns: [
-          { id: 'idea', name: 'To Do', kind: 'todo' }, { id: 'go', name: 'In Progress', kind: 'progress' }, { id: 'launched', name: 'In Store', kind: 'live' },
-        ] } });
-        ceo = await one('units', made.id);
-      } else if (ceo.name !== appName) await methods.updateUnit({ id: ceo.id, name: appName });
-      // Managers
-      let mod = await existing(p.managers && p.managers.id);
-      const modName = str(p.managers && p.managers.name, 80) || 'Managers';
-      if (!mod) {
-        const made = await methods.createUnit({ name: modName, key: (await keyTaken('MOD')) ? '' : 'MOD', color: '#7c3aed', description: 'Жизненный цикл приложений, апдейты и реджекты' }, ctx);
-        await methods.updateUnit({ id: made.id, settings: { ...made.settings, columns: [
-          { id: 'brief', name: 'Бриф', kind: 'todo' }, { id: 'design', name: 'Дизайн', kind: 'progress', color: '#ec4899' },
-          { id: 'dev', name: 'Разработка', kind: 'progress', color: '#3b82f6' }, { id: 'qa', name: 'Тест', kind: 'progress', color: '#f59e0b' },
-          { id: 'store', name: 'Ревью стора', kind: 'progress', color: '#8b5cf6' }, { id: 'live', name: 'В сторе', kind: 'live' },
-        ] } });
-        mod = await one('units', made.id);
-      }
-      await methods.updateUnit({ id: mod.id, name: modName, parentId: ceo.id });
-      // передача App → Managers: в первую рабочую колонку App
-      const ceoSt = unitSettings((await one('units', ceo.id)).settings);
-      const goCol = (ceoSt.handoff && ceoSt.handoff.column) || (ceoSt.columns.find(c => c.kind === 'progress') || ceoSt.columns[0]).id;
-      await methods.updateUnit({ id: ceo.id, settings: { ...ceoSt, handoff: { column: goCol, unitId: mod.id } } });
-      // рабочие юниты и команды внутри
-      const unitIds = [];
-      for (const def of p.units || []) {
-        const name = str(def.name, 80);
-        if (!name) continue;
-        let u = await existing(def.id);
-        if (!u) u = await one('units', (await methods.createUnit({ name, key: await uniqueKey(name) }, ctx)).id); // ключ — из названия (MVP → MVP)
-        await methods.updateUnit({ id: u.id, name, parentId: mod.id, ...(u.archived ? { archived: false } : {}) });
-        unitIds.push(u.id);
-        const want = new Set(await cleanTeams(def.teams || []));
-        const kids = await run(T('units').select('id,team_id,archived').eq('parent_id', u.id));
-        for (const k of kids.filter(k => k.team_id)) {
-          if (want.has(k.team_id) && k.archived) await methods.updateUnit({ id: k.id, archived: false });
-          if (!want.has(k.team_id) && !k.archived) await methods.updateUnit({ id: k.id, archived: true }); // в корзину, задачи сохраняются
-        }
-        const missing = [...want].filter(t => !kids.some(k => k.team_id === t));
-        if (missing.length) await methods.setupTeamUnits({ unitId: u.id, teamIds: missing }, ctx);
-      }
-      // снятые в мастере — выходят из структуры, юнит со всеми задачами остаётся
-      for (const id of p.detachUnits || []) {
-        const u = await existing(id);
-        if (u && u.parent_id === mod.id) await methods.updateUnit({ id: u.id, parentId: '' });
-      }
-      for (const id of p.removeUnits || []) {
-        const u = await existing(id);
-        if (u && !u.archived && u.parent_id === mod.id) await methods.updateUnit({ id: u.id, archived: true });
-      }
-      await methods.reorderUnits({ ids: [ceo.id, mod.id, ...unitIds] });
-      return { appId: ceo.id, managersId: mod.id, unitIds };
-    },
-
-    /**
-     * Команды внутри юнита одним шагом: по юниту на каждую команду справочника (Design, iOS…), кто в команде — в состав.
-     * Уже созданные (по команде) не дублирует.
-     */
-    async setupTeamUnits(p, ctx) {
-      const u = await findUnit(p.unitId);
-      const kids = await run(T('units').select('team_id').eq('parent_id', u.id));
-      const have = new Set(kids.map(k => k.team_id).filter(Boolean));
-      const ppl = await people();
-      const made = [];
-      for (const tm of (await teams()).filter(t => !t.archived && !have.has(t.id) && (!p.teamIds || p.teamIds.includes(t.id)))) {
-        let key = normKey(tm.name).slice(0, 4);
-        if (!/^[A-Z]/.test(key) || (await keyTaken(key))) key = '';
-        const nu = await methods.createUnit({ name: tm.name, key, color: tm.color, description: `Команда «${tm.name}» в «${u.name}»` }, ctx);
-        await methods.updateUnit({ id: nu.id, parentId: u.id, teamId: tm.id });
-        for (const person of ppl.filter(x => x.active && (x.teamIds || []).includes(tm.id))) {
-          await methods.setMember({ unitId: nu.id, personId: person.id, departmentId: person.positionId || '' });
-        }
-        made.push(nu.id);
-      }
-      return made;
-    },
-
-    /**
-     * Передать задачу вниз как есть (юнит приложений → Managers): копия-приложение без разбивки.
-     * Если в юните есть колонка передачи — задача переходит в неё (как при переносе), иначе копия создаётся сразу.
-     */
-    async handoffTask(p, ctx) {
-      const t = await findTask(p.id);
-      const unit = await findUnit(t.unit_id);
-      const ho = unitSettings(unit.settings).handoff || (json(unit.settings, {}) || {}).handoff;
-      if (!ho || !ho.unitId) fail('У этого юнита нет передачи вниз');
-      if (ho.column && t.status !== ho.column) await methods.updateTask({ id: t.id, patch: { status: ho.column } }, ctx);
-      const copyId = await rpc('do_handoff', { p_task: t.id });
-      if (!copyId) fail('Не удалось передать — проверьте юнит передачи');
-      return { copyId, unitId: ho.unitId };
-    },
-
-    /**
-     * All Apps: приложения юнита (его задачи) — где каждое сейчас (колонка здесь), на каком этапе у модераторов
-     * (копия-приложение уровнем ниже), сколько апдейтов и реджектов, прогресс задач команд под ним.
-     */
-    async getApps(p) {
-      const unit = await findUnit(p.unitId);
-      const apps = await all(() => T('tasks').select('*').eq('unit_id', unit.id).eq('archived', false).order('ord').order('id'));
-      // всё дерево под приложениями (до 5 уровней): копии у модераторов, апдейты/реджекты, задачи команд
-      const below = [];
-      let level = apps.map(t => t.id);
-      for (let d = 0; d < 5 && level.length; d++) {
-        const rows = await run(T('tasks').select('id,unit_id,num,title,status,kind,parent_id,archived,updated_at').in('parent_id', level));
-        below.push(...rows.filter(r => !r.archived));
-        level = rows.map(r => r.id);
-      }
-      const unitIds = [...new Set([unit.id, ...below.map(r => r.unit_id)])];
-      const units = await run(T('units').select('id,name,key,color,settings').in('id', unitIds));
-      const U = Object.fromEntries(units.map(u => [u.id, { ...u, st: unitSettings(u.settings) }]));
-      const col = (r) => { const u = U[r.unit_id]; const c = u && (u.st.columns.find(x => x.id === r.status) || u.st.columns[0]); return c || { name: r.status, kind: 'todo', color: '' }; };
-      const kidsOf = id => below.filter(r => r.parent_id === id);
-      const subtree = id => { const out = []; const walk = x => kidsOf(x).forEach(k => { out.push(k); walk(k.id); }); walk(id); return out; };
-      return apps.map(t => {
-        const c = col(t);
-        const all = subtree(t.id);
-        const copy = all.find(r => r.kind === 'app' && r.parent_id === t.id);
-        const cc = copy && col(copy);
-        const work = all.filter(r => !r.kind);
-        const doneKinds = new Set(['done', 'live']);
-        return {
-          id: t.id, unitId: unit.id, key: `${unit.key}-${t.num}`, title: t.title, updatedAt: t.updated_at, dueDate: t.due_date,
-          status: { name: c.name, kind: c.kind, color: c.color },
-          stage: copy ? { taskId: copy.id, unitId: copy.unit_id, unit: U[copy.unit_id] ? U[copy.unit_id].name : '', name: cc.name, kind: cc.kind, color: cc.color } : null,
-          updates: all.filter(r => r.kind === 'update').length,
-          updatesOpen: all.filter(r => r.kind === 'update' && !doneKinds.has(col(r).kind)).length,
-          rejects: all.filter(r => r.kind === 'reject').length,
-          rejectsOpen: all.filter(r => r.kind === 'reject' && !doneKinds.has(col(r).kind)).length,
-          progress: { done: work.filter(r => doneKinds.has(col(r).kind)).length, total: work.length },
-        };
-      });
-    },
-
-    /** Сводка юнита с командами внутри: по каждой команде — её задачи с этапом (давние готовые не показываем). */
-    async getUnitOverview(p) {
-      const u = await findUnit(p.unitId);
-      const kids = (await run(T('units').select('*').eq('parent_id', u.id).eq('archived', false).order('ord').order('id'))).map(r => ({ ...r, st: unitSettings(r.settings) }));
-      if (!kids.length) return { units: [] };
-      const tasks = await run(T('tasks').select('*').in('unit_id', kids.map(k => k.id)).eq('archived', false).order('ord').order('id'));
-      const old = new Date(Date.now() - 14 * 864e5).toISOString();
-      const parents = (await treeInfo(tasks, today(p.today))).parents;
-      return {
-        units: kids.map(k => ({
-          id: k.id, name: k.name, key: k.key, color: k.color, teamId: k.team_id || '',
-          tasks: tasks.filter(t => t.unit_id === k.id).map(t => {
-            const col = columnOf(k.st, t.status);
-            return { ...taskOut(t), key: `${k.key}-${t.num}`, statusName: col.name, statusKind: col.kind, statusColor: col.color || '', parent: parents[t.id] || null };
-          }).filter(t => t.statusKind !== 'done' || (t.doneAt || '') >= old),
-        })),
-      };
     },
 
     async reorderUnits(p) {
@@ -1068,7 +908,7 @@ export function createBackend(db, opts = {}) {
       const assignee = str(p.assigneeId, 40);
       const ts = now();
       const task = {
-        id: uid('t'), unit_id: unit.id, num: (await rpc('next_task_num', { p_unit: unit.id })) ?? fail('Создавать задачи могут модераторы и администраторы', 'FORBIDDEN'),
+        id: uid('t'), unit_id: unit.id, num: (await rpc('next_task_num', { p_unit: unit.id })) ?? fail('Создавать задачи могут CEO и PM юнита', 'FORBIDDEN'),
         title: req(str(p.title, 500), 'Название задачи'), description: str(p.description, 20000), status,
         assignee_id: assignee, department_id: (await validDept(p.departmentId)) || (await memberDept(unit.id, assignee)),
         team_id: await validTeam(p.teamId),
@@ -1076,6 +916,9 @@ export function createBackend(db, opts = {}) {
         fields: cleanFieldValues(p.fields, false), checklist: cleanChecklist(p.checklist),
         archived: false, done_at: kindOf(st, status) === 'done' ? ts : '', created_by: actor(ctx), created_at: ts, updated_at: ts,
         parent_id: p.parentId ? (await findTask(p.parentId)).id : '', kind: TASK_KINDS.includes(p.kind) ? p.kind : '',
+        app_id: str(p.appId, 40), request_type: p.kind === 'request' && REQUEST_TYPES[p.requestType] ? p.requestType : '',
+        step: str(p.step, 30), depends_on: (Array.isArray(p.dependsOn) ? p.dependsOn : []).map(x => str(x, 40)).filter(Boolean).slice(0, 20),
+        is_test: !!p.test,
       };
       await run(T('tasks').insert(task));
       await log([{ unitId: unit.id, taskId: task.id, action: 'create', to: task.title }], ctx);
@@ -1195,7 +1038,7 @@ export function createBackend(db, opts = {}) {
      */
     async getTaskTree(p) {
       const root = await findTask(p.id);
-      const unitRows = await all(() => T('units').select('id,name,key,color,settings,parent_id').order('id'));
+      const unitRows = await all(() => T('units').select('id,name,key,color,settings').order('id'));
       const U = Object.fromEntries(unitRows.map(u => [u.id, { ...u, st: unitSettings(u.settings) }]));
       const brief = r => {
         const u = U[r.unit_id];
@@ -1204,8 +1047,7 @@ export function createBackend(db, opts = {}) {
           id: r.id, key: u ? `${u.key}-${r.num}` : '', title: r.title, kind: r.kind || '', parentId: r.parent_id || '',
           unit: u ? { id: u.id, name: u.name, color: u.color } : null, status: r.status,
           statusName: col.name, statusKind: col.kind, statusColor: col.color || '',
-          assigneeId: r.assignee_id, dueDate: r.due_date, archived: !!r.archived,
-          stages: u && r.kind ? u.st.columns.map(c => ({ id: c.id, name: c.name, kind: c.kind, color: c.color || '' })) : null,
+          assigneeId: r.assignee_id, dueDate: r.due_date, archived: !!r.archived, step: r.step || '', dependsOn: json(r.depends_on, []) || [],
         };
       };
       const ancestors = [];
@@ -1467,6 +1309,177 @@ export function createBackend(db, opts = {}) {
       return unitMembers(String(p.unitId ?? ''));
     },
 
+    /* ---------- приложения (Tasks 2.0) ---------- */
+
+    /** Статусы приложения (настраиваемый список; по умолчанию — из schema.sql). */
+    async getAppStatuses() {
+      return appStatuses();
+    },
+
+    async saveAppStatuses(p) {
+      const list = cleanAppStatuses(p.statuses);
+      if (!list.length) fail('Нужен хотя бы один статус');
+      await run(T('app_settings').upsert({ key: 'appStatuses', value: list, updated_at: now() }, { onConflict: 'key' }));
+      return list;
+    },
+
+    /** Флоу декомпозиции по типу запроса: сохранённый в настройках или по умолчанию. */
+    async getFlows() {
+      return flows();
+    },
+
+    async saveFlow(p) {
+      if (!REQUEST_TYPES[p.type]) fail('Неизвестный тип запроса');
+      const all = { ...(await flows()), [p.type]: cleanFlow(p.steps) };
+      await run(T('app_settings').upsert({ key: 'flows', value: all, updated_at: now() }, { onConflict: 'key' }));
+      return all;
+    },
+
+    /**
+     * Приложения со сводкой по работам: открытые запросы (тип, этап, прогресс этапов). unitId — только этого юнита.
+     * Видно: CEO — все, остальным — приложения своих юнитов (правила базы).
+     */
+    async listApps(p) {
+      let q = T('apps').select('*').eq('archived', !!p.archived);
+      if (p.unitId) q = q.eq('unit_id', String(p.unitId));
+      const apps = (await run(q.order('ord').order('created_at'))).map(appOut);
+      if (!apps.length) return [];
+      const [tasks, units] = await Promise.all([
+        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,due_date,archived,kind,request_type,step,parent_id,app_id,depends_on')
+          .in('app_id', apps.map(a => a.id)).eq('archived', false).order('created_at').order('id')),
+        all(() => T('units').select('id,key,settings').order('id')),
+      ]);
+      const U = Object.fromEntries(units.map(u => [u.id, { ...u, st: unitSettings(u.settings) }]));
+      const kindOfRow = r => (U[r.unit_id] ? kindOf(U[r.unit_id].st, r.status) : 'todo');
+      const doneRow = r => kindOfRow(r) === 'done';
+      return apps.map(a => {
+        const own = tasks.filter(t => t.app_id === a.id);
+        const requests = own.filter(t => t.kind === 'request').map(r => {
+          // этапы флоу и задачи, которые PM поставил под запрос вручную
+          const stages = own.filter(t => t.parent_id === r.id && t.kind !== 'request');
+          const done = stages.filter(doneRow);
+          return {
+            id: r.id, unitId: r.unit_id, key: U[r.unit_id] ? `${U[r.unit_id].key}-${r.num}` : '', title: r.title, type: r.request_type,
+            assigneeId: r.assignee_id, dueDate: r.due_date, done: doneRow(r), statusKind: kindOfRow(r),
+            stages: stages.map(t => ({ id: t.id, step: t.step, title: t.title, assigneeId: t.assignee_id, kind: kindOfRow(t),
+              done: doneRow(t), blocked: !doneRow(t) && (json(t.depends_on, []) || []).some(id => { const d = own.find(x => x.id === id); return d && !doneRow(d); }) })),
+            progress: stages.length ? Math.round((done.length / stages.length) * 100) : 0,
+          };
+        });
+        return { ...a, requests, active: requests.filter(r => !r.done).length };
+      });
+    },
+
+    /**
+     * Новое приложение (CEO): сущность в юните + запрос «New App» PM юнита (pmId — конкретный PM, иначе первый PM юнита).
+     * test — шорткат разработчика: всё помечается тестовым.
+     */
+    async createApp(p, ctx) {
+      const unit = await findUnit(p.unitId);
+      const statuses = await appStatuses();
+      const ts = now();
+      const app = {
+        id: uid('app'), unit_id: unit.id, name: req(str(p.name, 120), 'Название'), color: color(p.color, PALETTE[Math.floor(Math.random() * PALETTE.length)]),
+        status: (statuses.find(x => x.kind === 'dev') || statuses[0]).id, info: {}, ord: (await maxOrd('apps', { unit_id: unit.id })) + 1,
+        archived: false, is_test: !!p.test, created_by: actor(ctx), created_at: ts, updated_at: ts,
+      };
+      await run(T('apps').insert(app));
+      const request = await methods.createRequest({
+        appId: app.id, type: 'new_app', title: str(p.requestTitle, 500) || `New App: ${app.name}`, description: p.description,
+        pmId: p.pmId, dueDate: p.dueDate,
+      }, ctx);
+      return { app: appOut(app), request };
+    },
+
+    /** Поправить приложение: название, цвет, статус, инфо; юнит — только CEO (проверяет база). */
+    async updateApp(p) {
+      const a = (await one('apps', p.id)) || fail('Приложение не найдено', 'NOT_FOUND');
+      const upd = {};
+      if ('name' in p) upd.name = req(str(p.name, 120), 'Название');
+      if ('color' in p) upd.color = color(p.color, a.color);
+      if ('status' in p) upd.status = (await appStatuses()).some(x => x.id === p.status) ? p.status : fail('Нет такого статуса');
+      if ('unitId' in p) upd.unit_id = (await findUnit(p.unitId)).id;
+      if ('info' in p) upd.info = { ...(json(a.info, {}) || {}), ...Object.fromEntries(Object.entries(p.info || {}).map(([k, v]) => [str(k, 40), str(v, 2000)])) };
+      if ('archived' in p) upd.archived = !!p.archived;
+      if (!Object.keys(upd).length) return appOut(a);
+      upd.updated_at = now();
+      await updateOne('apps', a.id, upd);
+      return appOut({ ...a, ...upd });
+    },
+
+    /**
+     * Запрос CEO по приложению → PM юнита приложения: type new_app / update / other.
+     * Задача лежит в юните приложения, тип request; pmId — конкретный PM (иначе первый PM юнита).
+     */
+    async createRequest(p, ctx) {
+      const a = (await one('apps', p.appId)) || fail('Приложение не найдено', 'NOT_FOUND');
+      const type = REQUEST_TYPES[p.type] ? p.type : 'other';
+      const pms = await unitPeople(a.unit_id, 'moderator');
+      const pmId = p.pmId && pms.some(x => x.id === p.pmId) ? p.pmId : pms.length ? pms[0].id : '';
+      return methods.createTask({
+        unitId: a.unit_id, title: str(p.title, 500) || `${REQUEST_TYPES[type]}: ${a.name}`, description: p.description,
+        assigneeId: pmId, dueDate: p.dueDate, kind: 'request', requestType: type, appId: a.id, test: !!a.is_test,
+      }, ctx);
+    },
+
+    /**
+     * Разложить запрос по флоу (PM): этапы — дочерние задачи с позицией, зависимостями и исполнителем
+     * (лид позиции в юните, иначе первый с этой позицией; у релиза — никого, пока не передадут RM).
+     * Запрос уходит «в работу». Повторно не раскладывает.
+     */
+    async decomposeRequest(p, ctx) {
+      const r = await findTask(p.taskId);
+      if (r.kind !== 'request') fail('Разложить по флоу можно только запрос');
+      const existing = await run(T('tasks').select('id').eq('parent_id', r.id).eq('kind', 'stage').limit(1));
+      if (existing.length) fail('Запрос уже разложен по этапам');
+      const steps = (await flows())[r.request_type] || [];
+      if (!steps.length) fail('Для этого типа запроса нет флоу — создайте задачи вручную');
+      const people = await unitPeople(r.unit_id);
+      const pick = positionId => {
+        const withPos = people.filter(x => x.positionIds.includes(positionId));
+        return (withPos.find(x => x.access === 'lead') || withPos[0] || {}).id || '';
+      };
+      const ids = {}, created = [];
+      for (const st of steps) {
+        const t = await methods.createTask({
+          unitId: r.unit_id, title: `${st.title} · ${r.title.replace(/^New App:\s*/, '')}`, parentId: r.id, kind: 'stage', step: st.key,
+          appId: r.app_id, departmentId: st.positionId, assigneeId: st.release ? '' : pick(st.positionId), dueDate: r.due_date,
+          dependsOn: st.dependsOn.map(k => ids[k]).filter(Boolean), test: !!r.is_test,
+        }, ctx);
+        ids[st.key] = t.id;
+        created.push(t);
+      }
+      // запрос — в работу (первая колонка типа «в работе»)
+      const st = unitSettings((await findUnit(r.unit_id)).settings);
+      const col = st.columns.find(c => c.kind === 'progress');
+      if (col && kindOf(st, r.status) === 'todo') await methods.updateTask({ id: r.id, patch: { status: col.id } }, ctx);
+      return created;
+    },
+
+    /**
+     * Передать в релиз (PM): этап release получает исполнителя-RM (rmId или первый RM юнита) — только когда
+     * закрыты все этапы, от которых он зависит. Статус приложения — «Релиз».
+     */
+    async sendToRelease(p, ctx) {
+      const t = await findTask(p.taskId);
+      if (t.kind !== 'stage' || t.step !== 'release') fail('Передать в релиз можно только этап «Релиз»');
+      const open = await rpc('open_deps', { p_deps: json(t.depends_on, []) || [] });
+      if (open) fail(`Сначала закройте: ${open}`, 'RULE');
+      const rms = await unitPeople(t.unit_id, 'rm');
+      const rmId = p.rmId && rms.some(x => x.id === p.rmId) ? p.rmId : rms.length ? rms[0].id : fail('В юните нет релиз-менеджера — добавьте RM в состав');
+      const saved = await methods.updateTask({ id: t.id, patch: { assigneeId: rmId } }, ctx);
+      if (t.app_id) {
+        const rel = (await appStatuses()).find(x => x.kind === 'release');
+        if (rel) await methods.updateApp({ id: t.app_id, status: rel.id }).catch(() => null);
+      }
+      return saved;
+    },
+
+    /** Режим разработчика: удалить всё, что создали шорткаты (тестовые задачи и приложения). */
+    async deleteTestData() {
+      return { tasks: Number(await rpc('delete_test_data', {})) || 0 };
+    },
+
     /* ---------- люди ---------- */
 
     /** Кто я: профиль вошедшего (привязка по email при первом входе). null — доступа нет. */
@@ -1487,7 +1500,6 @@ export function createBackend(db, opts = {}) {
       // команды: указанные или Other (если такая есть)
       person.team_ids = 'teamIds' in p ? await cleanTeams(p.teamIds) : (await validTeam('t_other')) ? ['t_other'] : [];
       await run(T('people').insert(person));
-      await syncTeamUnits(person.id, person.team_ids, [], person.position_id);
       return personOut(person);
     },
 
@@ -1583,57 +1595,6 @@ export function createBackend(db, opts = {}) {
       const t = { id: uid('tp'), ...row, ord: (await maxOrd('task_templates')) + 1 };
       await run(T('task_templates').insert(t));
       return templateOut(t);
-    },
-
-    /* ---------- наборы задач (декомпозиция) ---------- */
-
-    async getTaskSets() {
-      return taskSets();
-    },
-
-    async saveTaskSet(p) {
-      const items = [];
-      for (const it of (Array.isArray(p.items) ? p.items : []).slice(0, 30)) {
-        const title = str(it && it.title, 200);
-        if (!title) continue;
-        items.push({
-          title, teamId: await validTeam(it.teamId), positionId: await validDept(it.positionId),
-          dueDays: [-1, 0, 1, 2, 3, 5, 7, 14, 30].includes(Number(it.dueDays)) ? Number(it.dueDays) : -1,
-          description: str(it.description, 5000),
-        });
-      }
-      if (!items.length) fail('Добавьте в набор хотя бы одну задачу');
-      const row = { name: req(str(p.name, 80), 'Название набора'), items };
-      if (p.id) {
-        await updateOne('task_sets', String(p.id), row);
-        return taskSetOut(await one('task_sets', p.id));
-      }
-      const s = { id: uid('ts'), ...row, ord: (await maxOrd('task_sets')) + 1 };
-      await run(T('task_sets').insert(s));
-      return taskSetOut(s);
-    },
-
-    async deleteTaskSet(p) {
-      const gone = await run(T('task_sets').delete().eq('id', String(p.id ?? '')).select('id'));
-      if (!gone.length) fail('Недостаточно прав для этого действия', 'FORBIDDEN');
-      return true;
-    },
-
-    /** Применить набор к карточке: все задачи набора — в выбранный юнит, дочерними к ней («Дизайн · New App»). */
-    async applyTaskSet(p, ctx) {
-      const set = (await one('task_sets', p.setId)) || fail('Набор не найден', 'NOT_FOUND');
-      const parent = await findTask(p.parentId);
-      // задача набора с командой уходит в юнит-команду внутри выбранного юнита (Design в MVP), иначе — в сам юнит
-      const kids = await run(T('units').select('id,team_id').eq('parent_id', String(p.unitId)).eq('archived', false));
-      const byTeam = Object.fromEntries(kids.filter(k => k.team_id).map(k => [k.team_id, k.id]));
-      const created = [];
-      for (const it of taskSetOut(set).items) {
-        created.push(await methods.createTask({
-          unitId: byTeam[it.teamId] || p.unitId, parentId: parent.id, title: `${it.title} · ${parent.title}`, description: it.description,
-          teamId: it.teamId, departmentId: it.positionId, dueDate: it.dueDays >= 0 ? addDaysIso(it.dueDays) : '',
-        }, ctx));
-      }
-      return created;
     },
 
     async deleteTemplate(p) {
@@ -1732,7 +1693,6 @@ export function createBackend(db, opts = {}) {
       if ('extraPositionIds' in p) upd.extra_positions = (await cleanPositions(p.extraPositionIds)).filter(id => id !== main);
       else if (upd.position_id) upd.extra_positions = (json(person.extra_positions, []) || []).filter(id => id !== main);
       await updateOne('people', person.id, upd);
-      if (upd.team_ids) await syncTeamUnits(person.id, upd.team_ids, json(person.team_ids, []) || [], upd.position_id || person.position_id);
       // Отключённый человек не должен входить: блокируем аккаунт на сервере
       if ('active' in p && invoke && person.user_id && !!p.active !== !!person.active) {
         await invoke('admin-users', { action: 'active', personId: person.id, active: !!p.active });

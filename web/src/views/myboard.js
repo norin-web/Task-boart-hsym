@@ -58,9 +58,8 @@ function placeOf(data, cols, t) {
   const kind = unitKind(data, t);
   const p = data.placement[t.id];
   const own = p && cols.find(c => c.id === p.stage);
-  const same = c => c.kind === kind || (kind === 'live' && c.kind === 'done'); // «в сторе» на личной доске — как готово
-  if (own && same(own)) return { col: own, order: p.order };
-  return { col: cols.find(c => c.kind === kind) || cols.find(same) || cols[0], order: p ? p.order : t.order };
+  if (own && own.kind === kind) return { col: own, order: p.order };
+  return { col: cols.find(c => c.kind === kind) || cols[0], order: p ? p.order : t.order };
 }
 
 function draw(page, data) {
@@ -114,7 +113,7 @@ async function onMove(evt, data, cols, page) {
   data.placement[id] = { stage: col.id, order };
   try {
     const uk = unitKind(data, t);
-    if (col.kind !== uk && !(col.kind === 'done' && uk === 'live')) {
+    if (col.kind !== uk) {
       const u = data.units.find(x => x.id === t.unitId);
       const target = pickStatus(u, col.kind);
       if (target) Object.assign(t, await send('updateTask', { id: t.id, patch: { status: target } }));
@@ -131,8 +130,7 @@ async function onMove(evt, data, cols, page) {
 function pickStatus(u, kind) {
   if (!u) return '';
   const review = ((S.units.find(x => x.id === u.id) || {}).settings || {}).review || {};
-  const c = u.columns.find(x => x.kind === kind && x.id !== review.column) || u.columns.find(x => x.kind === kind)
-    || (kind === 'done' && u.columns.find(x => x.kind === 'live')); // в юните без «готово» — «в сторе»
+  const c = u.columns.find(x => x.kind === kind && x.id !== review.column) || u.columns.find(x => x.kind === kind);
   return c ? c.id : '';
 }
 

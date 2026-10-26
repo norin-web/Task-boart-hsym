@@ -1,5 +1,5 @@
-import { S, me, todayStr, dueInfo, KIND_COLORS, deptById, ACCESS_LABELS, LS, plural } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill } from '../ui.js';
+import { S, todayStr, dueInfo, KIND_COLORS, deptById, ACCESS_LABELS, LS, plural } from '../state.js';
+import { $, h, icon, topbar, showErr, fill } from '../ui.js';
 import { call } from '../api.js';
 import { currentView, taskLink, link } from '../router.js';
 

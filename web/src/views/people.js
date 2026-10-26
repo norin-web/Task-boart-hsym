@@ -5,7 +5,6 @@ import { send, call } from '../api.js';
 import { rerender } from '../router.js';
 import { mode, supabase, localPeople, localLogin } from '../data.js';
 import { LS } from '../state.js';
-import { personCaption } from './my.js';
 import { columnsEditor } from './settings.js';
 import { renderSidebar } from './sidebar.js';
 
@@ -84,7 +83,7 @@ export const positionsPicker = (get, set, opts = {}) => dictPicker({
 /** Команды: можно несколько; участник видит задачи своих команд. */
 export const teamsPicker = (get, set, opts = {}) => dictPicker({
   title: 'Команды', items: activeTeams, byId: teamById, get, set, empty: 'без команды', ...opts,
-  note: 'Участник видит в своих юнитах задачи своих команд',
+  note: 'Сотрудник видит в своих юнитах задачи своих команд',
 });
 
 const accessSelect = (value, onChange) => h('select', { class: 'inp', value, onchange: e => onChange(e.target.value) },
@@ -249,7 +248,7 @@ export function peopleManager({ search = false } = {}) {
       h('option', { value: 'off' }, 'Отключённые')));
   const el = h('div', null,
     h('p', { class: 'hint', style: { marginTop: 0 } },
-      'Участник видит в своих юнитах задачи своих команд и позиций. ' + (isSuper() ? 'Роли меняет только супер-админ.' : 'Роли назначает супер-админ.')),
+      'Сотрудник видит в своих юнитах задачи своих команд и позиций. ' + (isSuper() ? 'Роли меняете только вы (CEO).' : 'Роли назначает CEO.')),
     toolbar,
     box,
     h('div', { class: 'sub-title' }, 'Добавить человека'),
@@ -344,7 +343,7 @@ function passwordBlock() {
 /* ================= Локальный режим: «Войти как» ================= */
 
 export async function openActAs() {
-  const rank = { superadmin: 0, moderator: 1, member: 2 };
+  const rank = { superadmin: 0, moderator: 1, rm: 2, lead: 3, member: 4 };
   const people = (await localPeople()).sort((a, b) => rank[a.access] - rank[b.access] || a.name.localeCompare(b.name));
   modal({
     title: 'Войти как…',
@@ -366,7 +365,7 @@ export async function openActAs() {
         h('span', { class: 'person-name' }, p.name, S.meId === p.id && h('span', { class: 'badge' }, 'сейчас')),
         h('span', { class: 'person-sub' }, (deptById(p.position_id) || deptById('d_other') || {}).name || '')),
       !p.active && h('span', { class: 'badge' }, 'отключён'),
-      h('span', { class: 'role-badge role-' + p.access }, ACCESS_LABELS[p.access])))),
+      p.is_dev ? h('span', { class: 'role-badge dev-badge' }, 'Режим разработчика') : h('span', { class: 'role-badge role-' + p.access }, ACCESS_LABELS[p.access])))),
     ],
   });
 }
@@ -502,7 +501,7 @@ export const positionsManager = () => dictionaryManager({
     p.positionIds = p.positionIds.filter(x => x !== d.id);
     if (p.positionId === d.id || !p.positionIds.length) { p.positionId = 'd_other'; p.positionIds = ['d_other', ...p.positionIds.filter(x => x !== 'd_other')]; }
   }),
-  hint: 'Позиции есть у каждого человека (можно несколько) и у каждой задачи. Участник видит в своих юнитах задачи своих позиций.',
+  hint: 'Позиции есть у каждого человека (можно несколько) и у каждой задачи. Сотрудник видит в своих юнитах задачи своих позиций.',
   placeholder: 'Например, Backend Dev', addTitle: 'Добавить позицию', emptyText: 'Позиций нет',
 });
 
@@ -515,7 +514,7 @@ export const teamsManager = () => dictionaryManager({
   afterRemove: d => S.people.forEach(p => { if (p.teamIds) p.teamIds = p.teamIds.filter(x => x !== d.id); }),
   extra: (d, redraw) => h('button', { class: 'btn ghost sm', title: 'Стартовые этапы личной доски для людей этой команды', onclick: () => editTeamStages(d, redraw) },
     icon('board', 13), (d.boardTemplate || []).length + ' этап.'),
-  hint: 'Команды людей: Product Team, UX/UI Designers… У человека может быть несколько. Участник видит в своих юнитах задачи своих команд. «Этапы» — стартовая личная доска для людей команды.',
+  hint: 'Команды людей: Product Team, UX/UI Designers… У человека может быть несколько. Сотрудник видит в своих юнитах задачи своих команд. «Этапы» — стартовая личная доска для людей команды.',
   placeholder: 'Например, Growth Team', addTitle: 'Добавить команду', emptyText: 'Команд нет',
 });
 

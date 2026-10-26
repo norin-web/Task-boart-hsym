@@ -93,6 +93,10 @@ const ICONS = {
   app: 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z M8 12h8 M12 8v8',
   refresh: 'M21 12a9 9 0 1 1-3-6.7L21 8 M21 3v5h-5',
   tree: 'M6 3v18 M6 8h8 M6 16h8 M14 5h6v6h-6z M14 13h6v6h-6z',
+  lock: 'M6 11h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1z M8 11V7a4 4 0 0 1 8 0v4',
+  rocket: 'M5 15c-1.5 1.3-2 5-2 5s3.7-.5 5-2 M9 15l-3-3c1-4 5-9 13-9 0 8-5 12-9 13z M14.5 9.5h.01',
+  code: 'M16 18l6-6-6-6 M8 6l-6 6 6 6',
+  zap: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
 };
 const DOTS = new Set(['more', 'grip', 'list']);
 

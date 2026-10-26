@@ -1,17 +1,13 @@
 import Sortable from 'sortablejs';
-import { S, LS, byOrder, openCount, me, unitById, isStaff, ACCESS_LABELS } from '../state.js';
-import { $, h, icon, avatar, menu, showErr, fill, confirmDlg, toast } from '../ui.js';
+import { S, LS, byOrder, openCount, me, unitById, isStaff, isSuper, ceoMode, isDev, ACCESS_LABELS } from '../state.js';
+import { $, h, icon, avatar, menu, showErr, fill, confirmDlg } from '../ui.js';
 import { send } from '../api.js';
-import { link } from '../router.js';
+import { link, navigate, rerender } from '../router.js';
 import { openPalette } from './palette.js';
-import { unitMenu } from './units.js';
-import { openStructureWizard } from './structure.js';
-import { openPeople, openActAs, openDepartments, openMyProfile } from './people.js';
+import { unitMenu, openCreateUnit } from './units.js';
+import { openActAs, openMyProfile } from './people.js';
 import { personCaption } from './my.js';
 import { mode, supabase, resetLocalData } from '../data.js';
-
-// Воркспейсы создаются мастером структуры (App → Managers → юниты → команды → люди)
-const openStructure = () => openStructureWizard(() => location.reload());
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 
@@ -42,15 +38,13 @@ export function renderUnread() {
   b.hidden = !S.unread;
 }
 
-function unitItem(u, r, depth = 0) {
+function unitItem(u, r) {
   const n = openCount(u);
   const overdue = u.counts && u.counts.overdue;
-  // юнит с командами внутри (MVP) открывается сводкой, остальные — доской
-  const hasKids = S.units.some(x => !x.archived && x.parentId === u.id && x.teamId);
-  return link({ unit: u.id, mode: hasKids ? 'overview' : 'board' }, {
-    class: 'nav-item unit' + (r.unit === u.id ? ' active' : '') + (u.archived ? ' archived' : '') + (depth ? ' sub' : ''),
-    dataset: { id: u.id }, style: depth ? { '--depth': Math.min(depth, 4) } : null,
-    // правый клик — меню юнита (в т. ч. «Входит в…» — место в дереве)
+  return link({ unit: u.id, mode: 'board' }, {
+    class: 'nav-item unit' + (r.unit === u.id ? ' active' : '') + (u.archived ? ' archived' : ''),
+    dataset: { id: u.id },
+    // правый клик — меню юнита
     oncontextmenu: isStaff() ? e => { e.preventDefault(); unitMenu({ x: e.clientX, y: e.clientY }, u); } : null,
   },
   h('span', { class: 'unit-dot', style: { background: u.color } }),
@@ -60,35 +54,43 @@ function unitItem(u, r, depth = 0) {
 
 export function renderSidebar() {
   const r = S.route;
-  // Юниты деревом: верхние, под каждым — его юниты ниже (родитель не виден участнику — юнит считается верхним)
-  const visible = S.units.filter(u => !u.archived);
-  const ids = new Set(visible.map(u => u.id));
-  const units = [];
-  const walk = (list, depth) => list.sort(byOrder).forEach(u => {
-    units.push({ u, depth });
-    walk(visible.filter(x => x.parentId === u.id), depth + 1);
-  });
-  walk(visible.filter(u => !u.parentId || !ids.has(u.parentId)), 0);
+  const units = S.units.filter(u => !u.archived).sort(byOrder);
   const person = me();
   const [themeLabel, themeIcon] = THEMES[LS.get('theme', 'auto')] || THEMES.auto;
-  const list = h('div', { class: 'nav-units' }, units.map(({ u, depth }) => unitItem(u, r, depth)));
+  const list = h('div', { class: 'nav-units' }, units.map(u => unitItem(u, r)));
   const staff = isStaff();
+  const ceo = isSuper();
+  // CEO в режиме Default — только верхний уровень: приложения; остальное — в Admin
+  const lite = ceoMode() === 'default';
+  const lens = S.realMeId && S.meId !== S.realMeId ? person : null;
+  const navLink = (route, ic, label, extra) => link(route, { class: 'nav-item' + (isHere(r, route) ? ' active' : '') }, icon(ic), h('span', { class: 'nav-label' }, label), extra);
 
   fill($('#sidebar'),
     h('div', { class: 'brand' }, h('div', { class: 'brand-logo' }, icon('check', 16)), h('span', null, 'Tasks')),
+    lens && h('div', { class: 'lens-bar', role: 'status' }, icon('eye', 14),
+      h('span', null, 'Вы смотрите как ', h('b', null, lens.name), ' · ', ACCESS_LABELS[lens.access]),
+      h('button', { class: 'link-btn', onclick: () => import('./dev.js').then(m => m.viewAs('')) }, 'Вернуться')),
+    ceo && h('div', { class: 'ceo-mode' }, h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Режим CEO' },
+      [['default', 'Default', 'Приложения и приоритеты — без деталей разработки'], ['admin', 'Admin', 'Всё: юниты, доски, задачи, панель админа']].map(([m, label, hint]) =>
+        h('button', { class: ceoMode() === m ? 'on' : '', role: 'radio', 'aria-checked': String(ceoMode() === m), title: hint, onclick: () => setCeoMode(m) }, label)))),
     h('button', { class: 'search-btn', onclick: openPalette }, icon('search', 15), h('span', null, 'Поиск'), h('kbd', null, isMac ? '⌘K' : 'Ctrl K')),
-    link({ view: 'home' }, { class: 'nav-item' + (!r.unit && (!r.view || r.view === 'home') ? ' active' : '') }, icon('home'), h('span', { class: 'nav-label' }, staff ? 'Главная' : 'Мой дашборд'),
+    !lite && navLink({ view: 'home' }, 'home', staff ? 'Главная' : 'Мой дашборд',
       h('span', { class: 'nav-badge', id: 'unread-badge', title: 'Новые задачи на вас', hidden: !S.unread }, S.unread || '')),
-    link({ view: 'myboard' }, { class: 'nav-item' + (r.view === 'myboard' ? ' active' : '') }, icon('board'), h('span', { class: 'nav-label' }, 'Моя доска')),
-    staff && link({ view: 'my' }, { class: 'nav-item' + (r.view === 'my' ? ' active' : '') }, icon('user'), h('span', { class: 'nav-label' }, 'Мои задачи')),
-    staff && link({ view: 'admin' }, { class: 'nav-item' + (r.view === 'admin' ? ' active' : '') }, icon('settings'), h('span', { class: 'nav-label' }, 'Панель админа')),
-    h('div', { class: 'nav-section' },
+    navLink({ view: 'apps' }, 'app', 'Приложения', lite && h('span', { class: 'nav-badge', id: 'unread-badge', title: 'Новое для вас', hidden: !S.unread }, S.unread || '')),
+    !lite && navLink({ view: 'myboard' }, 'board', 'Моя доска'),
+    !lite && staff && navLink({ view: 'my' }, 'user', 'Мои задачи'),
+    !lite && staff && navLink({ view: 'admin' }, 'settings', 'Панель админа'),
+    !lite && h('div', { class: 'nav-section' },
       h('span', null, staff ? 'Воркспейсы' : 'Мои воркспейсы'),
-      staff && h('button', { class: 'icon-btn sm', title: 'Структура: уровни, юниты, команды, люди', onclick: openStructure }, icon('plus', 14))),
-    list,
-    !units.length && staff && h('button', { class: 'nav-item', onclick: openStructure }, icon('plus'), h('span', { class: 'nav-label muted' }, 'Создать воркспейс')),
-    !units.length && !staff && h('div', { class: 'nav-empty' }, 'Пока нет воркспейсов'),
+      ceo && h('button', { class: 'icon-btn sm', title: 'Новый юнит (Gold, RF, MVP…)', onclick: openCreateUnit }, icon('plus', 14))),
+    !lite && list,
+    !lite && !units.length && ceo && h('button', { class: 'nav-item', onclick: openCreateUnit }, icon('plus'), h('span', { class: 'nav-label muted' }, 'Создать воркспейс')),
+    !lite && !units.length && !ceo && h('div', { class: 'nav-empty' }, 'Пока нет воркспейсов'),
     h('div', { class: 'nav-spacer' }),
+    isDev() && h('button', {
+      class: 'nav-item dev-item' + (isHere(r, { view: 'dev' }) ? ' active' : ''), title: 'Смотреть как, шорткаты-сценарии, тестовые данные',
+      onclick: () => import('./dev.js').then(m => m.openDevPanel()),
+    }, icon('code'), h('span', { class: 'nav-label' }, 'Режим разработчика'), h('kbd', null, isMac ? '⌥D' : 'Alt D')),
 
     h('button', { class: 'nav-item', onclick: cycleTheme, title: 'Переключить тему' }, icon(themeIcon), h('span', { class: 'nav-label' }, themeLabel)),
     mode === 'local' && h('div', { class: 'mode-badge', title: 'Supabase не подключён: данные хранятся в этом браузере. См. README.' }, 'Локальный режим: данные только в этом браузере'),
@@ -110,15 +112,19 @@ export function renderSidebar() {
   }
 }
 
-/** Локальный режим: 6 демо-человек в текущую базу (ничего не стирая), чтобы было за кого «Войти как…». */
-async function addTestPeople() {
-  if (!(await confirmDlg('Добавить тестовых людей (Анна, Олег, Дмитрий, Мария, Павел, Ирина) в текущую базу? Ничего не удалится; уже добавленных пропустим.', { ok: 'Добавить' }))) return;
-  try {
-    const { seedPeople } = await import('../demo.js');
-    const n = await seedPeople();
-    toast(n ? `Добавлено: ${n}. Войти за них — «Войти как…»` : 'Тестовые люди уже есть');
-    if (n) setTimeout(() => location.reload(), 800);
-  } catch (e) { showErr(e); }
+/** Активен ли пункт меню для маршрута (главная — только без юнита и других экранов). */
+const isHere = (r, route) => !r.unit && (route.view === 'home' ? !r.view || r.view === 'home' : r.view === route.view);
+
+/** CEO: Default — только приложения; Admin — всё. Сохраняется в профиле (на всех устройствах). */
+async function setCeoMode(m) {
+  const p = me();
+  if (!p || ceoMode() === m) return;
+  p.prefs = { ...(p.prefs || {}), ceoMode: m };
+  renderSidebar(); // переключатель отзывается сразу
+  // сохраняем до перерисовки: экраны перечитывают людей с сервера и не должны получить старый режим
+  try { await send('setMyPrefs', { personId: p.id, prefs: { ceoMode: m } }); } catch (e) { showErr(e); }
+  if (m === 'default' && (S.route.unit || ['my', 'myboard', 'admin', 'home'].includes(S.route.view))) navigate({ view: 'apps' });
+  else rerender();
 }
 
 function meMenu(anchor) {
@@ -127,7 +133,6 @@ function meMenu(anchor) {
     email && { title: email },
     { label: 'Мой профиль', icon: 'user', action: openMyProfile },
     mode === 'local' && { label: 'Войти как…', icon: 'users', action: openActAs },
-    mode === 'local' && isStaff() && { label: 'Добавить тестовых людей', icon: 'plus', action: addTestPeople },
     mode === 'local' && { sep: true },
     mode === 'local' && { label: 'Очистить локальную базу', icon: 'trash', danger: true, action: resetLocal },
     mode === 'supabase' && { sep: true },

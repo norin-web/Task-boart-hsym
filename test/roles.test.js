@@ -27,7 +27,7 @@ async function setup() {
   return api;
 }
 
-/** Команда: супер-админ, модератор, дизайнер и iOS-разработчик в юните A; юнит B без участников. */
+/** Команда: CEO (супер-админ), PM (модератор) юнита A, дизайнер и iOS-разработчик в юните A; юнит B без участников. */
 async function team(api) {
   const mk = async (n, name, access, positionId) => {
     const p = await api('createPerson', { name, email: `u${n}@x.ru`, access, positionId });
@@ -42,6 +42,7 @@ async function team(api) {
   const B = await api('createUnit', { name: 'Bravo', key: 'BRV' });
   await api('setMember', { unitId: A.id, personId: designer.id });
   await api('setMember', { unitId: A.id, personId: dev.id });
+  await api('setMember', { unitId: A.id, personId: mod.id }); // PM юнита A (B ему не виден)
   const link = await api('createField', { unitId: A.id, name: 'Макет', type: 'url', required: true });
   const t1 = await api('createTask', { unitId: A.id, title: 'Макет экрана', assigneeId: designer.id });
   const t2 = await api('createTask', { unitId: A.id, title: 'Вёрстка', assigneeId: dev.id });
@@ -112,7 +113,7 @@ test('обязательное поле с колонки: нужно тольк
 
 test('ссылки: видимость по позициям проверяет база', async () => {
   const api = await setup();
-  const { admin, mod, designer, dev, A, B, t1, t2 } = await team(api);
+  const { mod, designer, dev, A, B, t1, t2 } = await team(api);
   // Google Drive — только дизайнерам; Figma — всем
   await api('updateLinkField', { id: 'lf_drive', positions: ['d_design', 'нет-такой'] });
   await api.as(designer, async () => {
@@ -235,20 +236,6 @@ test('несколько позиций, приоритет — только а�
   assert.equal(b.tasks.find(t => t.id === t2.id).assigneeId, '');
   assert.ok(!b.people.some(p => p.id === dev.id));
   assert.ok(!b.members.some(m => m.personId === dev.id));
-});
-
-test('передача вниз: модераторам — уведомление; участник не меняет связи задачи', async () => {
-  const api = await setup();
-  const { mod, designer, A, B, t1 } = await team(api);
-  await api('updateUnit', { id: A.id, settings: { ...A.settings, handoff: { column: 'in_progress', unitId: B.id } } });
-  await api('updateTask', { id: t1.id, patch: { status: 'in_progress' } });
-  await api.as(mod, async () => {
-    const n = await api('getNotifications', {});
-    assert.ok(n.some(x => x.kind === 'handoff' && x.unit.id === B.id), JSON.stringify(n.map(x => x.kind)));
-  });
-  await api.as(designer, async () => {
-    await assert.rejects(() => api.pg.query("update tasks set kind = 'app' where id = $1", [t1.id]), /Недостаточно прав/);
-  });
 });
 
 test('ревью: автоназначение ревьюера по позиции и возврат исполнителю', async () => {
@@ -482,7 +469,7 @@ test('личная доска: шаблоны этапов команд, тол�
 
 test('профили: свой профиль, роли меняет только супер-админ', async () => {
   const api = await setup();
-  const { admin, mod, designer, dev } = await team(api);
+  const { admin, mod, designer, dev, A, B } = await team(api);
   await api.as(designer, async () => {
     await api('updatePerson', { id: designer.id, name: 'Дизайнер Ира', color: '#ec4899' });
     await assert.rejects(() => api('updatePerson', { id: designer.id, access: 'superadmin' }), forbidden);
@@ -501,8 +488,10 @@ test('профили: свой профиль, роли меняет тольк�
     await assert.rejects(() => api('updatePerson', { id: designer.id, access: 'moderator' }), forbidden);
     await assert.rejects(() => api('createPerson', { name: 'x', access: 'moderator' }), forbidden);
     await assert.rejects(() => api('updatePerson', { id: admin.id, name: 'x' }), forbidden);
-    const u = await api('createUnit', { name: 'Charlie', key: 'CHR' }); // модератор управляет юнитами
-    await api('setMember', { unitId: u.id, personId: dev.id });
+    // PM управляет своими юнитами, но не создаёт новые и не трогает чужие
+    await assert.rejects(() => api('createUnit', { name: 'Charlie', key: 'CHR' }), forbidden);
+    await api('setMember', { unitId: A.id, personId: designer.id });
+    await assert.rejects(() => api('setMember', { unitId: B.id, personId: dev.id }), e => e.code === 'NOT_FOUND' || forbidden(e));
   });
   await api.as(admin, async () => {
     await assert.rejects(() => api('updatePerson', { id: admin.id, access: 'member' }), e => e.code === 'RULE' && /последнего/.test(e.message));
@@ -527,56 +516,12 @@ test('вход: привязка профиля по email, первый вхо�
   assert.equal(await api.as({ uid: UID(9), email: 'stranger@x.ru' }, () => api('whoami', {})), null);
 });
 
-test('передача вниз: срабатывает, когда задачу в колонку переносит участник; вручную — только администраторы', async () => {
+test('«нужно при создании» — для задач вручную; этапы запроса и дубли создаются', async () => {
   const api = await setup();
-  const { designer, A, B, link, t1 } = await team(api);
-  await api('updateField', { id: link.id, required: false });
-  await api('updateUnit', { id: A.id, settings: { ...A.settings, handoff: { column: 'in_progress', unitId: B.id } } });
-  await api.as(designer, async () => {
-    assert.equal((await api('updateTask', { id: t1.id, patch: { status: 'in_progress' } })).status, 'in_progress');
-    await assert.rejects(() => api('handoffTask', { id: t1.id }), forbidden);
-    await assert.rejects(() => api.pg.query('select handoff_copy($1)', [t1.id]), /permission denied/);
-  });
-  const copies = (await api.pg.query('select title, kind from tasks where unit_id = $1 and parent_id = $2', [B.id, t1.id])).rows;
-  assert.deepEqual(copies, [{ title: 'Макет экрана', kind: 'app' }]);
-});
-
-test('«в сторе» (live) — как «готово»: чеклист, обязательные с «готово», «закрыта по ревью»', async () => {
-  const api = await setup();
-  const { mod, designer, dev, A, link, t1, t2 } = await team(api);
-  await api('updateField', { id: link.id, required: false });
-  const st = (await api('getBoard', { unitId: A.id })).unit.settings;
-  st.columns = st.columns.map(c => (c.kind === 'done' ? { ...c, kind: 'live' } : c));
-  st.columns.splice(2, 0, { id: 'review', name: 'Review', kind: 'progress', color: '' });
-  await api('updateUnit', { id: A.id, settings: { ...st, checklistBeforeDone: true, review: { column: 'review', byPosition: {}, default: designer.id } } });
-  const ch = await api('createField', { global: true, name: 'Канал', type: 'text', required: true, requiredFrom: 'done' });
-  await api('updateTask', { id: t1.id, patch: { checklist: [{ text: 'a' }] } });
-  await api.as(designer, async () => {
-    await assert.rejects(() => api('updateTask', { id: t1.id, patch: { status: 'done' } }), /Канал/);
-    await api('updateTask', { id: t1.id, patch: { fields: { [ch.id]: 'web' } } });
-    await assert.rejects(() => api('updateTask', { id: t1.id, patch: { status: 'done' } }), /чеклист/);
-    await api('updateTask', { id: t1.id, patch: { checklist: [{ text: 'a', done: true }] } });
-    assert.equal((await api('updateTask', { id: t1.id, patch: { status: 'done' } })).status, 'done');
-  });
-  // ревьюер переносит в «в сторе» — исполнителю «закрыта по ревью»
-  await api('updateTask', { id: t2.id, patch: { fields: { [ch.id]: 'web' } } });
-  await api.as(dev, () => api('updateTask', { id: t2.id, patch: { status: 'review' } }));
-  await api.as(designer, () => api('updateTask', { id: t2.id, patch: { status: 'done' } }));
-  await api.as(dev, async () => {
-    const n = (await api('getNotifications', {})).find(x => x.taskId === t2.id);
-    assert.equal(n.kind, 'approved');
-  });
-  assert.ok(mod);
-});
-
-test('«нужно при создании» — для задач вручную; наборы и дубли создаются', async () => {
-  const api = await setup();
-  const { mod, A, B, t1 } = await team(api);
+  const { admin, mod, A, t1 } = await team(api);
   const brief = await api('createField', { global: true, name: 'Бриф', type: 'text', requiredOnCreate: true });
-  const set = await api('saveTaskSet', { name: 'S', items: [{ title: 'a' }, { title: 'b' }] });
   await api.as(mod, async () => {
     await assert.rejects(() => api('createTask', { unitId: A.id, title: 'Без брифа' }), /Бриф/);
-    assert.equal((await api('applyTaskSet', { setId: set.id, parentId: t1.id, unitId: B.id })).length, 2);
     const copy = await api('duplicateTask', { id: t1.id });
     assert.equal(copy.title, 'Макет экрана (копия)');
     assert.equal(copy.assigneeId, t1.assigneeId);
@@ -584,6 +529,9 @@ test('«нужно при создании» — для задач вручну�
     const full = await api('createTask', { unitId: A.id, title: 'С брифом', fields: { [brief.id]: 'есть' } });
     assert.equal(full.fields[brief.id], 'есть');
   });
+  // этапы запроса CEO — дочерние задачи, создаются без брифа
+  const { request } = await api.as(admin, () => api('createApp', { name: 'App', unitId: A.id }));
+  assert.ok((await api.as(mod, () => api('decomposeRequest', { taskId: request.id }))).length > 0);
 });
 
 test('история: участник пишет только про свои задачи', async () => {
