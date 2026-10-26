@@ -10,6 +10,7 @@ import { taskGroups, unitGroups, loadMyTasks, personCaption } from './my.js';
 import { activityFeed } from './feed.js';
 import { renderLayout, editLayout } from './layout.js';
 import { openPeople } from './people.js';
+import { focusBlock, reviewsBlock, teamLoadBlock } from './employee.js';
 
 /* ---------- «Новое для вас»: задачи, которые на меня назначили ---------- */
 
@@ -45,6 +46,7 @@ function noteText(kind, by) {
   if (kind === 'review') return who ? 'отправил(а) ' + who : 'от вас';
   if (kind === 'returned') return who ? 'вернул(а) ' + who : 'вернули';
   if (kind === 'approved') return who ? 'принял(а) ' + who : 'принято';
+  if (kind === 'unblocked') return 'предыдущие этапы закрыты';
   return who ? 'назначил(а) ' + who : 'назначено';
 }
 
@@ -76,6 +78,7 @@ export function newsBlock() {
     n.kind === 'review' && h('span', { class: 'news-kind review', title: 'Задача пришла вам на ревью' }, icon('eye', 12), 'Ревью'),
     n.kind === 'returned' && h('span', { class: 'news-kind returned', title: 'Ревьюер вернул задачу вам' }, icon('back', 12), 'Вернули'),
     n.kind === 'approved' && h('span', { class: 'news-kind approved', title: 'Ревьюер принял работу — задача закрыта' }, icon('done', 12), 'Закрыта по ревью'),
+    n.kind === 'unblocked' && h('span', { class: 'news-kind unblocked', title: 'Этапы, которые нужно было закрыть раньше, закрыты' }, icon('zap', 12), 'Можно начинать'),
     n.kind === 'overdue' && h('span', { class: 'news-kind overdue', title: 'Срок прошёл' }, icon('alert', 12), 'Просрочено'),
     n.kind === 'due_soon' && h('span', { class: 'news-kind soon', title: 'Срок скоро' }, icon('clock', 12), n.dueDate === todayStr() ? 'Срок сегодня' : 'Срок завтра'),
     h('span', { class: 'key-badge' }, n.key),
@@ -470,9 +473,10 @@ function unitCard(u) {
 async function renderMemberHome() {
   const page = h('div', { class: 'page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
   fill($('#main'), topbar([h('h1', null, 'Мой дашборд')], []), h('div', { class: 'view-body' }, page));
-  let d, tasks;
+  let d, tasks, md;
   try {
-    [d, tasks] = await Promise.all([call('getHome', { today: new Date().toISOString().slice(0, 10) }), loadMyTasks(), loadNotes()]);
+    [d, tasks, , md] = await Promise.all([call('getHome', { today: new Date().toISOString().slice(0, 10) }), loadMyTasks(), loadNotes(),
+      call('getMyDashboard', { personId: S.meId, today: todayStr() })]);
   } catch (e) {
     showErr(e);
     return;
@@ -493,6 +497,9 @@ async function renderMemberHome() {
 
   const BLOCKS = [
     NEWS_BLOCK,
+    { id: 'focus', title: 'Фокус', col: 'left', render: () => focusBlock(md) },
+    md.lead && { id: 'reviews', title: 'Ждут вашего ревью', col: 'right', render: () => reviewsBlock(md, () => rerender()) },
+    md.lead && { id: 'teamLoad', title: 'Загрузка позиции', col: 'right', render: () => teamLoadBlock(md) },
     { id: 'stats', title: 'Статистика', col: 'full', render: () => h('div', { class: 'stats' },
       stat('Мои открытые задачи', open.length, 'circle', 'var(--st-progress)'),
       stat('Просрочено', overdue, 'alert', 'var(--danger)'),
@@ -504,8 +511,8 @@ async function renderMemberHome() {
       h('div', { class: 'section-head' }, h('h2', null, 'Мои юниты')),
       units.length
         ? h('div', { class: 'unit-grid', style: { gridTemplateColumns: '1fr' } }, units.map(unitCard))
-        : h('div', { class: 'card-box empty-state' }, h('p', { style: { margin: 0 } }, 'Вас пока не добавили ни в один юнит. Обратитесь к модератору.'))) },
-  ];
+        : h('div', { class: 'card-box empty-state' }, h('p', { style: { margin: 0 } }, 'Вас пока не добавили ни в один юнит. Обратитесь к PM.'))) },
+  ].filter(Boolean);
   const draw = () => fill(page,
     h('div', { class: 'hero' },
       h('div', null,

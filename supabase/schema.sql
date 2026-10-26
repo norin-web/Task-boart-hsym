@@ -737,6 +737,53 @@ end $$;
 drop trigger if exists notify_assignee on tasks;
 create trigger notify_assignee after insert or update on tasks for each row execute function notify_assignee();
 
+-- Этап разблокировался: задача закрылась — исполнителям этапов, которые ждали только её, уведомление «Можно начинать»
+-- (kind 'unblocked'). Тестовые задачи — только разработчику.
+create or replace function notify_unblocked() returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_actor text := coalesce(my_person_id(), '');
+  at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+begin
+  if new.status is not distinct from old.status or not task_done(new.id) then return new; end if;
+  insert into notifications (id, person_id, task_id, kind, actor_id, at)
+  select 'n_' || substr(md5(random()::text || clock_timestamp()::text || d.id), 1, 12), d.assignee_id, d.id, 'unblocked', v_actor, at_
+    from tasks d
+   where d.depends_on ? new.id and d.assignee_id <> '' and not d.archived and not task_done(d.id)
+     and open_deps(d.depends_on) is null
+     and (not d.is_test or exists (select 1 from people where id = d.assignee_id and is_dev))
+     and not exists (select 1 from notifications n where n.task_id = d.id and n.person_id = d.assignee_id and n.kind = 'unblocked');
+  return new;
+end $$;
+drop trigger if exists notify_unblocked on tasks;
+create trigger notify_unblocked after update of status on tasks for each row execute function notify_unblocked();
+
+-- Лид передаёт свой этап сотруднику своей позиции в этом юните (менять исполнителя участнику нельзя — делает функция).
+create or replace function lead_handover(p_task text, p_person text) returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  t tasks;
+  v_me text := my_person_id();
+  at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+begin
+  select * into t from tasks where id = p_task;
+  if t.id is null then raise exception 'Задача не найдена' using errcode = 'P0001'; end if;
+  if my_access() <> 'lead' or t.assignee_id is distinct from v_me then
+    raise exception 'Недостаточно прав: передать может лид — свою задачу' using errcode = '42501';
+  end if;
+  if task_done(t.id) then raise exception 'Задача уже готова' using errcode = 'P0001'; end if;
+  if not exists (select 1 from people p join unit_members m on m.person_id = p.id and m.unit_id = t.unit_id
+                  where p.id = p_person and p.active and p.id <> v_me
+                    and (t.department_id = '' or t.department_id = p.position_id or p.extra_positions ? t.department_id)) then
+    raise exception 'Передать можно сотруднику этой позиции в юните' using errcode = 'P0001';
+  end if;
+  perform set_config('app.system', 'on', true);
+  update tasks set assignee_id = p_person, updated_at = at_ where id = t.id;
+  insert into activity (id, unit_id, task_id, action, field, from_val, to_val, actor_id, at)
+  values ('a_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), t.unit_id, t.id, 'update', 'assigneeId',
+          to_jsonb(v_me)::text, to_jsonb(p_person)::text, v_me, at_);
+  perform set_config('app.system', 'off', true);
+end $$;
+
 -- Сроки своих задач: просрочено (kind 'overdue') и срок сегодня/завтра ('due_soon'). Зовёт приложение вошедшего
 -- (пульс и загрузка уведомлений) с его сегодняшней датой — без крона. На каждый срок — одно уведомление.
 create or replace function scan_due(p_today text) returns void language plpgsql security definer set search_path = public as $$

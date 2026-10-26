@@ -372,3 +372,48 @@ test('RM: релиз — поля и чеклист, отправка в Apple, 
   await api.as(pm, () => assert.rejects(() => api('saveReleaseSettings', { checklist: ['x'] }), forbidden));
   await api.as(rm, async () => assert.deepEqual((await api('saveReleaseSettings', { checklist: ['Сборка', ''] })).checklist, ['Сборка']));
 });
+
+test('сотрудник и лид: «Можно начинать», фокус, очередь ревью, загрузка позиции, передача этапа', async () => {
+  const api = await setup();
+  const { ceo, pm, lead, ios, qa, gold } = await studio(api);
+  const des = await api('createPerson', { name: 'Дизайнер', email: 'des@x.ru', access: 'member', positionId: 'd_design' });
+  await api.pg.query('update people set user_id = $1 where id = $2', [UID(99), des.id]);
+  const designer = { ...des, uid: UID(99) };
+  await api('setMember', { unitId: gold.id, personId: designer.id });
+  const day = new Date().toISOString().slice(0, 10);
+  const { request } = await api.as(ceo, () => api('createApp', { name: 'Sleep', unitId: gold.id }));
+  const st = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: request.id }))).map(t => [t.step, t]));
+  assert.equal(st.design.assigneeId, lead.id);
+
+  // лид передаёт дизайн дизайнеру; не своей позиции и не лиду — нельзя
+  await api.as(lead, () => assert.rejects(() => api('handOverTask', { taskId: st.design.id, personId: ios.id }), /этой позиции/));
+  await api.as(ios, () => assert.rejects(() => api('handOverTask', { taskId: st.ios.id, personId: designer.id }), /лид/));
+  assert.equal((await api.as(lead, () => api('handOverTask', { taskId: st.design.id, personId: designer.id }))).assigneeId, designer.id);
+  await api.as(designer, async () => assert.ok((await api('getNotifications', {})).some(n => n.taskId === st.design.id && n.kind === 'assigned')));
+
+  // фокус: просроченное — первым, заблокированные этапы — не в фокусе
+  await api.as(pm, () => api('updateTask', { id: st.design.id, patch: { dueDate: '2020-01-01' } }));
+  await api.as(designer, async () => {
+    const d = await api('getMyDashboard', { personId: designer.id, today: day });
+    assert.equal(d.focus[0].id, st.design.id);
+    assert.equal(d.focus[0].reason, 'overdue');
+    assert.equal(d.lead, null);
+  });
+  await api.as(ios, async () => assert.ok(!(await api('getMyDashboard', { personId: ios.id, today: day })).focus.some(t => t.id === st.ios.id)));
+
+  // ревью дизайна — у лида: в очереди, «Принять» → готово
+  await api('updateUnit', { id: gold.id, settings: { ...(await api('getBoard', { unitId: gold.id })).unit.settings, review: { column: 'review', byPosition: { d_design: lead.id }, default: pm.id } } });
+  await api.as(designer, () => api('updateTask', { id: st.design.id, patch: { status: 'review' } }));
+  const ld = await api.as(lead, () => api('getMyDashboard', { personId: lead.id, today: day }));
+  const rv = ld.lead.reviews.find(x => x.id === st.design.id);
+  assert.ok(rv);
+  assert.equal(rv.authorId, designer.id);
+  assert.equal(rv.acceptStatus, 'done');
+  assert.equal(rv.returnStatus, 'in_progress');
+  assert.deepEqual(ld.lead.team.map(x => x.personId).sort(), [lead.id, designer.id].sort());
+  await api.as(lead, () => api('updateTask', { id: st.design.id, patch: { status: rv.acceptStatus } }));
+
+  // дизайн закрыт → iOS «Можно начинать», QA ещё ждёт
+  await api.as(ios, async () => assert.ok((await api('getNotifications', {})).some(n => n.taskId === st.ios.id && n.kind === 'unblocked')));
+  await api.as(qa, async () => assert.ok(!(await api('getNotifications', {})).some(n => n.kind === 'unblocked')));
+});

@@ -1364,3 +1364,34 @@ a.rl-link:hover { background: var(--accent-soft); color: var(--accent-text); }
 .rq-line { font-size: 12.5px; display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 .rm-actions { display: inline-flex; align-items: center; gap: 6px; }
 @media (max-width: 720px) { .rm-row { grid-template-columns: auto minmax(0, 1fr); } .rm-actions { grid-column: 1 / -1; justify-content: flex-end; } }
+
+/* ---------- Tasks 2.0: сотрудник и лид ---------- */
+.news-kind.unblocked { background: var(--ok-soft); color: var(--ok); }
+.fc-row { display: grid; grid-template-columns: 20px auto minmax(0, 1fr) auto auto; gap: 10px; align-items: center; width: 100%; border: 0; background: none; font: inherit;
+  font-size: 13px; color: var(--text); text-align: left; padding: 8px 10px; border-radius: 8px; cursor: pointer; min-height: 44px; }
+.fc-row:hover { background: var(--surface-2); }
+.fc-main { display: grid; gap: 2px; min-width: 0; text-align: left; color: var(--text); }
+.fc-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.fc-sub { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fc-when { font-size: 12px; white-space: nowrap; font-weight: 600; }
+.fc-when.danger, .att-ic.danger { color: var(--danger); }
+.fc-when.warn { color: var(--warn); }
+.fc-when.accent, .att-ic.accent { color: var(--accent-text); }
+.rv-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 8px; }
+.rv-row:hover { background: var(--surface-2); }
+.rv-actions { display: inline-flex; gap: 6px; }
+.tl-list { padding: 4px; display: grid; }
+.tl-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: center; padding: 8px 10px; }
+.tl-row + .tl-row { border-top: 1px solid var(--border); }
+.tl-name { display: grid; min-width: 0; }
+.tl-name b, .tl-name small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-nums { grid-column: 2; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; }
+@media (max-width: 720px) { .fc-row { grid-template-columns: 20px minmax(0, 1fr) auto; } .fc-row > .uc-icon, .fc-row > .prio-tag { display: none; } }
+/* личная доска: обязательные колонки и свои */
+.mb-row { grid-template-columns: auto auto minmax(0, 1fr) auto; }
+.mb-row.locked { background: var(--surface-2); border-radius: 8px; padding: 4px 8px; }
+.mb-row.locked .swatch { cursor: default; }
+.drag-off { display: flex; color: var(--muted); padding: 0 1px; }
+.mb-name { font-size: 13.5px; }
+.mb-note { font-size: 12px; text-align: right; }
+.my-board .col.own { border-top-style: dashed; }

@@ -1703,6 +1703,72 @@ export function createBackend(db, opts = {}) {
       return saved;
     },
 
+    /* ---------- сотрудник и лид ---------- */
+
+    /**
+     * Дашборд сотрудника: фокус (мои открытые задачи — просрочено, срок сегодня/завтра, в работе; заблокированные этапы не здесь).
+     * Лиду ещё: очередь ревью (задачи сотрудников на его ревью: «Принять» — колонка готово, «Вернуть» — колонка перед ревью)
+     * и загрузка людей его позиций в его юнитах. personId — кто смотрит (в «смотреть как» — за кого).
+     */
+    async getMyDashboard(p) {
+      const day = today(p.today);
+      const tomorrow = new Date(Date.parse(day) + 864e5).toISOString().slice(0, 10);
+      const meId = str(p.personId, 40);
+      const [tasks, units, apps, ppl, members] = await Promise.all([
+        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,due_date,archived,kind,step,app_id,depends_on,fields,review_from,department_id,updated_at')
+          .eq('archived', false).order('id')),
+        all(() => T('units').select('id,key,name,color,settings').eq('archived', false).order('ord').order('id')),
+        all(() => T('apps').select('id,name,color,priority').order('id')),
+        people(), all(() => T('unit_members').select('unit_id,person_id').order('unit_id')),
+      ]);
+      const U = Object.fromEntries(units.map(u => [u.id, { ...u, st: unitSettings(u.settings) }]));
+      const A = Object.fromEntries(apps.map(a => [a.id, { id: a.id, name: a.name, color: a.color, priority: a.priority || '' }]));
+      const vis = tasks.filter(t => U[t.unit_id]);
+      const kindOfRow = t => kindOf(U[t.unit_id].st, t.status);
+      const byId = Object.fromEntries(vis.map(t => [t.id, t]));
+      const done = t => kindOfRow(t) === 'done';
+      const blocked = t => (json(t.depends_on, []) || []).some(id => byId[id] && !done(byId[id]));
+      const col = t => columnOf(U[t.unit_id].st, t.status);
+      const brief = t => ({ id: t.id, unitId: t.unit_id, key: `${U[t.unit_id].key}-${t.num}`, title: t.title, dueDate: t.due_date, kind: kindOfRow(t),
+        statusName: col(t).name, priority: (json(t.fields, {}) || {}).f_priority || (A[t.app_id] || {}).priority || '', app: A[t.app_id] || null, updatedAt: t.updated_at });
+
+      const person = ppl.find(x => x.id === meId);
+      const isLead = !!person && person.access === 'lead';
+      const reviewing = t => !!t.review_from && t.status === U[t.unit_id].st.review.column;
+      // у лида задачи на его ревью — в своей очереди, не в фокусе
+      const mine = vis.filter(t => t.assignee_id === meId && !done(t) && !blocked(t) && !(isLead && reviewing(t)));
+      const reason = t => (t.due_date && t.due_date < day ? 'overdue' : t.due_date === day ? 'today' : t.due_date === tomorrow ? 'tomorrow' : kindOfRow(t) === 'progress' ? 'progress' : '');
+      const rankR = { overdue: 0, today: 1, tomorrow: 2, progress: 3 };
+      const focus = mine.map(t => ({ ...brief(t), reason: reason(t) })).filter(t => t.reason)
+        .sort((a, b) => rankR[a.reason] - rankR[b.reason] || (a.dueDate || '9999').localeCompare(b.dueDate || '9999'));
+
+      if (!isLead) return { focus, lead: null };
+      // очередь ревью: на мне, отправлено на ревью, лежит в колонке ревью
+      const reviews = vis.filter(t => t.assignee_id === meId && reviewing(t)).map(t => {
+        const cols = U[t.unit_id].st.columns;
+        const i = cols.findIndex(c => c.id === t.status);
+        const back = [...cols.slice(0, i)].reverse().find(c => c.kind !== 'done') || cols[0];
+        const fin = cols.find(c => c.kind === 'done');
+        return { ...brief(t), authorId: t.review_from, acceptStatus: fin ? fin.id : '', returnStatus: back.id };
+      });
+      // загрузка: люди моих позиций в моих юнитах
+      const myUnits = new Set(members.filter(m => m.person_id === meId).map(m => m.unit_id));
+      const inMine = new Set(members.filter(m => myUnits.has(m.unit_id)).map(m => m.person_id));
+      const team = ppl.filter(x => x.active && inMine.has(x.id) && x.positionIds.some(id => person.positionIds.includes(id))).map(x => {
+        const own = vis.filter(t => t.assignee_id === x.id && !done(t));
+        return { personId: x.id, open: own.length, inProgress: own.filter(t => kindOfRow(t) === 'progress').length,
+          overdue: own.filter(t => t.due_date && t.due_date < day).length, waiting: own.filter(blocked).length };
+      }).sort((a, b) => b.open - a.open);
+      return { focus, lead: { reviews, team } };
+    },
+
+    /** Лид передаёт свою задачу сотруднику своей позиции в юните (проверяет база). */
+    async handOverTask(p) {
+      const t = await findTask(p.taskId);
+      await rpc('lead_handover', { p_task: t.id, p_person: str(p.personId, 40) });
+      return taskOut(await findTask(t.id));
+    },
+
     /* ---------- релиз (RM) ---------- */
 
     /** Релизные поля и чеклист релиза студии (настраивают CEO и RM). */

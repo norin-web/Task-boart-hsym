@@ -1,5 +1,5 @@
 import {
-  S, LS,  taskById, personById, activeFields, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDateTime, relTime, addDays,
+  S, LS, me, taskById, personById, activeFields, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDateTime, relTime, addDays,
   unitById, safeUrl, visibleLinkFields, REQUEST_TYPES, appById, isSuper, ceoDefault, KIND_COLORS, whoName, teamById, activeTeams, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, fmtValue,
 } from '../state.js';
 import { $, h, append, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, fill } from '../ui.js';
@@ -210,6 +210,23 @@ function flowBlock(t) {
   }
   load();
   return box;
+}
+
+/** Кому лид может передать задачу: люди юнита с позицией задачи (кроме него). */
+function handoverPeople(t) {
+  return (S.board.members || []).map(m => personById(m.personId))
+    .filter(p => p && p.active && p.id !== S.meId && (!t.departmentId || (p.positionIds || []).includes(t.departmentId)))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+}
+
+async function handOver(t, p) {
+  try {
+    const saved = await send('handOverTask', { taskId: t.id, personId: p.id });
+    Object.assign(t, saved);
+    toast('Передано: ' + p.name);
+    await reloadBoard().catch(() => {});
+    if (S.panelTaskId === t.id) openTask(t.id);
+  } catch (e) { showErr(e); }
 }
 
 /** Перейти на доску юнита (из карточки, открытой поверх дашборда — с этой же задачей). */
@@ -500,7 +517,14 @@ function sideBlock(t, { staff, editable }) {
 
   if (!B.assignee.hidden && !staff) {
     const p = personById(t.assigneeId);
-    prop(B.assignee.label, ro(p && h('span', { class: 'row', style: { gap: '6px', flexWrap: 'nowrap' } }, avatar(p, 'sm'), p.name)));
+    // лид может отдать свою задачу сотруднику своей позиции в этом юните
+    const handover = me() && me().access === 'lead' && t.assigneeId === S.meId && !taskDone(t) && handoverPeople(t);
+    prop(B.assignee.label, ro(p && h('span', { class: 'row', style: { gap: '6px', flexWrap: 'nowrap' } }, avatar(p, 'sm'), p.name)), {
+      after: handover && handover.length > 0 && h('div', { class: 'quick-chips' }, h('button', {
+        class: 'quick-chip', onclick: e => { e.stopPropagation(); menu(e.currentTarget, [{ title: 'Передать сотруднику' },
+          ...handover.map(x => ({ label: x.name, icon: 'user', action: () => handOver(t, x) }))]); },
+      }, icon('users', 12), 'Передать сотруднику')),
+    });
   } else if (!B.assignee.hidden) {
     prop(B.assignee.label, assigneeSelect(t.assigneeId, v => {
       const p = personById(v);
