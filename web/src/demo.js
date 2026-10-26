@@ -181,6 +181,18 @@ async function runProcess(api, P, U, test) {
   await act('kate', 'createTask', { unitId: U.RF.id, title: 'Пейволл: ссылки на условия подписки', parentId: rej.id, appId: wx.app.id,
     assigneeId: P.dima.id, departmentId: 'd_ios', dueDate: day(-1), fields: opt('Critical'), test });
 
+  // свой флоу New App у MVP (настройки юнита): плюс промо-ролик параллельно — его PM увидит в окне «Разложить» у Habit Tracker
+  if (!test) {
+    await act('kate', 'saveFlow', { unitId: U.MVP.id, type: 'new_app', steps: [
+      { key: 'design', title: 'Дизайн', positionId: 'd_design' },
+      { key: 'ios', title: 'Разработка iOS', positionId: 'd_ios', dependsOn: ['design'] },
+      { key: 'qa', title: 'Тестирование', positionId: 'd_qa', dependsOn: ['ios'] },
+      { key: 'meta', title: 'Мета (ASO)', positionId: 'd_aso' },
+      { key: 'promo', title: 'Промо-ролик', positionId: 'd_design', dependsOn: ['design'] },
+      { key: 'release', title: 'Релиз', positionId: 'd_release', dependsOn: ['design', 'ios', 'qa', 'meta', 'promo'], release: true },
+    ] });
+  }
+
   // Habit Tracker (MVP): запрос только что пришёл — у PM во входящих, ещё не разложен
   await app('Habit Tracker', 'MVP', '#10b981', { dueDate: day(60), description: 'Трекер привычек: стрики, напоминания, виджеты.' });
   apps++;
