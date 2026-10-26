@@ -138,11 +138,11 @@ function team(d, period, setPeriod) {
       rows.map(k => h('div', { class: 'kt-row', role: 'row' },
         h('span', { class: 'kt-who', role: 'cell' }, avatar(k.p, 'sm'), h('span', null, h('b', null, k.p.name),
           h('small', { class: 'muted' }, (k.p.positionIds || []).map(id => (deptById(id) || {}).name).filter(Boolean).join(', ')))),
-        h('span', { class: 'num', role: 'cell' }, h('b', null, k.done)),
-        h('span', { class: 'num', role: 'cell' }, pct(k.onTime)),
-        h('span', { class: 'num', role: 'cell' }, k.avgDays === null ? h('span', { class: 'muted' }, '—') : k.avgDays + ' дн.'),
-        h('span', { class: 'num', role: 'cell' }, k.inProgress),
-        h('span', { class: 'num' + (k.overdue ? ' warn-text' : ''), role: 'cell' }, k.overdue))),
+        h('span', { class: 'num', role: 'cell', 'data-label': 'Сделано' }, h('b', null, k.done)),
+        h('span', { class: 'num', role: 'cell', 'data-label': 'В срок' }, pct(k.onTime)),
+        h('span', { class: 'num', role: 'cell', 'data-label': 'Ср. время' }, k.avgDays === null ? h('span', { class: 'muted' }, '—') : k.avgDays + ' дн.'),
+        h('span', { class: 'num', role: 'cell', 'data-label': 'В работе' }, k.inProgress),
+        h('span', { class: 'num' + (k.overdue ? ' warn-text' : ''), role: 'cell', 'data-label': 'Просроч.' }, k.overdue))),
       h('p', { class: 'hint kt-note' }, `За ${PERIODS.find(([k]) => k === period)[1].toLowerCase()}: «Сделано» и «В срок» — закрытые задачи в ваших юнитах; «Ср. время» — от «в работе» до «готово»; «В работе» и «Просрочено» — сейчас.`))
       : h('div', { class: 'card-box empty-state sm' }, h('p', null, 'В ваших юнитах пока нет сотрудников — добавьте их в составе юнита.')));
 }

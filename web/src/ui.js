@@ -184,7 +184,7 @@ export function topbar(left, right) {
 /* ---------- тосты ---------- */
 
 export function toast(msg, opts = {}) {
-  const el = h('div', { class: 'toast' + (opts.type ? ' ' + opts.type : ''), role: 'status' },
+  const el = h('div', { class: 'toast' + (opts.type ? ' ' + opts.type : ''), role: opts.type === 'error' ? 'alert' : 'status' },
     h('span', null, msg),
     opts.action && h('button', { class: 'toast-action', onclick: () => { el.remove(); opts.action.run(); } }, opts.action.label));
   $('#toast-root').append(el);
@@ -199,9 +199,14 @@ export function showErr(e) {
 /* ---------- контекстное меню ---------- */
 
 let openMenuEl = null;
+let menuAnchor = null;
 
 export function closeMenu() {
-  if (openMenuEl) { openMenuEl.remove(); openMenuEl = null; }
+  if (!openMenuEl) return;
+  const hadFocus = openMenuEl.contains(document.activeElement);
+  openMenuEl.remove(); openMenuEl = null;
+  if (hadFocus && menuAnchor && menuAnchor.isConnected) menuAnchor.focus();  // фокус возвращается на кнопку меню
+  menuAnchor = null;
 }
 export const isMenuOpen = () => !!openMenuEl;
 
@@ -221,6 +226,15 @@ export function menu(anchor, items) {
     }, it.icon && icon(it.icon, 15), it.label);
   }));
   m.addEventListener('click', e => e.stopPropagation());
+  // клавиатура: стрелки ходят по пунктам, Home/End — к крайним
+  m.addEventListener('keydown', e => {
+    const items = [...m.querySelectorAll('button:not(:disabled)')];
+    const i = items.indexOf(document.activeElement);
+    const go = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: items.length - 1 }[e.key];
+    if (go === undefined || !items.length) return;
+    e.preventDefault();
+    items[(go + items.length) % items.length].focus();
+  });
   document.body.append(m);
   const r = anchor instanceof Element ? anchor.getBoundingClientRect() : { left: anchor.x, right: anchor.x, top: anchor.y, bottom: anchor.y };
   const w = m.offsetWidth, hgt = m.offsetHeight;
@@ -229,6 +243,9 @@ export function menu(anchor, items) {
   m.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, left)) + 'px';
   m.style.top = top + 'px';
   openMenuEl = m;
+  menuAnchor = anchor instanceof Element ? anchor : null;
+  // открыто с клавиатуры — фокус на первый пункт
+  if (menuAnchor && menuAnchor.matches(':focus-visible')) { const first = m.querySelector('button:not(:disabled)'); if (first) first.focus(); }
   setTimeout(() => document.addEventListener('click', closeMenu, { once: true }), 0);
   return m;
 }
@@ -242,7 +259,9 @@ export const isModalOpen = () => $('#modal-root').children.length > 0;
  * action: { label, primary, danger, action(close) } — без action кнопка просто закрывает.
  */
 export function modal({ title, body, actions, wide, footLeft, onClose }) {
-  const box = h('div', { class: 'modal' + (wide ? ' wide' : ''), role: 'dialog', 'aria-modal': 'true' });
+  const titleId = 'dlg-' + Math.random().toString(36).slice(2, 8);
+  const box = h('div', { class: 'modal' + (wide ? ' wide' : ''), role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': titleId });
+  const opener = document.activeElement;
   const wrap = h('div', { class: 'modal-wrap', onmousedown: e => { if (e.target === wrap) close(); } }, box);
   let closed = false;
   function close() {
@@ -250,10 +269,21 @@ export function modal({ title, body, actions, wide, footLeft, onClose }) {
     closed = true;
     wrap.remove();
     document.removeEventListener('keydown', onKey, true);
+    if (opener && opener.isConnected && !isModalOpen()) opener.focus();
     if (onClose) onClose();
   }
   function onKey(e) {
-    if (e.key === 'Escape' && $('#modal-root').lastElementChild === wrap) { e.stopPropagation(); close(); }
+    if ($('#modal-root').lastElementChild !== wrap) return;
+    if (e.key === 'Escape') { e.stopPropagation(); close(); }
+    // Tab не уходит из диалога на страницу под ним
+    if (e.key === 'Tab') {
+      const f = [...box.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter(x => !x.disabled && x.offsetParent);
+      if (!f.length) return;
+      const [a, z] = [f[0], f[f.length - 1]];
+      if (!box.contains(document.activeElement)) { e.preventDefault(); a.focus(); }
+      else if (e.shiftKey && document.activeElement === a) { e.preventDefault(); z.focus(); }
+      else if (!e.shiftKey && document.activeElement === z) { e.preventDefault(); a.focus(); }
+    }
   }
   const btns = (actions || [{ label: 'Закрыть' }]).map(a => h('button', {
     class: 'btn' + (a.primary ? ' primary' : '') + (a.danger ? ' danger solid' : ''),
@@ -265,13 +295,15 @@ export function modal({ title, body, actions, wide, footLeft, onClose }) {
     },
   }, a.label));
   box.append(
-    h('div', { class: 'modal-head' }, h('h2', null, title), h('button', { class: 'icon-btn', onclick: close, title: 'Закрыть' }, icon('x'))),
+    h('div', { class: 'modal-head' }, h('h2', { id: titleId }, title), h('button', { class: 'icon-btn', onclick: close, title: 'Закрыть' }, icon('x'))),
     h('div', { class: 'modal-body' }, body),
     h('div', { class: 'modal-foot' }, footLeft && h('div', { class: 'left' }, footLeft), btns));
   $('#modal-root').append(wrap);
   document.addEventListener('keydown', onKey, true);
   const first = box.querySelector('.modal-body input:not([type=checkbox]):not([type=color]), .modal-body textarea');
-  if (first) first.focus();
+  // фокус в диалог: первое поле, иначе основная кнопка; у опасного действия — «Отмена», чтобы Enter не удалил случайно
+  const target = first || box.querySelector('.modal-foot .btn.primary') || box.querySelector('.modal-foot .btn');
+  if (target) target.focus();
   // Enter в однострочном поле = основная кнопка
   box.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey && e.target.matches('input:not([type=checkbox])')) {

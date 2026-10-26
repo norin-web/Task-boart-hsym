@@ -109,7 +109,7 @@ function buildPanel(t) {
       h('span', { class: 'key-badge' }, taskKey(t)),
       t.archived && h('span', { class: 'badge' }, 'в архиве')),
     h('span', { class: 'spacer' }),
-    S.peek && !ceoDefault() && h('button', { class: 'btn ghost sm', title: 'Перейти на доску юнита с этой задачей', onclick: () => openUnitBoard(t) }, icon('board', 14), 'Открыть доску'),
+    S.peek && !ceoDefault() && h('button', { class: 'btn ghost sm', title: 'Перейти на доску юнита с этой задачей', onclick: () => openUnitBoard(t) }, icon('board', 14), h('span', { class: 'btn-label' }, 'Открыть доску')),
     h('button', {
       class: 'icon-btn', title: cardCenter() ? 'Открывать карточки справа' : 'Открывать карточки по центру',
       onclick: () => { LS.set('cardMode', cardCenter() ? 'side' : 'center'); openTask(t.id); },
