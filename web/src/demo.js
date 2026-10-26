@@ -109,11 +109,24 @@ async function runProcess(api, P, U, test) {
   const set = (id, patch, who) => act(who, 'updateTask', { id, patch });
   const app = (name, unit, color, extra = {}) => act('anna', 'createApp', { name, unitId: U[unit].id, color, test, ...extra });
   const steps = async (requestId, pm) => Object.fromEntries((await act(pm, 'decomposeRequest', { taskId: requestId })).map(t => [t.step, t]));
-  /** Всё до релиза закрыто, PM передал релиз RM; done — RM уже выпустил. */
-  const ship = async (s, pm, done) => {
+  /**
+   * Всё до релиза закрыто, PM передал релиз RM. phase — докуда RM довёл: '' (к отправке), submitted (ревью Apple),
+   * rejected (реджект с причиной — PM получает задачу), live (в сторе). version — релизные поля заполнены.
+   */
+  const ship = async (s, pm, phase, version, reason) => {
+    // что команда прикладывает к этапам — RM видит это в карточке релиза («От команды»)
+    const links = { design: ['lf_figma', 'https://figma.com/design/demo-app'], ios: ['lf_github', 'https://github.com/studio/demo-app'], meta: ['lf_meta', 'https://docs.google.com/document/d/demo-meta'] };
+    for (const [k, [fieldId, url]] of Object.entries(links)) if (s[k]) await act('anna', 'setTaskLink', { taskId: s[k].id, fieldId, url });
     for (const k of ['design', 'ios', 'qa', 'meta']) if (s[k]) await set(s[k].id, { status: 'done' }, s[k].assigneeId ? keyOf(P, s[k].assigneeId) : pm);
-    await act(pm, 'sendToRelease', { taskId: s.release.id });
-    await move(s.release.id, done ? 'done' : 'in_progress', 'sergey');
+    const rel = await act(pm, 'sendToRelease', { taskId: s.release.id });
+    if (!version) return null;
+    await act('sergey', 'saveReleaseValues', { taskId: s.release.id, values: { version, build: String(100 + Number(version.replace(/\D/g, '').slice(0, 3))), whatsnew: 'Новые функции и исправления' } });
+    if (!phase) return null;
+    await set(s.release.id, { checklist: rel.checklist.map(i => ({ ...i, done: true })) }, 'sergey');
+    await act('sergey', 'releaseStep', { taskId: s.release.id, action: 'submit' });
+    if (phase === 'live') await act('sergey', 'releaseStep', { taskId: s.release.id, action: 'live' });
+    if (phase === 'rejected') return (await act('sergey', 'releaseStep', { taskId: s.release.id, action: 'reject', reason })).rejectRequestId;
+    return null;
   };
   let apps = 0;
 
@@ -134,9 +147,8 @@ async function runProcess(api, P, U, test) {
   const fit = await app('Fitness Coach', 'GLD', '#ef4444', { requestTitle: 'Старт приложения' });
   apps++;
   const s0 = await steps(fit.request.id, 'oleg');
-  await ship(s0, 'oleg', true);
-  await move(fit.request.id, 'done', 'oleg');
-  await act('anna', 'updateApp', { id: fit.app.id, status: 'live', priority: 'o_medium',
+  await ship(s0, 'oleg', 'live', '1.0');
+  await act('anna', 'updateApp', { id: fit.app.id, priority: 'o_medium',
     info: { appstore: 'https://apps.apple.com/app/id1000000001', asc: 'https://appstoreconnect.apple.com/apps/1000000001', figma: 'https://figma.com/design/fitness-coach' } });
   const upd = await act('anna', 'createRequest', { appId: fit.app.id, type: 'update', title: 'Апдейт 3.5: персональный план', dueDate: day(14),
     description: 'Персональный план тренировок на онбординге, новые достижения.' });
@@ -150,25 +162,21 @@ async function runProcess(api, P, U, test) {
   const calm = await app('Calm Rain', 'MVP', '#14b8a6', { dueDate: day(3), priority: 'o_high', description: 'Звуки дождя: один экран, подписка.' });
   apps++;
   const s3 = await steps(calm.request.id, 'kate');
-  await ship(s3, 'kate', false);
-  await set(s3.release.id, { checklist: cl(['Сборка в TestFlight', 1], ['Скриншоты и мета в ASC', 1], ['Отправить на ревью']) }, 'sergey');
+  await ship(s3, 'kate', '', '1.0'); // у RM в очереди: поля заполнены, чеклист ещё нет
+  await move(s3.release.id, 'in_progress', 'sergey');
 
   // Meditation Kids (RF): выпущено, на ревью Apple
   const med = await app('Meditation Kids', 'RF', '#8b5cf6', { requestTitle: 'Старт приложения' });
   apps++;
-  await ship(await steps(med.request.id, 'kate'), 'kate', true);
-  await move(med.request.id, 'done', 'kate');
-  await act('anna', 'updateApp', { id: med.app.id, status: 'review' });
+  await ship(await steps(med.request.id, 'kate'), 'kate', 'submitted', '1.0'); // ждёт ответа Apple
 
-  // Weather Pro (RF): реджект Apple — CEO ставит задачу, PM отдаёт её лиду iOS (просрочено, не начато)
+  // Weather Pro (RF): RM отметил реджект Apple — PM получил задачу «Реджект: …» и отдал исправление лиду iOS (просрочено)
   const wx = await app('Weather Pro', 'RF', '#0ea5e9', { requestTitle: 'Старт приложения' });
   apps++;
-  await ship(await steps(wx.request.id, 'kate'), 'kate', true);
-  await move(wx.request.id, 'done', 'kate');
-  await act('anna', 'updateApp', { id: wx.app.id, status: 'reject', priority: 'o_critical',
-    info: { asc: 'https://appstoreconnect.apple.com/apps/1000000002' } });
-  const rej = await act('anna', 'createRequest', { appId: wx.app.id, type: 'other', title: 'Реджект: Guideline 3.1.2 — условия подписки', dueDate: day(-1),
-    description: 'Apple: нет ссылок на условия подписки на пейволле. Исправить и отправить заново.' });
+  await act('anna', 'updateApp', { id: wx.app.id, priority: 'o_critical', info: { asc: 'https://appstoreconnect.apple.com/apps/1000000002' } });
+  const rejId = await ship(await steps(wx.request.id, 'kate'), 'kate', 'rejected', '2.1', 'Guideline 3.1.2 — нет условий подписки на пейволле');
+  await set(rejId, { dueDate: day(-1) }, 'kate');
+  const rej = { id: rejId };
   await move(rej.id, 'in_progress', 'kate');
   await act('kate', 'createTask', { unitId: U.RF.id, title: 'Пейволл: ссылки на условия подписки', parentId: rej.id, appId: wx.app.id,
     assigneeId: P.dima.id, departmentId: 'd_ios', dueDate: day(-1), fields: opt('Critical'), test });

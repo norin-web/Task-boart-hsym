@@ -220,6 +220,7 @@ function settingsMenu(anchor, reload) {
   menu(anchor, [
     { label: 'Статусы приложения…', icon: 'progress', action: () => openStatusesEditor(reload) },
     { label: 'Поля приложения…', icon: 'link', action: () => openFieldsEditor(reload) },
+    { label: 'Релиз: поля и чеклист…', icon: 'rocket', action: () => import('./release.js').then(m => m.openReleaseSettings()) },
   ]);
 }
 

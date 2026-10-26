@@ -15,6 +15,7 @@ import { renderMyBoard } from './views/myboard.js';
 import { renderApps } from './views/apps.js';
 import { renderCeoHome } from './views/ceo.js';
 import { renderPmHome } from './views/pm.js';
+import { renderRmHome } from './views/rm.js';
 import { renderDev } from './views/dev.js';
 import { renderAdmin } from './views/admin.js';
 import { renderBoardView, loadBoard } from './views/board.js';
@@ -107,9 +108,9 @@ export async function render() {
     const key = ['my', 'myboard', 'apps', 'dev'].includes(view) ? view : view === 'admin' ? 'admin:' + (r.tab || 'overview') : 'home';
     if (rendered !== key) {
       rendered = key;
-      document.title = ({ my: 'Мои задачи', myboard: 'Моя доска', admin: 'Панель админа', apps: 'Приложения', dev: 'Режим разработчика' }[view] || (isStaff() ? 'Дашборд' : 'Главная')) + ' · Tasks';
+      document.title = ({ my: 'Мои задачи', myboard: 'Моя доска', admin: 'Панель админа', apps: 'Приложения', dev: 'Режим разработчика' }[view] || (isStaff() ? 'Дашборд' : myAccess() === 'rm' ? 'Релизы' : 'Главная')) + ' · Tasks';
       if (view === 'my') renderMy(); else if (view === 'myboard') renderMyBoard(); else if (view === 'apps') renderApps(); else if (view === 'dev') renderDev();
-      else if (view === 'admin') renderAdmin(r.tab || 'overview'); else if (isSuper()) renderCeoHome(); else if (myAccess() === 'moderator') renderPmHome(); else renderHome();
+      else if (view === 'admin') renderAdmin(r.tab || 'overview'); else if (isSuper()) renderCeoHome(); else if (myAccess() === 'moderator') renderPmHome(); else if (myAccess() === 'rm') renderRmHome(); else renderHome();
     }
     return;
   }

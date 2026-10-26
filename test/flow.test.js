@@ -315,3 +315,60 @@ test('дашборд PM: входящие, этапы, проблемы, KPI к�
   assert.ok(!(pm.id in k)); // PM в KPI команды не входит
   assert.equal(d.period.days, 7);
 });
+
+test('RM: релиз — поля и чеклист, отправка в Apple, реджект с задачей PM, отправка снова, в сторе', async () => {
+  const api = await setup();
+  const { ceo, pm, rm, lead, ios, qa, aso, gold } = await studio(api);
+  const { app, request } = await api.as(ceo, () => api('createApp', { name: 'Sleep', unitId: gold.id, priority: 'o_high' }));
+  const st = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: request.id }))).map(t => [t.step, t]));
+  await api.as(lead, () => api('setTaskLink', { taskId: st.design.id, fieldId: 'lf_figma', url: 'https://figma.com/x' }));
+  for (const [who, k] of [[lead, 'design'], [ios, 'ios'], [qa, 'qa'], [aso, 'meta']]) await api.as(who, () => api('updateTask', { id: st[k].id, patch: { status: 'done' } }));
+  const rel = await api.as(pm, () => api('sendToRelease', { taskId: st.release.id }));
+  assert.equal(rel.checklist.length, 4); // чеклист релиза студии подставился
+
+  await api.as(rm, async () => {
+    let d = await api('getRmDashboard', {});
+    assert.equal(d.queue.length, 1);
+    assert.deepEqual(d.queue[0].missing, ['Версия', 'Номер сборки', 'Что нового']);
+    assert.deepEqual(d.queue[0].checklist, { done: 0, total: 4 });
+    const card = await api('getRelease', { taskId: st.release.id });
+    assert.equal(card.app.name, 'Sleep');
+    assert.deepEqual(card.links.map(l => [l.stage, l.name]), [['Дизайн', 'Figma']]); // ссылки других этапов RM видит
+    // напрямую фазу не поменять — только кнопками
+    await assert.rejects(() => api.pg.query(`update tasks set release = '{"phase":"live"}' where id = $1`, [st.release.id]), /Недостаточно прав/);
+    await assert.rejects(() => api('releaseStep', { taskId: st.release.id, action: 'submit' }), /Версия/);
+    await api('saveReleaseValues', { taskId: st.release.id, values: { version: '1.0', build: '42', whatsnew: 'Первый релиз', hack: 'x' } });
+    await assert.rejects(() => api('releaseStep', { taskId: st.release.id, action: 'submit' }), /чеклист/);
+    await api('updateTask', { id: st.release.id, patch: { checklist: rel.checklist.map(i => ({ ...i, done: true })) } });
+    const s1 = await api('releaseStep', { taskId: st.release.id, action: 'submit' });
+    assert.equal(s1.task.release.phase, 'submitted');
+    assert.deepEqual(s1.task.release.values, { version: '1.0', build: '42', whatsnew: 'Первый релиз' });
+    d = await api('getRmDashboard', {});
+    assert.equal(d.review.length, 1);
+    await assert.rejects(() => api('releaseStep', { taskId: st.release.id, action: 'reject', reason: ' ' }), /причину/);
+    const rj = await api('releaseStep', { taskId: st.release.id, action: 'reject', reason: 'Guideline 3.1.2' });
+    assert.ok(rj.rejectRequestId);
+    assert.equal((await api('getRmDashboard', {})).rejected[0].reason, 'Guideline 3.1.2');
+  });
+  const appNow = id => api.as(ceo, async () => (await api('listApps', {})).find(a => a.id === id));
+  assert.equal((await appNow(app.id)).status, 'reject');
+  await api.as(pm, async () => {
+    const n = await api('getNotifications', {});
+    const fix = (await api('getBoard', { unitId: gold.id })).tasks.find(t => t.title === 'Реджект: Guideline 3.1.2');
+    assert.ok(fix && fix.kind === 'request' && fix.assigneeId === pm.id && fix.fields.f_priority === 'o_high');
+    assert.ok(n.some(x => x.taskId === fix.id));
+  });
+  await api.as(rm, async () => {
+    await api('releaseStep', { taskId: st.release.id, action: 'resubmit' });
+    const done = await api('releaseStep', { taskId: st.release.id, action: 'live' });
+    assert.equal(done.task.release.phase, 'live');
+    assert.equal(done.task.status, 'done');
+    assert.deepEqual(await api('getRmDashboard', {}), { queue: [], review: [], rejected: [] });
+  });
+  assert.equal((await appNow(app.id)).status, 'live');
+  const reqNow = await api.as(ceo, async () => (await api('getBoard', { unitId: gold.id })).tasks.find(t => t.id === request.id));
+  assert.equal(reqNow.status, 'done'); // задача CEO закрыта вместе с релизом
+  // настройки релиза: CEO и RM, PM — нет
+  await api.as(pm, () => assert.rejects(() => api('saveReleaseSettings', { checklist: ['x'] }), forbidden));
+  await api.as(rm, async () => assert.deepEqual((await api('saveReleaseSettings', { checklist: ['Сборка', ''] })).checklist, ['Сборка']));
+});

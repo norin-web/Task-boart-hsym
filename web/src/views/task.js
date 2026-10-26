@@ -10,6 +10,7 @@ import { addMemberDialog } from './people.js';
 import { openCreateUnit } from './units.js';
 import { activityText } from './feed.js';
 import { readNote } from './home.js';
+import { releaseBlock } from './release.js';
 
 /* ================= Панель задачи ================= */
 
@@ -94,6 +95,7 @@ function buildPanel(t) {
         h('span', null, 'На ревью у ' + ((personById(t.assigneeId) || {}).name || 'ревьюера') + '. Что-то забыли?'),
         h('button', { class: 'btn sm', onclick: () => recallReview(t) }, icon('back', 13), 'Забрать из ревью'))
       : !editable && h('div', { class: 'readonly-note' }, icon('alert', 14), 'Только просмотр: менять можно свои задачи'),
+    t.step === 'release' && t.assigneeId && releaseBlock(t, () => reloadBoard().catch(() => {})),
     t.kind === 'request' || t.kind === 'stage' ? flowBlock(t) : treeBlock(t),
     !B.description.hidden && descriptionBlock(t, B.description.label, editable),
     linksBlock(t, editable),

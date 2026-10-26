@@ -458,6 +458,9 @@ alter table tasks add column if not exists depends_on jsonb not null default '[]
 alter table tasks add column if not exists is_test boolean not null default false;
 -- Когда задачу впервые взяли в работу (для KPI: среднее время задачи — от «в работе» до «готово»)
 alter table tasks add column if not exists started_at text not null default '';
+-- Релиз (этап step = release): phase '' (к отправке) / submitted (ревью Apple) / rejected / live, values — релизные поля,
+-- submittedAt, rejectedAt, reason, liveAt, rejectRequestId, pmId. Меняет функция release_step (кнопки RM).
+alter table tasks add column if not exists release jsonb not null default '{}';
 create index if not exists tasks_app on tasks(app_id);
 
 -- Статусы приложения по умолчанию; kind связывает статус с ходом работ (dev / release / review / live / reject, '' — свой).
@@ -476,6 +479,20 @@ insert into app_settings (key, value, updated_at) values ('appFields', '[
   {"id": "figma", "name": "Figma", "kind": "link"},
   {"id": "drive", "name": "Google Drive", "kind": "link"}
 ]'::jsonb, '') on conflict (key) do nothing;
+-- Релизные поля (заполняют RM или команда до отправки в Apple; required — без них «Отправил в Apple» недоступна)
+insert into app_settings (key, value, updated_at) values ('releaseFields', '[
+  {"id": "version", "name": "Версия", "kind": "text", "required": true},
+  {"id": "build", "name": "Номер сборки", "kind": "text", "required": true},
+  {"id": "whatsnew", "name": "Что нового", "kind": "longtext", "required": true}
+]'::jsonb, '') on conflict (key) do nothing;
+-- Чеклист релиза: подставляется в этап «Релиз», когда PM передаёт его RM; закрыть до отправки в Apple
+insert into app_settings (key, value, updated_at) values ('releaseChecklist', '[
+  "Сборка загружена в TestFlight и проверена",
+  "Скриншоты и метаданные в App Store Connect",
+  "Политика конфиденциальности и условия подписки",
+  "Покупки и подписки проверены в песочнице"
+]'::jsonb, '') on conflict (key) do nothing;
+
 -- «Требует внимания» у CEO: работа без изменений столько дней
 insert into app_settings (key, value, updated_at) values ('staleDays', '7'::jsonb, '') on conflict (key) do nothing;
 
@@ -533,7 +550,8 @@ begin
        or new.team_id is distinct from old.team_id
        or new.parent_id is distinct from old.parent_id or new.kind is distinct from old.kind
        or new.app_id is distinct from old.app_id or new.step is distinct from old.step
-       or new.depends_on is distinct from old.depends_on or new.request_type is distinct from old.request_type then
+       or new.depends_on is distinct from old.depends_on or new.request_type is distinct from old.request_type
+       or (new.release - 'values') is distinct from (old.release - 'values') then
       raise exception 'Недостаточно прав: сотрудник меняет только статус, описание, поля и чеклист своей задачи' using errcode = '42501';
     end if;
     select string_agg(f.name, ', ') into missing from fields f
@@ -956,6 +974,102 @@ begin
   return n;
 end $$;
 
+-- Шаги релиза (этап «Релиз», кнопки RM): submit — отправил в Apple (нужны обязательные релизные поля и закрытый чеклист;
+-- приложение → «Ревью Apple»); live — вышло в стор (этап и запрос CEO — «готово», приложение → «В сторе»);
+-- reject — реджект (приложение → «Реджект», PM юнита получает запрос «Реджект: причина», релиз ждёт у RM);
+-- resubmit — отправил снова после исправления. Делает: исполнитель этапа (RM), CEO и PM юнита.
+create or replace function release_step(p_task text, p_action text, p_reason text default '') returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  t tasks;
+  u units;
+  a apps;
+  rel jsonb;
+  missing text;
+  st jsonb;
+  v_status text;
+  col text;
+  pm text;
+  v_id text;
+  v_actor text := coalesce(my_person_id(), '');
+  at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+begin
+  select * into t from tasks where id = p_task;
+  if t.id is null or t.step <> 'release' then raise exception 'Это не этап «Релиз»' using errcode = 'P0001'; end if;
+  if not app_system() and t.assignee_id is distinct from v_actor and not can_manage(t.unit_id) then
+    raise exception 'Недостаточно прав: релиз ведёт его RM' using errcode = '42501';
+  end if;
+  if t.assignee_id = '' then raise exception 'Релиз ещё не передан RM' using errcode = 'P0001'; end if;
+  select * into u from units where id = t.unit_id;
+  select * into a from apps where id = t.app_id;
+  rel := coalesce(t.release, '{}'::jsonb);
+  select value into st from app_settings where key = 'appStatuses';
+  perform set_config('app.system', 'on', true);
+  if p_action in ('submit', 'resubmit') then
+    if p_action = 'submit' and coalesce(rel ->> 'phase', '') not in ('') then raise exception 'Релиз уже отправлен' using errcode = 'P0001'; end if;
+    if p_action = 'resubmit' and coalesce(rel ->> 'phase', '') <> 'rejected' then raise exception 'Отправить снова можно после реджекта' using errcode = 'P0001'; end if;
+    select string_agg(f ->> 'name', ', ') into missing from app_settings s, jsonb_array_elements(s.value) f
+     where s.key = 'releaseFields' and coalesce((f ->> 'required')::boolean, false)
+       and coalesce(rel -> 'values' ->> (f ->> 'id'), '') = '';
+    if missing is not null then raise exception 'Заполните релизные поля: %', missing using errcode = 'P0001'; end if;
+    if exists (select 1 from jsonb_array_elements(t.checklist) i where not coalesce((i ->> 'done')::boolean, false)) then
+      raise exception 'Сначала закройте чеклист релиза' using errcode = 'P0001';
+    end if;
+    rel := rel || jsonb_build_object('phase', 'submitted', 'submittedAt', at_, 'reason', '');
+    select c ->> 'id' into col from jsonb_array_elements(u.settings -> 'columns') c where c ->> 'kind' = 'progress' limit 1;
+    update tasks set release = rel, updated_at = at_,
+      status = case when coalesce((select c ->> 'kind' from jsonb_array_elements(u.settings -> 'columns') c where c ->> 'id' = t.status), 'todo') = 'todo' and col is not null then col else status end,
+      started_at = case when started_at = '' then at_ else started_at end
+     where id = t.id;
+    select x ->> 'id' into v_status from jsonb_array_elements(st) x where x ->> 'kind' = 'review' limit 1;
+  elsif p_action = 'reject' then
+    if coalesce(rel ->> 'phase', '') <> 'submitted' then raise exception 'Реджект — после отправки в Apple' using errcode = 'P0001'; end if;
+    if coalesce(trim(p_reason), '') = '' then raise exception 'Укажите причину реджекта' using errcode = 'P0001'; end if;
+    select m.person_id into pm from unit_members m join people p on p.id = m.person_id
+     where m.unit_id = t.unit_id and p.access = 'moderator' and p.active order by m.created_at limit 1;
+    v_id := 't_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12);
+    insert into tasks (id, unit_id, num, title, description, status, assignee_id, department_id, due_date, ord, fields, checklist,
+                       archived, done_at, created_by, created_at, updated_at, parent_id, kind, request_type, app_id, is_test)
+    values (v_id, t.unit_id, next_task_num(t.unit_id), left('Реджект: ' || trim(p_reason), 500), 'Apple отклонил релиз «' || coalesce(a.name, '') || '». Причина: ' || trim(p_reason),
+            u.settings -> 'columns' -> 0 ->> 'id', coalesce(pm, ''), '', '', 0,
+            case when coalesce(a.priority, '') <> '' then jsonb_build_object('f_priority', a.priority) else '{}'::jsonb end, '[]'::jsonb,
+            false, '', v_actor, at_, at_, '', 'request', 'other', t.app_id, t.is_test);
+    rel := rel || jsonb_build_object('phase', 'rejected', 'rejectedAt', at_, 'reason', trim(p_reason), 'rejectRequestId', v_id, 'pmId', coalesce(pm, ''));
+    update tasks set release = rel, updated_at = at_ where id = t.id;
+    select x ->> 'id' into v_status from jsonb_array_elements(st) x where x ->> 'kind' = 'reject' limit 1;
+  elsif p_action = 'live' then
+    if coalesce(rel ->> 'phase', '') <> 'submitted' then raise exception 'В стор — после отправки в Apple' using errcode = 'P0001'; end if;
+    rel := rel || jsonb_build_object('phase', 'live', 'liveAt', at_);
+    select c ->> 'id' into col from jsonb_array_elements(u.settings -> 'columns') c where c ->> 'kind' = 'done' limit 1;
+    update tasks set release = rel, updated_at = at_, status = coalesce(col, status), done_at = at_ where id = t.id;
+    if t.parent_id <> '' then
+      update tasks set status = coalesce(col, status), done_at = at_, updated_at = at_ where id = t.parent_id;
+    end if;
+    select x ->> 'id' into v_status from jsonb_array_elements(st) x where x ->> 'kind' = 'live' limit 1;
+  else
+    raise exception 'Неизвестный шаг релиза' using errcode = 'P0001';
+  end if;
+  if a.id is not null and v_status is not null then
+    update apps set status = v_status, status_at = at_, updated_at = at_ where id = a.id;
+  end if;
+  insert into activity (id, unit_id, task_id, action, field, from_val, to_val, actor_id, at)
+  values ('a_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), t.unit_id, t.id, 'update', 'release',
+          to_jsonb(coalesce(t.release ->> 'phase', ''))::text, to_jsonb(rel ->> 'phase')::text, v_actor, at_);
+  perform set_config('app.system', 'off', true);
+  return coalesce(v_id, t.id);
+end $$;
+
+-- Ссылки этапов запроса для карточки релиза: RM видит только свой этап, а ему нужны макеты, сборка, метаданные.
+create or replace function release_links(p_task text) returns table (task_id text, step text, title text, field_id text, url text)
+language sql stable security definer set search_path = public as $$
+  select s.id, s.step, s.title, l.field_id, l.url
+    from tasks r join tasks s on s.parent_id = r.parent_id and s.id <> r.id and r.parent_id <> ''
+    join task_links l on l.task_id = s.id
+   where r.id = p_task and r.step = 'release'
+     and (r.assignee_id = my_person_id() or can_manage(r.unit_id))
+   order by s.created_at, l.field_id;
+$$;
+
 -- ---------- правила доступа (RLS) ----------
 -- Без входа — ничего. Регистрация закрыта в Supabase Auth; людей добавляет администратор.
 
@@ -972,7 +1086,9 @@ alter table app_settings enable row level security;
 drop policy if exists settings_read on app_settings;
 create policy settings_read on app_settings for select to authenticated using (true);
 drop policy if exists settings_write on app_settings;
-create policy settings_write on app_settings for all to authenticated using (is_superadmin()) with check (is_superadmin());
+create policy settings_write on app_settings for all to authenticated
+  using (is_superadmin() or (my_access() = 'rm' and key in ('releaseFields', 'releaseChecklist')))
+  with check (is_superadmin() or (my_access() = 'rm' and key in ('releaseFields', 'releaseChecklist')));
 
 -- Юниты, поля, состав: видят администраторы и участники юнита; меняют администраторы.
 drop policy if exists units_read on units;

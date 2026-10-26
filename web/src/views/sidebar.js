@@ -74,7 +74,7 @@ export function renderSidebar() {
       [['default', 'Default', 'Приложения и приоритеты — без деталей разработки'], ['admin', 'Admin', 'Всё: юниты, доски, задачи, панель админа']].map(([m, label, hint]) =>
         h('button', { class: ceoMode() === m ? 'on' : '', role: 'radio', 'aria-checked': String(ceoMode() === m), title: hint, onclick: () => setCeoMode(m) }, label)))),
     h('button', { class: 'search-btn', onclick: openPalette }, icon('search', 15), h('span', null, 'Поиск'), h('kbd', null, isMac ? '⌘K' : 'Ctrl K')),
-    navLink({ view: 'home' }, 'home', staff ? 'Дашборд' : 'Мой дашборд',
+    navLink({ view: 'home' }, person && person.access === 'rm' ? 'rocket' : 'home', staff ? 'Дашборд' : person && person.access === 'rm' ? 'Релизы' : 'Мой дашборд',
       h('span', { class: 'nav-badge', id: 'unread-badge', title: 'Новое для вас', hidden: !S.unread }, S.unread || '')),
     navLink({ view: 'apps' }, 'app', 'Приложения'),
     !lite && navLink({ view: 'myboard' }, 'board', 'Моя доска'),

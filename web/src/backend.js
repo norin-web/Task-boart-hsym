@@ -229,6 +229,7 @@ const taskOut = r => ({
   fields: json(r.fields, {}), checklist: json(r.checklist, []), archived: !!r.archived, doneAt: r.done_at,
   reviewFrom: r.review_from || '', reviewerId: r.reviewer_id || '', teamId: r.team_id || '',
   parentId: r.parent_id || '', kind: r.kind || '', startedAt: r.started_at || '',
+  release: json(r.release, {}) || {},
   appId: r.app_id || '', requestType: r.request_type || '', step: r.step || '', dependsOn: json(r.depends_on, []) || [], isTest: !!r.is_test,
   createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at,
 });
@@ -267,6 +268,20 @@ const appOut = r => ({
   priority: r.priority || '', statusAt: r.status_at || '',
   order: r.ord, archived: !!r.archived, isTest: !!r.is_test, createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at,
 });
+
+/** Релизные поля: { id, name, kind: text | longtext | link, required }. */
+function cleanReleaseFields(list) {
+  const seen = new Set();
+  return (Array.isArray(list) ? list : []).slice(0, 30).map(x => {
+    const name = str(x && x.name, 60);
+    if (!name) return null;
+    let id = /^[a-z0-9_]{1,40}$/.test((x && x.id) || '') ? x.id : uid('rf').toLowerCase();
+    if (seen.has(id)) id = uid('rf').toLowerCase();
+    seen.add(id);
+    return { id, name, kind: ['text', 'longtext', 'link'].includes(x.kind) ? x.kind : 'text', required: !!x.required };
+  }).filter(Boolean);
+}
+const cleanReleaseChecklist = list => (Array.isArray(list) ? list : []).map(x => str(x, 300)).filter(Boolean).slice(0, 40);
 
 /** Поля приложения: { id, name, kind: link | text }. */
 function cleanAppFields(list) {
@@ -1676,12 +1691,100 @@ export function createBackend(db, opts = {}) {
       if (open) fail(`Сначала закройте: ${open}`, 'RULE');
       const rms = await unitPeople(t.unit_id, 'rm');
       const rmId = p.rmId && rms.some(x => x.id === p.rmId) ? p.rmId : rms.length ? rms[0].id : fail('В юните нет релиз-менеджера — добавьте RM в состав');
-      const saved = await methods.updateTask({ id: t.id, patch: { assigneeId: rmId } }, ctx);
+      // чеклист релиза студии — в этап (если своего ещё нет)
+      const tpl = cleanReleaseChecklist(await setting('releaseChecklist'));
+      const patch = { assigneeId: rmId };
+      if (tpl.length && !(json(t.checklist, []) || []).length) patch.checklist = tpl.map(text => ({ text, done: false }));
+      const saved = await methods.updateTask({ id: t.id, patch }, ctx);
       if (t.app_id) {
         const rel = (await appStatuses()).find(x => x.kind === 'release');
         if (rel) await methods.updateApp({ id: t.app_id, status: rel.id }).catch(() => null);
       }
       return saved;
+    },
+
+    /* ---------- релиз (RM) ---------- */
+
+    /** Релизные поля и чеклист релиза студии (настраивают CEO и RM). */
+    async getReleaseSettings() {
+      return { fields: cleanReleaseFields(await setting('releaseFields')), checklist: cleanReleaseChecklist(await setting('releaseChecklist')) };
+    },
+
+    async saveReleaseSettings(p) {
+      if ('fields' in p) await run(T('app_settings').upsert({ key: 'releaseFields', value: cleanReleaseFields(p.fields), updated_at: now() }, { onConflict: 'key' }));
+      if ('checklist' in p) await run(T('app_settings').upsert({ key: 'releaseChecklist', value: cleanReleaseChecklist(p.checklist), updated_at: now() }, { onConflict: 'key' }));
+      return methods.getReleaseSettings();
+    },
+
+    /** Карточка релиза: этап, приложение, ссылки из этапов запроса, релизные поля. */
+    async getRelease(p) {
+      const t = await findTask(p.taskId);
+      if (t.step !== 'release') fail('Это не этап «Релиз»');
+      const [app, links, lf, settings] = await Promise.all([
+        t.app_id ? one('apps', t.app_id) : null, rpc('release_links', { p_task: t.id }), linkFields(), methods.getReleaseSettings(),
+      ]);
+      const LF = Object.fromEntries(lf.map(f => [f.id, f]));
+      return {
+        task: taskOut(t), app: app ? appOut(app) : null, fields: settings.fields,
+        links: (links || []).map(l => ({ taskId: l.task_id, step: l.step, stage: String(l.title).split(' · ')[0], fieldId: l.field_id, name: (LF[l.field_id] || {}).name || 'Ссылка', kind: (LF[l.field_id] || {}).kind || 'link', url: l.url })),
+      };
+    },
+
+    /** Релизные поля этапа: значения по id полей студии (ссылки — только http(s)). */
+    async saveReleaseValues(p) {
+      const t = await findTask(p.taskId);
+      if (t.step !== 'release') fail('Это не этап «Релиз»');
+      const fields = cleanReleaseFields(await setting('releaseFields'));
+      const rel = json(t.release, {}) || {};
+      const values = { ...(rel.values || {}) };
+      for (const [k, v] of Object.entries(p.values || {})) {
+        const f = fields.find(x => x.id === k);
+        if (!f) continue;
+        const val = f.kind === 'link' ? linkUrl(v) : str(v, f.kind === 'longtext' ? 4000 : 300);
+        if (val) values[k] = val; else delete values[k];
+      }
+      await updateOne('tasks', t.id, { release: { ...rel, values }, updated_at: now() });
+      return taskOut(await findTask(t.id));
+    },
+
+    /** Шаг релиза: submit (отправил в Apple) / live (вышло в стор) / reject (реджект, reason) / resubmit (отправил снова). */
+    async releaseStep(p) {
+      if (!['submit', 'live', 'reject', 'resubmit'].includes(p.action)) fail('Неизвестный шаг релиза');
+      const t = await findTask(p.taskId);
+      const id = await rpc('release_step', { p_task: t.id, p_action: p.action, p_reason: str(p.reason, 300) });
+      return { task: taskOut(await findTask(t.id)), rejectRequestId: p.action === 'reject' ? id : '' };
+    },
+
+    /**
+     * Дашборд RM: релизы, которые ему видны (свои и своей позиции), кроме вышедших: очередь (к отправке — чего не хватает),
+     * на ревью Apple (сколько дней ждут), реджекты (причина, кто исправляет).
+     */
+    async getRmDashboard(p) {
+      const [rows, units, apps, settings] = await Promise.all([
+        all(() => T('tasks').select('*').eq('step', 'release').eq('archived', false).neq('assignee_id', '').order('created_at').order('id')),
+        all(() => T('units').select('id,key,settings').order('id')),
+        all(() => T('apps').select('id,name,color,unit_id,status,priority,is_test').order('id')),
+        methods.getReleaseSettings(),
+      ]);
+      const U = Object.fromEntries(units.map(u => [u.id, u]));
+      const A = Object.fromEntries(apps.map(a => [a.id, { id: a.id, name: a.name, color: a.color, unitId: a.unit_id, status: a.status, priority: a.priority || '', isTest: !!a.is_test }]));
+      const required = settings.fields.filter(f => f.required);
+      const items = rows.filter(t => U[t.unit_id] && kindOf(unitSettings(U[t.unit_id].settings), t.status) !== 'done').map(t => {
+        const rel = json(t.release, {}) || {};
+        const cl = json(t.checklist, []) || [];
+        return {
+          id: t.id, unitId: t.unit_id, key: `${U[t.unit_id].key}-${t.num}`, title: t.title, assigneeId: t.assignee_id, dueDate: t.due_date,
+          app: A[t.app_id] || null, phase: rel.phase || '', reason: rel.reason || '', pmId: rel.pmId || '',
+          submittedAt: rel.submittedAt || '', rejectedAt: rel.rejectedAt || '', updatedAt: t.updated_at,
+          missing: required.filter(f => !(rel.values || {})[f.id]).map(f => f.name),
+          checklist: { done: cl.filter(i => i.done).length, total: cl.length },
+        };
+      }).filter(x => x.phase !== 'live');
+      return {
+        queue: items.filter(x => !x.phase),
+        review: items.filter(x => x.phase === 'submitted'),
+        rejected: items.filter(x => x.phase === 'rejected'),
+      };
     },
 
     /** Режим разработчика: удалить всё, что создали шорткаты (тестовые задачи и приложения). */
