@@ -2,13 +2,14 @@
  * Дашборд CEO (главная CEO в обоих режимах): портфель приложений по статусам и юнитам, что требует внимания,
  * работы в ходу (запросы и текущий этап), что недавно вышло. Клик — карточка приложения или задача поверх.
  */
-import { S, isSuper, personById, unitById, REQUEST_TYPES, greeting, me, plural, fmtDate, relTime, todayStr } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill, menu } from '../ui.js';
-import { call } from '../api.js';
+import { S, isSuper, personById, unitById, REQUEST_TYPES, greeting, me, plural, fmtDate, relTime, todayStr, appStatusById } from '../state.js';
+import { $, h, icon, avatar, topbar, showErr, fill, menu, modal, field } from '../ui.js';
+import { call, send } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
-import { openAppById, openCreateApp, openNewAppTask, appIcon, prioTag, stageDots } from './apps.js';
+import { openAppById, openCreateApp, openNewAppTask, appIcon, prioTag, stageDots, statusPill, appPm } from './apps.js';
 import { newsBlock, loadNotes, fillDemo, unitCard } from './home.js';
+import { renderLayout, editLayout } from './layout.js';
 import { openCreateUnit } from './units.js';
 import { mode } from '../data.js';
 
@@ -27,26 +28,38 @@ export async function renderCeoHome() {
       isSuper() && units().length > 0 && h('button', { class: 'btn primary', onclick: () => openCreateApp(load) }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Новое приложение'))]),
     h('div', { class: 'view-body' }, page));
   async function load() {
-    let d;
-    try { [d] = await Promise.all([call('getCeoDashboard', { today: todayStr() }), loadNotes()]); } catch (e) { return showErr(e); }
+    let d, apps;
+    try { [d, apps] = await Promise.all([call('getCeoDashboard', { today: todayStr() }), call('listApps', {}), loadNotes()]); } catch (e) { return showErr(e); }
     if (currentView() !== 'home') return;
-    const total = Object.values(d.portfolio.byStatus).reduce((n, l) => n + l.length, 0);
+    S.apps = apps.map(({ requests, active, ...a }) => a);
+    const total = apps.length;
     const person = me();
-    fill(page,
-      h('div', { class: 'ceo-hello' }, h('h2', null, greeting() + (person ? ', ' + person.name.split(' ')[0] : ''))),
-      newsBlock(),
-      !total && h('div', { class: 'card-box empty-state' },
-        h('h2', null, 'Приложений пока нет'),
-        !units().length && h('p', null, 'Сначала создайте юнит.'),
-        h('div', { class: 'row', style: { justifyContent: 'center', gap: '8px' } },
-          isSuper() && (units().length
-            ? h('button', { class: 'btn primary', onclick: () => openCreateApp(load) }, icon('plus', 15), 'Новое приложение')
-            : h('button', { class: 'btn primary', onclick: openCreateUnit }, icon('plus', 15), 'Создать юнит')),
-          mode === 'local' && !units().length && h('button', { class: 'btn', onclick: e => fillDemo(e.currentTarget) }, icon('layers', 15), 'Заполнить демо-данными'))),
-      total > 0 && portfolio(d, load),
-      total > 0 && h('div', { class: 'home-grid' },
-        h('div', { class: 'home-col' }, attention(d, load), inProgress(d, load)),
-        h('div', { class: 'home-col' }, recent(d, load))));
+    if (!total) {
+      return fill(page,
+        h('div', { class: 'ceo-hello' }, h('h2', null, greeting() + (person ? ', ' + person.name.split(' ')[0] : ''))),
+        newsBlock(),
+        h('div', { class: 'card-box empty-state' },
+          h('h2', null, 'Приложений пока нет'),
+          !units().length && h('p', null, 'Сначала создайте юнит.'),
+          h('div', { class: 'row', style: { justifyContent: 'center', gap: '8px' } },
+            isSuper() && (units().length
+              ? h('button', { class: 'btn primary', onclick: () => openCreateApp(load) }, icon('plus', 15), 'Новое приложение')
+              : h('button', { class: 'btn primary', onclick: openCreateUnit }, icon('plus', 15), 'Создать юнит')),
+            mode === 'local' && !units().length && h('button', { class: 'btn', onclick: e => fillDemo(e.currentTarget) }, icon('layers', 15), 'Заполнить демо-данными'))));
+    }
+    const blocks = () => ceoBlocks(d, apps, load);
+    const edit = () => editLayout('ceoHome', blocks(), page, draw, {
+      title: 'Настройка дашборда',
+      extra: h('button', { class: 'btn sm', onclick: () => openBlockEditor(null, edit) }, icon('plus', 14), 'Свой блок'),
+      onEdit: id => openBlockEditor(customBlocks().find(b => 'c:' + b.id === id), edit),
+      onDelete: id => { setCustomBlocks(customBlocks().filter(b => 'c:' + b.id !== id)); edit(); },
+    });
+    const draw = () => fill(page,
+      h('div', { class: 'ceo-hello row' }, h('h2', null, greeting() + (person ? ', ' + person.name.split(' ')[0] : '')),
+        h('span', { class: 'spacer' }),
+        h('button', { class: 'btn ghost sm', title: 'Блоки, статистика и свои подборки', onclick: edit }, icon('layers', 14), 'Настроить')),
+      renderLayout('ceoHome', blocks()));
+    draw();
   }
   load();
 }
@@ -135,3 +148,129 @@ function recent(d, reload) {
       : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Пока ничего')));
 }
 
+
+/* ---------- блоки дашборда ---------- */
+
+const DAY = 864e5;
+const ago = iso => (iso ? (Date.now() - Date.parse(iso)) / DAY : Infinity);
+
+/**
+ * Блоки дашборда CEO для раскладки: основные включены, статистика — off (включают в «Настроить»),
+ * свои подборки — c:<id>. Порядок, колонки и видимость — у каждого свои (prefs.ceoHome).
+ */
+function ceoBlocks(d, apps, reload) {
+  const open = apps.flatMap(a => a.requests.filter(r => !r.done).map(r => ({ a, r })));
+  const stat = (n, label, sub, tone) => h('div', { class: 'cs' + (tone ? ' ' + tone : '') }, h('div', { class: 'cs-n' }, n), h('div', { class: 'cs-label' }, label), sub && h('div', { class: 'cs-sub muted' }, sub));
+  const appRow = (a, right) => h('button', { class: 'rc-row', onclick: () => openAppById(a.id, reload) },
+    appIcon(a, 'xs'), h('span', { class: 'rc-main' }, h('b', null, a.name)), right);
+  const section = (title, body, n) => h('section', null, h('div', { class: 'section-head' }, h('h2', null, title, n != null && h('span', { class: 'muted sec-n' }, n))), body);
+  const list = (items, empty) => (items.length ? h('div', { class: 'card-box rc-list' }, items) : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, empty)));
+  const overdue = d.attention.filter(x => x.type === 'overdue').length;
+  const live30 = apps.filter(a => (appStatusById(a.status) || {}).kind === 'live' && ago(a.statusAt) <= 30);
+  const done30 = apps.flatMap(a => a.requests.filter(r => r.done && ago(r.doneAt) <= 30).map(r => ({ a, r })));
+  const stale = apps.filter(a => ago(a.lastActivity) > d.staleDays).sort((x, y) => String(x.lastActivity).localeCompare(String(y.lastActivity)));
+  const pms = S.people.filter(p => p.active && p.access === 'moderator');
+
+  const blocks = [
+    { id: 'news', title: 'Новое для вас', col: 'full', first: true, empty: 'Появится, когда что-то придёт вам', render: () => newsBlock() },
+    { id: 'units', title: 'Юниты', col: 'full', render: () => portfolio(d, reload) },
+    { id: 'attention', title: 'Требует внимания', col: 'left', render: () => attention(d, reload) },
+    { id: 'inprogress', title: 'Работы в ходу', col: 'left', render: () => inProgress(d, reload) },
+    { id: 'recent', title: 'Недавно вышло', col: 'right', render: () => recent(d, reload) },
+    // статистика — по умолчанию скрыта
+    { id: 'kpi', title: 'Цифры', col: 'full', off: true, render: () => h('div', { class: 'cs-row' },
+      stat(apps.length, 'приложений'), stat(open.length, 'задач в работе'),
+      stat(overdue, 'просрочено', null, overdue ? 'danger' : ''), stat(live30.length + done30.length, 'выпущено за 30 дней'),
+      stat(stale.length, 'не трогали', d.staleDays + '+ дн.')) },
+    { id: 'statuses', title: 'Приложения по статусам', col: 'full', off: true, render: () => section('По статусам', h('div', { class: 'card-box st-sum' },
+      S.appStatuses.map(st => { const n = apps.filter(a => a.status === st.id).length; return h('div', { class: 'st-sum-row' + (n ? '' : ' zero') }, statusPill(st), h('span', { class: 'st-sum-bar' }, h('span', { style: { width: (apps.length ? n / apps.length * 100 : 0) + '%', background: st.color } })), h('b', null, n)); }))) },
+    { id: 'byunit', title: 'Юниты × статусы', col: 'full', off: true, render: () => section('Юниты × статусы', h('div', { class: 'card-box mx', style: { '--n': S.appStatuses.length } },
+      h('div', { class: 'mx-row mx-head' }, h('span'), S.appStatuses.map(st => h('span', { title: st.name }, st.name))),
+      units().map(u => h('div', { class: 'mx-row' }, h('span', { class: 'mx-unit' }, h('span', { class: 'unit-dot', style: { background: u.color, margin: 0 } }), u.name),
+        S.appStatuses.map(st => { const n = apps.filter(a => a.unitId === u.id && a.status === st.id).length; return h('span', { class: n ? 'mx-n' : 'mx-n zero' }, n || '—'); }))))) },
+    { id: 'pmload', title: 'Загрузка PM', col: 'right', off: true, render: () => section('Загрузка PM', list(pms.map(p => {
+      const mine = open.filter(x => x.r.assigneeId === p.id);
+      const late = mine.filter(x => x.r.dueDate && x.r.dueDate < todayStr()).length;
+      return h('div', { class: 'rc-row' }, avatar(p, 'sm'), h('span', { class: 'rc-main' }, h('b', null, p.name)),
+        h('span', { class: 'muted rc-at' }, mine.length + ' в работе', late > 0 && h('span', { class: 'warn-text' }, ' · ' + late + ' просроч.')));
+    }), 'PM нет')) },
+    { id: 'stale', title: 'Забытые приложения', col: 'right', off: true, render: () => section('Давно не трогали', list(stale.map(a => appRow(a, h('span', { class: 'muted rc-at' }, relTime(a.lastActivity)))), 'Таких нет'), stale.length || null) },
+    { id: 'shipped', title: 'Выпущено за 30 дней', col: 'right', off: true, render: () => section('Выпущено за 30 дней', list([
+      ...live30.map(a => appRow(a, h('span', { class: 'muted rc-at' }, 'в сторе · ' + relTime(a.statusAt)))),
+      ...done30.map(({ a, r }) => appRow(a, h('span', { class: 'muted rc-at' }, r.title.slice(0, 40) + ' · ' + relTime(r.doneAt))))], 'Пока ничего')) },
+  ];
+  // свои подборки
+  for (const b of customBlocks()) blocks.push({ id: 'c:' + b.id, title: b.name, col: b.col || 'right', custom: true, render: () => customBlock(b, apps, reload) });
+  return blocks;
+}
+
+/* ---------- свои блоки (подборки приложений по фильтрам) ---------- */
+
+const customBlocks = () => ((me() || {}).prefs || {}).ceoBlocks || [];
+function setCustomBlocks(list) {
+  const p = me();
+  if (p) p.prefs = { ...(p.prefs || {}), ceoBlocks: list };
+  send('setMyPrefs', { personId: S.meId, prefs: { ceoBlocks: list } }).catch(showErr);
+}
+const AGES = [[0, 'Неважно'], [7, 'Больше недели'], [14, 'Больше 2 недель'], [30, 'Больше месяца']];
+
+/** Приложения под фильтр блока: юниты, статусы, менеджеры, приоритеты, «не трогали N дней». */
+const matchBlock = (b, a) => {
+  const f = b.f || {};
+  return (!(f.units || []).length || f.units.includes(a.unitId)) && (!(f.statuses || []).length || f.statuses.includes(a.status))
+    && (!(f.pms || []).length || f.pms.includes(appPm(a))) && (!(f.prios || []).length || f.prios.includes(a.priority))
+    && (!f.age || ago(a.lastActivity) > f.age);
+};
+
+function customBlock(b, apps, reload) {
+  const found = apps.filter(a => matchBlock(b, a));
+  const head = h('div', { class: 'section-head' }, h('h2', null, b.name, h('span', { class: 'muted sec-n' }, found.length)));
+  if (b.view === 'count') {
+    return h('section', null, head, h('button', {
+      class: 'card-box cb-count', onclick: e => { e.stopPropagation(); menu(e.currentTarget, [{ title: b.name }, ...found.map(a => ({ label: a.name, action: () => openAppById(a.id, reload) }))]); },
+    }, h('div', { class: 'cs-n' }, found.length), h('div', { class: 'cs-label muted' }, plural(found.length, ['приложение', 'приложения', 'приложений']))));
+  }
+  return h('section', null, head, found.length
+    ? h('div', { class: 'card-box rc-list' }, found.map(a => h('button', { class: 'rc-row', onclick: () => openAppById(a.id, reload) },
+      appIcon(a, 'xs'), h('span', { class: 'rc-main' }, h('b', null, a.name)), statusPill(appStatusById(a.status)))))
+    : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Под фильтр ничего не попало')));
+}
+
+/** Окно своего блока: название, фильтры (галочки), вид — список или число. */
+function openBlockEditor(b, onSaved) {
+  const draft = b ? JSON.parse(JSON.stringify(b)) : { id: Math.random().toString(36).slice(2, 9), name: '', view: 'list', col: 'right', f: {} };
+  draft.f = { units: [], statuses: [], pms: [], prios: [], age: 0, ...draft.f };
+  const name = h('input', { class: 'inp', value: draft.name, maxlength: 60, placeholder: 'Например, Gold в ревью Apple' });
+  const group = (title, key, items) => h('div', { class: 'field' }, h('label', null, title), h('div', { class: 'cb-chips' }, items.map(([id, label, color]) => {
+    const btn = h('button', { class: 'cb-chip' + (draft.f[key].includes(id) ? ' on' : ''), type: 'button' }, color && h('span', { class: 'dot', style: { background: color } }), label);
+    btn.onclick = () => { draft.f[key] = draft.f[key].includes(id) ? draft.f[key].filter(x => x !== id) : [...draft.f[key], id]; btn.classList.toggle('on'); };
+    return btn;
+  })));
+  const age = h('select', { class: 'inp' }, AGES.map(([v, t]) => h('option', { value: String(v), selected: draft.f.age === v }, t)));
+  const view = h('select', { class: 'inp' }, [['list', 'Списком'], ['count', 'Числом']].map(([v, t]) => h('option', { value: v, selected: draft.view === v }, t)));
+  modal({
+    title: b ? 'Свой блок' : 'Новый блок', wide: true,
+    body: [
+      h('p', { class: 'hint', style: { marginTop: 0 } }, 'Подборка приложений по фильтрам. Ничего не отмечено — значит все.'),
+      field('Название', name),
+      group('Юниты', 'units', units().map(u => [u.id, u.name, u.color])),
+      group('Статусы', 'statuses', S.appStatuses.map(st => [st.id, st.name, st.color])),
+      group('Менеджер', 'pms', S.people.filter(p => p.active && p.access === 'moderator').map(p => [p.id, p.name])),
+      group('Приоритет', 'prios', [...S.priorityOptions].reverse().map(o => [o.id, o.name, o.color])),
+      h('div', { class: 'grid2' }, field('Не трогали', age), field('Вид', view)),
+    ],
+    actions: [{ label: 'Отмена' }, {
+      label: b ? 'Сохранить' : 'Добавить', primary: true,
+      action: close => {
+        if (!name.value.trim()) return name.focus();
+        draft.name = name.value.trim();
+        draft.f.age = Number(age.value);
+        draft.view = view.value;
+        const list = customBlocks();
+        setCustomBlocks(b ? list.map(x => (x.id === b.id ? draft : x)) : [...list, draft]);
+        close();
+        onSaved();
+      },
+    }],
+  });
+}

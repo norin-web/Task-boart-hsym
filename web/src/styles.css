@@ -1477,3 +1477,33 @@ a.rl-link:hover { background: var(--accent-soft); color: var(--accent-text); }
 
 .uc-icon.app-img { object-fit: cover; background: var(--surface-2); padding: 0; }
 .store-preview { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; min-height: 20px; }
+
+/* Дашборд CEO: цифры, статусы, матрица, свои блоки */
+.ceo-hello.row { display: flex; align-items: center; gap: 12px; }
+.ceo-hello .spacer { flex: 1; }
+.cs-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.cs { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface); }
+.cs-n { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.cs-label { font-size: 12.5px; color: var(--text-2); }
+.cs-sub { font-size: 11.5px; }
+.cs.danger .cs-n { color: var(--danger); }
+.st-sum { display: grid; gap: 8px; padding: 12px 14px; }
+.st-sum-row { display: grid; grid-template-columns: 150px minmax(0, 1fr) 32px; align-items: center; gap: 12px; font-size: 13px; }
+.st-sum-row.zero { opacity: .55; }
+.st-sum-row b { text-align: right; font-variant-numeric: tabular-nums; }
+.st-sum-bar { height: 6px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.st-sum-bar span { display: block; height: 100%; border-radius: 99px; }
+.mx { padding: 6px 12px; overflow-x: auto; }
+.mx-row { display: grid; grid-template-columns: 130px repeat(var(--n), minmax(70px, 1fr)); gap: 6px; align-items: center; min-height: 34px; font-size: 13px; }
+.mx-row + .mx-row { border-top: 1px solid var(--border); }
+.mx-head { font-size: 12px; color: var(--muted); min-height: 28px; }
+.mx-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mx-unit { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+.mx-n { font-variant-numeric: tabular-nums; font-weight: 600; }
+.mx-n.zero { color: var(--muted); font-weight: 400; }
+.cb-count { display: grid; justify-items: start; gap: 2px; width: 100%; text-align: left; font: inherit; color: var(--text); cursor: pointer; }
+.cb-count:hover { border-color: var(--border-strong); }
+.cb-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.cb-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer; }
+.cb-chip:hover { border-color: var(--border-strong); }
+.cb-chip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text); }

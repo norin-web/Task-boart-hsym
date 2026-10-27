@@ -216,7 +216,7 @@ export const appHead = () => h('div', { class: 'ap-row ap-head', 'aria-hidden': 
   h('span', null, 'Приложение'), h('span', null, 'Статус'), h('span', null, 'Сейчас в работе'), h('span', null, 'Обновлено'), h('span', null, 'PM'), h('span'));
 
 /** Менеджер приложения: PM открытой задачи, иначе PM юнита. */
-const appPm = a => { const req = (a.requests || []).find(r => !r.done); return (req && req.assigneeId) || ((pmsOf(a.unitId)[0] || {}).id) || ''; };
+export const appPm = a => { const req = (a.requests || []).find(r => !r.done); return (req && req.assigneeId) || ((pmsOf(a.unitId)[0] || {}).id) || ''; };
 
 export function appTable(apps, reload) {
   const rank = id => S.priorityOptions.findIndex(o => o.id === id);

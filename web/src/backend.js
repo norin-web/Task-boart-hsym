@@ -1637,7 +1637,7 @@ export function createBackend(db, opts = {}) {
       const staleBefore = new Date(Date.now() - staleDays * 864e5).toISOString();
       const recentFrom = new Date(Date.now() - 14 * 864e5).toISOString();
       const kindOfStatus = id => (statuses.find(x => x.id === id) || {}).kind || '';
-      const brief = a => ({ id: a.id, name: a.name, color: a.color, unitId: a.unitId, status: a.status, priority: a.priority, isTest: a.isTest });
+      const brief = a => ({ id: a.id, name: a.name, color: a.color, iconUrl: a.iconUrl, unitId: a.unitId, status: a.status, priority: a.priority, isTest: a.isTest });
       const portfolio = { byStatus: {}, byUnit: {} };
       for (const a of apps) {
         (portfolio.byStatus[a.status] || (portfolio.byStatus[a.status] = [])).push(a.id);
