@@ -15,6 +15,8 @@ import { mode } from '../data.js';
 const units = () => S.units.filter(u => !u.archived).sort((a, b) => (a.order || 0) - (b.order || 0));
 const prioRank = id => S.priorityOptions.findIndex(o => o.id === id);
 const daysSince = iso => Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 864e5));
+// «высокий» — два верхних варианта приоритета (High, Critical)
+const isHigh = id => { const i = prioRank(id); return i >= 0 && i >= S.priorityOptions.length - 2; };
 const daysLate = due => Math.max(1, Math.round((Date.parse(todayStr()) - Date.parse(due)) / 864e5));
 
 export async function renderCeoHome() {
@@ -29,14 +31,11 @@ export async function renderCeoHome() {
     const total = Object.values(d.portfolio.byStatus).reduce((n, l) => n + l.length, 0);
     const person = me();
     fill(page,
-      h('div', { class: 'ceo-hello' },
-        h('h2', null, greeting() + (person ? ', ' + person.name.split(' ')[0] : '')),
-        h('p', { class: 'muted' }, total ? `${total} ${plural(total, ['приложение', 'приложения', 'приложений'])} · ${d.inProgress.length} ${plural(d.inProgress.length, ['работа', 'работы', 'работ'])} в ходу`
-          : 'Приложений пока нет')),
+      h('div', { class: 'ceo-hello' }, h('h2', null, greeting() + (person ? ', ' + person.name.split(' ')[0] : ''))),
       newsBlock(),
       !total && h('div', { class: 'card-box empty-state' },
-        h('h2', null, 'Портфель пуст'),
-        h('p', null, units().length ? 'Создайте приложение — задача «New App» сразу уйдёт PM его юнита.' : 'Сначала юниты — направления студии (Gold, RF, MVP…), потом приложения.'),
+        h('h2', null, 'Приложений пока нет'),
+        !units().length && h('p', null, 'Сначала создайте юнит.'),
         h('div', { class: 'row', style: { justifyContent: 'center', gap: '8px' } },
           isSuper() && (units().length
             ? h('button', { class: 'btn primary', onclick: () => openCreateApp(load) }, icon('plus', 15), 'Новое приложение')
@@ -52,7 +51,7 @@ export async function renderCeoHome() {
 
 /* ---------- портфель ---------- */
 
-/** Плитки по статусам (клик — список приложений) и таблица «юниты × статусы». */
+/** Таблица «юниты × статусы»; итог по статусу — в шапке колонки. Клик по числу — список приложений. */
 function portfolio(d, reload) {
   const statuses = d.statuses;
   const appsOf = ids => ids.map(id => S.apps.find(a => a.id === id)).filter(Boolean);
@@ -63,16 +62,16 @@ function portfolio(d, reload) {
   const unitRows = units().filter(u => d.portfolio.byUnit[u.id]);
   return h('section', { class: 'ceo-portfolio' },
     h('div', { class: 'section-head' }, h('h2', null, 'Портфель')),
-    h('div', { class: 'pf-tiles' }, statuses.map(st => {
-      const ids = d.portfolio.byStatus[st.id] || [];
-      return h('button', {
-        class: 'pf-tile' + (ids.length ? '' : ' empty'), style: { '--sc': st.color },
-        onclick: e => { e.stopPropagation(); listMenu(e.currentTarget, st.name, appsOf(ids)); },
-      }, h('span', { class: 'pf-count' }, ids.length), h('span', { class: 'pf-name' }, h('span', { class: 'dot' }), st.name));
-    })),
-    unitRows.length > 0 && h('div', { class: 'pf-table card-box', role: 'table', 'aria-label': 'Приложения по юнитам и статусам' },
+    h('div', { class: 'pf-table card-box', role: 'table', 'aria-label': 'Приложения по юнитам и статусам' },
       h('div', { class: 'pf-row pf-head', role: 'row', style: { '--n': statuses.length } },
-        h('span', { role: 'columnheader' }, 'Юнит'), statuses.map(st => h('span', { role: 'columnheader', title: st.name }, st.name))),
+        h('span', { role: 'columnheader' }),
+        statuses.map(st => {
+          const ids = d.portfolio.byStatus[st.id] || [];
+          return h('button', {
+            class: 'pf-status' + (ids.length ? '' : ' empty'), role: 'columnheader', style: { '--sc': st.color }, disabled: !ids.length,
+            onclick: e => { e.stopPropagation(); listMenu(e.currentTarget, st.name, appsOf(ids)); },
+          }, h('span', { class: 'pf-total' }, ids.length), h('span', { class: 'pf-name' }, h('span', { class: 'dot' }), st.name));
+        })),
       unitRows.map(u => h('div', { class: 'pf-row', role: 'row', style: { '--n': statuses.length } },
         h('span', { class: 'pf-unit', role: 'cell' }, h('span', { class: 'unit-dot', style: { background: u.color, margin: 0 } }), u.name),
         statuses.map(st => {
@@ -84,12 +83,13 @@ function portfolio(d, reload) {
 
 /* ---------- требует внимания ---------- */
 
+// Короткая пометка справа; красным — только то, что уже горит
 const ATT = {
-  reject: { icon: 'alert', cls: 'danger', text: x => 'реджект Apple' },
-  overdue: { icon: 'clock', cls: 'danger', text: x => `просрочено на ${daysLate(x.task.dueDate)} ${plural(daysLate(x.task.dueDate), ['день', 'дня', 'дней'])}` },
-  nopm: { icon: 'user', cls: 'warn', text: x => 'нет PM в юните — некому разложить' },
-  waiting: { icon: 'tree', cls: 'warn', text: x => 'PM ещё не разложил по этапам' },
-  stale: { icon: 'clock', cls: 'muted', text: x => `без движения ${daysSince(x.task.updatedAt)} ${plural(daysSince(x.task.updatedAt), ['день', 'дня', 'дней'])}` },
+  reject: { cls: 'danger', text: () => 'реджект' },
+  overdue: { cls: 'danger', text: x => `просрочено ${daysLate(x.task.dueDate)} дн.` },
+  nopm: { cls: 'muted', text: () => 'нет PM' },
+  waiting: { cls: 'muted', text: () => 'не разложено' },
+  stale: { cls: 'muted', text: x => `стоит ${daysSince(x.task.updatedAt)} дн.` },
 };
 
 function attention(d, reload) {
@@ -99,19 +99,18 @@ function attention(d, reload) {
   // этапы лежат в юните запроса; реджект — карточка приложения
   const open = x => (x.request ? peekTask(x.request.unitId, x.task ? x.task.id : x.request.id) : openAppById(x.app.id, reload));
   return h('section', null,
-    h('div', { class: 'section-head' }, h('h2', null, 'Требует внимания', rows.length > 0 && h('span', { class: 'news-count' }, rows.length))),
+    h('div', { class: 'section-head' }, h('h2', null, 'Требует внимания', rows.length > 0 && h('span', { class: 'muted sec-n' }, rows.length))),
     rows.length
       ? h('div', { class: 'card-box att-list' }, rows.slice(0, 12).map(x => {
         const a = ATT[x.type];
         const p = who(x);
         return h('button', { class: 'att-row', onclick: () => open(x) },
-          h('span', { class: 'att-ic ' + a.cls }, icon(a.icon, 14)),
           appIcon(x.app, 'xs'),
           h('span', { class: 'att-main' }, h('b', null, x.app.name), what(x) && h('span', { class: 'muted' }, ' · ' + what(x))),
           h('span', { class: 'att-what ' + a.cls }, a.text(x)),
           p ? avatar(p, 'sm') : h('span', { class: 'avatar-gap' }));
       }), rows.length > 12 && h('p', { class: 'muted att-more' }, `и ещё ${rows.length - 12}`))
-      : h('div', { class: 'card-box empty-state sm' }, icon('check', 18), h('p', null, `Всё идёт по плану: реджектов, просрочек и работ без движения ${d.staleDays}+ дней нет.`)));
+      : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Всё по плану')));
 }
 
 /* ---------- работы в ходу ---------- */
@@ -130,27 +129,28 @@ function inProgress(d, reload) {
           const late = r.dueDate && r.dueDate < today;
           const pm = personById(r.assigneeId);
           return h('button', { class: 'wip-row', onclick: () => openAppById(app.id, reload) },
-            h('span', { class: 'wip-app' }, appIcon(app, 'xs'), h('b', null, app.name), prioTag(r.priority)),
-            h('span', { class: 'wip-req' }, h('span', { class: 'ap-type' }, REQUEST_TYPES[r.type] || 'Задача'), h('span', { class: 'wip-title' }, r.title)),
-            h('span', { class: 'wip-now' }, current ? current.title.split(' · ')[0] : r.stages.length ? 'релиз' : h('span', { class: 'warn-text' }, 'ждёт PM')),
-            h('span', { class: 'wip-stages' }, r.stages.length ? [stageDots(r.stages), h('span', { class: 'muted ap-pct' }, r.progress + '%')] : h('span', { class: 'muted' }, '—')),
+            // приоритет показываем только высокий — остальное не повод для плашки
+            h('span', { class: 'wip-app' }, appIcon(app, 'xs'), h('b', null, app.name), isHigh(r.priority) && prioTag(r.priority)),
+            h('span', { class: 'wip-req' }, h('span', { class: 'wip-title', title: REQUEST_TYPES[r.type] || '' }, r.title)),
+            h('span', { class: 'wip-now' }, current ? current.title.split(' · ')[0] : r.stages.length ? 'релиз' : h('span', { class: 'muted' }, 'ждёт PM')),
+            h('span', { class: 'wip-stages', title: r.stages.length ? r.progress + '%' : '' }, r.stages.length ? stageDots(r.stages) : h('span', { class: 'muted' }, '—')),
             h('span', { class: 'wip-due' + (late ? ' late' : '') }, r.dueDate ? fmtDate(r.dueDate) : h('span', { class: 'muted' }, '—')),
             pm ? avatar(pm, 'sm') : h('span', { class: 'muted' }, '—'));
         }))
-      : h('div', { class: 'card-box empty-state sm' }, h('p', null, 'Открытых задач по приложениям нет.')));
+      : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Нет работ')));
 }
 
 /* ---------- недавно вышло ---------- */
 
 function recent(d, reload) {
   return h('section', null,
-    h('div', { class: 'section-head' }, h('h2', null, 'Недавно вышло'), h('span', { class: 'muted' }, '14 дней')),
+    h('div', { class: 'section-head', title: 'За 14 дней' }, h('h2', null, 'Недавно вышло')),
     d.recent.length
       ? h('div', { class: 'card-box rc-list' }, d.recent.map(x => h('button', { class: 'rc-row', onclick: () => openAppById(x.app.id, reload) },
-        h('span', { class: 'rc-ic' + (x.type === 'live' ? ' live' : '') }, icon(x.type === 'live' ? 'rocket' : 'check', 14)),
+        appIcon(x.app, 'xs'),
         h('span', { class: 'rc-main' }, h('b', null, x.app.name),
-          h('span', { class: 'muted' }, x.type === 'live' ? ' — в сторе' : ' · ' + x.request.title + ' — готово')),
+          h('span', { class: 'muted' }, x.type === 'live' ? ' в сторе' : ' · ' + x.request.title)),
         h('span', { class: 'muted rc-at' }, relTime(x.at)))))
-      : h('div', { class: 'card-box empty-state sm' }, h('p', null, 'За две недели ничего не вышло.')));
+      : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Пока ничего')));
 }
 
