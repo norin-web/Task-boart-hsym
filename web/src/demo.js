@@ -9,6 +9,16 @@
 import { getBackend, asSystem } from './data.js';
 import { LS } from './state.js';
 
+/** Демо-приложения из App Store: название → ссылка на стор и иконка (iTunes Lookup). */
+const STORE = {
+  'Sleep Cycle - Tracker & Sounds': { storeUrl: 'https://apps.apple.com/us/app/sleep-cycle-tracker-sounds/id320606217', iconUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/e4/f5/03/e4f503c8-58f2-2d9a-a15b-05f6d70a9198/AppIconSleepCycle-0-0-1x_U007epad-0-1-0-0-85-220.png/512x512bb.jpg' },
+  'Nike Training Club': { storeUrl: 'https://apps.apple.com/us/app/nike-training-club/id301521403', iconUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/ab/9f/77/ab9f77b6-732e-00d6-223b-69f784ef5012/AppIcon-0-0-1x_U007emarketing-0-6-0-85-220.png/512x512bb.jpg' },
+  'CARROT Weather: Alerts & Radar': { storeUrl: 'https://apps.apple.com/us/app/carrot-weather-alerts-radar/id961390574', iconUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/0c/6e/8c/0c6e8c1d-b032-899e-4093-9a46af46d645/AppIcon-0-0-1x_U007epad-0-0-0-1-0-0-sRGB-0-85-220.png/512x512bb.jpg' },
+  'Calm': { storeUrl: 'https://apps.apple.com/us/app/calm/id571800810', iconUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/95/3e/7b/953e7b88-6a4a-c88d-fb68-7d4ee4083ec8/AppIcon-0-0-1x_U007emarketing-0-11-0-85-220.png/512x512bb.jpg' },
+  'Moshi Kids: Sleep, Relax, Play': { storeUrl: 'https://apps.apple.com/us/app/moshi-kids-sleep-relax-play/id1306719339', iconUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/18/cf/7c/18cf7cff-0aed-f877-21c7-90d6034434f5/app_icon-0-0-1x_U007epad-0-1-0-0-85-220.png/512x512bb.jpg' },
+  'Streaks': { storeUrl: 'https://apps.apple.com/us/app/streaks/id963034692', iconUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/80/c5/78/80c57847-4c05-f8b4-1a8b-3e42423e4392/orange_normal-0-0-1x_U007epad-0-1-0-85-220.png/512x512bb.jpg' },
+};
+
 const day = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 const cl = (...items) => items.map(([text, done]) => ({ text, done: !!done }));
 
@@ -107,7 +117,8 @@ async function runProcess(api, P, U, test) {
   const act = (who, method, payload) => api(method, payload, P[who].id);
   const move = (id, status, who) => act(who, 'updateTask', { id, patch: { status } });
   const set = (id, patch, who) => act(who, 'updateTask', { id, patch });
-  const app = (name, unit, color, extra = {}) => act('anna', 'createApp', { name, unitId: U[unit].id, color, test, ...extra });
+  // демо-приложения — настоящие из App Store: ссылка на стор и иконка (как при вставке ссылки в «Новое приложение»)
+  const app = (name, unit, color, extra = {}) => act('anna', 'createApp', { name, unitId: U[unit].id, color, test, ...(STORE[name] || {}), ...extra });
   const steps = async (requestId, pm) => Object.fromEntries((await act(pm, 'decomposeRequest', { taskId: requestId })).map(t => [t.step, t]));
   /**
    * Всё до релиза закрыто, PM передал релиз RM. phase — докуда RM довёл: '' (к отправке), submitted (ревью Apple),
@@ -130,9 +141,9 @@ async function runProcess(api, P, U, test) {
   };
   let apps = 0;
 
-  // ВЕРХ — CEO: Sleep Sounds (Gold), New App в самом разгаре.
+  // ВЕРХ — CEO: Sleep Cycle (Gold), New App в самом разгаре.
   // СЕРЕДИНА — PM Олег раскладывает по флоу. НИЗ — дизайнер сдаёт на ревью лиду, ASO параллельно, iOS/QA/релиз ждут.
-  const sleep = await app('Sleep Sounds', 'GLD', '#6366f1', { dueDate: day(40), priority: 'o_high', description: 'Звуки для сна: подписка, 30 звуков на старте, виджет. Рынки — US, UK.' });
+  const sleep = await app('Sleep Cycle - Tracker & Sounds', 'GLD', '#6366f1', { dueDate: day(40), priority: 'o_high', description: 'Звуки для сна: подписка, 30 звуков на старте, виджет. Рынки — US, UK.' });
   await act('anna', 'updateApp', { id: sleep.app.id, info: { figma: 'https://figma.com/design/sleep-sounds', drive: 'https://drive.google.com/drive/folders/sleep-sounds' } });
   apps++;
   const s1 = await steps(sleep.request.id, 'oleg');
@@ -143,8 +154,8 @@ async function runProcess(api, P, U, test) {
   await set(s1.meta.id, { checklist: cl(['Семантика US', 1], ['Название и подзаголовок'], ['Описание']), fields: opt('Medium') }, 'oleg');
   await move(s1.meta.id, 'in_progress', 'pavel');
 
-  // Fitness Coach (Gold): в сторе, идёт апдейт — дизайн у лида готов, iOS в работе, QA и релиз ждут
-  const fit = await app('Fitness Coach', 'GLD', '#ef4444', { requestTitle: 'Старт приложения' });
+  // Nike Training Club (Gold): в сторе, идёт апдейт — дизайн у лида готов, iOS в работе, QA и релиз ждут
+  const fit = await app('Nike Training Club', 'GLD', '#ef4444', { requestTitle: 'Старт приложения' });
   apps++;
   const s0 = await steps(fit.request.id, 'oleg');
   await ship(s0, 'oleg', 'live', '1.0');
@@ -158,20 +169,20 @@ async function runProcess(api, P, U, test) {
   await set(s2.ios.id, { assigneeId: P.alex.id, fields: opt('High'), checklist: cl(['Экран плана', 1], ['Достижения'], ['Аналитика']) }, 'oleg');
   await move(s2.ios.id, 'in_progress', 'alex');
 
-  // Calm Rain (MVP): всё сделано — PM Катя передала релиз, RM Сергей выпускает
-  const calm = await app('Calm Rain', 'MVP', '#14b8a6', { dueDate: day(3), priority: 'o_high', description: 'Звуки дождя: один экран, подписка.' });
+  // Calm (MVP): всё сделано — PM Катя передала релиз, RM Сергей выпускает
+  const calm = await app('Calm', 'MVP', '#14b8a6', { dueDate: day(3), priority: 'o_high', description: 'Звуки дождя: один экран, подписка.' });
   apps++;
   const s3 = await steps(calm.request.id, 'kate');
   await ship(s3, 'kate', '', '1.0'); // у RM в очереди: поля заполнены, чеклист ещё нет
   await move(s3.release.id, 'in_progress', 'sergey');
 
-  // Meditation Kids (RF): выпущено, на ревью Apple
-  const med = await app('Meditation Kids', 'RF', '#8b5cf6', { requestTitle: 'Старт приложения' });
+  // Moshi Kids (RF): выпущено, на ревью Apple
+  const med = await app('Moshi Kids: Sleep, Relax, Play', 'RF', '#8b5cf6', { requestTitle: 'Старт приложения' });
   apps++;
   await ship(await steps(med.request.id, 'kate'), 'kate', 'submitted', '1.0'); // ждёт ответа Apple
 
-  // Weather Pro (RF): RM отметил реджект Apple — PM получил задачу «Реджект: …» и отдал исправление лиду iOS (просрочено)
-  const wx = await app('Weather Pro', 'RF', '#0ea5e9', { requestTitle: 'Старт приложения' });
+  // CARROT Weather (RF): RM отметил реджект Apple — PM получил задачу «Реджект: …» и отдал исправление лиду iOS (просрочено)
+  const wx = await app('CARROT Weather: Alerts & Radar', 'RF', '#0ea5e9', { requestTitle: 'Старт приложения' });
   apps++;
   await act('anna', 'updateApp', { id: wx.app.id, priority: 'o_critical', info: { asc: 'https://appstoreconnect.apple.com/apps/1000000002' } });
   const rejId = await ship(await steps(wx.request.id, 'kate'), 'kate', 'rejected', '2.1', 'Guideline 3.1.2 — нет условий подписки на пейволле');
@@ -181,7 +192,7 @@ async function runProcess(api, P, U, test) {
   await act('kate', 'createTask', { unitId: U.RF.id, title: 'Пейволл: ссылки на условия подписки', parentId: rej.id, appId: wx.app.id,
     assigneeId: P.dima.id, departmentId: 'd_ios', dueDate: day(-1), fields: opt('Critical'), test });
 
-  // свой флоу New App у MVP (настройки юнита): плюс промо-ролик параллельно — его PM увидит в окне «Разложить» у Habit Tracker
+  // свой флоу New App у MVP (настройки юнита): плюс промо-ролик параллельно — его PM увидит в окне «Разложить» у Streaks
   if (!test) {
     await act('kate', 'saveFlow', { unitId: U.MVP.id, type: 'new_app', steps: [
       { key: 'design', title: 'Дизайн', positionId: 'd_design' },
@@ -193,8 +204,8 @@ async function runProcess(api, P, U, test) {
     ] });
   }
 
-  // Habit Tracker (MVP): запрос только что пришёл — у PM во входящих, ещё не разложен
-  await app('Habit Tracker', 'MVP', '#10b981', { dueDate: day(60), description: 'Трекер привычек: стрики, напоминания, виджеты.' });
+  // Streaks (MVP): запрос только что пришёл — у PM во входящих, ещё не разложен
+  await app('Streaks', 'MVP', '#10b981', { dueDate: day(60), description: 'Трекер привычек: стрики, напоминания, виджеты.' });
   apps++;
 
   // НИЗ — обычные задачи сотрудников во всех состояниях
@@ -203,7 +214,7 @@ async function runProcess(api, P, U, test) {
     ['GLD', 'Падение при открытии истории тренировок', 'alex', 'd_ios', 'review', 1, 'High'], // → ревью у лида iOS
     ['GLD', 'Ответы на отзывы за октябрь', 'pavel', 'd_aso', 'done', null, 'Low'],
     ['RF', 'Локализация скриншотов на RU', 'julia', 'd_design', 'in_progress', 4, 'Medium'],
-    ['RF', 'Тест-план для Meditation Kids 1.1', 'ira', 'd_qa', 'done', null, 'Medium'],
+    ['RF', 'Тест-план для Moshi Kids 1.1', 'ira', 'd_qa', 'done', null, 'Medium'],
     ['MVP', 'Исследование конкурентов: трекеры привычек', 'pavel', 'd_aso', 'in_progress', 5, 'Medium'],
     ['MVP', 'Дизайн-система для новых продуктов', 'masha', 'd_design', 'todo', 12, 'Low'],
   ];
