@@ -108,15 +108,14 @@ export function taskGroups(tasks) {
 
 function row(t, { unit = true, done = false } = {}) {
   const due = dueInfo(t.dueDate, t.statusKind === 'done');
+  // тихая строка: статус точкой и серым текстом, срок датой (красным — просрочка); ключ и позиция — в подсказке
   const d = deptById(t.departmentId);
-  return taskLink(t.unit.id, t.id, { class: 'trow' + (done ? ' done' : '') },
-    h('span', { class: 'dot', title: t.statusName, style: { background: t.statusColor || KIND_COLORS[t.statusKind] } }),
-    h('span', { class: 'key-badge' }, t.key),
+  return taskLink(t.unit.id, t.id, { class: 'trow' + (done ? ' done' : ''), title: [t.key, d && d.name].filter(Boolean).join(' · ') },
+    h('span', { class: 'dot', style: { background: t.statusColor || KIND_COLORS[t.statusKind] } }),
     h('span', { class: 't-title' }, t.title),
-    h('span', { class: 'badge' }, t.statusName),
-    d && h('span', { class: 'chip dept-chip', style: { background: `color-mix(in srgb, ${d.color} 16%, transparent)`, color: d.color } }, d.name),
-    due && h('span', { class: 'due ' + due.cls, title: due.hint }, icon('calendar', 12), due.text),
-    unit && h('span', { class: 'unit-chip' }, h('span', { class: 'unit-dot', style: { background: t.unit.color, margin: 0 } }), t.unit.name));
+    h('span', { class: 'muted trow-status' }, t.statusName),
+    due && h('span', { class: 'trow-due' + (due.cls.includes('overdue') ? ' danger-text' : ' muted'), title: due.hint }, due.text),
+    unit && h('span', { class: 'muted trow-unit' }, t.unit.name));
 }
 
 /** Подпись под именем: роль и позиция. */

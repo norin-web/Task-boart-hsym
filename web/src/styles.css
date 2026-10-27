@@ -1296,7 +1296,7 @@ a.af-val:hover { text-decoration: underline; }
 .pl-late { font-size: 11px; font-weight: 600; color: var(--danger); }
 .pl-release { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 9px; background: var(--ok-soft); color: var(--ok); font-size: 13px; font-weight: 500; }
 .pl-release .btn { margin-left: auto; }
-.pb-row { display: grid; grid-template-columns: 20px minmax(0, 1fr) 24px; gap: 10px; align-items: center; width: 100%; border: 0; background: none; font: inherit;
+.pb-row { display: grid; grid-template-columns: minmax(0, 1fr) 24px; gap: 10px; align-items: center; width: 100%; border: 0; background: none; font: inherit;
   font-size: 13px; color: var(--text); text-align: left; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
 .pb-row:hover { background: var(--surface-2); }
 .pb-main { display: grid; gap: 2px; min-width: 0; }
@@ -1346,7 +1346,7 @@ a.rl-link:hover { background: var(--accent-soft); color: var(--accent-text); }
 
 /* ---------- Tasks 2.0: сотрудник и лид ---------- */
 .news-kind.unblocked { background: var(--ok-soft); color: var(--ok); }
-.fc-row { display: grid; grid-template-columns: 20px auto minmax(0, 1fr) auto auto; gap: 10px; align-items: center; width: 100%; border: 0; background: none; font: inherit;
+.fc-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 10px; align-items: center; width: 100%; border: 0; background: none; font: inherit;
   font-size: 13px; color: var(--text); text-align: left; padding: 8px 10px; border-radius: 8px; cursor: pointer; min-height: 44px; }
 .fc-row:hover { background: var(--surface-2); }
 .fc-main { display: grid; gap: 2px; min-width: 0; text-align: left; color: var(--text); }
@@ -1365,7 +1365,7 @@ a.rl-link:hover { background: var(--accent-soft); color: var(--accent-text); }
 .tl-name { display: grid; min-width: 0; }
 .tl-name b, .tl-name small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tl-nums { grid-column: 2; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; }
-@media (max-width: 720px) { .fc-row { grid-template-columns: 20px minmax(0, 1fr) auto; } .fc-row > .uc-icon, .fc-row > .prio-tag { display: none; } }
+@media (max-width: 720px) { .fc-row { grid-template-columns: minmax(0, 1fr) auto; } .fc-row > .uc-icon, .fc-row > .prio-tag { display: none; } }
 /* личная доска: обязательные колонки и свои */
 .mb-row { grid-template-columns: auto auto minmax(0, 1fr) auto; }
 .mb-row.locked { background: var(--surface-2); border-radius: 8px; padding: 4px 8px; }
@@ -1507,3 +1507,16 @@ a.rl-link:hover { background: var(--accent-soft); color: var(--accent-text); }
 .cb-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer; }
 .cb-chip:hover { border-color: var(--border-strong); }
 .cb-chip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text); }
+
+.news-what { font-size: 12.5px; color: var(--text-2); white-space: nowrap; flex: none; width: 104px; overflow: hidden; text-overflow: ellipsis; }
+.news:not(.with-what) .news-what { display: none; }
+.news-more { display: block; padding: 8px 10px; font-size: 12.5px; }
+@container (max-width: 520px) { .news-what { width: auto; } }
+.news-what.danger, .news-due.danger { color: var(--danger); }
+.news-due { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; flex: none; }
+.news-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.news-noapp { width: 18px; flex: none; }
+.news-title b { font-weight: 600; }
+
+.trow-status, .trow-due, .trow-unit { font-size: 12.5px; white-space: nowrap; flex: none; }
+.home-col > .cs-row, .page > .cs-row { margin-bottom: 8px; }

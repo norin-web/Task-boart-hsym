@@ -1557,11 +1557,11 @@ export function createBackend(db, opts = {}) {
           .eq('archived', false).order('created_at').order('id')),
         all(() => T('unit_members').select('unit_id,person_id').order('unit_id')),
         people(),
-        all(() => T('apps').select('id,name,color,unit_id,status,priority,is_test').order('id')),
+        all(() => T('apps').select('id,name,color,icon_url,unit_id,status,priority,is_test').order('id')),
         setting('staleDays'),
       ]);
       const U = Object.fromEntries(units.map(u => [u.id, { ...u, st: unitSettings(u.settings) }]));
-      const A = Object.fromEntries(apps.map(a => [a.id, { id: a.id, name: a.name, color: a.color, unitId: a.unit_id, status: a.status, priority: a.priority || '', isTest: !!a.is_test }]));
+      const A = Object.fromEntries(apps.map(a => [a.id, { id: a.id, name: a.name, color: a.color, iconUrl: a.icon_url || '', unitId: a.unit_id, status: a.status, priority: a.priority || '', isTest: !!a.is_test }]));
       const own = tasks.filter(t => U[t.unit_id]);
       const kindOfRow = t => kindOf(U[t.unit_id].st, t.status);
       const done = t => kindOfRow(t) === 'done';
@@ -1766,11 +1766,11 @@ export function createBackend(db, opts = {}) {
         all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,due_date,archived,kind,step,app_id,depends_on,fields,review_from,department_id,updated_at')
           .eq('archived', false).order('id')),
         all(() => T('units').select('id,key,name,color,settings').eq('archived', false).order('ord').order('id')),
-        all(() => T('apps').select('id,name,color,priority').order('id')),
+        all(() => T('apps').select('id,name,color,icon_url,priority').order('id')),
         people(), all(() => T('unit_members').select('unit_id,person_id').order('unit_id')),
       ]);
       const U = Object.fromEntries(units.map(u => [u.id, { ...u, st: unitSettings(u.settings) }]));
-      const A = Object.fromEntries(apps.map(a => [a.id, { id: a.id, name: a.name, color: a.color, priority: a.priority || '' }]));
+      const A = Object.fromEntries(apps.map(a => [a.id, { id: a.id, name: a.name, color: a.color, iconUrl: a.icon_url || '', priority: a.priority || '' }]));
       const vis = tasks.filter(t => U[t.unit_id]);
       const kindOfRow = t => kindOf(U[t.unit_id].st, t.status);
       const byId = Object.fromEntries(vis.map(t => [t.id, t]));
@@ -1877,11 +1877,11 @@ export function createBackend(db, opts = {}) {
       const [rows, units, apps, settings] = await Promise.all([
         all(() => T('tasks').select('*').eq('step', 'release').eq('archived', false).neq('assignee_id', '').order('created_at').order('id')),
         all(() => T('units').select('id,key,settings').order('id')),
-        all(() => T('apps').select('id,name,color,unit_id,status,priority,is_test').order('id')),
+        all(() => T('apps').select('id,name,color,icon_url,unit_id,status,priority,is_test').order('id')),
         methods.getReleaseSettings(),
       ]);
       const U = Object.fromEntries(units.map(u => [u.id, u]));
-      const A = Object.fromEntries(apps.map(a => [a.id, { id: a.id, name: a.name, color: a.color, unitId: a.unit_id, status: a.status, priority: a.priority || '', isTest: !!a.is_test }]));
+      const A = Object.fromEntries(apps.map(a => [a.id, { id: a.id, name: a.name, color: a.color, iconUrl: a.icon_url || '', unitId: a.unit_id, status: a.status, priority: a.priority || '', isTest: !!a.is_test }]));
       const required = settings.fields.filter(f => f.required);
       const items = rows.filter(t => U[t.unit_id] && kindOf(unitSettings(U[t.unit_id].settings), t.status) !== 'done').map(t => {
         const rel = json(t.release, {}) || {};
@@ -1978,14 +1978,19 @@ export function createBackend(db, opts = {}) {
       if (p.today) await rpc('scan_due', { p_today: today(p.today) });
       const rows = await run(T('notifications').select('*').eq('read_at', '').order('at', { ascending: false }).limit(50));
       if (!rows.length) return [];
-      const tasks = await run(T('tasks').select('id,unit_id,num,title,status,due_date,archived').in('id', [...new Set(rows.map(r => r.task_id))]));
-      const units = await run(T('units').select('id,name,key,color').in('id', [...new Set(tasks.map(t => t.unit_id))]));
+      const tasks = await run(T('tasks').select('id,unit_id,num,title,status,due_date,archived,app_id').in('id', [...new Set(rows.map(r => r.task_id))]));
+      const appIds = [...new Set(tasks.map(t => t.app_id).filter(Boolean))];
+      const [units, apps] = await Promise.all([
+        run(T('units').select('id,name,key,color').in('id', [...new Set(tasks.map(t => t.unit_id))])),
+        appIds.length ? run(T('apps').select('id,name,color,icon_url').in('id', appIds)) : [],
+      ]);
       const TT = Object.fromEntries(tasks.map(t => [t.id, t])), U = Object.fromEntries(units.map(u => [u.id, u]));
+      const A = Object.fromEntries(apps.map(a => [a.id, { id: a.id, name: a.name, color: a.color || '', iconUrl: a.icon_url || '' }]));
       return rows.filter(r => TT[r.task_id] && !TT[r.task_id].archived && U[TT[r.task_id].unit_id]).map(r => {
         const t = TT[r.task_id], u = U[t.unit_id];
         return {
           id: r.id, kind: r.kind, actorId: r.actor_id, at: r.at, ref: r.ref || '', taskId: t.id, title: t.title, dueDate: t.due_date,
-          key: `${u.key}-${t.num}`, unit: { id: u.id, name: u.name, color: u.color },
+          key: `${u.key}-${t.num}`, unit: { id: u.id, name: u.name, color: u.color }, app: A[t.app_id] || null,
         };
       });
     },

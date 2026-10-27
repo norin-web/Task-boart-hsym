@@ -8,6 +8,7 @@ import { openCreateUnit, unitMenu } from './units.js';
 import { mode } from '../data.js';
 import { taskGroups, unitGroups, loadMyTasks, personCaption } from './my.js';
 import { activityFeed } from './feed.js';
+import { appIcon } from './apps.js';
 import { renderLayout, editLayout } from './layout.js';
 import { openPeople } from './people.js';
 import { focusBlock, reviewsBlock, teamLoadBlock } from './employee.js';
@@ -66,6 +67,8 @@ const NEWS_BLOCK = {
   render: () => newsBlock(),
 };
 
+const NEWS_WHAT = { review: 'ревью', returned: 'вернули', approved: 'закрыта по ревью', unblocked: 'можно начинать', overdue: 'просрочено', due_soon: 'срок', handoff: 'новое приложение' };
+
 export function newsBlock() {
   if (!S.notes.length) return null;
   const row = n => {
@@ -75,17 +78,14 @@ export function newsBlock() {
       class: 'news-row', dataset: { noteTask: n.taskId }, onclick: () => peekTask(n.unit.id, n.taskId),
     },
     h('span', { class: 'news-dot' + (n.kind !== 'assigned' ? ' ' + n.kind : '') }),
-    n.kind === 'review' && h('span', { class: 'news-kind review', title: 'Задача пришла вам на ревью' }, icon('eye', 12), 'Ревью'),
-    n.kind === 'returned' && h('span', { class: 'news-kind returned', title: 'Ревьюер вернул задачу вам' }, icon('back', 12), 'Вернули'),
-    n.kind === 'approved' && h('span', { class: 'news-kind approved', title: 'Ревьюер принял работу — задача закрыта' }, icon('done', 12), 'Закрыта по ревью'),
-    n.kind === 'unblocked' && h('span', { class: 'news-kind unblocked', title: 'Этапы, которые нужно было закрыть раньше, закрыты' }, icon('zap', 12), 'Можно начинать'),
-    n.kind === 'overdue' && h('span', { class: 'news-kind overdue', title: 'Срок прошёл' }, icon('alert', 12), 'Просрочено'),
-    n.kind === 'due_soon' && h('span', { class: 'news-kind soon', title: 'Срок скоро' }, icon('clock', 12), n.dueDate === todayStr() ? 'Срок сегодня' : 'Срок завтра'),
-    h('span', { class: 'key-badge' }, n.key),
-    h('span', { class: 'news-title' }, n.title),
-    due && h('span', { class: 'due ' + due.cls, title: due.hint }, icon('calendar', 12), due.text),
-    h('span', { class: 'news-meta' }, h('span', { class: 'unit-dot', style: { background: n.unit.color } }), n.unit.name,
-      ...(n.actorId || !['overdue', 'due_soon'].includes(n.kind) ? [' · ', noteText(n.kind, by)] : []), ' · ', relTime(n.at)));
+    // что случилось — короткой подписью; красным только «просрочено» и «вернули»; ключ, юнит и кто — в подсказке
+    h('span', { class: 'news-what' + (['overdue', 'returned'].includes(n.kind) ? ' danger' : '') },
+      n.kind === 'due_soon' ? (n.dueDate === todayStr() ? 'срок сегодня' : 'срок завтра') : NEWS_WHAT[n.kind] || ''),
+    n.app ? appIcon(n.app, 'xs') : h('span', { class: 'news-noapp' }),
+    h('span', { class: 'news-title', title: `${n.key} · ${n.unit.name}` + (n.actorId || !['overdue', 'due_soon'].includes(n.kind) ? ' · ' + noteText(n.kind, by) : '') },
+      n.app && h('b', null, n.app.name + ' · '), n.title),
+    due && n.kind !== 'due_soon' && h('span', { class: 'news-due' + (due.cls.includes('overdue') ? ' danger' : ''), title: due.hint }, fmtDate(n.dueDate)),
+    h('span', { class: 'news-meta' }, relTime(n.at)));
   };
   const readAll = () => {
     S.notes = [];
@@ -94,11 +94,21 @@ export function newsBlock() {
     call('readNotifications', {}).catch(showErr);
     sec.querySelectorAll('.news-row').forEach(fadeOut);
   };
+  // колонка «что случилось» — только если хоть у одной строки есть подпись (иначе не занимает место)
+  const list = h('div', { class: 'news card-box' + (S.notes.some(n => NEWS_WHAT[n.kind]) ? ' with-what' : '') });
   const sec = h('section', { class: 'news-sec' },
     h('div', { class: 'section-head' },
-      h('h2', null, 'Новое для вас', h('span', { class: 'news-count' }, S.notes.length)),
+      h('h2', null, 'Новое для вас', h('span', { class: 'muted sec-n' }, S.notes.length)),
       h('button', { class: 'btn ghost sm', onclick: readAll }, icon('check', 14), 'Просмотрено всё')),
-    h('div', { class: 'news card-box' }, S.notes.map(row)));
+    list);
+  // длинный список — первые 6, остальное по кнопке
+  const LIMIT = 6;
+  let all = false;
+  function drawList() {
+    fill(list, (all ? S.notes : S.notes.slice(0, LIMIT)).map(row),
+      S.notes.length > LIMIT && h('button', { class: 'link-btn news-more', onclick: () => { all = !all; drawList(); } }, all ? 'Свернуть' : 'Показать все ' + S.notes.length));
+  }
+  drawList();
   return sec;
 }
 
@@ -491,36 +501,32 @@ async function renderMemberHome() {
   renderSidebar();
 
   const person = me();
-  const pos = person && deptById(person.positionId);
   const units = d.units.filter(u => !u.archived);
   const open = tasks.filter(t => t.statusKind !== 'done');
   const overdue = open.filter(t => t.dueDate && t.dueDate < new Date().toISOString().slice(0, 10)).length;
-  const dateStr = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
 
   const BLOCKS = [
     NEWS_BLOCK,
     { id: 'focus', title: 'Фокус', col: 'left', render: () => focusBlock(md) },
     md.lead && { id: 'reviews', title: 'Ждут вашего ревью', col: 'right', render: () => reviewsBlock(md, () => rerender()) },
     md.lead && { id: 'teamLoad', title: 'Загрузка позиции', col: 'right', render: () => teamLoadBlock(md) },
-    { id: 'stats', title: 'Статистика', col: 'full', render: () => h('div', { class: 'stats' },
-      stat('Мои открытые задачи', open.length, 'circle', 'var(--st-progress)'),
-      stat('Просрочено', overdue, 'alert', 'var(--danger)'),
-      stat('Мои юниты', units.length, 'board', 'var(--accent)'),
-      stat('Сделано', tasks.length - open.length, 'done', 'var(--st-done)')) },
+    { id: 'stats', title: 'Статистика', col: 'full', render: () => h('div', { class: 'cs-row' },
+      h('div', { class: 'cs' }, h('div', { class: 'cs-n' }, open.length), h('div', { class: 'cs-label' }, 'открытых задач')),
+      h('div', { class: 'cs' + (overdue ? ' danger' : '') }, h('div', { class: 'cs-n' }, overdue), h('div', { class: 'cs-label' }, 'просрочено')),
+      h('div', { class: 'cs' }, h('div', { class: 'cs-n' }, tasks.length - open.length), h('div', { class: 'cs-label' }, 'сделано')),
+      h('div', { class: 'cs' }, h('div', { class: 'cs-n' }, units.length), h('div', { class: 'cs-label' }, plural(units.length, ['юнит', 'юнита', 'юнитов'])))) },
     { id: 'tasks', title: 'Мои задачи', col: 'left', render: () => h('section', null,
       h('div', { class: 'section-head' }, h('h2', null, 'Мои задачи')), unitGroups(tasks)) },
     { id: 'units', title: 'Мои юниты', col: 'right', render: () => h('section', null,
       h('div', { class: 'section-head' }, h('h2', null, 'Мои юниты')),
       units.length
         ? h('div', { class: 'unit-grid', style: { gridTemplateColumns: '1fr' } }, units.map(unitCard))
-        : h('div', { class: 'card-box empty-state' }, h('p', { style: { margin: 0 } }, 'Вас пока не добавили ни в один юнит. Обратитесь к PM.'))) },
+        : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Юнитов пока нет'))) },
   ].filter(Boolean);
   const draw = () => fill(page,
     h('div', { class: 'hero' },
-      h('div', null,
-        h('h1', null, greeting() + (person ? ', ' + person.name.split(' ')[0] : '')),
-        h('p', null, dateStr[0].toUpperCase() + dateStr.slice(1) + (pos ? ' · ' + pos.name : ''))),
-      h('button', { class: 'btn ghost', title: 'Настроить дашборд под себя', onclick: () => editLayout('memberHome', BLOCKS, page, draw) }, icon('layers', 15), 'Настроить')),
+      h('h1', null, greeting() + (person ? ', ' + person.name.split(' ')[0] : '')),
+      h('button', { class: 'btn ghost sm', title: 'Настроить дашборд под себя', onclick: () => editLayout('memberHome', BLOCKS, page, draw) }, icon('layers', 14), 'Настроить')),
     renderLayout('memberHome', BLOCKS));
   draw();
 }

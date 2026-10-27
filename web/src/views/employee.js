@@ -6,29 +6,29 @@ import { personById, deptById, prioById, fmtDate, plural } from '../state.js';
 import { h, icon, avatar, toast, showErr } from '../ui.js';
 import { send } from '../api.js';
 import { peekTask } from './task.js';
-import { appIcon, prioTag } from './apps.js';
+import { appIcon, prioTag, isHighPrio } from './apps.js';
 
+// Красным — только просрочка; остальное — серым
 const REASON = {
-  overdue: { label: 'просрочено', cls: 'danger', icon: 'alert' },
-  today: { label: 'срок сегодня', cls: 'warn', icon: 'clock' },
-  tomorrow: { label: 'срок завтра', cls: 'warn', icon: 'clock' },
-  progress: { label: 'в работе', cls: 'accent', icon: 'progress' },
+  overdue: { label: 'просрочено', cls: 'danger' },
+  today: { label: 'сегодня', cls: 'muted' },
+  tomorrow: { label: 'завтра', cls: 'muted' },
+  progress: { label: 'в работе', cls: 'muted' },
 };
 
 /** Фокус: просроченное, сроки сегодня и завтра, начатое — по важности; заблокированные этапы сюда не попадают. */
 export function focusBlock(d) {
   const rows = d.focus;
   return h('section', null,
-    h('div', { class: 'section-head' }, h('h2', null, 'Фокус', rows.length > 0 && h('span', { class: 'news-count' }, rows.length))),
+    h('div', { class: 'section-head' }, h('h2', null, 'Фокус', rows.length > 0 && h('span', { class: 'muted sec-n' }, rows.length))),
     rows.length ? h('div', { class: 'card-box att-list' }, rows.map(t => {
       const r = REASON[t.reason];
       return h('button', { class: 'fc-row', onclick: () => peekTask(t.unitId, t.id) },
-        h('span', { class: 'att-ic ' + r.cls }, icon(r.icon, 14)),
         t.app ? appIcon(t.app, 'xs') : h('span'),
         h('span', { class: 'fc-main' }, h('span', { class: 'fc-title' }, t.title), h('span', { class: 'muted fc-sub' }, (t.app ? t.app.name + ' · ' : '') + t.statusName)),
-        prioById(t.priority) ? prioTag(t.priority) : h('span'),
+        isHighPrio(t.priority) ? prioTag(t.priority) : h('span'),
         h('span', { class: 'fc-when ' + r.cls }, t.reason === 'overdue' ? 'срок ' + fmtDate(t.dueDate) : r.label));
-    })) : h('div', { class: 'card-box empty-state sm' }, icon('check', 18), h('p', null, 'Горящего нет: просрочек и сроков на сегодня-завтра нет.')));
+    })) : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Горящего нет')));
 }
 
 /** Очередь ревью лида: чья задача, «Принять» (в готово) и «Вернуть» (автору, в колонку перед ревью). */
@@ -38,7 +38,7 @@ export function reviewsBlock(d, reload) {
     try { await send('updateTask', { id: t.id, patch: { status } }); toast(done); reload(); } catch (e) { showErr(e); }
   };
   return h('section', null,
-    h('div', { class: 'section-head' }, h('h2', null, 'Ждут вашего ревью', rows.length > 0 && h('span', { class: 'news-count' }, rows.length))),
+    h('div', { class: 'section-head' }, h('h2', null, 'Ждут вашего ревью', rows.length > 0 && h('span', { class: 'muted sec-n' }, rows.length))),
     rows.length ? h('div', { class: 'card-box att-list' }, rows.map(t => {
       const author = personById(t.authorId);
       return h('div', { class: 'rv-row' },
@@ -48,7 +48,7 @@ export function reviewsBlock(d, reload) {
         h('div', { class: 'rv-actions' },
           t.acceptStatus && h('button', { class: 'btn primary sm', onclick: () => act(t, t.acceptStatus, 'Принято — задача закрыта') }, icon('check', 13), 'Принять'),
           h('button', { class: 'btn sm', onclick: () => act(t, t.returnStatus, 'Вернули автору') }, icon('back', 13), 'Вернуть')));
-    })) : h('div', { class: 'card-box empty-state sm' }, h('p', null, 'Ревью не ждёт никто.')));
+    })) : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Ревью никто не ждёт')));
 }
 
 /** Загрузка людей позиции лида в его юнитах: открыто, в работе, ждут, просрочено. */
@@ -64,5 +64,5 @@ export function teamLoadBlock(d) {
         x.inProgress > 0 && h('span', { class: 'muted' }, x.inProgress + ' в работе'),
         x.waiting > 0 && h('span', { class: 'muted' }, x.waiting + ' ждут'),
         x.overdue > 0 && h('span', { class: 'warn-text' }, x.overdue + ' просроч.')))))
-      : h('div', { class: 'card-box empty-state sm' }, h('p', null, 'В ваших юнитах нет людей вашей позиции.')));
+      : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Никого нет')));
 }
