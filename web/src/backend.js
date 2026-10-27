@@ -1453,7 +1453,9 @@ export function createBackend(db, opts = {}) {
             progress: stages.length ? Math.round((done.length / stages.length) * 100) : 0,
           };
         });
-        return { ...a, requests, active: requests.filter(r => !r.done).length };
+        // последняя работа с приложением: само приложение, его задачи и этапы — чтобы видеть забытые
+        const lastActivity = [a.updatedAt, a.statusAt, ...own.map(t => t.updated_at)].filter(Boolean).sort().pop() || a.createdAt || '';
+        return { ...a, requests, active: requests.filter(r => !r.done).length, lastActivity };
       });
     },
 

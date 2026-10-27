@@ -4,8 +4,8 @@
  * справа: статус, юнит, приоритет, поля быстрого доступа, работы (запросы CEO и их этапы).
  */
 import Sortable from 'sortablejs';
-import { S, isSuper, isStaff, me, personById, unitById, appStatusById, prioById, REQUEST_TYPES, LS, plural, fmtDate, PALETTE, between, todayStr } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill, modal, field, toast, menu, closeMenu, confirmDlg } from '../ui.js';
+import { S, isSuper, isStaff, me, personById, unitById, appStatusById, prioById, REQUEST_TYPES, LS, plural, fmtDate, PALETTE, between, todayStr, relTime } from '../state.js';
+import { $, h, icon, avatar, topbar, showErr, fill, modal, field, toast, menu, closeMenu, confirmDlg, promptDlg } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
@@ -66,6 +66,67 @@ export async function renderApps() {
 
   // Только список: приложения по юнитам в сворачиваемых блоках, поиск по названию сверху
   let q = '';
+  // Фильтры: статус, менеджер (PM), давность работы; свои наборы — в профиле (prefs.appFilters)
+  const f = { statuses: [], pms: [], age: 0, ...LS.get('appsFilter', {}) };
+  const saveF = () => LS.set('appsFilter', f);
+  const active = () => f.statuses.length + f.pms.length + (f.age ? 1 : 0);
+  const chips = h('div', { class: 'feed-filters apps-chips' });
+  const filterBtn = h('button', { class: 'btn sm', onclick: e => { e.stopPropagation(); filterMenu(e.currentTarget); } });
+  const passes = a => (!f.statuses.length || f.statuses.includes(a.status))
+    && (!f.pms.length || f.pms.includes(appPm(a)))
+    && (!f.age || !a.lastActivity || Date.now() - Date.parse(a.lastActivity) > f.age * 864e5);
+  const saved = () => (((me() || {}).prefs || {}).appFilters || []);
+  const setSaved = list => {
+    const p = me();
+    if (p) p.prefs = { ...(p.prefs || {}), appFilters: list };
+    send('setMyPrefs', { personId: S.meId, prefs: { appFilters: list } }).catch(showErr);
+  };
+  const apply = next => { Object.assign(f, { statuses: [], pms: [], age: 0 }, next); saveF(); drawList(); };
+  const check = (on, label, dot, onclick) => h('button', {
+    class: 'menu-item aud-item' + (on ? ' on' : ''), role: 'menuitemcheckbox', 'aria-checked': String(on),
+    onclick: e => { e.stopPropagation(); onclick(); },
+  }, h('span', { class: 'aud-check' }, on && icon('check', 13)), dot, label);
+  function filterMenu(anchor) {
+    const box = h('div', { class: 'af-menu' });
+    const toggle = (key, id) => { f[key] = f[key].includes(id) ? f[key].filter(x => x !== id) : [...f[key], id]; saveF(); drawList(); paint(); };
+    const paint = () => fill(box,
+      saved().length > 0 && [h('div', { class: 'menu-label' }, 'Мои фильтры'),
+        saved().map((s, i) => h('div', { class: 'af-saved' },
+          h('button', { class: 'menu-item', onclick: e => { e.stopPropagation(); apply(s.f); paint(); } }, icon('filter', 14), s.name),
+          h('button', { class: 'icon-btn sm', title: 'Удалить', onclick: e => { e.stopPropagation(); setSaved(saved().filter((_, j) => j !== i)); paint(); } }, icon('x', 13)))),
+        h('div', { class: 'menu-sep' })],
+      h('div', { class: 'menu-label' }, 'Статус'),
+      S.appStatuses.map(st => check(f.statuses.includes(st.id), st.name, h('span', { class: 'dot', style: { background: st.color } }), () => toggle('statuses', st.id))),
+      h('div', { class: 'menu-sep' }),
+      h('div', { class: 'menu-label' }, 'Менеджер'),
+      S.people.filter(p => p.active && p.access === 'moderator').map(p => check(f.pms.includes(p.id), p.name, avatar(p, 'sm'), () => toggle('pms', p.id))),
+      h('div', { class: 'menu-sep' }),
+      h('div', { class: 'menu-label' }, 'Не трогали'),
+      [[0, 'Неважно'], [7, 'Больше недели'], [14, 'Больше 2 недель'], [30, 'Больше месяца']].map(([d, label]) =>
+        check(f.age === d, label, null, () => { f.age = d; saveF(); drawList(); paint(); })),
+      active() > 0 && [h('div', { class: 'menu-sep' }),
+        h('button', {
+          class: 'menu-item', onclick: async e => {
+            e.stopPropagation();
+            closeMenu();
+            const name = await promptDlg('Сохранить фильтр', 'Название', '');
+            if (name && name.trim()) setSaved([...saved(), { name: name.trim().slice(0, 40), f: { statuses: f.statuses, pms: f.pms, age: f.age } }]);
+          },
+        }, icon('plus', 14), 'Сохранить как свой фильтр'),
+        h('button', { class: 'menu-item', onclick: e => { e.stopPropagation(); apply({}); paint(); } }, icon('x', 14), 'Сбросить')]);
+    paint();
+    menu(anchor, [box]);
+  }
+  const drawFilters = () => {
+    const n = active();
+    fill(filterBtn, icon('filter', 14), h('span', { class: 'btn-label' }, 'Фильтр'), n > 0 && h('span', { class: 'count-badge' }, n));
+    filterBtn.classList.toggle('on', n > 0);
+    const chip = (label, onx) => h('span', { class: 'chip filter-chip' }, label, h('button', { class: 'chip-x', title: 'Убрать', onclick: onx }, icon('x', 11)));
+    fill(chips,
+      f.statuses.map(id => chip((appStatusById(id) || { name: id }).name, () => { f.statuses = f.statuses.filter(x => x !== id); saveF(); drawList(); })),
+      f.pms.map(id => chip((personById(id) || { name: '—' }).name, () => { f.pms = f.pms.filter(x => x !== id); saveF(); drawList(); })),
+      f.age > 0 && chip(`не трогали > ${f.age} дн.`, () => { f.age = 0; saveF(); drawList(); }));
+  };
   const collapsed = new Set(LS.get('appsCollapsed', []));
   const reload = () => load().then(drawList).catch(showErr);
   const search = h('input', {
@@ -78,13 +139,14 @@ export async function renderApps() {
     drawList();
   };
   const drawList = () => {
+    drawFilters();
     if (!apps.length) return fill(body, emptyApps(reload));
-    const found = apps.filter(a => !q || a.name.toLowerCase().includes(q));
+    const found = apps.filter(a => (!q || a.name.toLowerCase().includes(q)) && passes(a));
     const groups = [...units(), { id: '', name: 'Без юнита', color: 'var(--border-strong)' }]
       .map(u => ({ u, list: found.filter(a => (a.unitId || '') === u.id || (!u.id && !unitById(a.unitId))) }))
       .filter(g => g.list.length);
-    fill(body, groups.length ? [appHead(), ...groups.map(({ u, list }) => {
-      const open = !!q || !collapsed.has(u.id);
+    fill(body, chips, groups.length ? [appHead(), ...groups.map(({ u, list }) => {
+      const open = !!q || active() > 0 || !collapsed.has(u.id);
       return h('section', { class: 'ap-group' + (open ? ' open' : '') },
         h('button', { class: 'ap-group-head', 'aria-expanded': String(open), onclick: () => toggle(u.id) },
           h('span', { class: 'ap-chev' }, icon('chevron', 14)),
@@ -95,6 +157,7 @@ export async function renderApps() {
   };
   fill(tools,
     search,
+    filterBtn,
     isSuper() && h('button', { class: 'icon-btn', title: 'Статусы и поля приложения', onclick: e => { e.stopPropagation(); settingsMenu(e.currentTarget, reload); } }, icon('settings', 17)),
     isSuper() && units().length > 0 && h('button', { class: 'btn primary sm', onclick: () => openCreateApp(reload) }, icon('plus', 14), h('span', { class: 'btn-label' }, 'Новое приложение')));
   drawList();
@@ -129,7 +192,10 @@ function settingsMenu(anchor, reload) {
 /** Строки с подписанными колонками: приложение · юнит · статус · сейчас в работе · PM. */
 /** Подписи колонок списка — одна строка над всеми группами. */
 export const appHead = () => h('div', { class: 'ap-row ap-head', 'aria-hidden': 'true' },
-  h('span', null, 'Приложение'), h('span', null, 'Статус'), h('span', null, 'Сейчас в работе'), h('span', null, 'PM'), h('span'));
+  h('span', null, 'Приложение'), h('span', null, 'Статус'), h('span', null, 'Сейчас в работе'), h('span', null, 'Обновлено'), h('span', null, 'PM'), h('span'));
+
+/** Менеджер приложения: PM открытой задачи, иначе PM юнита. */
+const appPm = a => { const req = (a.requests || []).find(r => !r.done); return (req && req.assigneeId) || ((pmsOf(a.unitId)[0] || {}).id) || ''; };
 
 export function appTable(apps, reload) {
   const rank = id => S.priorityOptions.findIndex(o => o.id === id);
@@ -137,11 +203,12 @@ export function appTable(apps, reload) {
     [...apps].sort((a, b) => rank(b.priority) - rank(a.priority) || (a.order || 0) - (b.order || 0)).map(a => {
       const st = appStatusById(a.status);
       const req = a.requests.find(r => !r.done) || null;
-      const pm = req ? personById(req.assigneeId) : null;
+      const pm = personById(appPm(a));
       return h('button', { class: 'ap-row', onclick: () => openAppPanel(a, reload) },
         h('span', { class: 'ap-name' }, appIcon(a), h('b', null, a.name), a.isTest && h('span', { class: 'test-tag' }, 'тест'), isHighPrio(a.priority) && prioTag(a.priority)),
         h('span', null, statusPill(st)),
         h('span', { class: 'ap-work' }, req ? workSummary(req) : h('span', { class: 'muted' }, '—')),
+        h('span', { class: 'muted ap-upd', title: a.lastActivity ? fmtDate(a.lastActivity.slice(0, 10)) : '' }, a.lastActivity ? relTime(a.lastActivity) : '—'),
         h('span', null, pm ? avatar(pm, 'sm') : h('span', { class: 'muted' }, '—')),
         icon('chevron', 15));
     }));
