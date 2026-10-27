@@ -1449,3 +1449,28 @@ a.rl-link:hover { background: var(--accent-soft); color: var(--accent-text); }
 .af-menu { min-width: 240px; }
 .af-saved { display: flex; align-items: center; gap: 2px; }
 .af-saved .menu-item { flex: 1; }
+
+/* Карточка приложения */
+.unit-panel.center { width: min(820px, calc(100vw - 48px)); }
+.ap-now { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.ap-now-st { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding-bottom: 6px; }
+.ap-now-st .spacer { flex: 1; }
+.ap-now-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 24px; align-items: center; gap: 10px; border: 0; background: none; font: inherit; font-size: 13px; color: var(--text); text-align: left; padding: 6px 4px; border-radius: 8px; cursor: pointer; }
+.ap-now-row:hover { background: var(--surface-2); }
+.ap-now-what { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-num-list { display: grid; }
+.ap-num-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 10px; align-items: center; border: 0; background: none; font: inherit; font-size: 13px; color: var(--text); text-align: left; padding: 7px 4px; border-radius: 8px; cursor: pointer; }
+.ap-num-row + .ap-num-row { border-top: 1px solid var(--border); border-radius: 0; }
+.ap-num-row:hover { background: var(--surface-2); }
+.ap-num { font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ap-num-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-num-row.done .ap-num-title { color: var(--text-2); }
+.ap-num-state, .ap-num-at { font-size: 12px; white-space: nowrap; }
+.ap-closed { margin-top: 6px; }
+.ap-note-add { display: grid; gap: 6px; justify-items: end; margin-bottom: 10px; }
+.ap-note-add .inp { width: 100%; }
+.ap-note { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 8px 0; }
+.ap-note + .ap-note { border-top: 1px solid var(--border); }
+.ap-note-meta { font-size: 12px; margin-bottom: 2px; }
+.ap-note-text { font-size: 13.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pool-rows { display: grid; gap: 6px; }

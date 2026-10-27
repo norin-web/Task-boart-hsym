@@ -444,6 +444,23 @@ create table if not exists apps (
   updated_at text not null
 );
 create index if not exists apps_unit on apps(unit_id);
+-- Заметки к приложению (идеи на будущее, договорённости): видит тот, кто видит приложение; удаляет автор или CEO
+create table if not exists app_notes (
+  id        text primary key,
+  app_id    text not null references apps(id) on delete cascade,
+  author_id text not null default '',
+  text      text not null,
+  at        text not null
+);
+create index if not exists app_notes_app on app_notes(app_id);
+-- автор заметки — всегда тот, кто пишет
+create or replace function guard_note_author() returns trigger language plpgsql set search_path = public as $$
+begin
+  if not app_system() then new.author_id := coalesce(my_person_id(), ''); end if;
+  return new;
+end $$;
+drop trigger if exists guard_note_author on app_notes;
+create trigger guard_note_author before insert on app_notes for each row execute function guard_note_author();
 -- Приоритет приложения (вариант общего поля «Приоритет»: o_low / o_medium / o_high / o_critical) и когда сменился статус
 alter table apps add column if not exists priority text not null default '';
 alter table apps add column if not exists status_at text not null default '';
@@ -1245,6 +1262,14 @@ create policy notifications_read on notifications for update to authenticated
   using (person_id = my_person_id()) with check (person_id = my_person_id());
 
 -- Приложения: CEO — все; остальные — приложения своих юнитов. Создаёт и удаляет CEO, правит — CEO и PM юнита.
+alter table app_notes enable row level security;
+drop policy if exists app_notes_read on app_notes;
+create policy app_notes_read on app_notes for select to authenticated using (exists (select 1 from apps a where a.id = app_id));
+drop policy if exists app_notes_insert on app_notes;
+create policy app_notes_insert on app_notes for insert to authenticated
+  with check (author_id = my_person_id() and exists (select 1 from apps a where a.id = app_id));
+drop policy if exists app_notes_delete on app_notes;
+create policy app_notes_delete on app_notes for delete to authenticated using (author_id = my_person_id() or is_superadmin());
 drop policy if exists apps_read on apps;
 create policy apps_read on apps for select to authenticated
   using ((not is_test or is_dev()) and (is_superadmin() or is_unit_member(unit_id)));

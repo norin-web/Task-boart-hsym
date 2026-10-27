@@ -430,3 +430,20 @@ test('сменить ответственного за юнит: новый PM �
   assert.equal(tasks.find(t => t.id === request.id).assigneeId, pmRf.id);
   await api.as(ceo, () => assert.rejects(() => api('setUnitPm', { unitId: gold.id, personId: ios.id }), /только PM/));
 });
+
+test('заметки к приложению: видят те, кто видит приложение; автор — тот, кто пишет; удаляет автор или CEO', async () => {
+  const api = await setup();
+  const { ceo, pm, pmRf, gold } = await studio(api);
+  const { app } = await api.as(ceo, () => api('createApp', { name: 'Notes App', unitId: gold.id }));
+  const n = await api.as(pm, () => api('addAppNote', { appId: app.id, text: 'Идея: виджет на экран блокировки' }));
+  await api.as(ceo, async () => {
+    const list = await api('getAppNotes', { appId: app.id });
+    assert.equal(list.length, 1);
+    assert.equal(list[0].authorId, pm.id);
+  });
+  await api.as(pmRf, async () => {
+    assert.equal((await api('getAppNotes', { appId: app.id })).length, 0); // чужой юнит — не видно
+    await assert.rejects(() => api('deleteAppNote', { id: n.id }), forbidden);
+  });
+  await api.as(ceo, () => api('deleteAppNote', { id: n.id }));
+});

@@ -1424,6 +1424,26 @@ export function createBackend(db, opts = {}) {
      * Приложения со сводкой по работам: открытые запросы (тип, этап, прогресс этапов). unitId — только этого юнита.
      * Видно: CEO — все, остальным — приложения своих юнитов (правила базы).
      */
+    /* ---------- заметки к приложению ---------- */
+
+    async getAppNotes(p) {
+      return (await run(T('app_notes').select('*').eq('app_id', String(p.appId)).order('at', { ascending: false })))
+        .map(r => ({ id: r.id, appId: r.app_id, authorId: r.author_id, text: r.text, at: r.at }));
+    },
+
+    async addAppNote(p, ctx) {
+      const text = req(str(p.text, 5000), 'Текст заметки');
+      const row = { id: uid('n'), app_id: String(p.appId), author_id: actor(ctx), text, at: now() };
+      await run(T('app_notes').insert(row));
+      return { id: row.id, appId: row.app_id, authorId: row.author_id, text, at: row.at };
+    },
+
+    async deleteAppNote(p) {
+      const gone = await run(T('app_notes').delete().eq('id', String(p.id ?? '')).select('id'));
+      if (!gone.length) fail('Удалить можно только свою заметку', 'FORBIDDEN');
+      return true;
+    },
+
     async listApps(p) {
       let q = T('apps').select('*').eq('archived', !!p.archived);
       if (p.unitId) q = q.eq('unit_id', String(p.unitId));

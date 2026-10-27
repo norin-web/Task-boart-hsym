@@ -225,12 +225,20 @@ export async function openAppById(id, onChange) {
   } catch (e) { showErr(e); }
 }
 
+/** Реджект — запрос, который создаёт RM кнопкой «Реджект» (тип «Задача», название «Реджект: причина»). */
+const isReject = r => /^Реджект/i.test(r.title);
+const byCreated = (x, y) => String(x.createdAt).localeCompare(String(y.createdAt));
+/** Карточка приложения: справа или по центру — как у задачи (общая настройка cardMode). */
+const appCardCenter = () => LS.get('cardMode', 'side') === 'center';
+
 export function openAppPanel(a, onChange) {
   const root = $('#panel-root');
   const close = () => { document.removeEventListener('keydown', onKey, true); fill(root); };
   const onKey = e => { if (e.key === 'Escape' && !document.querySelector('.modal') && !document.querySelector('.menu')) { e.stopPropagation(); close(); } };
   document.addEventListener('keydown', onKey, true);
   const body = h('div', { class: 'up-body' });
+  let notes = null;
+  const loadNotes = () => call('getAppNotes', { appId: a.id }).then(list => { notes = list; draw(); }).catch(showErr);
   const refresh = async () => {
     try {
       const list = await call('listApps', {});
@@ -244,6 +252,16 @@ export function openAppPanel(a, onChange) {
     } catch (e) { showErr(e); }
   };
   const save = patch => send('updateApp', { id: a.id, ...patch }).then(refresh).catch(e => { showErr(e); draw(); });
+
+  /** Пронумерованный список (апдейты / реджекты): «#2 Название», этап сейчас, срок; клик — запрос поверх. */
+  const numbered = (list, label) => list.map((r, i) => {
+    const cur = r.stages.find(s => !s.done && !s.blocked) || null;
+    return h('button', { class: 'ap-num-row' + (r.done ? ' done' : ''), onclick: () => peekTask(r.unitId, r.id) },
+      h('span', { class: 'ap-num' }, label + ' ' + (i + 1)),
+      h('span', { class: 'ap-num-title' }, r.title.replace(/^Реджект:\s*/i, '')),
+      h('span', { class: 'ap-num-state muted' }, r.done ? [icon('check', 13), ' готово'] : cur ? cur.title.split(' · ')[0] : r.stages.length ? 'релиз' : 'ждёт PM'),
+      h('span', { class: 'muted ap-num-at' }, fmtDate((r.doneAt || r.createdAt || '').slice(0, 10))));
+  });
 
   const draw = () => {
     const u = unitById(a.unitId);
@@ -260,30 +278,120 @@ export function openAppPanel(a, onChange) {
     }, units().map(x => h('option', { value: x.id, selected: x.id === a.unitId }, x.name)));
     const prioSel = h('select', { class: 'inp', 'aria-label': 'Приоритет', disabled: !manage, onchange: e => save({ priority: e.target.value }) },
       h('option', { value: '' }, '—'), [...S.priorityOptions].reverse().map(o => h('option', { value: o.id, selected: o.id === a.priority }, o.name)));
-    const open = a.requests.filter(r => !r.done), closed = a.requests.filter(r => r.done);
+    const reqs = [...a.requests].sort(byCreated);
+    const updates = reqs.filter(r => r.type === 'update');
+    const rejects = reqs.filter(isReject);
+    const other = reqs.filter(r => r.type !== 'update' && !isReject(r));
+    const open = other.filter(r => !r.done), closed = other.filter(r => r.done);
+    const active = reqs.filter(r => !r.done);
+    const st = appStatusById(a.status);
+    const noteInp = h('textarea', { class: 'inp', rows: 2, placeholder: 'Идея, договорённость, что не забыть…', maxlength: 5000 });
+    const addNote = () => {
+      if (!noteInp.value.trim()) return noteInp.focus();
+      send('addAppNote', { appId: a.id, text: noteInp.value }).then(n => { notes = [n, ...(notes || [])]; draw(); }).catch(showErr);
+    };
+    noteInp.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) addNote(); });
     fill(body,
       h('section', { class: 'ap-props' },
         field('Статус', statusSel), field('Юнит', ceo ? unitSel : h('div', { class: 'ap-static' }, u ? u.name : '—')), field('Приоритет', prioSel)),
+      // где приложение сейчас: статус, с какого числа, текущие этапы открытых работ
+      h('section', null,
+        h('div', { class: 'up-head' }, h('h3', null, 'Сейчас')),
+        h('div', { class: 'ap-now' },
+          h('div', { class: 'ap-now-st' }, statusPill(st), a.statusAt && h('span', { class: 'muted' }, 'с ' + fmtDate(a.statusAt.slice(0, 10))),
+            h('span', { class: 'spacer' }), a.lastActivity && h('span', { class: 'muted' }, 'обновлено ' + relTime(a.lastActivity))),
+          active.length
+            ? active.map(r => {
+              const cur = r.stages.find(s => !s.done && !s.blocked) || null;
+              const who = personById(cur ? cur.assigneeId : r.assigneeId);
+              return h('button', { class: 'ap-now-row', onclick: () => peekTask(r.unitId, cur ? cur.id : r.id) },
+                h('span', { class: 'ap-now-what' }, h('b', null, cur ? cur.title.split(' · ')[0] : r.stages.length ? 'Релиз' : 'Ждёт PM'),
+                  h('span', { class: 'muted' }, ' · ' + r.title)),
+                r.stages.length > 0 && stageDots(r.stages),
+                who ? avatar(who, 'sm') : h('span', { class: 'avatar-gap' }));
+            })
+            : h('p', { class: 'muted', style: { margin: 0 } }, 'Открытых работ нет'))),
       S.appFields.length > 0 && h('section', null,
         h('div', { class: 'up-head' }, h('h3', null, 'Быстрый доступ')),
         h('div', { class: 'af-list' }, S.appFields.map(f => infoRow(a, f, manage, v => save({ info: { [f.id]: v } }))))),
       h('section', null,
-        h('div', { class: 'up-head' }, h('h3', null, 'Работы'),
-          ceo && h('button', { class: 'btn ghost sm', onclick: e => requestMenu(e.currentTarget, a, refresh) }, icon('plus', 14), 'Поставить задачу')),
-        open.length ? open.map(r => requestCard(r, refresh)) : h('p', { class: 'muted' }, 'Открытых задач нет.')),
-      closed.length > 0 && h('section', null,
-        h('div', { class: 'up-head' }, h('h3', null, 'Сделано')),
-        closed.map(r => h('button', { class: 'ap-done-row', onclick: () => peekTask(r.unitId, r.id) },
-          icon('check', 14), h('span', { class: 'ap-type' }, REQUEST_TYPES[r.type] || 'Задача'), h('span', { class: 'ap-done-title' }, r.title)))));
+        h('div', { class: 'up-head' }, h('h3', null, 'Задачи'),
+          ceo && h('button', { class: 'btn ghost sm', onclick: () => openTaskPool(a, refresh) }, icon('plus', 14), 'Поставить задачи')),
+        open.length ? open.map(r => requestCard(r, refresh)) : h('p', { class: 'muted' }, 'Открытых задач нет'),
+        closed.length > 0 && h('div', { class: 'ap-closed' }, closed.map(r => h('button', { class: 'ap-done-row', onclick: () => peekTask(r.unitId, r.id) },
+          icon('check', 14), h('span', { class: 'ap-done-title' }, r.title))))),
+      h('section', null,
+        h('div', { class: 'up-head' }, h('h3', null, 'Апдейты', updates.length > 0 && h('span', { class: 'muted sec-n' }, updates.length)),
+          ceo && h('button', { class: 'btn ghost sm', onclick: () => openCreateRequest(a, 'update', refresh) }, icon('plus', 14), 'Апдейт')),
+        updates.length ? h('div', { class: 'ap-num-list' }, numbered(updates, 'Апдейт')) : h('p', { class: 'muted' }, 'Апдейтов не было')),
+      h('section', null,
+        h('div', { class: 'up-head' }, h('h3', null, 'Реджекты', rejects.length > 0 && h('span', { class: 'muted sec-n' }, rejects.length))),
+        rejects.length ? h('div', { class: 'ap-num-list' }, numbered(rejects, 'Реджект')) : h('p', { class: 'muted' }, 'Реджектов не было')),
+      h('section', null,
+        h('div', { class: 'up-head' }, h('h3', null, 'Заметки')),
+        h('div', { class: 'ap-note-add' }, noteInp, h('button', { class: 'btn sm', onclick: addNote }, 'Добавить')),
+        notes == null ? h('p', { class: 'muted' }, 'Загрузка…') : notes.map(n => {
+          const p = personById(n.authorId);
+          return h('div', { class: 'ap-note' },
+            avatar(p, 'sm'),
+            h('div', { class: 'ap-note-body' }, h('div', { class: 'ap-note-meta muted' }, (p ? p.name : '—') + ' · ' + relTime(n.at)), h('div', { class: 'ap-note-text' }, n.text)),
+            (n.authorId === S.meId || ceo) && h('button', {
+              class: 'icon-btn sm', title: 'Удалить заметку',
+              onclick: () => send('deleteAppNote', { id: n.id }).then(() => { notes = notes.filter(x => x !== n); draw(); }).catch(showErr),
+            }, icon('x', 13)));
+        })));
   };
+  const panel = h('aside', { class: 'panel unit-panel' + (appCardCenter() ? ' center' : ''), role: 'dialog', 'aria-label': a.name });
+  const head = () => h('div', { class: 'panel-head' },
+    appIcon(a), h('b', null, a.name), a.isTest && h('span', { class: 'test-tag' }, 'тест'), h('span', { class: 'spacer' }),
+    h('button', {
+      class: 'icon-btn', title: appCardCenter() ? 'Открывать справа' : 'Открывать по центру',
+      onclick: () => { LS.set('cardMode', appCardCenter() ? 'side' : 'center'); panel.classList.toggle('center', appCardCenter()); backdrop.classList.toggle('center', appCardCenter()); fill(headBox, head()); },
+    }, icon(appCardCenter() ? 'panelSide' : 'panelCenter', 16)),
+    h('button', { class: 'icon-btn', title: 'Закрыть', onclick: close }, icon('x', 18)));
+  const headBox = h('div', null, head());
+  const backdrop = h('div', { class: 'panel-backdrop' + (appCardCenter() ? ' center' : ''), onclick: close });
   draw();
-  fill(root,
-    h('div', { class: 'panel-backdrop', onclick: close }),
-    h('aside', { class: 'panel unit-panel', role: 'dialog', 'aria-label': a.name },
-      h('div', { class: 'panel-head' },
-        appIcon(a), h('b', null, a.name), a.isTest && h('span', { class: 'test-tag' }, 'тест'), h('span', { class: 'spacer' }),
-        h('button', { class: 'icon-btn', title: 'Закрыть', onclick: close }, icon('x', 18))),
-      body));
+  loadNotes();
+  panel.append(headBox, body);
+  fill(root, backdrop, panel);
+}
+
+/** «Поставить задачи» пачкой: несколько строк — каждая уходит PM юнита отдельной задачей. */
+function openTaskPool(a, onDone) {
+  const rows = h('div', { class: 'pool-rows' });
+  const addRow = (focus = true) => {
+    const inp = h('input', { class: 'inp', maxlength: 500, placeholder: 'Задача ' + (rows.children.length + 1) });
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); addRow(); } });
+    rows.append(inp);
+    if (focus) inp.focus();
+  };
+  [0, 1, 2].forEach(() => addRow(false));
+  const type = h('select', { class: 'inp' }, [['other', 'Задача'], ['update', 'Апдейт']].map(([v, t]) => h('option', { value: v }, t)));
+  const pm = pmPicker(a.unitId);
+  const due = h('input', { class: 'inp', type: 'date' });
+  const prio = prioPicker(a.priority);
+  modal({
+    title: 'Задачи · ' + a.name,
+    body: [h('p', { class: 'hint', style: { marginTop: 0 } }, 'Каждая строка — отдельная задача PM. Enter — ещё строка.'), rows,
+      h('button', { class: 'btn sm', style: { marginTop: '6px' }, onclick: () => addRow() }, icon('plus', 13), 'Строка'),
+      h('div', { class: 'grid2', style: { marginTop: '14px' } }, field('Тип', type), field('PM', pm.el)),
+      h('div', { class: 'grid2' }, field('Срок', due), field('Приоритет', prio))],
+    actions: [{ label: 'Отмена' }, {
+      label: 'Поставить', primary: true,
+      action: async close => {
+        const titles = [...rows.querySelectorAll('input')].map(i => i.value.trim()).filter(Boolean);
+        if (!titles.length) return rows.querySelector('input').focus();
+        for (const title of titles) {
+          await send('createRequest', { appId: a.id, type: type.value, title, pmId: pm.el.value, dueDate: due.value, priority: prio.value });
+        }
+        close();
+        toast(`${titles.length} ${plural(titles.length, ['задача ушла', 'задачи ушли', 'задач ушло'])} PM`);
+        if (onDone) onDone();
+      },
+    }],
+  });
+  rows.querySelector('input').focus();
 }
 
 /** Поле быстрого доступа: значение (ссылка открывается в новой вкладке) и правка на месте для CEO и PM юнита. */
@@ -438,14 +546,6 @@ export async function sendRelease(stageId) {
 }
 
 /* ---------- создание ---------- */
-
-function requestMenu(anchor, a, done) {
-  menu(anchor, [
-    { title: 'Задача PM юнита' },
-    { label: 'Апдейт', icon: 'refresh', action: () => openCreateRequest(a, 'update', done) },
-    { label: 'Другая задача', icon: 'plus', action: () => openCreateRequest(a, 'other', done) },
-  ]);
-}
 
 /** Выбор PM юнита: по умолчанию — первый PM; пусто — предупреждение (запрос повиснет без исполнителя). */
 function pmPicker(unitId) {
