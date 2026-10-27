@@ -447,3 +447,15 @@ test('заметки к приложению: видят те, кто видит
   });
   await api.as(ceo, () => api('deleteAppNote', { id: n.id }));
 });
+
+test('иконка из App Store: только картинки Apple; ссылка на стор — в поле «App Store»', async () => {
+  const api = await setup();
+  const { ceo, gold } = await studio(api);
+  const { app } = await api.as(ceo, () => api('createApp', {
+    name: 'Store App', unitId: gold.id, storeUrl: 'https://apps.apple.com/us/app/x/id123', iconUrl: 'https://is1-ssl.mzstatic.com/image/thumb/a.png/512x512bb.jpg',
+  }));
+  assert.ok(app.iconUrl.startsWith('https://is1-ssl.mzstatic.com/'));
+  assert.ok(Object.values(app.info).includes('https://apps.apple.com/us/app/x/id123'));
+  const bad = await api.as(ceo, () => api('updateApp', { id: app.id, iconUrl: 'https://evil.example.com/x.png' }));
+  assert.equal(bad.iconUrl, '');
+});

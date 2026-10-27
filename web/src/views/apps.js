@@ -28,7 +28,28 @@ export const STATUS_KINDS = { dev: 'В разработке', release: 'Рели
 
 /* ---------- мелкие части (их же использует дашборд CEO) ---------- */
 
-export const appIcon = (a, size = 'sm') => h('span', { class: 'uc-icon ' + size, style: { background: a.color || PALETTE[0] }, 'aria-hidden': 'true' }, a.name.slice(0, 2).toUpperCase());
+export const appIcon = (a, size = 'sm') => (a.iconUrl
+  ? h('img', { class: 'uc-icon app-img ' + size, src: a.iconUrl, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' })
+  : h('span', { class: 'uc-icon ' + size, style: { background: a.color || PALETTE[0] }, 'aria-hidden': 'true' }, a.name.slice(0, 2).toUpperCase()));
+
+/** Поле «App Store» среди полей приложения (ссылка на стор, не App Store Connect). */
+export const storeField = () => S.appFields.find(f => f.kind === 'link' && /app ?store/i.test(f.name) && !/connect/i.test(f.name)) || null;
+
+/**
+ * Название и иконка из App Store по ссылке вида apps.apple.com/ru/app/…/id123 (открытый iTunes Lookup, CORS разрешён).
+ * Возвращает { name, iconUrl } или null.
+ */
+export async function storeLookup(url) {
+  const id = (/id(\d{5,})/.exec(url || '') || [])[1];
+  if (!id) return null;
+  const country = (/apple\.com\/([a-z]{2})\//i.exec(url) || [])[1] || 'us';
+  try {
+    const r = await fetch(`https://itunes.apple.com/lookup?id=${id}&country=${country}`);
+    const j = await r.json();
+    const x = j.results && j.results[0];
+    return x ? { name: x.trackName || '', iconUrl: x.artworkUrl512 || x.artworkUrl100 || '' } : null;
+  } catch { return null; }
+}
 export const statusPill = st => (st ? h('span', { class: 'st-pill', style: { '--sc': st.color } }, h('span', { class: 'dot' }), st.name) : h('span', { class: 'muted' }, '—'));
 /** Приоритет: цветная метка с названием (не только цветом). */
 /** Высокий приоритет — два верхних варианта (High, Critical); плашку показываем только им. */
@@ -252,6 +273,13 @@ export function openAppPanel(a, onChange) {
     } catch (e) { showErr(e); }
   };
   const save = patch => send('updateApp', { id: a.id, ...patch }).then(refresh).catch(e => { showErr(e); draw(); });
+  /** Ссылка на стор → иконка и название из App Store вместе с остальной правкой. */
+  const fromStore = async (url, patch = {}) => {
+    const info = await storeLookup(url);
+    if (!info) { toast('В App Store по этой ссылке ничего не нашлось', { type: 'error' }); return save(patch); }
+    toast('Название и иконка — из App Store');
+    return save({ ...patch, iconUrl: info.iconUrl, ...(info.name ? { name: info.name } : {}) });
+  };
 
   /** Пронумерованный список (апдейты / реджекты): «#2 Название», этап сейчас, срок; клик — запрос поверх. */
   const numbered = (list, label) => list.map((r, i) => {
@@ -313,7 +341,7 @@ export function openAppPanel(a, onChange) {
             : h('p', { class: 'muted', style: { margin: 0 } }, 'Открытых работ нет'))),
       S.appFields.length > 0 && h('section', null,
         h('div', { class: 'up-head' }, h('h3', null, 'Быстрый доступ')),
-        h('div', { class: 'af-list' }, S.appFields.map(f => infoRow(a, f, manage, v => save({ info: { [f.id]: v } }))))),
+        h('div', { class: 'af-list' }, S.appFields.map(f => infoRow(a, f, manage, v => (f === storeField() && v ? fromStore(v, { info: { [f.id]: v } }) : save({ info: { [f.id]: v } })))))),
       h('section', null,
         h('div', { class: 'up-head' }, h('h3', null, 'Задачи'),
           ceo && h('button', { class: 'btn ghost sm', onclick: () => openTaskPool(a, refresh) }, icon('plus', 14), 'Поставить задачи')),
@@ -566,6 +594,19 @@ const prioPicker = value => h('select', { class: 'inp', 'aria-label': 'Прио�
 export function openCreateApp(onDone, unitId) {
   const list = unitId ? units().filter(u => u.id === unitId) : units();
   const name = h('input', { class: 'inp', maxlength: 120, placeholder: 'Например, Sleep Sounds' });
+  // ссылка на App Store (если приложение уже в сторе) — подтягивает название и иконку
+  let iconUrl = '';
+  const preview = h('span', { class: 'store-preview' });
+  const store = h('input', { class: 'inp', type: 'url', placeholder: 'https://apps.apple.com/…/id123456789' });
+  const pull = async () => {
+    const info = await storeLookup(store.value);
+    if (!info) { fill(preview); iconUrl = ''; return; }
+    iconUrl = info.iconUrl;
+    if (info.name) name.value = info.name;
+    fill(preview, info.iconUrl && h('img', { class: 'uc-icon app-img sm', src: info.iconUrl, alt: '' }), h('span', { class: 'muted' }, 'из App Store'));
+  };
+  store.addEventListener('change', pull);
+  store.addEventListener('paste', () => setTimeout(pull, 0));
   const unit = h('select', { class: 'inp' }, list.map(u => h('option', { value: u.id }, u.name)));
   const pm = pmPicker(list[0] && list[0].id);
   unit.addEventListener('change', () => pm.setUnit(unit.value));
@@ -575,6 +616,7 @@ export function openCreateApp(onDone, unitId) {
   modal({
     title: 'Новое приложение',
     body: [
+      field('Ссылка в App Store', store, preview),
       field('Название', name),
       h('div', { class: 'grid2' }, field('Юнит', unit), field('PM', pm.el, 'Получит задачу «New App»')),
       h('div', { class: 'grid2' }, field('Срок', due), field('Приоритет', prio)),
@@ -584,7 +626,7 @@ export function openCreateApp(onDone, unitId) {
       label: 'Создать', primary: true,
       action: async close => {
         if (!name.value.trim()) { name.focus(); return; }
-        await send('createApp', { name: name.value, unitId: unit.value, pmId: pm.el.value, dueDate: due.value, priority: prio.value, description: desc.value });
+        await send('createApp', { name: name.value, unitId: unit.value, pmId: pm.el.value, dueDate: due.value, priority: prio.value, description: desc.value, storeUrl: store.value.trim(), iconUrl });
         close();
         toast(`«${name.value.trim()}» создано — задача ушла PM`);
         if (onDone) onDone();

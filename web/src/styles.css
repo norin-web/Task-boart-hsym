@@ -1474,3 +1474,6 @@ a.rl-link:hover { background: var(--accent-soft); color: var(--accent-text); }
 .ap-note-meta { font-size: 12px; margin-bottom: 2px; }
 .ap-note-text { font-size: 13.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .pool-rows { display: grid; gap: 6px; }
+
+.uc-icon.app-img { object-fit: cover; background: var(--surface-2); padding: 0; }
+.store-preview { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; min-height: 20px; }

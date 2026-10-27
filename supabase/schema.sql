@@ -463,6 +463,8 @@ drop trigger if exists guard_note_author on app_notes;
 create trigger guard_note_author before insert on app_notes for each row execute function guard_note_author();
 -- Приоритет приложения (вариант общего поля «Приоритет»: o_low / o_medium / o_high / o_critical) и когда сменился статус
 alter table apps add column if not exists priority text not null default '';
+-- Иконка из App Store (artwork по ссылке на стор)
+alter table apps add column if not exists icon_url text not null default '';
 alter table apps add column if not exists status_at text not null default '';
 
 -- Задачи 2.0: приложение; запрос CEO (kind request, request_type new_app / update / other);
