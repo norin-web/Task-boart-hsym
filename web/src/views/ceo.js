@@ -8,7 +8,7 @@ import { call } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
 import { openAppById, openCreateApp, openNewAppTask, appIcon, prioTag, stageDots } from './apps.js';
-import { newsBlock, loadNotes, fillDemo } from './home.js';
+import { newsBlock, loadNotes, fillDemo, unitCard } from './home.js';
 import { openCreateUnit } from './units.js';
 import { mode } from '../data.js';
 
@@ -51,37 +51,15 @@ export async function renderCeoHome() {
   load();
 }
 
-/* ---------- портфель ---------- */
+/* ---------- юниты ---------- */
 
-/** Юниты: таблица «юнит × статус приложений», итог по статусу — в шапке колонки. Клик по числу — список приложений; «+ Юнит» — сразу здесь. */
+/** Юниты карточками (команда, задачи, прогресс); последняя — «Новый юнит». */
 function portfolio(d, reload) {
-  const statuses = d.statuses;
-  const appsOf = ids => ids.map(id => S.apps.find(a => a.id === id)).filter(Boolean);
-  const listMenu = (anchor, title, list) => menu(anchor, [{ title }, h('div', { class: 'kp-list' },
-    list.length ? list.map(a => h('button', { class: 'kp-row kp-link', onclick: () => openAppById(a.id, reload) },
-      appIcon(a, 'xs'), h('span', { class: 'kp-name' }, a.name), h('span', { class: 'kp-sub muted' }, (unitById(a.unitId) || {}).name || '')))
-      : h('p', { class: 'muted kp-empty' }, 'Пусто'))]);
-  const unitRows = units();
+  const count = u => S.apps.filter(a => a.unitId === u.id && !a.archived).length;
   return h('section', { class: 'ceo-portfolio' },
-    h('div', { class: 'section-head' }, h('h2', null, 'Юниты'),
-      isSuper() && h('button', { class: 'btn ghost sm', onclick: () => openCreateUnit(reload) }, icon('plus', 14), 'Юнит')),
-    h('div', { class: 'pf-table card-box', role: 'table', 'aria-label': 'Приложения по юнитам и статусам' },
-      h('div', { class: 'pf-row pf-head', role: 'row', style: { '--n': statuses.length } },
-        h('span', { role: 'columnheader' }),
-        statuses.map(st => {
-          const ids = d.portfolio.byStatus[st.id] || [];
-          return h('button', {
-            class: 'pf-status' + (ids.length ? '' : ' empty'), role: 'columnheader', style: { '--sc': st.color }, disabled: !ids.length,
-            onclick: e => { e.stopPropagation(); listMenu(e.currentTarget, st.name, appsOf(ids)); },
-          }, h('span', { class: 'pf-total' }, ids.length), h('span', { class: 'pf-name' }, h('span', { class: 'dot' }), st.name));
-        })),
-      unitRows.map(u => h('div', { class: 'pf-row', role: 'row', style: { '--n': statuses.length } },
-        h('span', { class: 'pf-unit', role: 'cell' }, h('span', { class: 'unit-dot', style: { background: u.color, margin: 0 } }), u.name),
-        statuses.map(st => {
-          const n = (d.portfolio.byUnit[u.id] || {})[st.id] || 0;
-          return n ? h('button', { class: 'pf-cell', role: 'cell', onclick: e => { e.stopPropagation(); listMenu(e.currentTarget, `${u.name} · ${st.name}`, S.apps.filter(a => a.unitId === u.id && a.status === st.id)); } }, n)
-            : h('span', { class: 'pf-cell zero', role: 'cell' }, '—');
-        })))));
+    h('div', { class: 'section-head' }, h('h2', null, 'Юниты')),
+    h('div', { class: 'unit-grid' }, units().map(u => unitCard(u, { apps: count(u) })),
+      isSuper() && h('button', { class: 'unit-card add', onclick: () => openCreateUnit(reload) }, icon('plus', 18), 'Новый юнит')));
 }
 
 /* ---------- требует внимания ---------- */

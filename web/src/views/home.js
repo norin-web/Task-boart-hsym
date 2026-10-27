@@ -435,14 +435,16 @@ function statRow(t) {
     due && h('span', { class: 'due' + (late ? ' overdue' : '') }, due));
 }
 
-function unitCard(u) {
+/** Карточка юнита: команда, задачи по статусам, прогресс. apps — сколько приложений (дашборд CEO). */
+export function unitCard(u, { apps } = {}) {
   const c = u.counts || emptyCounts();
   const total = c.todo + c.in_progress + c.done;
   const pct = total ? Math.round((c.done / total) * 100) : 0;
   return link({ unit: u.id, mode: 'board' }, { class: 'unit-card', dataset: { id: u.id } },
     h('div', { class: 'uc-head' },
       h('div', { class: 'uc-icon', style: { background: u.color } }, u.key.slice(0, 2)),
-      h('div', { class: 'uc-title' }, h('div', { class: 'uc-name' }, u.name), h('div', { class: 'uc-key' }, u.key)),
+      h('div', { class: 'uc-title' }, h('div', { class: 'uc-name' }, u.name),
+        h('div', { class: 'uc-key' }, apps != null ? apps + ' ' + plural(apps, ['приложение', 'приложения', 'приложений']) : u.key)),
       isStaff() && h('button', {
         class: 'icon-btn sm uc-add', title: 'Новая задача в ' + u.name,
         onclick: e => { e.preventDefault(); e.stopPropagation(); openCreateTask({ unitId: u.id, onCreated: () => rerender() }); },
