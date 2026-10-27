@@ -31,6 +31,8 @@ export const STATUS_KINDS = { dev: 'В разработке', release: 'Рели
 export const appIcon = (a, size = 'sm') => h('span', { class: 'uc-icon ' + size, style: { background: a.color || PALETTE[0] }, 'aria-hidden': 'true' }, a.name.slice(0, 2).toUpperCase());
 export const statusPill = st => (st ? h('span', { class: 'st-pill', style: { '--sc': st.color } }, h('span', { class: 'dot' }), st.name) : h('span', { class: 'muted' }, '—'));
 /** Приоритет: цветная метка с названием (не только цветом). */
+/** Высокий приоритет — два верхних варианта (High, Critical); плашку показываем только им. */
+export const isHighPrio = id => { const i = S.priorityOptions.findIndex(o => o.id === id); return i >= 0 && i >= S.priorityOptions.length - 2; };
 export const prioTag = id => { const o = prioById(id); return o && h('span', { class: 'prio-tag', style: { '--pc': o.color }, title: 'Приоритет: ' + o.name }, o.name); };
 /** Этапы точками: готово — залито, в работе — кольцо, ждёт — штрих, не начато — серое; подпись — в title. */
 export const stageDots = stages => h('span', { class: 'stage-dots', 'aria-label': `Этапы: ${stages.filter(s => s.done).length} из ${stages.length} готово` },
@@ -39,26 +41,11 @@ export const stageDots = stages => h('span', { class: 'stage-dots', 'aria-label'
 /** Иконка поля приложения по названию: Figma, Drive, GitHub, стор — свои, остальное — ссылка. */
 const fieldIcon = f => { const n = (f.id + ' ' + f.name).toLowerCase(); return /figma/.test(n) ? 'figma' : /drive|диск/.test(n) ? 'drive' : /git/.test(n) ? 'github' : /store|asc|apple/.test(n) ? 'app' : f.kind === 'text' ? 'edit' : 'link'; };
 
-/** Какие поля показывать на карточках канбана — выбор человека (prefs.appCardFields); по умолчанию — первые две ссылки. */
-const cardFieldIds = () => {
-  const saved = ((me() || {}).prefs || {}).appCardFields;
-  return Array.isArray(saved) ? saved : S.appFields.filter(f => f.kind === 'link').slice(0, 2).map(f => f.id);
-};
-
-/** Значения полей приложения на карточке: ссылки — иконки (открываются в новой вкладке), тексты — короткие метки. */
-function quickFields(a, ids = cardFieldIds()) {
-  const items = ids.map(id => S.appFields.find(f => f.id === id)).filter(f => f && a.info[f.id]);
-  return items.map(f => (f.kind === 'link'
-    ? h('a', { class: 'qf', href: a.info[f.id], target: '_blank', rel: 'noopener', title: f.name, 'aria-label': f.name, onclick: e => e.stopPropagation() }, icon(fieldIcon(f), 13))
-    : h('span', { class: 'qf qf-text', title: f.name + ': ' + a.info[f.id] }, a.info[f.id])));
-}
-
 /** Тип запроса, этапы точками и прогресс. */
 function workSummary(r) {
   return [
-    h('span', { class: 'ap-type' }, REQUEST_TYPES[r.type] || 'Задача'),
-    r.stages.length ? stageDots(r.stages) : h('span', { class: 'muted' }, 'ждёт PM'),
-    r.stages.length > 0 && h('span', { class: 'muted ap-pct' }, r.progress + '%'),
+    h('span', { class: 'ap-req muted' }, REQUEST_TYPES[r.type] || 'Задача'),
+    r.stages.length ? h('span', { title: r.progress + '%' }, stageDots(r.stages)) : h('span', { class: 'muted' }, 'ждёт PM'),
   ];
 }
 
@@ -77,30 +64,40 @@ export async function renderApps() {
   try { await load(); } catch (e) { return showErr(e); }
   if (currentView() !== 'apps') return;
 
-  let view = LS.get('appsView', 'board') === 'list' ? 'list' : 'board';
-  let unitFilter = units().some(u => u.id === LS.get('appsUnit', '')) ? LS.get('appsUnit', '') : '';
-  const reload = () => load().then(draw).catch(showErr);
-  const draw = () => {
-    const list = units();
-    fill(tools,
-      list.length > 1 && h('div', { class: 'seg', role: 'tablist', 'aria-label': 'Юнит' },
-        [['', 'Все'], ...list.map(u => [u.id, u.name])].map(([id, name]) => h('button', {
-          class: unitFilter === id ? 'on' : '', role: 'tab', 'aria-selected': String(unitFilter === id),
-          onclick: () => { unitFilter = id; LS.set('appsUnit', id); draw(); },
-        }, name))),
-      h('div', { class: 'seg', role: 'tablist', 'aria-label': 'Вид' },
-        [['board', 'board', 'Канбан'], ['list', 'list', 'Список']].map(([v, ic, label]) => h('button', {
-          class: view === v ? 'on' : '', role: 'tab', 'aria-selected': String(view === v), title: label,
-          onclick: () => { view = v; LS.set('appsView', v); draw(); },
-        }, icon(ic, 14), h('span', { class: 'btn-label' }, label)))),
-      view === 'board' && h('button', { class: 'btn sm', title: 'Какие поля показывать на карточках', onclick: e => { e.stopPropagation(); cardFieldsMenu(e.currentTarget, draw); } }, icon('eye', 14), h('span', { class: 'btn-label' }, 'Поля')),
-      isSuper() && h('button', { class: 'icon-btn', title: 'Статусы и поля приложения', onclick: e => { e.stopPropagation(); settingsMenu(e.currentTarget, reload); } }, icon('settings', 17)),
-      isSuper() && list.length > 0 && h('button', { class: 'btn primary sm', onclick: () => openCreateApp(reload) }, icon('plus', 14), h('span', { class: 'btn-label' }, 'Новое приложение')));
-    const shown = apps.filter(a => !unitFilter || a.unitId === unitFilter);
-    if (!apps.length) return fill(body, emptyApps(reload));
-    fill(body, view === 'board' ? kanban(shown, unitFilter, reload) : appTable(shown, reload));
+  // Только список: приложения по юнитам в сворачиваемых блоках, поиск по названию сверху
+  let q = '';
+  const collapsed = new Set(LS.get('appsCollapsed', []));
+  const reload = () => load().then(drawList).catch(showErr);
+  const search = h('input', {
+    class: 'inp sm apps-search', type: 'search', placeholder: 'Поиск приложения', 'aria-label': 'Поиск приложения',
+    oninput: e => { q = e.target.value.trim().toLowerCase(); drawList(); },
+  });
+  const toggle = id => {
+    if (collapsed.has(id)) collapsed.delete(id); else collapsed.add(id);
+    LS.set('appsCollapsed', [...collapsed]);
+    drawList();
   };
-  draw();
+  const drawList = () => {
+    if (!apps.length) return fill(body, emptyApps(reload));
+    const found = apps.filter(a => !q || a.name.toLowerCase().includes(q));
+    const groups = [...units(), { id: '', name: 'Без юнита', color: 'var(--border-strong)' }]
+      .map(u => ({ u, list: found.filter(a => (a.unitId || '') === u.id || (!u.id && !unitById(a.unitId))) }))
+      .filter(g => g.list.length);
+    fill(body, groups.length ? [appHead(), ...groups.map(({ u, list }) => {
+      const open = !!q || !collapsed.has(u.id);
+      return h('section', { class: 'ap-group' + (open ? ' open' : '') },
+        h('button', { class: 'ap-group-head', 'aria-expanded': String(open), onclick: () => toggle(u.id) },
+          h('span', { class: 'ap-chev' }, icon('chevron', 14)),
+          h('span', { class: 'unit-dot', style: { background: u.color, margin: 0 } }), h('b', null, u.name),
+          h('span', { class: 'muted' }, list.length)),
+        open && appTable(list, reload));
+    })] : h('p', { class: 'muted apps-none' }, 'Ничего не найдено'));
+  };
+  fill(tools,
+    search,
+    isSuper() && h('button', { class: 'icon-btn', title: 'Статусы и поля приложения', onclick: e => { e.stopPropagation(); settingsMenu(e.currentTarget, reload); } }, icon('settings', 17)),
+    isSuper() && units().length > 0 && h('button', { class: 'btn primary sm', onclick: () => openCreateApp(reload) }, icon('plus', 14), h('span', { class: 'btn-label' }, 'Новое приложение')));
+  drawList();
 }
 
 function emptyApps(reload) {
@@ -118,103 +115,6 @@ function emptyApps(reload) {
 
 /* ---------- канбан: статусы × юниты ---------- */
 
-/**
- * Колонки — статусы приложения, дорожки — юниты. Перетаскивание: в другую колонку — смена статуса, выше/ниже — приоритет
- * внутри колонки, в другую дорожку — перенос приложения в другой юнит (только CEO, с подтверждением). PM двигает в своих юнитах.
- */
-function kanban(apps, unitFilter, reload) {
-  const statuses = S.appStatuses;
-  const lanes = units().filter(u => !unitFilter || u.id === unitFilter);
-  const byOrd = (a, b) => (a.order || 0) - (b.order || 0) || a.name.localeCompare(b.name);
-  const grid = h('div', { class: 'kb', style: { '--n': statuses.length } },
-    h('div', { class: 'kb-row kb-head' }, h('span'),
-      statuses.map(st => h('div', { class: 'kb-col-head', style: { '--sc': st.color } }, h('span', { class: 'dot' }), st.name,
-        h('span', { class: 'muted kb-n' }, apps.filter(a => a.status === st.id).length)))));
-  const cells = [];
-  for (const u of lanes) {
-    const own = apps.filter(a => a.unitId === u.id);
-    grid.append(h('div', { class: 'kb-row' },
-      h('div', { class: 'kb-lane' }, h('span', { class: 'unit-dot', style: { background: u.color, margin: 0 } }), h('b', null, u.name), h('span', { class: 'muted' }, own.length)),
-      statuses.map(st => {
-        const cell = h('div', { class: 'kb-cell', dataset: { unit: u.id, status: st.id }, 'aria-label': `${u.name} · ${st.name}` },
-          own.filter(a => a.status === st.id).sort(byOrd).map(a => kbCard(a, reload)));
-        cells.push(cell);
-        return cell;
-      })));
-  }
-  const byId = id => apps.find(a => a.id === id);
-  for (const cell of cells) {
-    Sortable.create(cell, {
-      group: { name: 'apps', pull: () => true, put: (to, from) => isSuper() || to.el.dataset.unit === from.el.dataset.unit },
-      animation: 150, delay: 120, delayOnTouchOnly: true, ghostClass: 'sortable-ghost', forceFallback: true, fallbackTolerance: 5,
-      disabled: !canManage(cell.dataset.unit),
-      onEnd: async evt => {
-        const a = byId(evt.item.dataset.id);
-        const to = evt.to;
-        const ids = [...to.children].map(el => el.dataset.id);
-        const i = ids.indexOf(a.id);
-        const ord = id => (byId(id) || {}).order;
-        const patch = { order: between(ord(ids[i - 1]), ord(ids[i + 1])) };
-        if (to.dataset.status !== a.status) patch.status = to.dataset.status;
-        if (to.dataset.unit !== a.unitId) {
-          const from = unitById(a.unitId), dest = unitById(to.dataset.unit);
-          const ok = await confirmDlg(`Перенести «${a.name}» из ${from ? from.name : '—'} в ${dest ? dest.name : '—'}? Задачи приложения переедут вместе с ним, открытые запросы получит PM ${dest ? dest.name : ''}.`,
-            { ok: 'Перенести', title: 'Перенос в другой юнит' });
-          if (!ok) return reload();
-          patch.unitId = to.dataset.unit;
-        }
-        try {
-          await send('updateApp', { id: a.id, ...patch });
-          if (patch.unitId) toast(`«${a.name}» теперь в ${unitById(patch.unitId).name}`);
-        } catch (e) { showErr(e); }
-        reload();
-      },
-    });
-  }
-  return grid;
-}
-
-function kbCard(a, reload) {
-  const req = a.requests.find(r => !r.done) || null;
-  const pm = req ? personById(req.assigneeId) : null;
-  const prio = prioById(a.priority);
-  const late = req && req.dueDate && req.dueDate < todayStr();
-  const qf = quickFields(a);
-  return h('div', {
-    class: 'kb-card' + (prio ? ' has-prio' : ''), dataset: { id: a.id }, style: prio ? { '--pc': prio.color } : null,
-    tabindex: 0, role: 'button', 'aria-label': a.name,
-    onclick: () => openAppPanel(a, reload), onkeydown: e => { if (e.key === 'Enter') openAppPanel(a, reload); },
-  },
-  h('div', { class: 'kb-top' }, appIcon(a, 'xs'), h('b', { class: 'kb-name', title: a.name }, a.name), a.isTest && h('span', { class: 'test-tag' }, 'тест')),
-  req && h('div', { class: 'kb-work' }, workSummary(req)),
-  (prio || qf.length > 0 || pm || late) && h('div', { class: 'kb-foot' }, prio && prioTag(a.priority), qf, h('span', { class: 'spacer' }),
-    late && h('span', { class: 'due overdue', title: 'Срок задачи прошёл' }, icon('calendar', 11), fmtDate(req.dueDate)),
-    pm && avatar(pm, 'sm')));
-}
-
-/** Поля на карточках: галочки, сохраняется в профиле человека. */
-function cardFieldsMenu(anchor, redraw) {
-  const box = h('div', { class: 'qf-menu' });
-  const draw = () => {
-    const ids = cardFieldIds();
-    fill(box, S.appFields.length ? S.appFields.map(f => {
-      const on = ids.includes(f.id);
-      return h('button', {
-        class: 'menu-item aud-item pos-item' + (on ? ' on' : ''), role: 'menuitemcheckbox', 'aria-checked': String(on),
-        onclick: () => {
-          const next = on ? ids.filter(x => x !== f.id) : [...ids, f.id];
-          const p = me();
-          if (p) p.prefs = { ...(p.prefs || {}), appCardFields: next };
-          send('setMyPrefs', { personId: S.meId, prefs: { appCardFields: next } }).catch(showErr);
-          draw();
-          redraw();
-        },
-      }, h('span', { class: 'aud-check' }, on && icon('check', 13)), icon(fieldIcon(f), 14), f.name);
-    }) : h('p', { class: 'hint', style: { margin: '4px 10px' } }, 'Полей пока нет — их добавляет CEO (шестерёнка).'));
-  };
-  draw();
-  menu(anchor, [{ title: 'Поля на карточках' }, box]);
-}
 
 function settingsMenu(anchor, reload) {
   menu(anchor, [
@@ -227,21 +127,21 @@ function settingsMenu(anchor, reload) {
 /* ---------- список ---------- */
 
 /** Строки с подписанными колонками: приложение · юнит · статус · сейчас в работе · PM. */
+/** Подписи колонок списка — одна строка над всеми группами. */
+const appHead = () => h('div', { class: 'ap-row ap-head', 'aria-hidden': 'true' },
+  h('span', null, 'Приложение'), h('span', null, 'Статус'), h('span', null, 'Сейчас в работе'), h('span', null, 'PM'), h('span'));
+
 function appTable(apps, reload) {
   const rank = id => S.priorityOptions.findIndex(o => o.id === id);
   return h('div', { class: 'ap-list' },
-    h('div', { class: 'ap-row ap-head', 'aria-hidden': 'true' },
-      h('span', null, 'Приложение'), h('span', null, 'Юнит'), h('span', null, 'Статус'), h('span', null, 'Сейчас в работе'), h('span', null, 'PM'), h('span')),
     [...apps].sort((a, b) => rank(b.priority) - rank(a.priority) || (a.order || 0) - (b.order || 0)).map(a => {
-      const u = unitById(a.unitId);
       const st = appStatusById(a.status);
       const req = a.requests.find(r => !r.done) || null;
       const pm = req ? personById(req.assigneeId) : null;
       return h('button', { class: 'ap-row', onclick: () => openAppPanel(a, reload) },
-        h('span', { class: 'ap-name' }, appIcon(a), h('b', null, a.name), a.isTest && h('span', { class: 'test-tag' }, 'тест'), prioTag(a.priority)),
-        h('span', { class: 'ap-unit' }, u ? [h('span', { class: 'unit-dot', style: { background: u.color, margin: 0 } }), u.name] : h('span', { class: 'muted' }, '—')),
+        h('span', { class: 'ap-name' }, appIcon(a), h('b', null, a.name), a.isTest && h('span', { class: 'test-tag' }, 'тест'), isHighPrio(a.priority) && prioTag(a.priority)),
         h('span', null, statusPill(st)),
-        h('span', { class: 'ap-work' }, req ? workSummary(req) : h('span', { class: 'muted' }, 'Нет открытых задач')),
+        h('span', { class: 'ap-work' }, req ? workSummary(req) : h('span', { class: 'muted' }, '—')),
         h('span', null, pm ? avatar(pm, 'sm') : h('span', { class: 'muted' }, '—')),
         icon('chevron', 15));
     }));
