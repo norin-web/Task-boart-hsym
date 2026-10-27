@@ -58,7 +58,7 @@ function portfolio(d, reload) {
   const count = u => S.apps.filter(a => a.unitId === u.id && !a.archived).length;
   return h('section', { class: 'ceo-portfolio' },
     h('div', { class: 'section-head' }, h('h2', null, 'Юниты')),
-    h('div', { class: 'unit-grid' }, units().map(u => unitCard(u, { apps: count(u) })),
+    h('div', { class: 'unit-grid' }, units().map(u => unitCard(u, { apps: count(u), to: 'overview' })),
       isSuper() && h('button', { class: 'unit-card add', onclick: () => openCreateUnit(reload) }, icon('plus', 18), 'Новый юнит')));
 }
 
@@ -73,7 +73,7 @@ const ATT = {
   stale: { cls: 'muted', text: x => `стоит ${daysSince(x.task.updatedAt)} дн.` },
 };
 
-function attention(d, reload) {
+export function attention(d, reload) {
   const rows = d.attention;
   const what = x => (x.task && x.task.id !== x.request.id ? x.task.title.split(' · ')[0] : x.request ? x.request.title : '');
   const who = x => personById(x.task ? x.task.assigneeId : x.request ? x.request.assigneeId : '');
@@ -96,7 +96,7 @@ function attention(d, reload) {
 
 /* ---------- работы в ходу ---------- */
 
-function inProgress(d, reload) {
+export function inProgress(d, reload) {
   const rows = [...d.inProgress].sort((a, b) => prioRank(b.request.priority) - prioRank(a.request.priority)
     || (a.request.dueDate || '9999').localeCompare(b.request.dueDate || '9999'));
   const today = todayStr();

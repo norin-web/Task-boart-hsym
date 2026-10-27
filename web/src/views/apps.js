@@ -13,7 +13,7 @@ import { fillDemo } from './home.js';
 import { mode } from '../data.js';
 
 const units = () => S.units.filter(u => !u.archived).sort((a, b) => (a.order || 0) - (b.order || 0));
-const pmsOf = unitId => ((unitById(unitId) || {}).members || []).map(personById).filter(p => p && p.active && p.access === 'moderator');
+export const pmsOf = unitId => ((unitById(unitId) || {}).members || []).map(personById).filter(p => p && p.active && p.access === 'moderator');
 /** Управляет юнитом: CEO — любым, PM — своим (то же правило в базе). */
 const canManage = unitId => isSuper() || (isStaff() && ((unitById(unitId) || {}).members || []).includes(S.meId));
 
@@ -128,10 +128,10 @@ function settingsMenu(anchor, reload) {
 
 /** Строки с подписанными колонками: приложение · юнит · статус · сейчас в работе · PM. */
 /** Подписи колонок списка — одна строка над всеми группами. */
-const appHead = () => h('div', { class: 'ap-row ap-head', 'aria-hidden': 'true' },
+export const appHead = () => h('div', { class: 'ap-row ap-head', 'aria-hidden': 'true' },
   h('span', null, 'Приложение'), h('span', null, 'Статус'), h('span', null, 'Сейчас в работе'), h('span', null, 'PM'), h('span'));
 
-function appTable(apps, reload) {
+export function appTable(apps, reload) {
   const rank = id => S.priorityOptions.findIndex(o => o.id === id);
   return h('div', { class: 'ap-list' },
     [...apps].sort((a, b) => rank(b.priority) - rank(a.priority) || (a.order || 0) - (b.order || 0)).map(a => {
@@ -395,8 +395,9 @@ function pmPicker(unitId) {
 const prioPicker = value => h('select', { class: 'inp', 'aria-label': 'Приоритет' }, h('option', { value: '' }, '—'),
   [...S.priorityOptions].reverse().map(o => h('option', { value: o.id, selected: o.id === value }, o.name)));
 
-export function openCreateApp(onDone) {
-  const list = units();
+/** unitId — сразу в этот юнит (со страницы юнита). */
+export function openCreateApp(onDone, unitId) {
+  const list = unitId ? units().filter(u => u.id === unitId) : units();
   const name = h('input', { class: 'inp', maxlength: 120, placeholder: 'Например, Sleep Sounds' });
   const unit = h('select', { class: 'inp' }, list.map(u => h('option', { value: u.id }, u.name)));
   const pm = pmPicker(list[0] && list[0].id);
@@ -426,8 +427,8 @@ export function openCreateApp(onDone) {
 }
 
 /** «Новая задача» с дашборда CEO: приложение, тип (апдейт / задача) — уходит PM юнита приложения. */
-export function openNewAppTask(onDone) {
-  const list = S.apps.filter(a => !a.archived).sort((x, y) => x.name.localeCompare(y.name));
+export function openNewAppTask(onDone, unitId) {
+  const list = S.apps.filter(a => !a.archived && (!unitId || a.unitId === unitId)).sort((x, y) => x.name.localeCompare(y.name));
   const app = h('select', { class: 'inp' }, list.map(a => h('option', { value: a.id }, a.name)));
   const type = h('select', { class: 'inp' }, [['other', 'Задача'], ['update', 'Апдейт']].map(([v, t]) => h('option', { value: v }, t)));
   const title = h('input', { class: 'inp', maxlength: 500, placeholder: 'Что сделать' });

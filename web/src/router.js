@@ -20,6 +20,7 @@ import { renderDev } from './views/dev.js';
 import { renderAdmin } from './views/admin.js';
 import { renderBoardView, loadBoard } from './views/board.js';
 import { renderSettings } from './views/settings.js';
+import { renderUnitPage } from './views/unitpage.js';
 import { openTask, closePanel, peekTask } from './views/task.js';
 
 let rendered = null;
@@ -94,8 +95,8 @@ export async function render() {
   closeNav();
   renderSidebar();
 
-  // CEO в режиме Default: дашборд и приложения — доски, «мои» и панель админа не показываем; задача — поверх
-  if (ceoDefault() && (r.unit || ['my', 'myboard', 'admin'].includes(r.view))) {
+  // CEO в режиме Default: дашборд, приложения и страницы юнитов — доски, «мои» и панель админа не показываем; задача — поверх
+  if (ceoDefault() && ((r.unit && r.mode !== 'overview') || ['my', 'myboard', 'admin'].includes(r.view))) {
     navigate({ view: 'home' }, { replace: true });
     if (r.unit && r.task) peekTask(r.unit, r.task);
     return;
@@ -136,9 +137,9 @@ export async function render() {
   if (rendered !== key) {
     rendered = key;
     document.title = S.board.unit.name + ' · Tasks';
-    if (r.mode === 'settings') renderSettings(); else renderBoardView();
+    if (r.mode === 'settings') renderSettings(); else if (r.mode === 'overview') renderUnitPage(); else renderBoardView();
   }
-  if (r.task && r.mode !== 'settings') {
+  if (r.task && r.mode !== 'settings' && r.mode !== 'overview') {
     if (S.panelTaskId !== r.task) openTask(r.task);
   } else {
     closePanel();

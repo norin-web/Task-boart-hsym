@@ -436,11 +436,11 @@ function statRow(t) {
 }
 
 /** Карточка юнита: команда, задачи по статусам, прогресс. apps — сколько приложений (дашборд CEO). */
-export function unitCard(u, { apps } = {}) {
+export function unitCard(u, { apps, to = 'board' } = {}) {
   const c = u.counts || emptyCounts();
   const total = c.todo + c.in_progress + c.done;
   const pct = total ? Math.round((c.done / total) * 100) : 0;
-  return link({ unit: u.id, mode: 'board' }, { class: 'unit-card', dataset: { id: u.id } },
+  return link({ unit: u.id, mode: to }, { class: 'unit-card', dataset: { id: u.id } },
     h('div', { class: 'uc-head' },
       h('div', { class: 'uc-icon', style: { background: u.color } }, u.key.slice(0, 2)),
       h('div', { class: 'uc-title' }, h('div', { class: 'uc-name' }, u.name),

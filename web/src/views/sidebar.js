@@ -116,14 +116,14 @@ export function renderSidebar() {
 const isHere = (r, route) => !r.unit && (route.view === 'home' ? !r.view || r.view === 'home' : r.view === route.view);
 
 /** CEO: Default — только приложения; Admin — всё. Сохраняется в профиле (на всех устройствах). */
-async function setCeoMode(m) {
+export async function setCeoMode(m) {
   const p = me();
   if (!p || ceoMode() === m) return;
   p.prefs = { ...(p.prefs || {}), ceoMode: m };
   renderSidebar(); // переключатель отзывается сразу
   // сохраняем до перерисовки: экраны перечитывают людей с сервера и не должны получить старый режим
   try { await send('setMyPrefs', { personId: p.id, prefs: { ceoMode: m } }); } catch (e) { showErr(e); }
-  if (m === 'default' && (S.route.unit || ['my', 'myboard', 'admin'].includes(S.route.view))) navigate({ view: 'home' });
+  if (m === 'default' && ((S.route.unit && S.route.mode !== 'overview') || ['my', 'myboard', 'admin'].includes(S.route.view))) navigate({ view: 'home' });
   else rerender();
 }
 

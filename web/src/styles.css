@@ -1436,3 +1436,9 @@ a.rl-link:hover { background: var(--accent-soft); color: var(--accent-text); }
 .ap-req { font-size: 12.5px; }
 .apps-none { padding: 24px 4px; }
 @media (max-width: 640px) { .apps-search { width: 140px; } }
+
+/* Страница юнита */
+.unit-desc { margin: -4px 0 18px; max-width: 70ch; }
+.owner-box { display: grid; gap: 8px; }
+.owner-row { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
+.owner-row .muted { margin-left: auto; font-size: 12.5px; }

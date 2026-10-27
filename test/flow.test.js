@@ -417,3 +417,16 @@ test('сотрудник и лид: «Можно начинать», фокус,
   await api.as(ios, async () => assert.ok((await api('getNotifications', {})).some(n => n.taskId === st.ios.id && n.kind === 'unblocked')));
   await api.as(qa, async () => assert.ok(!(await api('getNotifications', {})).some(n => n.kind === 'unblocked')));
 });
+
+test('сменить ответственного за юнит: новый PM в составе, прежний — нет, открытые задачи CEO переходят новому', async () => {
+  const api = await setup();
+  const { ceo, pm, pmRf, ios, gold } = await studio(api);
+  const { request } = await api.as(ceo, () => api('createApp', { name: 'Sleep Sounds', unitId: gold.id }));
+  assert.equal(request.assigneeId, pm.id);
+  await api.as(ceo, () => api('setUnitPm', { unitId: gold.id, personId: pmRf.id }));
+  const members = (await api('getBoard', { unitId: gold.id })).members.map(m => m.personId);
+  assert.ok(members.includes(pmRf.id) && !members.includes(pm.id));
+  const tasks = (await api('getBoard', { unitId: gold.id })).tasks;
+  assert.equal(tasks.find(t => t.id === request.id).assigneeId, pmRf.id);
+  await api.as(ceo, () => assert.rejects(() => api('setUnitPm', { unitId: gold.id, personId: ios.id }), /только PM/));
+});

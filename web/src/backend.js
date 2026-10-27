@@ -1348,6 +1348,26 @@ export function createBackend(db, opts = {}) {
     /* ---------- состав юнита ---------- */
 
     /** Добавить человека в команду или сменить его отдел в ней. */
+    /**
+     * Сменить ответственного (PM) юнита: новый PM — в составе, прежние PM — из состава вон,
+     * их открытые задачи CEO (запросы) переходят новому.
+     */
+    async setUnitPm(p) {
+      const u = await findUnit(p.unitId);
+      const pm = (await one('people', p.personId)) || fail('Человек не найден', 'NOT_FOUND');
+      if (pm.access !== 'moderator') fail('Ответственным за юнит может быть только PM');
+      const old = (await unitPeople(u.id, 'moderator')).filter(x => x.id !== pm.id).map(x => x.id);
+      await methods.setMember({ unitId: u.id, personId: pm.id, departmentId: pm.position_id || '' });
+      for (const id of old) await methods.removeMember({ unitId: u.id, personId: id });
+      if (old.length) {
+        const st = unitSettings(u.settings);
+        const open = (await run(T('tasks').select('id,status').eq('unit_id', u.id).eq('kind', 'request').eq('archived', false).in('assignee_id', old)))
+          .filter(t => kindOf(st, t.status) !== 'done');
+        for (const t of open) await methods.updateTask({ id: t.id, patch: { assigneeId: pm.id } });
+      }
+      return unitMembers(u.id);
+    },
+
     async setMember(p) {
       const u = await findUnit(p.unitId);
       (await one('people', p.personId)) || fail('Человек не найден', 'NOT_FOUND');
