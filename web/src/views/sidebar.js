@@ -1,5 +1,5 @@
 import Sortable from 'sortablejs';
-import { S, LS, byOrder, openCount, me, unitById, isStaff, isSuper, ceoMode, isDev, ACCESS_LABELS } from '../state.js';
+import { S, LS, byOrder, openCount, me, unitById, isStaff, isSuper, ceoMode, isDev, ACCESS_LABELS, seesApps } from '../state.js';
 import { $, h, icon, avatar, menu, showErr, fill, confirmDlg } from '../ui.js';
 import { send } from '../api.js';
 import { link, navigate, rerender } from '../router.js';
@@ -76,7 +76,7 @@ export function renderSidebar() {
     h('button', { class: 'search-btn', onclick: openPalette }, icon('search', 15), h('span', null, 'Поиск'), h('kbd', null, isMac ? '⌘K' : 'Ctrl K')),
     navLink({ view: 'home' }, person && person.access === 'rm' ? 'rocket' : 'home', staff ? 'Дашборд' : person && person.access === 'rm' ? 'Релизы' : 'Мой дашборд',
       h('span', { class: 'nav-badge', id: 'unread-badge', title: 'Новое для вас', hidden: !S.unread }, S.unread || '')),
-    navLink({ view: 'apps' }, 'app', 'Приложения'),
+    seesApps() && navLink({ view: 'apps' }, 'app', 'Приложения'),
     !lite && navLink({ view: 'myboard' }, 'board', 'Моя доска'),
     !lite && staff && navLink({ view: 'my' }, 'user', 'Мои задачи'),
     !lite && staff && navLink({ view: 'admin' }, 'settings', 'Панель админа'),

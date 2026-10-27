@@ -7,7 +7,7 @@ import { $, h, icon, avatar, topbar, showErr, fill, menu } from '../ui.js';
 import { call } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
-import { openAppById, openCreateApp, appIcon, prioTag, stageDots } from './apps.js';
+import { openAppById, openCreateApp, openNewAppTask, appIcon, prioTag, stageDots } from './apps.js';
 import { newsBlock, loadNotes, fillDemo } from './home.js';
 import { openCreateUnit } from './units.js';
 import { mode } from '../data.js';
@@ -22,7 +22,9 @@ const daysLate = due => Math.max(1, Math.round((Date.parse(todayStr()) - Date.pa
 export async function renderCeoHome() {
   const page = h('div', { class: 'page ceo-page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
   fill($('#main'),
-    topbar([h('h1', null, 'Дашборд')], [isSuper() && units().length > 0 && h('button', { class: 'btn primary', onclick: () => openCreateApp(load) }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Новое приложение'))]),
+    topbar([h('h1', null, 'Дашборд')], [
+      isSuper() && S.apps.some(a => !a.archived) && h('button', { class: 'btn', onclick: () => openNewAppTask(load) }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Новая задача')),
+      isSuper() && units().length > 0 && h('button', { class: 'btn primary', onclick: () => openCreateApp(load) }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Новое приложение'))]),
     h('div', { class: 'view-body' }, page));
   async function load() {
     let d;
@@ -51,7 +53,7 @@ export async function renderCeoHome() {
 
 /* ---------- портфель ---------- */
 
-/** Таблица «юниты × статусы»; итог по статусу — в шапке колонки. Клик по числу — список приложений. */
+/** Юниты: таблица «юнит × статус приложений», итог по статусу — в шапке колонки. Клик по числу — список приложений; «+ Юнит» — сразу здесь. */
 function portfolio(d, reload) {
   const statuses = d.statuses;
   const appsOf = ids => ids.map(id => S.apps.find(a => a.id === id)).filter(Boolean);
@@ -59,9 +61,10 @@ function portfolio(d, reload) {
     list.length ? list.map(a => h('button', { class: 'kp-row kp-link', onclick: () => openAppById(a.id, reload) },
       appIcon(a, 'xs'), h('span', { class: 'kp-name' }, a.name), h('span', { class: 'kp-sub muted' }, (unitById(a.unitId) || {}).name || '')))
       : h('p', { class: 'muted kp-empty' }, 'Пусто'))]);
-  const unitRows = units().filter(u => d.portfolio.byUnit[u.id]);
+  const unitRows = units();
   return h('section', { class: 'ceo-portfolio' },
-    h('div', { class: 'section-head' }, h('h2', null, 'Портфель')),
+    h('div', { class: 'section-head' }, h('h2', null, 'Юниты'),
+      isSuper() && h('button', { class: 'btn ghost sm', onclick: () => openCreateUnit(reload) }, icon('plus', 14), 'Юнит')),
     h('div', { class: 'pf-table card-box', role: 'table', 'aria-label': 'Приложения по юнитам и статусам' },
       h('div', { class: 'pf-row pf-head', role: 'row', style: { '--n': statuses.length } },
         h('span', { role: 'columnheader' }),

@@ -6,7 +6,7 @@
  *   #/admin[?tab=…]          панель админа (модераторы и супер-админы)
  *   #/u/:unit[/list|/settings|/overview][?task=:id]
  */
-import { S, isStaff, isSuper, myAccess, loadBoardView, ceoDefault } from './state.js';
+import { S, isStaff, isSuper, myAccess, loadBoardView, ceoDefault, seesApps } from './state.js';
 import { $, h, fill, closeMenu, closeNav, showErr } from './ui.js';
 import { renderSidebar } from './views/sidebar.js';
 import { renderHome } from './views/home.js';
@@ -104,6 +104,7 @@ export async function render() {
     closePanel();
     S.board = null;
     if (r.view === 'admin' && !isStaff()) return navigate({ view: 'home' }, { replace: true });
+    if (r.view === 'apps' && !seesApps()) return navigate({ view: 'home' }, { replace: true });
     const view = r.view;
     const key = ['my', 'myboard', 'apps', 'dev'].includes(view) ? view : view === 'admin' ? 'admin:' + (r.tab || 'overview') : 'home';
     if (rendered !== key) {

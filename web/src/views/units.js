@@ -59,7 +59,8 @@ export async function deleteUnit(u) {
   }).catch(showErr);
 }
 
-export function openCreateUnit() {
+/** onCreated — остаться на месте (дашборд CEO) и обновить экран; без него — переход на доску нового юнита. */
+export function openCreateUnit(onCreated) {
   const name = h('input', { class: 'inp', placeholder: 'Например, Gold', maxlength: 80 });
   const key = h('input', { class: 'inp mono', placeholder: 'MKT', maxlength: 10 });
   const keyHint = h('span', null, 'KEY-1');
@@ -91,7 +92,7 @@ export function openCreateUnit() {
           S.units.push(u);
           close();
           renderSidebar();
-          navigate({ unit: u.id, mode: 'board' });
+          if (typeof onCreated === 'function') { toast(`Юнит «${u.name}» создан`); onCreated(u); } else navigate({ unit: u.id, mode: 'board' });
         },
       },
     ],

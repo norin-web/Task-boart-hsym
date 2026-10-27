@@ -525,6 +525,35 @@ export function openCreateApp(onDone) {
   });
 }
 
+/** «Новая задача» с дашборда CEO: приложение, тип (апдейт / задача) — уходит PM юнита приложения. */
+export function openNewAppTask(onDone) {
+  const list = S.apps.filter(a => !a.archived).sort((x, y) => x.name.localeCompare(y.name));
+  const app = h('select', { class: 'inp' }, list.map(a => h('option', { value: a.id }, a.name)));
+  const type = h('select', { class: 'inp' }, [['other', 'Задача'], ['update', 'Апдейт']].map(([v, t]) => h('option', { value: v }, t)));
+  const title = h('input', { class: 'inp', maxlength: 500, placeholder: 'Что сделать' });
+  const pm = pmPicker(list[0] && list[0].unitId);
+  app.addEventListener('change', () => { const a = list.find(x => x.id === app.value); pm.setUnit(a && a.unitId); });
+  const due = h('input', { class: 'inp', type: 'date' });
+  const prio = prioPicker('');
+  const desc = h('textarea', { class: 'inp', rows: 3 });
+  modal({
+    title: 'Новая задача',
+    body: [field('Название', title), h('div', { class: 'grid2' }, field('Приложение', app), field('Тип', type)),
+      h('div', { class: 'grid2' }, field('PM', pm.el), field('Срок', due)), field('Приоритет', prio), field('Описание', desc)],
+    actions: [{ label: 'Отмена' }, {
+      label: 'Поставить', primary: true,
+      action: async close => {
+        if (!title.value.trim()) { title.focus(); return; }
+        await send('createRequest', { appId: app.value, type: type.value, title: title.value, pmId: pm.el.value, dueDate: due.value, priority: prio.value, description: desc.value });
+        close();
+        toast('Задача ушла PM');
+        if (onDone) onDone();
+      },
+    }],
+  });
+  title.focus();
+}
+
 function openCreateRequest(a, type, onDone) {
   const title = h('input', { class: 'inp', maxlength: 500, placeholder: type === 'update' ? 'Например, Апдейт 1.2: виджет' : 'Что сделать' });
   const pm = pmPicker(a.unitId);
