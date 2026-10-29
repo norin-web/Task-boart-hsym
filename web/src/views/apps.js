@@ -606,6 +606,19 @@ function infoBlock(a, manage, ceo, save, redraw) {
   const toggle = r => put(r.common
     ? { ...checks, done: r.done ? checks.done.filter(id => id !== r.id) : [...checks.done, r.id] }
     : { ...checks, own: checks.own.map(x => (x.id === r.id ? { ...x, done: !x.done } : x)) });
+  // правка и удаление пункта — иконки справа при наведении: общий пункт — CEO (для всех), свой — CEO и PM юнита
+  const saveCommon = items => send('saveAppInfoItems', { items }).then(list => { S.appInfoItems = list; redraw(); }).catch(showErr);
+  const rename = async r => {
+    const name = await promptDlg(r.common ? 'Пункт Info (для всех приложений)' : 'Пункт Info', 'Название', r.name);
+    if (!name || !name.trim() || name.trim() === r.name) return;
+    if (r.common) saveCommon(S.appInfoItems.map(x => (x.id === r.id ? { ...x, name: name.trim() } : x)));
+    else put({ ...checks, own: checks.own.map(x => (x.id === r.id ? { ...x, name: name.trim() } : x)) });
+  };
+  const remove = async r => {
+    if (r.common) {
+      if (await confirmDlg(`Убрать пункт «${r.name}» из Info всех приложений? Отметки по нему пропадут.`, { ok: 'Убрать', danger: true })) saveCommon(S.appInfoItems.filter(x => x.id !== r.id));
+    } else put({ ...checks, own: checks.own.filter(x => x.id !== r.id) });
+  };
   const done = rows.filter(r => r.done).length;
   return h('section', null,
     h('div', { class: 'up-head' }, h('h3', null, 'Info', rows.length > 0 && h('span', { class: 'muted sec-n' }, `${done} из ${rows.length}`))),
@@ -613,7 +626,11 @@ function infoBlock(a, manage, ceo, save, redraw) {
       ? h('div', { class: 'info-list' }, rows.map(r => h('div', { class: 'info-row' + (r.done ? ' on' : '') },
         h('button', { class: 'info-check', role: 'checkbox', 'aria-checked': String(r.done), disabled: !manage, onclick: () => toggle(r) },
           h('span', { class: 'aud-check' }, r.done && icon('check', 13)), h('span', { class: 'info-name' }, r.name)),
-        h('span', { class: 'muted info-tag' }, r.common ? 'для всех' : 'только тут'))))
+        h('span', { class: 'muted info-tag' }, r.common ? 'для всех' : 'только тут'),
+        (r.common ? ceo : manage) ? h('span', { class: 'info-acts' },
+          h('button', { class: 'icon-btn sm', title: 'Переименовать' + (r.common ? ' (для всех)' : ''), onclick: () => rename(r) }, icon('edit', 13)),
+          h('button', { class: 'icon-btn sm danger-ic', title: r.common ? 'Убрать из всех приложений' : 'Удалить пункт', onclick: () => remove(r) }, icon('trash', 13)))
+          : h('span'))))
       : h('p', { class: 'muted', style: { margin: 0 } }, 'Пунктов пока нет — добавьте: «⋯» → «Настроить карточку» → «Info» (продуктовый апдейт, пейвол, локализации…).'));
 }
 

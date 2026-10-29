@@ -1650,3 +1650,9 @@ a.rl-link:hover { background: var(--accent-soft); color: var(--accent-text); }
 .qf-kind { width: auto; flex: none; }
 .cs-tabs { margin-bottom: 14px; }
 .cs-pane { min-height: 220px; }
+/* Info: правка и удаление пункта — иконки справа при наведении */
+.info-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+.info-acts { display: inline-flex; gap: 2px; opacity: 0; transition: opacity .12s; }
+.info-row:hover .info-acts, .info-acts:focus-within { opacity: 1; }
+@media (hover: none) { .info-acts { opacity: 1; } }
+.icon-btn.danger-ic:hover { color: var(--danger); background: var(--danger-soft); }
