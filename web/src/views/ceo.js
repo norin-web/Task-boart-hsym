@@ -86,7 +86,6 @@ function portfolio(d, reload) {
 // Короткая пометка справа; красным — только то, что уже горит
 const ATT = {
   reject: { cls: 'danger', text: () => 'реджект' },
-  store: { cls: 'danger', text: () => 'нет в App Store' },
   overdue: { cls: 'danger', text: x => `просрочено ${daysLate(x.task.dueDate)} дн.` },
   nopm: { cls: 'muted', text: () => 'нет PM' },
   waiting: { cls: 'muted', text: () => 'не разложено' },

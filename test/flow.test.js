@@ -497,7 +497,7 @@ test('массовая правка приложений: статус и юни
   await api.as(pm, () => assert.rejects(() => api('updateApps', { ids, status: 'live' })));
 });
 
-test('проверка App Store: итог сохраняется, пропавшие — в «Требует внимания», «Обновлено» не трогает', async () => {
+test('проверка App Store: итог сохраняется, «Обновлено» не трогает; в «Требует внимания» дашборда не дублируется', async () => {
   const api = await setup();
   const { ceo, pmRf, gold } = await studio(api);
   const { app } = await api.as(ceo, () => api('createApp', { name: 'Gone', unitId: gold.id, noRequest: true }));
@@ -511,7 +511,8 @@ test('проверка App Store: итог сохраняется, пропав�
   assert.equal(gone.updatedAt, app.updatedAt);
   assert.equal(list.find(x => x.id === ok.app.id).storeName, 'Ok Store');
   const d = await api.as(ceo, () => api('getCeoDashboard', {}));
-  assert.deepEqual(d.attention.filter(x => x.type === 'store').map(x => x.app.name), ['Gone']);
+  // пропавшие показывает блок «Проверка App Store», в «Требует внимания» их нет
+  assert.ok(!d.attention.some(x => x.app.id === app.id));
   // PM чужого юнита отметку не поставит
   assert.equal((await api.as(pmRf, () => api('saveStoreCheck', { items: [{ id: ok.app.id, ok: false }] }))).saved, 0);
 });

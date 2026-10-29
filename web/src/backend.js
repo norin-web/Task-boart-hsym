@@ -1690,7 +1690,6 @@ export function createBackend(db, opts = {}) {
       const attention = [], inProgress = [], recent = [];
       for (const a of apps) {
         if (kindOfStatus(a.status) === 'reject') attention.push({ type: 'reject', app: brief(a), at: a.statusAt });
-        if (a.storeOk === false) attention.push({ type: 'store', app: brief(a), at: a.storeCheckedAt });
         if (kindOfStatus(a.status) === 'live' && a.statusAt >= recentFrom) recent.push({ type: 'live', app: brief(a), at: a.statusAt });
         for (const r of a.requests) {
           if (r.done) {
@@ -1709,7 +1708,7 @@ export function createBackend(db, opts = {}) {
           inProgress.push({ app: brief(a), request: r, current });
         }
       }
-      const rank = { reject: 0, store: 1, overdue: 2, nopm: 3, waiting: 4, stale: 5 };
+      const rank = { reject: 0, overdue: 1, nopm: 2, waiting: 3, stale: 4 };
       attention.sort((x, y) => rank[x.type] - rank[y.type] || String(x.at).localeCompare(String(y.at)));
       recent.sort((x, y) => String(y.at).localeCompare(String(x.at)));
       return { portfolio, attention, inProgress, recent, staleDays, statuses };
