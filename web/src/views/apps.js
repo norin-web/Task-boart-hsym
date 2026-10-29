@@ -526,9 +526,9 @@ function openCardSettings(a, { ceo, manage, save, redraw, tab: start = 'blocks' 
   const infoAll = S.appInfoItems.map(x => ({ ...x }));
   const infoOwn = ((a.checks || {}).own || []).map(x => ({ ...x }));
   let tab = manage ? start : 'blocks';
-  // пришли из пустого блока — сразу пустая строка для нового пункта / поля (для всех у CEO, иначе — только сюда)
-  if (manage && start === 'info' && !infoAll.length && !infoOwn.length) (ceo ? infoAll : infoOwn).push({ id: '', name: '', done: false });
-  if (manage && start === 'quick' && !fieldsAll.length && !fieldsOwn.length) (ceo ? fieldsAll : fieldsOwn).push({ id: '', name: '', kind: 'link', value: '' });
+  // пришли по «Добавить» из блока — сразу пустая строка для нового пункта / поля (для всех у CEO, иначе — только сюда)
+  if (manage && start === 'info') (ceo ? infoAll : infoOwn).push({ id: '', name: '', done: false });
+  if (manage && start === 'quick') (ceo ? fieldsAll : fieldsOwn).push({ id: '', name: '', kind: 'link', value: '' });
 
   // Блоки — сразу
   const blocks = h('div', { class: 'col-edit-list card-layout' });
@@ -628,7 +628,8 @@ function infoBlock(a, manage, ceo, save, redraw, configure) {
   };
   const done = rows.filter(r => r.done).length;
   return h('section', null,
-    h('div', { class: 'up-head' }, h('h3', null, 'Info', rows.length > 0 && h('span', { class: 'muted sec-n' }, `${done} из ${rows.length}`))),
+    h('div', { class: 'up-head' }, h('h3', null, 'Info', rows.length > 0 && h('span', { class: 'muted sec-n' }, `${done} из ${rows.length}`)),
+      manage && rows.length > 0 && h('button', { class: 'btn ghost sm', onclick: configure }, icon('plus', 14), 'Пункт')),
     rows.length
       ? h('div', { class: 'info-list' }, rows.map(r => h('div', { class: 'info-row' + (r.done ? ' on' : '') },
         h('button', { class: 'info-check', role: 'checkbox', 'aria-checked': String(r.done), disabled: !manage, onclick: () => toggle(r), title: r.common ? 'Пункт для всех приложений' : 'Пункт только этого приложения' },
@@ -689,7 +690,8 @@ function quickBlock(a, manage, ceo, save, fromStore, redraw, configure) {
   if (!S.appFields.length && !own.length && !manage) return null;
   const putOwn = next => { a.ownFields = next; redraw(); save({ ownFields: next }); };
   return h('section', null,
-    h('div', { class: 'up-head' }, h('h3', null, 'Быстрый доступ')),
+    h('div', { class: 'up-head' }, h('h3', null, 'Быстрый доступ'),
+      manage && (S.appFields.length > 0 || own.length > 0) && h('button', { class: 'btn ghost sm', onclick: configure }, icon('plus', 14), 'Поле')),
     S.appFields.length || own.length
       ? h('div', { class: 'af-list' },
         S.appFields.map(f => infoRow(a, f, manage, v => (f === storeField() && v ? fromStore(v, { info: { [f.id]: v } }) : save({ info: { [f.id]: v } })))),
