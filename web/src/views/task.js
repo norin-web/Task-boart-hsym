@@ -12,6 +12,7 @@ import { activityText } from './feed.js';
 import { readNote } from './home.js';
 import { releaseBlock } from './release.js';
 import { brandIcon, brandOf } from './brand.js';
+import { isWatched, toggleWatch } from './watch.js';
 
 /* ================= Панель задачи ================= */
 
@@ -240,6 +241,7 @@ function panelMenu(anchor, t, staff) {
     { label: cardCenter() ? 'Открывать справа' : 'Открывать по центру', icon: cardCenter() ? 'panelSide' : 'panelCenter', action: () => { LS.set('cardMode', cardCenter() ? 'side' : 'center'); openTask(t.id); } },
     { label: 'Скопировать ссылку', icon: 'link', action: () => copyLink(t) },
     S.peek && !ceoDefault() && { label: 'Открыть на доске юнита', icon: 'board', action: () => openUnitBoard(t) },
+    isSuper() && { label: isWatched('task', t.id) ? 'Не отслеживать на дашборде' : 'Отслеживать на дашборде', icon: 'eye', action: () => toggleWatch('task', t.id, t.unitId, t.title) },
     staff && { sep: true },
     staff && { label: 'Дублировать', icon: 'copy', action: () => duplicateTask(t) },
     staff && others.length > 0 && { label: 'Перенести в другой юнит…', icon: 'arrow', action: () => moveTaskDialog(t) },

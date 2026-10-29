@@ -859,13 +859,16 @@ export function createBackend(db, opts = {}) {
       };
     },
 
-    /** Задачи из всех активных юнитов: поиск (q) или «мои задачи» (assigneeId). */
+    /** Задачи из всех активных юнитов: поиск (q), «мои задачи» (assigneeId) или конкретные (ids — «Отслеживаю» на дашборде). */
     async queryTasks(p) {
       const q = str(p.q, 100).toLowerCase();
       const units = Object.fromEntries((await all(() => T('units').select('*').eq('archived', false).order('id'))).map(u => [u.id, u]));
+      const ids = Array.isArray(p.ids) ? p.ids.map(x => String(x ?? '')).filter(Boolean).slice(0, 200) : null;
+      if (ids && !ids.length) return [];
       let rows = await all(() => {
         let b = T('tasks').select('*').eq('archived', false);
         if (p.assigneeId) b = b.eq('assignee_id', String(p.assigneeId));
+        if (ids) b = b.in('id', ids);
         return b.order('updated_at', { ascending: false }).order('id');
       });
       rows = rows.filter(r => units[r.unit_id]);

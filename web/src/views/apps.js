@@ -11,6 +11,7 @@ import { currentView } from '../router.js';
 import { peekTask } from './task.js';
 import { unitHeader } from './unitnav.js';
 import { brandIcon, brandOf } from './brand.js';
+import { isWatched, toggleWatch } from './watch.js';
 import { fillDemo } from './home.js';
 import { mode } from '../data.js';
 import appStoreSvg from '../assets/app-store.svg';  // thesvg.org/icons/app-store
@@ -571,6 +572,7 @@ export function openAppPanel(a, onChange) {
       { label: appCardCenter() ? 'Открывать справа' : 'Открывать по центру', icon: appCardCenter() ? 'panelSide' : 'panelCenter',
         action: () => { LS.set('cardMode', appCardCenter() ? 'side' : 'center'); panel.classList.toggle('center', appCardCenter()); backdrop.classList.toggle('center', appCardCenter()); } },
       { label: 'Настроить карточку', icon: 'layers', action: () => configure() },
+      ceo && { label: isWatched('app', a.id) ? 'Не отслеживать на дашборде' : 'Отслеживать на дашборде', icon: 'eye', action: () => toggleWatch('app', a.id, a.unitId, a.name) },
       ceo && { sep: true },
       ceo && { label: 'Поставить задачи', icon: 'plus', action: () => openTaskPool(a, refresh) },
       ceo && { label: 'Апдейт', icon: 'plus', action: () => openCreateRequest(a, 'update', refresh) },

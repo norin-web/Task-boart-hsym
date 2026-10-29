@@ -7,10 +7,11 @@ import { $, h, icon, avatar, topbar, showErr, fill, menu, modal, field } from '.
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
-import { openAppById, openCreateApp, openImportApps, storeCheckBlock, openNewAppTask, appIcon, prioTag, stageDots, statusPill, appPm } from './apps.js';
+import { openAppById, openCreateApp, openImportApps, storeCheckBlock, appStatusCell, openNewAppTask, appIcon, prioTag, stageDots, statusPill, appPm } from './apps.js';
 import { newsBlock, loadNotes, fillDemo, unitCard } from './home.js';
 import { renderLayout, editLayout } from './layout.js';
 import { openCreateUnit } from './units.js';
+import { watchBlock } from './watch.js';
 import { mode } from '../data.js';
 
 const units = () => S.units.filter(u => !u.archived).sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -200,6 +201,7 @@ function ceoBlocks(d, apps, reload) {
     { id: 'news', title: 'Новое для вас', col: 'full', first: true, empty: 'Появится, когда что-то придёт вам', render: () => newsBlock() },
     { id: 'units', title: 'Юниты', col: 'full', render: () => portfolio(d, reload) },
     { id: 'storeCheck', title: 'Проверка App Store', col: 'full', render: () => storeCheckBlock(apps, reload, { compact: true }) },
+    { id: 'watch', title: 'Отслеживаю', col: 'full', render: () => watchBlock(apps, { openApp: id => openAppById(id, reload), openTask: peekTask, appIcon, appStatusCell, stageDots }) },
     // внимание и недавнее — рядом, широкая таблица работ — на всю ширину под ними
     { id: 'attention', title: 'Требует внимания', col: 'left', render: () => attention(d, reload) },
     { id: 'recent', title: 'Недавнее', col: 'right', render: () => recent(d, reload) },

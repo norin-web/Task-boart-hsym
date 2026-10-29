@@ -1733,3 +1733,35 @@ a.rc-more { text-decoration: none; }
 .ap-sort.on { color: var(--text); }
 .ap-sort.on .ap-sort-ic { opacity: 1; color: var(--accent-text); }
 .ap-sort[aria-sort="ascending"] .ap-sort-ic { transform: rotate(180deg); }
+
+/* «Отслеживаю» на дашборде CEO: живой список выбранных приложений и задач */
+.watch .section-head { gap: 10px; }
+.w-live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+.w-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 60%, transparent); animation: w-pulse 2s ease-out infinite; }
+@keyframes w-pulse { 70% { box-shadow: 0 0 0 6px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+.w-list { padding: 4px; display: grid; }
+.w-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; border-radius: 8px; transition: background .4s; }
+.w-row + .w-row { border-top: 1px solid var(--border); }
+.w-row:hover { background: var(--surface-2); }
+.w-row.changed { background: var(--accent-soft); animation: w-flash 2.4s ease-out; }
+@keyframes w-flash { from { background: color-mix(in srgb, var(--accent) 35%, transparent); } }
+.w-open { display: grid; grid-template-columns: 58px minmax(180px, 1.6fr) minmax(120px, .8fr) minmax(180px, 1.2fr) 90px; align-items: center; gap: 14px; width: 100%; border: 0; background: none; font: inherit; color: var(--text); text-align: left; padding: 8px 10px; }
+.w-row.task .w-key { justify-self: start; font-size: 11px; }
+.w-main { display: grid; min-width: 0; gap: 1px; font-size: 13.5px; }
+.w-main b, .w-main small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.w-st { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); white-space: nowrap; }
+.w-st .dot { width: 8px; height: 8px; border-radius: 50%; }
+.w-now { display: inline-flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; white-space: nowrap; overflow: hidden; }
+.w-at { font-size: 12px; text-align: right; white-space: nowrap; }
+.w-x { opacity: 0; margin-right: 6px; }
+.w-row:hover .w-x, .w-x:focus-visible { opacity: 1; }
+@media (hover: none) { .w-x { opacity: 1; } }
+.w-gone { margin: 6px 10px; font-size: 12.5px; }
+.w-pick { margin-top: 10px; max-height: 50vh; overflow-y: auto; display: grid; gap: 1px; }
+.w-pick-row { width: 100%; }
+.w-pick-name { display: grid; min-width: 0; text-align: left; }
+.w-pick-name small { font-size: 12px; }
+.w-pick-empty { margin: 4px 10px 8px; font-size: 13px; }
+.app-ic-slot { display: inline-flex; width: 18px; justify-content: center; }
+@media (max-width: 760px) { .w-open { grid-template-columns: 28px minmax(0, 1fr) auto; } .w-now, .w-at { display: none; } }
+@media (prefers-reduced-motion: reduce) { .w-dot, .w-row.changed { animation: none; } }

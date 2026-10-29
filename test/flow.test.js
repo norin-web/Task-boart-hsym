@@ -550,3 +550,15 @@ test('Быстрый доступ: свои поля приложения', asyn
   assert.deepEqual(upd.ownFields.map(x => [x.name, x.kind, x.value]), [['RevenueCat', 'link', 'https://app.revenuecat.com/x'], ['Bundle', 'text', 'com.x.a']]);
   await api.as(ios, () => assert.rejects(() => api('updateApp', { id: app.id, ownFields: [] })));
 });
+
+test('queryTasks по ids — для «Отслеживаю» на дашборде', async () => {
+  const api = await setup();
+  const { ceo, gold } = await studio(api);
+  const a = await api.as(ceo, () => api('createApp', { name: 'A', unitId: gold.id }));
+  const b = await api.as(ceo, () => api('createApp', { name: 'B', unitId: gold.id }));
+  const got = await api.as(ceo, () => api('queryTasks', { ids: [a.request.id] }));
+  assert.deepEqual(got.map(t => t.id), [a.request.id]);
+  assert.ok(got[0].statusName && got[0].key);
+  assert.deepEqual(await api.as(ceo, () => api('queryTasks', { ids: [] })), []);
+  assert.ok(b.request.id);
+});
