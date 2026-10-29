@@ -8,6 +8,7 @@ import { $, h, icon, avatar, topbar, menu, closeMenu, modal, field, confirmDlg, 
 import { call, send } from '../api.js';
 import { navigate, link } from '../router.js';
 import { updateSidebarCounts, renderUnread } from './sidebar.js';
+import { unitHeader } from './unitnav.js';
 import { openTask, closePanel, openCreateTask, duplicateTask, deleteTaskUndoable, refreshPanel } from './task.js';
 
 let sortables = [];
@@ -31,17 +32,8 @@ export function renderBoardView() {
   const u = S.board.unit;
   const mode = S.route.mode;
   fill($('#main'),
-    topbar([
-      h('span', { class: 'uc-icon sm', style: { background: u.color } }, u.key.slice(0, 2)),
-      h('h1', null, u.name),
-      h('span', { class: 'key-badge' }, u.key),
-      u.archived && h('span', { class: 'badge' }, 'в архиве'),
+    ...unitHeader(mode === 'list' ? 'list' : 'board', [
       teamStack(),
-    ], [
-      h('div', { class: 'seg', role: 'tablist' },
-        link({ unit: u.id, mode: 'board' }, { class: mode === 'board' ? 'on' : '', title: 'Доска' }, icon('board', 15), h('span', { class: 'btn-label' }, 'Доска')),
-        link({ unit: u.id, mode: 'list' }, { class: mode === 'list' ? 'on' : '', title: 'Список' }, icon('list', 15), h('span', { class: 'btn-label' }, 'Список'))),
-      isStaff() && link({ unit: u.id, mode: 'settings' }, { class: 'icon-btn', title: 'Настройки юнита' }, icon('settings', 17)),
       isStaff() && h('button', { class: 'btn primary', onclick: () => openCreateTask(), title: 'Новая задача (C)' }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Задача')),
     ]),
     filterBar(),
@@ -49,12 +41,11 @@ export function renderBoardView() {
   renderTasks();
 }
 
-/** Аватары команды в шапке — клик ведёт в настройки состава. */
+/** Аватары команды в шапке — клик ведёт на вкладку «Команда». */
 function teamStack() {
   const list = S.board.members.map(m => personById(m.personId)).filter(Boolean);
   const attrs = { class: 'team-stack', title: 'Команда: ' + (list.map(p => p.name).join(', ') || 'пока никого') };
-  if (!isStaff()) return h('span', attrs, list.slice(0, 5).map(p => avatar(p, 'sm')), list.length > 5 && h('span', { class: 'avatar sm more' }, '+' + (list.length - 5)));
-  return link({ unit: S.board.unit.id, mode: 'settings' }, attrs,
+  return link({ unit: S.board.unit.id, mode: 'team' }, attrs,
     list.slice(0, 5).map(p => avatar(p, 'sm')),
     list.length > 5 && h('span', { class: 'avatar sm more' }, '+' + (list.length - 5)),
     !list.length && h('span', { class: 'hint' }, '+ команда'));

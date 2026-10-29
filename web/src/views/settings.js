@@ -7,6 +7,7 @@ import { renderSidebar } from './sidebar.js';
 import { archiveUnit, deleteUnit } from './units.js';
 import { flowSection } from './flows.js';
 import { addMemberDialog, applyMembers, openDepartments, positionChips } from './people.js';
+import { unitHeader } from './unitnav.js';
 
 export function renderSettings() {
   const b = S.board;
@@ -85,11 +86,7 @@ export function renderSettings() {
     h('button', { class: 'btn ghost sm', title: 'Убрать с карточек (значения сохранятся)', onclick: () => setFieldArchived(f, true) }, 'Убрать'))));
 
   fill($('#main'),
-    topbar([
-      link({ unit: u.id, mode: 'board' }, { class: 'btn ghost' }, icon('back', 15), 'Доска'),
-      h('h1', null, 'Настройки'),
-      h('span', { class: 'muted' }, u.name),
-    ], []),
+    ...unitHeader('settings'),
     h('div', { class: 'view-body' }, h('div', { class: 'page settings-page' },
       h('section', { class: 'card-box' },
         h('h2', null, 'Основное'),

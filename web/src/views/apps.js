@@ -9,6 +9,7 @@ import { $, h, icon, avatar, topbar, showErr, fill, modal, field, toast, menu, c
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
+import { unitHeader } from './unitnav.js';
 import { fillDemo } from './home.js';
 import { mode } from '../data.js';
 import appStoreSvg from '../assets/app-store.svg';  // thesvg.org/icons/app-store
@@ -79,19 +80,25 @@ function workSummary(r) {
 
 /* ---------- экран ---------- */
 
-export async function renderApps() {
+/** Список приложений: общий (#/apps) или вкладка юнита (unitId, #/u/:id/apps — шапка юнита, только его приложения). */
+export async function renderApps({ unitId = '' } = {}) {
   const body = h('div', { class: 'page apps-page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
   const tools = h('div', { class: 'row', style: { gap: '8px' } });
-  fill($('#main'), topbar([h('h1', null, 'Приложения')], [tools]), h('div', { class: 'view-body' }, body));
+  const viewKey = unitId ? 'apps:' + unitId : 'apps';
+  const here = () => currentView() === viewKey;
+  const head = () => (unitId ? unitHeader('apps', [tools]) : [topbar([h('h1', null, 'Приложения')], [tools])]);
+  fill($('#main'), ...head(), h('div', { class: 'view-body' }, body));
 
   let apps;
   const load = async () => {
-    apps = await call('listApps', {});
-    S.apps = apps.map(({ requests, active, ...a }) => a);
+    apps = await call('listApps', unitId ? { unitId } : {});
+    const brief = apps.map(({ requests, active, ...a }) => a);
+    S.apps = unitId ? [...S.apps.filter(a => a.unitId !== unitId), ...brief] : brief;
   };
   try { await load(); } catch (e) { return showErr(e); }
-  if (currentView() !== 'apps') return;
-  setTimeout(() => fillFromStore(apps, () => currentView() === 'apps' && drawList()), 0);
+  if (!here()) return;
+  if (unitId) fill($('#main'), ...head(), h('div', { class: 'view-body' }, body));  // счётчик вкладки — по свежему списку
+  setTimeout(() => fillFromStore(apps, () => here() && drawList()), 0);
 
   // Только список: приложения по юнитам в сворачиваемых блоках, поиск по названию сверху
   let q = '';
@@ -210,7 +217,7 @@ export async function renderApps() {
     // в работе (есть открытый запрос) — отдельным разделом сверху, из юнитов ниже убираются
     const work = f.workTop ? found.filter(a => a.active > 0) : [];
     const rest = f.workTop ? found.filter(a => !(a.active > 0)) : found;
-    const groups = [...units(), { id: '', name: 'Без юнита', color: 'var(--border-strong)' }]
+    const groups = (unitId ? units().filter(u => u.id === unitId) : [...units(), { id: '', name: 'Без юнита', color: 'var(--border-strong)' }])
       .map(u => ({ u, list: rest.filter(a => (a.unitId || '') === u.id || (!u.id && !unitById(a.unitId))) }))
       .filter(g => g.list.length);
     const workOpen = !!q || !collapsed.has('__work');
@@ -221,6 +228,8 @@ export async function renderApps() {
           h('span', { class: 'muted' }, work.length)),
         workOpen && appTable(work, reload, sel, pick, true)),
       ...groups.map(({ u, list }) => {
+      // во вкладке юнита группа одна — без заголовка
+      if (unitId) return appTable(list, reload, sel, pick);
       const open = !!q || active() > 0 || !collapsed.has(u.id);
       return h('section', { class: 'ap-group' + (open ? ' open' : '') },
         h('button', { class: 'ap-group-head', 'aria-expanded': String(open), onclick: () => toggle(u.id) },
@@ -235,8 +244,8 @@ export async function renderApps() {
     filterBtn,
     isSuper() && apps.length > 0 && h('button', { class: 'btn sm' + (sel ? ' on' : ''), title: 'Выбрать несколько приложений, чтобы удалить', onclick: () => setPicking(!sel) }, icon('check', 14), h('span', { class: 'btn-label' }, 'Выбрать')),
     isSuper() && h('button', { class: 'icon-btn', title: 'Статусы и поля приложения', onclick: e => { e.stopPropagation(); settingsMenu(e.currentTarget, reload); } }, icon('settings', 17)),
-    isSuper() && units().length > 0 && h('button', { class: 'btn sm', title: 'Уже существующие приложения: название и ссылка на App Store построчно', onclick: () => openImportApps(reload) }, icon('layers', 14), h('span', { class: 'btn-label' }, 'Добавить списком')),
-    isSuper() && units().length > 0 && h('button', { class: 'btn primary sm', onclick: () => openCreateApp(reload) }, icon('plus', 14), h('span', { class: 'btn-label' }, 'Новое приложение')));
+    isSuper() && units().length > 0 && h('button', { class: 'btn sm', title: 'Уже существующие приложения: название и ссылка на App Store построчно', onclick: () => openImportApps(reload, unitId) }, icon('layers', 14), h('span', { class: 'btn-label' }, 'Добавить списком')),
+    isSuper() && units().length > 0 && h('button', { class: 'btn primary sm', onclick: () => openCreateApp(reload, unitId || undefined) }, icon('plus', 14), h('span', { class: 'btn-label' }, 'Новое приложение')));
   drawTools();
   drawList();
 }
@@ -874,10 +883,10 @@ const storeId = url => (/id(\d{5,})/.exec(url || '') || [])[1] || '';
  * «Добавить списком» — уже существующие приложения: строка = название и ссылка на App Store (как копируется из таблицы).
  * Иконка — из стора, название — ваше; статус по умолчанию «В сторе», запроса PM не создаётся. Уже добавленные (та же ссылка) пропускаются.
  */
-export function openImportApps(onDone) {
+export function openImportApps(onDone, unitId) {
   const list = units();
   const text = h('textarea', { class: 'inp mono', rows: 10, placeholder: 'PDF Converter v5\thttps://apps.apple.com/app/id6670748953\nCall Recorder v6\thttps://apps.apple.com/app/id6578445681' });
-  const unit = h('select', { class: 'inp' }, list.map(u => h('option', { value: u.id }, u.name)));
+  const unit = h('select', { class: 'inp' }, list.map(u => h('option', { value: u.id, selected: u.id === unitId }, u.name)));
   const live = S.appStatuses.find(x => x.kind === 'live');
   const status = h('select', { class: 'inp' }, S.appStatuses.map(st => h('option', { value: st.id, selected: live && st.id === live.id }, st.name)));
   const sf = storeField();

@@ -4,7 +4,7 @@
  *   #/my                     мои задачи
  *   #/board                  моя доска (личные этапы)
  *   #/admin[?tab=…]          панель админа (модераторы и супер-админы)
- *   #/u/:unit[/list|/settings|/overview][?task=:id]
+ *   #/u/:unit[/overview|/apps|/list|/team|/settings][?task=:id] — вкладки юнита; без режима — доска
  */
 import { S, isStaff, isSuper, myAccess, loadBoardView, ceoDefault, seesApps } from './state.js';
 import { $, h, fill, closeMenu, closeNav, showErr } from './ui.js';
@@ -20,7 +20,7 @@ import { renderDev } from './views/dev.js';
 import { renderAdmin } from './views/admin.js';
 import { renderBoardView, loadBoard } from './views/board.js';
 import { renderSettings } from './views/settings.js';
-import { renderUnitPage } from './views/unitpage.js';
+import { renderUnitPage, renderUnitTeam } from './views/unitpage.js';
 import { openTask, closePanel, peekTask } from './views/task.js';
 
 let rendered = null;
@@ -35,7 +35,7 @@ export function parseLocation() {
   if (path === '/apps') return { view: 'apps' };
   if (path === '/dev') return { view: 'dev' };
   if (path === '/admin') return { view: 'admin', tab: new URLSearchParams(query || '').get('tab') || 'overview' };
-  const m = /^\/u\/([\w-]+)(?:\/(list|settings|overview))?$/.exec(path);
+  const m = /^\/u\/([\w-]+)(?:\/(list|settings|overview|apps|team))?$/.exec(path);
   if (m) return { unit: m[1], mode: m[2] || 'board', task: task || null };
   return { view: 'home' };
 }
@@ -96,7 +96,7 @@ export async function render() {
   renderSidebar();
 
   // CEO в режиме Default: дашборд, приложения и страницы юнитов — доски, «мои» и панель админа не показываем; задача — поверх
-  if (ceoDefault() && ((r.unit && r.mode !== 'overview') || ['my', 'myboard', 'admin'].includes(r.view))) {
+  if (ceoDefault() && ((r.unit && r.mode === 'settings') || ['my', 'myboard', 'admin'].includes(r.view))) {
     navigate({ view: 'home' }, { replace: true });
     if (r.unit && r.task) peekTask(r.unit, r.task);
     return;
@@ -133,13 +133,15 @@ export async function render() {
   }
 
   if (r.mode === 'settings' && !isStaff()) return navigate({ unit: r.unit, mode: 'board' }, { replace: true });
+  if (['overview', 'apps'].includes(r.mode) && !seesApps()) return navigate({ unit: r.unit, mode: 'board' }, { replace: true });
   const key = r.mode + ':' + r.unit;
   if (rendered !== key) {
     rendered = key;
     document.title = S.board.unit.name + ' · Tasks';
-    if (r.mode === 'settings') renderSettings(); else if (r.mode === 'overview') renderUnitPage(); else renderBoardView();
+    if (r.mode === 'settings') renderSettings(); else if (r.mode === 'overview') renderUnitPage();
+    else if (r.mode === 'apps') renderApps({ unitId: r.unit }); else if (r.mode === 'team') renderUnitTeam(); else renderBoardView();
   }
-  if (r.task && r.mode !== 'settings' && r.mode !== 'overview') {
+  if (r.task && ['board', 'list'].includes(r.mode)) {
     if (S.panelTaskId !== r.task) openTask(r.task);
   } else {
     closePanel();
