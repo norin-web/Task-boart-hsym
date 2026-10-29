@@ -5,7 +5,7 @@
  */
 import Sortable from 'sortablejs';
 import { S, isSuper, isStaff, me, personById, unitById, appStatusById, prioById, REQUEST_TYPES, LS, plural, fmtDate, PALETTE, between, todayStr, relTime } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill, modal, field, toast, menu, closeMenu, confirmDlg, promptDlg } from '../ui.js';
+import { $, h, icon, avatar, topbar, showErr, fill, modal, field, toast, menu, closeMenu, confirmDlg, promptDlg, prioMark } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
@@ -63,7 +63,8 @@ export const statusPill = st => (st ? h('span', { class: 'st-pill', style: { '--
 /** Приоритет: цветная метка с названием (не только цветом). */
 /** Высокий приоритет — два верхних варианта (High, Critical); плашку показываем только им. */
 export const isHighPrio = id => { const i = S.priorityOptions.findIndex(o => o.id === id); return i >= 0 && i >= S.priorityOptions.length - 2; };
-export const prioTag = id => { const o = prioById(id); return o && h('span', { class: 'prio-tag', style: { '--pc': o.color }, title: 'Приоритет: ' + o.name }, o.name); };
+/** Приоритет — шевроном цвета варианта (как в Jira); пусто — ничего. */
+export const prioTag = id => { const i = S.priorityOptions.findIndex(o => o.id === id); return i < 0 ? null : prioMark(S.priorityOptions[i], i, S.priorityOptions.length, 15); };
 /** Этапы точками: готово — залито, в работе — кольцо, ждёт — штрих, не начато — серое; подпись — в title. */
 export const stageDots = stages => h('span', { class: 'stage-dots', 'aria-label': `Этапы: ${stages.filter(s => s.done).length} из ${stages.length} готово` },
   stages.map(s => h('span', { class: 'sd sd-' + stageState(s), title: `${s.title.split(' · ')[0]} — ${STAGE_STATE[stageState(s)].label}` })));
@@ -73,9 +74,13 @@ const fieldIcon = f => { const n = (f.id + ' ' + f.name).toLowerCase(); return /
 
 /** Тип запроса, этапы точками и прогресс. */
 function workSummary(r) {
+  // текущий этап: начатый, иначе первый незаблокированный; всё готово — релиз
+  const cur = r.stages.find(s => !s.done && !s.blocked && s.kind !== 'todo') || r.stages.find(s => !s.done && !s.blocked);
   return [
     h('span', { class: 'ap-req muted' }, REQUEST_TYPES[r.type] || 'Задача'),
-    r.stages.length ? h('span', { title: r.progress + '%' }, stageDots(r.stages)) : h('span', { class: 'muted' }, 'ждёт PM'),
+    r.stages.length
+      ? [h('b', { class: 'ap-stage' }, cur ? cur.title.split(' · ')[0] : 'Релиз'), h('span', { title: r.progress + '%' }, stageDots(r.stages))]
+      : h('span', { class: 'muted' }, 'ждёт PM'),
   ];
 }
 
@@ -295,10 +300,11 @@ export function appTable(apps, reload, sel, onPick, withUnit) {
       const req = a.requests.find(r => !r.done) || null;
       const pm = personById(appPm(a));
       const on = !!sel && sel.has(a.id);
-      return h('button', { class: 'ap-row' + (on ? ' picked' : ''), 'aria-pressed': sel ? String(on) : null, onclick: () => (sel ? onPick(a.id) : openAppPanel(a, reload)) },
+      const po = prioById(a.priority);
+      return h('button', { class: 'ap-row' + (on ? ' picked' : '') + (po ? ' has-prio' : ''), style: po ? { '--pc': po.color } : null, 'aria-pressed': sel ? String(on) : null, onclick: () => (sel ? onPick(a.id) : openAppPanel(a, reload)) },
         h('span', { class: 'ap-name' }, sel && h('span', { class: 'aud-check pick-box' }, on && icon('check', 13)), appIcon(a),
           h('span', { class: 'ap-names' },
-            h('span', { class: 'ap-title' }, h('b', null, a.name), a.isTest && h('span', { class: 'test-tag' }, 'тест'), isHighPrio(a.priority) && prioTag(a.priority)),
+            h('span', { class: 'ap-title' }, h('b', null, a.name), a.isTest && h('span', { class: 'test-tag' }, 'тест'), prioTag(a.priority)),
             (a.storeName || withUnit) && h('small', { class: 'muted ap-store-name', title: a.storeName ? 'В App Store: ' + a.storeName : '' },
               withUnit && unitById(a.unitId) && h('span', { class: 'unit-dot', style: { background: unitById(a.unitId).color, margin: 0 } }),
               withUnit && unitById(a.unitId) && unitById(a.unitId).name + (a.storeName ? ' · ' : ''), a.storeName))),

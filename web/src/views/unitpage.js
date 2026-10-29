@@ -3,12 +3,12 @@
  * Обзор: описание, цифры, что в работе и что требует внимания, ответственный и команда коротко.
  * Команда: люди юнита — роль, позиция, открытые задачи в юните; добавить участника — руководителям.
  */
-import { S, isSuper, isStaff, todayStr, ACCESS_LABELS, personById, deptById, taskDone, plural } from '../state.js';
+import { S, isSuper, isStaff, todayStr, ACCESS_LABELS, personById, deptById, taskDone, plural, columns, colColor, appStatusById } from '../state.js';
 import { $, h, icon, avatar, showErr, fill, menu, toast } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView, link } from '../router.js';
-import { openCreateApp, openNewAppTask, pmsOf } from './apps.js';
-import { attention, inProgress } from './ceo.js';
+import { openCreateApp, openNewAppTask, pmsOf, appIcon, appStatusCell, openAppPanel } from './apps.js';
+import { attention, inProgress, recent } from './ceo.js';
 import { unitHeader } from './unitnav.js';
 import { addMemberDialog } from './people.js';
 
@@ -30,7 +30,7 @@ export async function renderUnitPage() {
     S.apps = [...S.apps.filter(a => a.unitId !== u.id), ...apps.map(({ requests, active, ...a }) => a)];
     draw();
     const mine = x => x.app && x.app.unitId === u.id;
-    const ud = { ...d, attention: d.attention.filter(mine), inProgress: d.inProgress.filter(mine) };
+    const ud = { ...d, attention: d.attention.filter(mine), inProgress: d.inProgress.filter(mine), recent: d.recent.filter(mine) };
     const open = S.board.tasks.filter(t => !t.archived && !taskDone(t));
     const today = todayStr();
     const late = open.filter(t => t.dueDate && t.dueDate < today).length;
@@ -52,23 +52,62 @@ export async function renderUnitPage() {
         stat(late, 'просрочено', 'list', late ? 'danger' : ''),
         stat(S.board.members.length, 'в команде', 'team')),
       h('div', { class: 'home-grid' },
-        h('div', { class: 'home-col' }, inProgress(ud, load), attention(ud, load)),
-        h('div', { class: 'home-col' }, owner(u, load), teamBrief(u))));
+        h('div', { class: 'home-col' }, inProgress(ud, load), attention(ud, load), appsBrief(u, apps, load)),
+        h('div', { class: 'home-col' }, owner(u, load), tasksByColumn(u, open), teamBrief(u), recent(ud, load, { empty: 'За 30 дней статусы приложений юнита не менялись' }))));
   }
 
   load();
 }
 
-/** Команда коротко на обзоре: аватары и переход на вкладку «Команда». */
+/** Команда на обзоре: кто, позиция и сколько задач в работе; самые загруженные сверху. */
 function teamBrief(u) {
-  const list = S.board.members.map(m => personById(m.personId)).filter(Boolean);
+  const today = todayStr();
+  const rows = S.board.members.map(m => {
+    const p = personById(m.personId);
+    const t = p ? S.board.tasks.filter(x => !x.archived && !taskDone(x) && x.assigneeId === p.id) : [];
+    return p && { p, pos: (deptById(m.departmentId) || deptById(p.positionId) || {}).name || '', n: t.length, late: t.filter(x => x.dueDate && x.dueDate < today).length };
+  }).filter(Boolean).sort((a, b) => b.n - a.n || a.p.name.localeCompare(b.p.name, 'ru'));
   return h('section', null,
-    h('div', { class: 'section-head' }, h('h2', null, 'Команда', list.length > 0 && h('span', { class: 'muted sec-n' }, list.length)),
+    h('div', { class: 'section-head' }, h('h2', null, 'Команда', rows.length > 0 && h('span', { class: 'muted sec-n' }, rows.length)),
       link({ unit: u.id, mode: 'team' }, { class: 'btn ghost sm' }, 'Вся команда')),
-    h('div', { class: 'card-box owner-box' },
-      list.length
-        ? h('div', { class: 'team-brief' }, list.slice(0, 12).map(p => h('span', { title: p.name }, avatar(p, 'sm'))), list.length > 12 && h('span', { class: 'muted' }, '+' + (list.length - 12)))
-        : h('p', { class: 'muted', style: { margin: 0 } }, 'Команда не собрана')));
+    rows.length
+      ? h('div', { class: 'card-box team-list' }, rows.slice(0, 6).map(x => h('div', { class: 'team-row compact' },
+        avatar(x.p, 'sm'),
+        h('span', { class: 'team-who' }, h('b', null, x.p.name), h('small', { class: 'muted' }, x.pos || ACCESS_LABELS[x.p.access] || '')),
+        h('span', { class: 'team-load' + (x.late ? ' warn-text' : x.n ? '' : ' muted') }, x.n ? x.n + (x.late ? ` · ${x.late} просроч.` : '') : '—'))),
+        rows.length > 6 && link({ unit: u.id, mode: 'team' }, { class: 'rc-more link-btn' }, `Ещё ${rows.length - 6}`))
+      : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Команда не собрана')));
+}
+
+/** Задачи юнита по колонкам доски: полоса и цифры; клик — на вкладку «Задачи». */
+function tasksByColumn(u, open) {
+  const all = S.board.tasks.filter(t => !t.archived);
+  const cols = columns().map(c => ({ c, n: all.filter(t => t.status === c.id).length }));
+  const total = all.length;
+  return h('section', null,
+    h('div', { class: 'section-head' }, h('h2', null, 'Задачи', h('span', { class: 'muted sec-n' }, `${open.length} открыто`)),
+      link({ unit: u.id, mode: 'list' }, { class: 'btn ghost sm' }, 'Все задачи')),
+    total
+      ? h('div', { class: 'card-box col-sum' },
+        h('div', { class: 'col-sum-bar', 'aria-hidden': 'true' }, cols.filter(x => x.n).map(x => h('span', { style: { flex: x.n, background: colColor(x.c) } }))),
+        h('div', { class: 'col-sum-list' }, cols.map(x => h('span', { class: 'col-sum-item' + (x.n ? '' : ' zero') },
+          h('span', { class: 'dot', style: { background: colColor(x.c) } }), x.c.name, h('b', null, x.n)))))
+      : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Задач пока нет')));
+}
+
+/** Приложения юнита коротко: иконка, название, статус; клик — карточка. Все — на вкладке «Приложения». */
+function appsBrief(u, apps, reload) {
+  const LIMIT = 8;
+  return h('section', null,
+    h('div', { class: 'section-head' }, h('h2', null, 'Приложения', apps.length > 0 && h('span', { class: 'muted sec-n' }, apps.length)),
+      link({ unit: u.id, mode: 'apps' }, { class: 'btn ghost sm' }, 'Все приложения')),
+    apps.length
+      ? h('div', { class: 'card-box app-brief' }, apps.slice(0, LIMIT).map(a => h('button', { class: 'app-brief-row', onclick: () => openAppPanel(a, reload) },
+        appIcon(a, 'sm'),
+        h('span', { class: 'app-brief-name' }, h('b', null, a.name), a.storeName && h('small', { class: 'muted' }, a.storeName)),
+        appStatusCell(appStatusById(a.status), a))),
+        apps.length > LIMIT && link({ unit: u.id, mode: 'apps' }, { class: 'rc-more link-btn' }, `Ещё ${apps.length - LIMIT}`))
+      : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Приложений пока нет')));
 }
 
 /** Вкладка «Команда»: участники юнита — роль, позиция в юните, открытые и просроченные задачи здесь. */

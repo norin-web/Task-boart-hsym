@@ -1663,3 +1663,35 @@ a.rl-link:hover { background: var(--accent-soft); color: var(--accent-text); }
 .brand-ic.mono { background: currentColor; -webkit-mask: var(--brand) center / contain no-repeat; mask: var(--brand) center / contain no-repeat; }
 .af-ic, .lf-ic { display: inline-flex; align-items: center; justify-content: center; }
 .af-ic .brand-ic.mono, .lf-ic .brand-ic.mono { color: var(--text-2); }
+
+/* «Недавнее»: приложение и что произошло — двумя строками, ничего не обрезается в узкой колонке */
+.rc-two { display: grid; gap: 1px; white-space: normal; }
+.rc-two b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rc-what { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Обзор юнита: задачи по колонкам, приложения коротко, команда с загрузкой */
+.col-sum { padding: 12px 14px; display: grid; gap: 10px; }
+.col-sum-bar { display: flex; height: 8px; border-radius: 99px; overflow: hidden; background: var(--surface-2); gap: 2px; }
+.col-sum-list { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; }
+.col-sum-item { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); }
+.col-sum-item .dot { width: 8px; height: 8px; border-radius: 50%; }
+.col-sum-item b { color: var(--text); font-variant-numeric: tabular-nums; }
+.col-sum-item.zero { opacity: .55; }
+.app-brief { padding: 4px; display: grid; }
+.app-brief-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 7px 8px; border: 0; background: none; font: inherit; color: var(--text); text-align: left; border-radius: 8px; }
+.app-brief-row:hover { background: var(--surface-2); }
+.app-brief-row + .app-brief-row { border-top: 1px solid var(--border); }
+.app-brief-name { display: grid; min-width: 0; font-size: 13.5px; }
+.app-brief-name b, .app-brief-name small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-row.compact { padding: 7px 8px; grid-template-columns: auto minmax(0, 1fr) auto; }
+a.rc-more { text-decoration: none; }
+
+/* Приоритет как в Jira: шеврон цвета варианта и полоска во всю высоту слева у карточки */
+.prio-mark { display: inline-flex; align-items: center; flex: none; }
+.prio-mark svg { display: block; }
+.card.prio::before { top: -1px; bottom: -1px; left: -1px; width: 3px; border-radius: var(--r) 0 0 var(--r); }
+.ap-row.has-prio { box-shadow: inset 3px 0 0 var(--pc); }
+.ap-row.has-prio:hover { box-shadow: inset 3px 0 0 var(--pc), var(--shadow-sm); }
+/* Список приложений: название шире, «Сейчас в работе» — тип, текущий этап и точки этапов */
+.ap-row { grid-template-columns: minmax(200px, 1.8fr) minmax(120px, .7fr) minmax(200px, 1.4fr) minmax(90px, .5fr) 40px 16px; }
+.ap-stage { font-weight: 500; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

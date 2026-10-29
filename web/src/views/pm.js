@@ -52,7 +52,7 @@ function inbox(d, reload) {
     h('div', { class: 'card-box att-list' }, d.inbox.map(r => h('div', { class: 'ib-row' },
       r.app ? appIcon(r.app, 'xs') : h('span'),
       h('button', { class: 'link-btn ib-title', onclick: () => peekTask(r.unitId, r.id) }, h('b', null, r.app ? r.app.name : ''), h('span', { class: 'muted' }, (r.app ? ' · ' : '') + r.title)),
-      r.app && isHighPrio(r.app.priority) ? prioTag(r.app.priority) : h('span'),
+      (r.app && prioTag(r.app.priority)) || h('span'),
       r.dueDate && h('span', { class: 'muted ib-due' + (r.dueDate < todayStr() ? ' late' : '') }, icon('calendar', 12), fmtDate(r.dueDate)),
       h('button', {
         class: 'btn primary sm', onclick: () => openDecomposeDialog({ id: r.id, unitId: r.unitId, type: r.type, title: r.title, dueDate: r.dueDate }).then(ok => ok && reload()),

@@ -1,10 +1,10 @@
 import Sortable from 'sortablejs';
 import {
-  S, taskById, appById, personById, activeFields, missingFor, missingNext, priorityOf, byPriority, visibleLinkFields, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder,
+  S, taskById, appById, personById, activeFields, missingFor, missingNext, priorityOf, priorityField, byPriority, visibleLinkFields, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder,
   between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, relTime, unitById, emptyCounts, freshFilters, saveBoardView,
   activeDepts, deptById, KINDS, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS,
 } from '../state.js';
-import { $, h, icon, avatar, topbar, menu, closeMenu, modal, field, confirmDlg, promptDlg, toast, showErr, statusDot, fill } from '../ui.js';
+import { $, h, icon, avatar, topbar, menu, closeMenu, modal, field, confirmDlg, promptDlg, toast, showErr, statusDot, fill, prioMark } from '../ui.js';
 import { call, send } from '../api.js';
 import { navigate, link } from '../router.js';
 import { updateSidebarCounts, renderUnread } from './sidebar.js';
@@ -379,11 +379,13 @@ function taskCard(t, inLane) {
   const fields = activeFields();
   const chips = [
     !B.department.hidden && !inLane && deptChip(t.departmentId),
-    ...fields.filter(f => f.showOnCard).flatMap(f => fieldChip(f, t)),
+    ...fields.filter(f => f.showOnCard && f.role !== 'priority').flatMap(f => fieldChip(f, t)),  // приоритет — шевроном
   ].filter(Boolean);
   const person = !B.assignee.hidden && personById(t.assigneeId);
   const missing = missingNext(t);
   const prio = priorityOf(t);
+  const pf = priorityField();
+  const prioEl = prio && prioMark(prio.opt, (pf.options || []).indexOf(prio.opt), (pf.options || []).length, 15);
   const cl = t.checklist || [];
   const clDone = cl.filter(i => i.done).length;
   const due = !B.dueDate.hidden && dueInfo(t.dueDate, taskDone(t));
@@ -403,7 +405,7 @@ function taskCard(t, inLane) {
 
   return h('article', {
     class: 'card' + (t.archived ? ' archived' : '') + (taskDone(t) ? ' done' : '') + (t._temp ? ' temp' : '') + (canEditTask(t) ? '' : ' locked')
-      + (prio ? ' prio' + (prio.top ? ' prio-top' : '') : ''),
+      + (prio ? ' prio' : ''),
     style: prio ? { '--prio': prio.opt.color } : null, dataset: { id: t.id }, tabindex: '0',
     onclick: () => { if (!t._temp) navigate({ unit: S.board.unit.id, mode: S.route.mode, task: t.id }); },
     onkeydown: e => { if (e.key === 'Enter' && !t._temp) navigate({ unit: S.board.unit.id, mode: S.route.mode, task: t.id }); },
@@ -411,7 +413,6 @@ function taskCard(t, inLane) {
   },
   // Ключ задачи на доске не показываем — он в открытой карточке
   h('div', { class: 'card-top' },
-    prio && prio.top && h('span', { class: 'prio-ic', title: 'Приоритет: ' + prio.opt.name }, icon('prio', 14)),
     h('div', { class: 'card-title' }, t.title),
     missing.length > 0 && h('span', { class: 'warn-ic', title: 'Для следующей колонки заполните: ' + missing.map(f => f.name).join(', ') }, icon('alert', 13)),
     t.archived && h('span', { class: 'badge' }, 'архив'),
@@ -422,11 +423,13 @@ function taskCard(t, inLane) {
   // «↑ откуда»: родитель — запрос CEO у этапа, задача у подзадачи
   t.parent && h('div', { class: 'card-parent', title: t.parent.unit.name + ' · ' + t.parent.key }, icon('tree', 11), t.parent.title),
   // тип, «ждёт» (этап заблокирован), позиция, поля и аватар — одной строкой; срок, чеклист, подзадачи, ссылки — строкой ниже
-  (TASK_KINDS[t.kind] || waits.length > 0 || chips.length > 0 || (person && !foot.length)) && h('div', { class: 'chips card-row' },
+  (TASK_KINDS[t.kind] || waits.length > 0 || chips.length > 0 || ((person || prioEl) && !foot.length)) && h('div', { class: 'chips card-row' },
     TASK_KINDS[t.kind] && h('span', { class: 'kind-tag', style: { '--kc': TASK_KINDS[t.kind].color } }, TASK_KINDS[t.kind].short),
     waits.length > 0 && h('span', { class: 'wait-tag', title: 'Этап ждёт: ' + waits.join(', ') }, icon('lock', 11), 'ждёт'),
-    chips, !foot.length && person && [h('span', { class: 'spacer' }), avatar(person, 'sm')]),
-  foot.length > 0 && h('div', { class: 'card-foot' }, foot, h('span', { class: 'spacer' }), person && avatar(person, 'sm')));
+    chips, !foot.length && [h('span', { class: 'spacer' }), prioEl, person && avatar(person, 'sm')]),
+  foot.length > 0 && h('div', { class: 'card-foot' }, foot, h('span', { class: 'spacer' }), prioEl, person && avatar(person, 'sm')),
+  // нет ни строки чипов, ни низа — шеврон отдельной строкой
+  !foot.length && !(TASK_KINDS[t.kind] || waits.length > 0 || chips.length > 0 || person) && prioEl && h('div', { class: 'card-foot' }, h('span', { class: 'spacer' }), prioEl));
 }
 
 export function fieldChip(f, t) {

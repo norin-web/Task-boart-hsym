@@ -64,7 +64,7 @@ function section(title, hint, rows, line, actions) {
       ? h('div', { class: 'card-box att-list' }, rows.map(x => h('div', { class: 'rm-row' },
         x.app ? appIcon(x.app, 'sm') : h('span'),
         h('button', { class: 'link-btn rm-main', onclick: () => peekTask(x.unitId, x.id) },
-          h('span', { class: 'rm-title' }, h('b', null, x.app ? x.app.name : x.title), x.app && isHighPrio(x.app.priority) && prioTag(x.app.priority), x.app && x.app.isTest && h('span', { class: 'test-tag' }, 'тест')),
+          h('span', { class: 'rm-title' }, h('b', null, x.app ? x.app.name : x.title), x.app && prioTag(x.app.priority), x.app && x.app.isTest && h('span', { class: 'test-tag' }, 'тест')),
           line(x)),
         h('div', { class: 'rm-actions' }, actions(x), avatar(personById(x.assigneeId), 'sm')))))
       : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, hint)));

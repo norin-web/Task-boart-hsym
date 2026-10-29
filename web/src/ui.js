@@ -364,3 +364,42 @@ export function colorPicker(initial, { auto = false, autoColor = '', onChange } 
   draw();
   return { el, value: () => value };
 }
+
+/* ---------- приоритет: шевроны как в Jira ---------- */
+
+const PRIO_SHAPES = {
+  up2: 'M6 12.5l6-5.5 6 5.5 M6 18l6-5.5 6 5.5',
+  up: 'M6 15l6-6 6 6',
+  equal: 'M6 9.5h12 M6 14.5h12',
+  down: 'M6 9l6 6 6-6',
+  down2: 'M6 6l6 5.5 6-5.5 M6 11.5l6 5.5 6-5.5',
+};
+/** Форма по названию варианта (Low / Medium / High / Critical, по-русски тоже), иначе — по месту в списке. */
+function prioShape(name, i, n) {
+  const s = String(name || '').toLowerCase();
+  if (/lowest|минимал|очень низ/.test(s)) return 'down2';
+  if (/critical|highest|urgent|blocker|крит|срочн|блок/.test(s)) return 'up2';
+  if (/low|низ/.test(s)) return 'down';
+  if (/medium|normal|сред|обыч/.test(s)) return 'equal';
+  if (/high|выс/.test(s)) return 'up';
+  const k = n > 1 ? i / (n - 1) : 1;
+  return k >= .99 ? 'up2' : k > .5 ? 'up' : k >= .34 ? 'equal' : 'down';
+}
+/** Значок приоритета: шеврон(ы) цветом варианта; opt — { name, color }, i / n — место в списке вариантов. */
+export function prioMark(opt, i, n, size = 16) {
+  if (!opt) return null;
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', size);
+  svg.setAttribute('height', size);
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2.6');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', PRIO_SHAPES[prioShape(opt.name, i, n)]);
+  svg.append(path);
+  return h('span', { class: 'prio-mark', style: { color: opt.color }, title: 'Приоритет: ' + opt.name, role: 'img', 'aria-label': 'Приоритет: ' + opt.name }, svg);
+}

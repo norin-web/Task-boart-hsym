@@ -26,7 +26,7 @@ export function focusBlock(d) {
       return h('button', { class: 'fc-row', onclick: () => peekTask(t.unitId, t.id) },
         t.app ? appIcon(t.app, 'xs') : h('span'),
         h('span', { class: 'fc-main' }, h('span', { class: 'fc-title' }, t.title), h('span', { class: 'muted fc-sub' }, (t.app ? t.app.name + ' · ' : '') + t.statusName)),
-        isHighPrio(t.priority) ? prioTag(t.priority) : h('span'),
+        prioTag(t.priority) || h('span'),
         h('span', { class: 'fc-when ' + r.cls }, t.reason === 'overdue' ? 'срок ' + fmtDate(t.dueDate) : r.label));
     })) : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Горящего нет')));
 }
