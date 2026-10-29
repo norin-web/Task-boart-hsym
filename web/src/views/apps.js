@@ -424,9 +424,7 @@ export function openAppPanel(a, onChange) {
             })
             : h('p', { class: 'muted', style: { margin: 0 } }, 'Открытых работ нет'))),
       info: infoBlock(a, manage, ceo, save, draw),
-      quick: S.appFields.length > 0 && h('section', null,
-        h('div', { class: 'up-head' }, h('h3', null, 'Быстрый доступ')),
-        h('div', { class: 'af-list' }, S.appFields.map(f => infoRow(a, f, manage, v => (f === storeField() && v ? fromStore(v, { info: { [f.id]: v } }) : save({ info: { [f.id]: v } })))))),
+      quick: quickBlock(a, manage, ceo, save, fromStore, draw),
       tasks: h('section', null,
         h('div', { class: 'up-head' }, h('h3', null, 'Задачи'),
           ceo && h('button', { class: 'btn ghost sm', onclick: () => openTaskPool(a, refresh) }, icon('plus', 14), 'Поставить задачи')),
@@ -627,9 +625,60 @@ function openTaskPool(a, onDone) {
 }
 
 /** Поле быстрого доступа: значение (ссылка открывается в новой вкладке) и правка на месте для CEO и PM юнита. */
+/**
+ * «Быстрый доступ»: общие поля (S.appFields) и свои поля приложения (ownFields). Состав полей — в настройках (шестерёнка в заголовке):
+ * общие правит CEO, свои — CEO и PM юнита. В самой карточке — значения: клик по строке — правка, справа — скопировать.
+ */
+function quickBlock(a, manage, ceo, save, fromStore, redraw) {
+  const own = a.ownFields || [];
+  if (!S.appFields.length && !own.length && !manage) return null;
+  const putOwn = next => { a.ownFields = next; redraw(); save({ ownFields: next }); };
+  return h('section', null,
+    h('div', { class: 'up-head' }, h('h3', null, 'Быстрый доступ'),
+      manage && h('button', { class: 'icon-btn sm', title: 'Настроить поля', onclick: () => openQuickFieldsSettings(a, ceo, putOwn, redraw) }, icon('settings', 15))),
+    S.appFields.length || own.length
+      ? h('div', { class: 'af-list' },
+        S.appFields.map(f => infoRow(a, f, manage, v => (f === storeField() && v ? fromStore(v, { info: { [f.id]: v } }) : save({ info: { [f.id]: v } })))),
+        own.map(f => infoRow(a, f, manage, v => putOwn(own.map(x => (x.id === f.id ? { ...x, value: v } : x))), { value: f.value })))
+      : h('p', { class: 'muted', style: { margin: 0 } }, 'Полей пока нет — добавьте в настройках (шестерёнка справа).'));
+}
+
+/** Настройки полей «Быстрого доступа»: общие для всех приложений (CEO) и свои у этого приложения. Перетаскивание — порядок. */
+function openQuickFieldsSettings(a, ceo, putOwn, redraw) {
+  const common = S.appFields.map(x => ({ ...x }));
+  const own = (a.ownFields || []).map(x => ({ ...x }));
+  // строка поля: название, тип, удалить; ручка порядка — у listEditor
+  const editor = list => listEditor(list, (x, i, draw) => [
+    h('input', { class: 'inp', value: x.name, maxlength: 40, placeholder: 'Например, RevenueCat', 'aria-label': 'Название поля', oninput: e => { x.name = e.target.value; } }),
+    h('select', { class: 'inp qf-kind', 'aria-label': 'Тип поля', onchange: e => { x.kind = e.target.value; } },
+      [['link', 'Ссылка'], ['text', 'Текст']].map(([k, label]) => h('option', { value: k, selected: k === x.kind }, label))),
+    h('button', { class: 'icon-btn sm', title: 'Удалить поле (значения сотрутся)', onclick: () => { list.splice(i, 1); draw(); } }, icon('x', 14)),
+  ], () => list.push({ id: '', name: '', kind: 'link', value: '' }), 'Поле');
+  modal({
+    title: 'Быстрый доступ · поля',
+    wide: true,
+    body: [
+      h('h3', { class: 'qf-h' }, 'Для всех приложений'),
+      ceo ? editor(common) : h('p', { class: 'muted' }, common.map(f => f.name).join(', ') || 'Нет', ' — меняет CEO'),
+      h('h3', { class: 'qf-h' }, 'Только у «' + a.name + '»'),
+      editor(own),
+    ],
+    actions: [{ label: 'Отмена' }, {
+      label: 'Сохранить', primary: true,
+      action: async close => {
+        if (ceo) S.appFields = await send('saveAppFields', { fields: common.filter(x => x.name.trim()) });
+        putOwn(own.filter(x => x.name.trim()));
+        close();
+        toast('Поля сохранены');
+        redraw();
+      },
+    }],
+  });
+}
+
 /** Строка «Быстрого доступа»: ссылка открывается, клик по строке — правка на месте, справа — скопировать значение. */
-function infoRow(a, f, editable, onSave) {
-  const v = a.info[f.id] || '';
+function infoRow(a, f, editable, onSave, { value } = {}) {
+  const v = value !== undefined ? value : a.info[f.id] || '';
   const row = h('div', { class: 'af-row' + (editable ? ' editable' : '') });
   const copy = e => {
     e.stopPropagation();
@@ -642,7 +691,8 @@ function infoRow(a, f, editable, onSave) {
       h('span', { class: 'af-name' }, f.name),
       v ? (f.kind === 'link' ? h('a', { class: 'af-val', href: v, target: '_blank', rel: 'noopener', title: v, onclick: e => e.stopPropagation() }, v.replace(/^https?:\/\//, ''))
         : h('span', { class: 'af-val' }, v)) : h('span', { class: 'af-val muted' }, editable ? (f.kind === 'link' ? 'Добавить ссылку' : 'Добавить') : '—'),
-      v ? h('button', { class: 'icon-btn sm', title: 'Скопировать', 'aria-label': 'Скопировать ' + f.name, onclick: copy }, icon('copy', 13)) : h('span'));
+      h('span', { class: 'af-acts' },
+        v && h('button', { class: 'icon-btn sm', title: 'Скопировать', 'aria-label': 'Скопировать ' + f.name, onclick: copy }, icon('copy', 13))));
     row.onclick = editable ? edit : null;
     row.title = editable ? 'Нажмите, чтобы изменить' : '';
   };

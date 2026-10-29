@@ -268,7 +268,7 @@ const iconUrl = v => { const s = String(v || '').trim().slice(0, 500); return /^
 const appOut = r => ({
   id: r.id, unitId: r.unit_id, name: r.name, color: r.color || '', status: r.status, info: json(r.info, {}) || {},
   priority: r.priority || '', statusAt: r.status_at || '', iconUrl: r.icon_url || '', storeName: r.store_name || '',
-  storeOk: r.store_ok == null ? null : !!r.store_ok, storeCheckedAt: r.store_checked_at || '', checks: cleanChecks(r.checks),
+  storeOk: r.store_ok == null ? null : !!r.store_ok, storeCheckedAt: r.store_checked_at || '', checks: cleanChecks(r.checks), ownFields: cleanOwnFields(r.own_fields),
   order: r.ord, archived: !!r.archived, isTest: !!r.is_test, createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at,
 });
 
@@ -326,6 +326,20 @@ function cleanChecks(v) {
       return { id, name, done: !!x.done };
     }).filter(Boolean),
   };
+}
+
+/** Свои поля «Быстрого доступа» у приложения: { id, name, kind, value }. */
+function cleanOwnFields(v) {
+  const ids = new Set();
+  return (Array.isArray(json(v, [])) ? json(v, []) : []).slice(0, 30).map(x => {
+    const name = str(x && x.name, 40);
+    if (!name) return null;
+    let id = /^[\w-]{1,40}$/.test((x && x.id) || '') ? x.id : uid('of').toLowerCase();
+    if (ids.has(id)) id = uid('of').toLowerCase();
+    ids.add(id);
+    const kind = x.kind === 'text' ? 'text' : 'link';
+    return { id, name, kind, value: kind === 'link' ? linkUrl(x.value) : str(x.value, 500) };
+  }).filter(Boolean);
 }
 
 /** Статусы приложения: { id, name, color, kind }, хотя бы один. */
@@ -1595,6 +1609,7 @@ export function createBackend(db, opts = {}) {
       if ('iconUrl' in p) upd.icon_url = iconUrl(p.iconUrl);
       if ('storeName' in p) upd.store_name = str(p.storeName, 200);
       if ('checks' in p) upd.checks = cleanChecks(p.checks);
+      if ('ownFields' in p) upd.own_fields = cleanOwnFields(p.ownFields);
       if ('order' in p && Number.isFinite(Number(p.order))) upd.ord = Number(p.order);
       if ('unitId' in p && p.unitId !== a.unit_id) upd.unit_id = (await findUnit(p.unitId)).id;
       if ('info' in p) {

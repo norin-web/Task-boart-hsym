@@ -539,3 +539,13 @@ test('Info приложения: общие пункты (CEO), отметки �
   const boot = await api.as(ceo, () => api('bootstrap', {}));
   assert.equal(boot.appInfoItems.length, 2);
 });
+
+test('Быстрый доступ: свои поля приложения', async () => {
+  const api = await setup();
+  const { ceo, pm, ios, gold } = await studio(api);
+  const { app } = await api.as(ceo, () => api('createApp', { name: 'A', unitId: gold.id, noRequest: true }));
+  assert.deepEqual(app.ownFields, []);
+  const upd = await api.as(pm, () => api('updateApp', { id: app.id, ownFields: [{ name: 'RevenueCat', kind: 'link', value: 'app.revenuecat.com/x' }, { name: 'Bundle', kind: 'text', value: 'com.x.a' }, { name: '' }] }));
+  assert.deepEqual(upd.ownFields.map(x => [x.name, x.kind, x.value]), [['RevenueCat', 'link', 'https://app.revenuecat.com/x'], ['Bundle', 'text', 'com.x.a']]);
+  await api.as(ios, () => assert.rejects(() => api('updateApp', { id: app.id, ownFields: [] })));
+});

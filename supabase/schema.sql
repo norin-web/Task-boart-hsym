@@ -472,6 +472,8 @@ alter table apps add column if not exists store_ok boolean;
 alter table apps add column if not exists store_checked_at text not null default '';
 -- Info приложения: отметки общих пунктов (app_settings.appInfoItems) и свои пункты — { done: [id], own: [{ id, name, done }] }
 alter table apps add column if not exists checks jsonb not null default '{}';
+-- Свои поля «Быстрого доступа» у приложения (общие — app_settings.appFields): [{ id, name, kind: link | text, value }]
+alter table apps add column if not exists own_fields jsonb not null default '[]';
 alter table apps add column if not exists status_at text not null default '';
 
 -- Задачи 2.0: приложение; запрос CEO (kind request, request_type new_app / update / other);
