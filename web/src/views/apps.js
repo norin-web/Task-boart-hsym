@@ -11,6 +11,7 @@ import { currentView } from '../router.js';
 import { peekTask } from './task.js';
 import { fillDemo } from './home.js';
 import { mode } from '../data.js';
+import appStoreSvg from '../assets/app-store.svg';  // thesvg.org/icons/app-store
 
 const units = () => S.units.filter(u => !u.archived).sort((a, b) => (a.order || 0) - (b.order || 0));
 export const pmsOf = unitId => ((unitById(unitId) || {}).members || []).map(personById).filter(p => p && p.active && p.access === 'moderator');
@@ -50,6 +51,10 @@ export async function storeLookup(url) {
     return x ? { name: x.trackName || '', iconUrl: x.artworkUrl512 || x.artworkUrl100 || '' } : null;
   } catch { return null; }
 }
+/** Приложение в сторе — значок и подпись App Store вместо статуса. */
+export const storeBadge = () => h('span', { class: 'store-badge', title: 'В App Store' }, h('img', { src: appStoreSvg, alt: '', width: 18, height: 18 }), 'App Store');
+/** Статус в списке: «в сторе» — App Store, остальное — цветная плашка. */
+export const appStatusCell = st => (st && st.kind === 'live' ? storeBadge() : statusPill(st));
 export const statusPill = st => (st ? h('span', { class: 'st-pill', style: { '--sc': st.color } }, h('span', { class: 'dot' }), st.name) : h('span', { class: 'muted' }, '—'));
 /** Приоритет: цветная метка с названием (не только цветом). */
 /** Высокий приоритет — два верхних варианта (High, Critical); плашку показываем только им. */
@@ -84,11 +89,12 @@ export async function renderApps() {
   };
   try { await load(); } catch (e) { return showErr(e); }
   if (currentView() !== 'apps') return;
+  setTimeout(() => fillFromStore(apps, () => currentView() === 'apps' && drawList()), 0);
 
   // Только список: приложения по юнитам в сворачиваемых блоках, поиск по названию сверху
   let q = '';
   // Фильтры: статус, менеджер (PM), давность работы; свои наборы — в профиле (prefs.appFilters)
-  const f = { statuses: [], pms: [], age: 0, ...LS.get('appsFilter', {}) };
+  const f = { statuses: [], pms: [], age: 0, workTop: true, ...LS.get('appsFilter', {}) };
   const saveF = () => LS.set('appsFilter', f);
   const active = () => f.statuses.length + f.pms.length + (f.age ? 1 : 0);
   const chips = h('div', { class: 'feed-filters apps-chips' });
@@ -102,7 +108,7 @@ export async function renderApps() {
     if (p) p.prefs = { ...(p.prefs || {}), appFilters: list };
     send('setMyPrefs', { personId: S.meId, prefs: { appFilters: list } }).catch(showErr);
   };
-  const apply = next => { Object.assign(f, { statuses: [], pms: [], age: 0 }, next); saveF(); drawList(); };
+  const apply = next => { Object.assign(f, { statuses: [], pms: [], age: 0 }, next); saveF(); drawList(); };  // вид (workTop) фильтр не сбрасывает
   const check = (on, label, dot, onclick) => h('button', {
     class: 'menu-item aud-item' + (on ? ' on' : ''), role: 'menuitemcheckbox', 'aria-checked': String(on),
     onclick: e => { e.stopPropagation(); onclick(); },
@@ -121,6 +127,9 @@ export async function renderApps() {
       h('div', { class: 'menu-sep' }),
       h('div', { class: 'menu-label' }, 'Менеджер'),
       S.people.filter(p => p.active && p.access === 'moderator').map(p => check(f.pms.includes(p.id), p.name, avatar(p, 'sm'), () => toggle('pms', p.id))),
+      h('div', { class: 'menu-sep' }),
+      h('div', { class: 'menu-label' }, 'Вид'),
+      check(f.workTop, 'В работе — отдельно сверху', null, () => { f.workTop = !f.workTop; saveF(); drawList(); paint(); }),
       h('div', { class: 'menu-sep' }),
       h('div', { class: 'menu-label' }, 'Не трогали'),
       [[0, 'Неважно'], [7, 'Больше недели'], [14, 'Больше 2 недель'], [30, 'Больше месяца']].map(([d, label]) =>
@@ -175,11 +184,21 @@ export async function renderApps() {
   const drawList = () => {
     drawFilters();
     if (!apps.length) return fill(body, emptyApps(reload));
-    const found = apps.filter(a => (!q || a.name.toLowerCase().includes(q)) && passes(a));
+    const found = apps.filter(a => (!q || a.name.toLowerCase().includes(q) || (a.storeName || '').toLowerCase().includes(q)) && passes(a));
+    // в работе (есть открытый запрос) — отдельным разделом сверху, из юнитов ниже убираются
+    const work = f.workTop ? found.filter(a => a.active > 0) : [];
+    const rest = f.workTop ? found.filter(a => !(a.active > 0)) : found;
     const groups = [...units(), { id: '', name: 'Без юнита', color: 'var(--border-strong)' }]
-      .map(u => ({ u, list: found.filter(a => (a.unitId || '') === u.id || (!u.id && !unitById(a.unitId))) }))
+      .map(u => ({ u, list: rest.filter(a => (a.unitId || '') === u.id || (!u.id && !unitById(a.unitId))) }))
       .filter(g => g.list.length);
-    fill(body, sel && pickBar(found), chips, groups.length ? [appHead(), ...groups.map(({ u, list }) => {
+    const workOpen = !!q || !collapsed.has('__work');
+    fill(body, sel && pickBar(found), chips, groups.length || work.length ? [appHead(),
+      work.length > 0 && h('section', { class: 'ap-group ap-work-group' + (workOpen ? ' open' : '') },
+        h('button', { class: 'ap-group-head', 'aria-expanded': String(workOpen), onclick: () => toggle('__work') },
+          h('span', { class: 'ap-chev' }, icon('chevron', 14)), icon('progress', 14), h('b', null, 'В работе'),
+          h('span', { class: 'muted' }, work.length)),
+        workOpen && appTable(work, reload, sel, pick, true)),
+      ...groups.map(({ u, list }) => {
       const open = !!q || active() > 0 || !collapsed.has(u.id);
       return h('section', { class: 'ap-group' + (open ? ' open' : '') },
         h('button', { class: 'ap-group-head', 'aria-expanded': String(open), onclick: () => toggle(u.id) },
@@ -235,8 +254,8 @@ export const appHead = () => h('div', { class: 'ap-row ap-head', 'aria-hidden': 
 /** Менеджер приложения: PM открытой задачи, иначе PM юнита. */
 export const appPm = a => { const req = (a.requests || []).find(r => !r.done); return (req && req.assigneeId) || ((pmsOf(a.unitId)[0] || {}).id) || ''; };
 
-/** sel — режим выбора (Set id): клик по строке отмечает её вместо открытия карточки. */
-export function appTable(apps, reload, sel, onPick) {
+/** sel — режим выбора (Set id): клик по строке отмечает её вместо открытия карточки; withUnit — показать юнит (раздел «В работе»). */
+export function appTable(apps, reload, sel, onPick, withUnit) {
   const rank = id => S.priorityOptions.findIndex(o => o.id === id);
   return h('div', { class: 'ap-list' + (sel ? ' picking' : '') },
     [...apps].sort((a, b) => rank(b.priority) - rank(a.priority) || (a.order || 0) - (b.order || 0)).map(a => {
@@ -245,8 +264,13 @@ export function appTable(apps, reload, sel, onPick) {
       const pm = personById(appPm(a));
       const on = !!sel && sel.has(a.id);
       return h('button', { class: 'ap-row' + (on ? ' picked' : ''), 'aria-pressed': sel ? String(on) : null, onclick: () => (sel ? onPick(a.id) : openAppPanel(a, reload)) },
-        h('span', { class: 'ap-name' }, sel && h('span', { class: 'aud-check pick-box' }, on && icon('check', 13)), appIcon(a), h('b', null, a.name), a.isTest && h('span', { class: 'test-tag' }, 'тест'), isHighPrio(a.priority) && prioTag(a.priority)),
-        h('span', null, statusPill(st)),
+        h('span', { class: 'ap-name' }, sel && h('span', { class: 'aud-check pick-box' }, on && icon('check', 13)), appIcon(a),
+          h('span', { class: 'ap-names' },
+            h('span', { class: 'ap-title' }, h('b', null, a.name), a.isTest && h('span', { class: 'test-tag' }, 'тест'), isHighPrio(a.priority) && prioTag(a.priority)),
+            (a.storeName || withUnit) && h('small', { class: 'muted ap-store-name', title: a.storeName ? 'В App Store: ' + a.storeName : '' },
+              withUnit && unitById(a.unitId) && h('span', { class: 'unit-dot', style: { background: unitById(a.unitId).color, margin: 0 } }),
+              withUnit && unitById(a.unitId) && unitById(a.unitId).name + (a.storeName ? ' · ' : ''), a.storeName))),
+        h('span', null, appStatusCell(st)),
         h('span', { class: 'ap-work' }, req ? workSummary(req) : h('span', { class: 'muted' }, '—')),
         h('span', { class: 'muted ap-upd', title: a.lastActivity ? fmtDate(a.lastActivity.slice(0, 10)) : '' }, a.lastActivity ? relTime(a.lastActivity) : '—'),
         h('span', null, pm ? avatar(pm, 'sm') : h('span', { class: 'muted' }, '—')),
@@ -390,7 +414,7 @@ export function openAppPanel(a, onChange) {
   };
   const panel = h('aside', { class: 'panel unit-panel' + (appCardCenter() ? ' center' : ''), role: 'dialog', 'aria-label': a.name });
   const head = () => h('div', { class: 'panel-head' },
-    appIcon(a), h('b', null, a.name), a.isTest && h('span', { class: 'test-tag' }, 'тест'), h('span', { class: 'spacer' }),
+    appIcon(a), h('b', null, a.name), a.storeName && h('span', { class: 'muted', title: 'Название в App Store' }, a.storeName), a.isTest && h('span', { class: 'test-tag' }, 'тест'), h('span', { class: 'spacer' }),
     h('button', {
       class: 'icon-btn', title: appCardCenter() ? 'Открывать справа' : 'Открывать по центру',
       onclick: () => { LS.set('cardMode', appCardCenter() ? 'side' : 'center'); panel.classList.toggle('center', appCardCenter()); backdrop.classList.toggle('center', appCardCenter()); fill(headBox, head()); },
@@ -615,14 +639,15 @@ export function openCreateApp(onDone, unitId) {
   const list = unitId ? units().filter(u => u.id === unitId) : units();
   const name = h('input', { class: 'inp', maxlength: 120, placeholder: 'Например, Sleep Sounds' });
   // ссылка на App Store (если приложение уже в сторе) — подтягивает название и иконку
-  let iconUrl = '';
+  let iconUrl = '', storeName = '';
   const preview = h('span', { class: 'store-preview' });
   const store = h('input', { class: 'inp', type: 'url', placeholder: 'https://apps.apple.com/…/id123456789' });
   const pull = async () => {
     const info = await storeLookup(store.value);
     if (!info) { fill(preview); iconUrl = ''; return; }
     iconUrl = info.iconUrl;
-    if (info.name) name.value = info.name;
+    storeName = info.name;
+    if (info.name && !name.value.trim()) name.value = info.name;
     fill(preview, info.iconUrl && h('img', { class: 'uc-icon app-img sm', src: info.iconUrl, alt: '' }), h('span', { class: 'muted' }, 'из App Store'));
   };
   store.addEventListener('change', pull);
@@ -646,7 +671,7 @@ export function openCreateApp(onDone, unitId) {
       label: 'Создать', primary: true,
       action: async close => {
         if (!name.value.trim()) { name.focus(); return; }
-        await send('createApp', { name: name.value, unitId: unit.value, pmId: pm.el.value, dueDate: due.value, priority: prio.value, description: desc.value, storeUrl: store.value.trim(), iconUrl });
+        await send('createApp', { name: name.value, unitId: unit.value, pmId: pm.el.value, dueDate: due.value, priority: prio.value, description: desc.value, storeUrl: store.value.trim(), iconUrl, storeName });
         close();
         toast(`«${name.value.trim()}» создано — задача ушла PM`);
         if (onDone) onDone();
@@ -667,6 +692,30 @@ export async function deleteAppsDlg(list) {
     toast(`Удалено: ${r.apps} ${plural(r.apps, ['приложение', 'приложения', 'приложений'])}` + (r.tasks ? ` и ${r.tasks} ${plural(r.tasks, ['задача', 'задачи', 'задач'])}` : ''));
     return true;
   } catch (e) { showErr(e); return false; }
+}
+
+/**
+ * Дозаполнить название в App Store и иконку у приложений со ссылкой на стор (добавленных раньше, без них).
+ * CEO и PM сохраняют в базу, остальным — только на экране. Не найденные в сторе за сессию повторно не ищем.
+ */
+const storeMiss = new Set();
+async function fillFromStore(apps, redraw) {
+  const sf = storeField();
+  if (!sf) return;
+  const todo = apps.filter(a => a.info && a.info[sf.id] && (!a.storeName || !a.iconUrl) && !storeMiss.has(a.id));
+  for (let i = 0; i < todo.length; i += 6) {
+    await Promise.all(todo.slice(i, i + 6).map(async a => {
+      const x = await storeLookup(a.info[sf.id]);
+      if (!x) { storeMiss.add(a.id); return; }
+      const patch = {};
+      if (!a.storeName && x.name) patch.storeName = x.name;
+      if (!a.iconUrl && x.iconUrl) patch.iconUrl = x.iconUrl;
+      if (!Object.keys(patch).length) { storeMiss.add(a.id); return; }
+      Object.assign(a, patch);
+      if (isStaff()) await send('updateApp', { id: a.id, ...patch }).catch(() => storeMiss.add(a.id));
+    }));
+    redraw();
+  }
 }
 
 /** id приложения в App Store из ссылки (…/id123456789). */
@@ -713,7 +762,7 @@ export function openImportApps(onDone) {
         const icons = await Promise.all(rows.map(x => (x.url ? storeLookup(x.url) : null)));
         let done = 0;
         for (const [i, x] of rows.entries()) {
-          await send('createApp', { name: x.name, unitId: unit.value, status: status.value, noRequest: true, storeUrl: x.url, iconUrl: (icons[i] && icons[i].iconUrl) || '' });
+          await send('createApp', { name: x.name, unitId: unit.value, status: status.value, noRequest: true, storeUrl: x.url, iconUrl: (icons[i] && icons[i].iconUrl) || '', storeName: (icons[i] && icons[i].name) || '' });
           done++;
           known.add(storeId(x.url));
         }

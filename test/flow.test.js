@@ -75,8 +75,10 @@ test('New App: CEO → PM юнита → этапы по флоу → блоки
   // создаёт приложения только CEO
   await api.as(pm, () => assert.rejects(() => api('createApp', { name: 'x', unitId: gold.id }), forbidden));
   // импорт уже вышедшего приложения: свой статус, без запроса PM
-  const imported = await api.as(ceo, () => api('createApp', { name: 'Old App', unitId: gold.id, status: 'live', noRequest: true, storeUrl: 'https://apps.apple.com/app/id6470798112' }));
+  const imported = await api.as(ceo, () => api('createApp', { name: 'Old App', unitId: gold.id, status: 'live', noRequest: true, storeUrl: 'https://apps.apple.com/app/id6470798112', storeName: 'Remote for Roku' }));
   assert.equal(imported.app.status, 'live');
+  assert.equal(imported.app.storeName, 'Remote for Roku');
+  assert.equal((await api.as(ceo, () => api('updateApp', { id: imported.app.id, storeName: 'Roku TV Remote' }))).storeName, 'Roku TV Remote');
   assert.equal(imported.request, null);
   await api.as(ceo, () => api('updateApp', { id: imported.app.id, archived: true }));
 

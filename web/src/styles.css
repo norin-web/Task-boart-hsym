@@ -1527,3 +1527,12 @@ a.rl-link:hover { background: var(--accent-soft); color: var(--accent-text); }
 .ap-row .pick-box { flex: none; }
 .ap-row.picked { border-color: var(--accent); background: var(--accent-soft); }
 .ap-row.picked .aud-check { background: var(--accent); border-color: var(--accent); }
+
+/* Приложения: название в App Store под своим, значок App Store, раздел «В работе» */
+.ap-names { display: grid; gap: 1px; min-width: 0; }
+.ap-title { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.ap-title b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.ap-store-name { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.store-badge { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 500; color: var(--text-2); white-space: nowrap; }
+.store-badge img { border-radius: 5px; flex: none; }
+.ap-work-group .ap-group-head > .i { color: var(--st-progress); }

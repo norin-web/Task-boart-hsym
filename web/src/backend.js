@@ -267,7 +267,7 @@ function cleanStages(list) {
 const iconUrl = v => { const s = String(v || '').trim().slice(0, 500); return /^https:\/\/[\w.-]+\.mzstatic\.com\//.test(s) ? s : ''; };
 const appOut = r => ({
   id: r.id, unitId: r.unit_id, name: r.name, color: r.color || '', status: r.status, info: json(r.info, {}) || {},
-  priority: r.priority || '', statusAt: r.status_at || '', iconUrl: r.icon_url || '',
+  priority: r.priority || '', statusAt: r.status_at || '', iconUrl: r.icon_url || '', storeName: r.store_name || '',
   order: r.ord, archived: !!r.archived, isTest: !!r.is_test, createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at,
 });
 
@@ -1493,7 +1493,7 @@ export function createBackend(db, opts = {}) {
         id: uid('app'), unit_id: unit.id, name: req(str(p.name, 120), 'Название'), color: color(p.color, PALETTE[Math.floor(Math.random() * PALETTE.length)]),
         status: (statuses.find(x => x.id === p.status) || statuses.find(x => x.kind === 'dev') || statuses[0]).id, info: {}, ord: (await maxOrd('apps', { unit_id: unit.id })) + 1,
         archived: false, is_test: !!p.test, created_by: actor(ctx), created_at: ts, updated_at: ts,
-        priority: await validPriority(p.priority), status_at: ts, icon_url: iconUrl(p.iconUrl),
+        priority: await validPriority(p.priority), status_at: ts, icon_url: iconUrl(p.iconUrl), store_name: str(p.storeName, 200),
       };
       // ссылка на стор — сразу в поле «App Store», если оно есть
       const store = p.storeUrl && (await appFields()).find(f => f.kind === 'link' && /app ?store/i.test(f.name) && !/connect/i.test(f.name));
@@ -1534,6 +1534,7 @@ export function createBackend(db, opts = {}) {
       }
       if ('priority' in p) upd.priority = await validPriority(p.priority);
       if ('iconUrl' in p) upd.icon_url = iconUrl(p.iconUrl);
+      if ('storeName' in p) upd.store_name = str(p.storeName, 200);
       if ('order' in p && Number.isFinite(Number(p.order))) upd.ord = Number(p.order);
       if ('unitId' in p && p.unitId !== a.unit_id) upd.unit_id = (await findUnit(p.unitId)).id;
       if ('info' in p) {
