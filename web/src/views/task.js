@@ -11,6 +11,7 @@ import { openCreateUnit } from './units.js';
 import { activityText } from './feed.js';
 import { readNote } from './home.js';
 import { releaseBlock } from './release.js';
+import { brandIcon, brandOf } from './brand.js';
 
 /* ================= Панель задачи ================= */
 
@@ -266,7 +267,7 @@ function linksBlock(t, editable) {
     const url = links[f.id] || '';
     const el = h('div', { class: 'link-row' });
     const view = () => fill(el,
-      h('span', { class: 'lf-ic' }, icon(f.kind === 'link' ? 'link' : f.kind, 15)),
+      h('span', { class: 'lf-ic' }, brandIcon(brandOf(f.name, f.kind, url), 15, f.kind === 'link' ? 'link' : f.kind)),
       h('span', { class: 'link-name' }, f.name),
       url
         ? h('a', { class: 'link-url', href: safeUrl(url), target: '_blank', rel: 'noopener noreferrer', title: url }, url.replace(/^https?:\/\/(www\.)?/, ''))
@@ -289,7 +290,7 @@ function linksBlock(t, editable) {
         if (e.key === 'Enter') { e.preventDefault(); save(); }
         if (e.key === 'Escape') { e.stopPropagation(); view(); }
       });
-      fill(el, h('span', { class: 'lf-ic' }, icon(f.kind === 'link' ? 'link' : f.kind, 15)), h('span', { class: 'link-name' }, f.name), inp,
+      fill(el, h('span', { class: 'lf-ic' }, brandIcon(brandOf(f.name, f.kind, url), 15, f.kind === 'link' ? 'link' : f.kind)), h('span', { class: 'link-name' }, f.name), inp,
         h('button', { class: 'btn primary sm', onclick: save }, 'OK'),
         h('button', { class: 'btn ghost sm', onclick: view }, 'Отмена'));
       inp.focus();
@@ -790,7 +791,7 @@ export function openCreateTask(opts = {}) {
     const fields = visibleLinkFields();
     fill(linksBox, fields.length > 0 && h('div', { class: 'field', style: { marginTop: '14px' } }, h('label', null, 'Ссылки'),
       h('div', { class: 'links' }, fields.map(f => h('div', { class: 'link-row' },
-        h('span', { class: 'lf-ic' }, icon(f.kind === 'link' ? 'link' : f.kind, 15)), h('span', { class: 'link-name' }, f.name),
+        h('span', { class: 'lf-ic' }, brandIcon(brandOf(f.name, f.kind), 15, f.kind === 'link' ? 'link' : f.kind)), h('span', { class: 'link-name' }, f.name),
         h('input', {
           class: 'inp sm', value: draft.links[f.id] || '', placeholder: 'https://…', maxlength: 2000,
           oninput: e => { if (e.target.value.trim()) draft.links[f.id] = e.target.value.trim(); else delete draft.links[f.id]; },

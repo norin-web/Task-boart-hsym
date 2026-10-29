@@ -10,6 +10,7 @@ import { call, send } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
 import { unitHeader } from './unitnav.js';
+import { brandIcon, brandOf } from './brand.js';
 import { fillDemo } from './home.js';
 import { mode } from '../data.js';
 import appStoreSvg from '../assets/app-store.svg';  // thesvg.org/icons/app-store
@@ -709,7 +710,7 @@ function infoRow(a, f, editable, onSave, { value } = {}) {
   };
   const show = () => {
     fill(row,
-      h('span', { class: 'af-ic' }, icon(fieldIcon(f), 15)),
+      h('span', { class: 'af-ic' }, brandIcon(brandOf(f.name, f.id, v), 15, fieldIcon(f))),
       h('span', { class: 'af-name' }, f.name),
       v ? (f.kind === 'link' ? h('a', { class: 'af-val', href: v, target: '_blank', rel: 'noopener', title: v, onclick: e => e.stopPropagation() }, v.replace(/^https?:\/\//, ''))
         : h('span', { class: 'af-val' }, v)) : h('span', { class: 'af-val muted' }, editable ? (f.kind === 'link' ? 'Добавить ссылку' : 'Добавить') : '—'),
@@ -726,7 +727,7 @@ function infoRow(a, f, editable, onSave, { value } = {}) {
     });
     row.onclick = null;
     row.title = '';
-    fill(row, h('span', { class: 'af-ic' }, icon(fieldIcon(f), 15)), h('span', { class: 'af-name' }, f.name), inp);
+    fill(row, h('span', { class: 'af-ic' }, brandIcon(brandOf(f.name, f.id, v), 15, fieldIcon(f))), h('span', { class: 'af-name' }, f.name), inp);
     inp.focus();
   };
   show();

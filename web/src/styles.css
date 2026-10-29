@@ -1657,3 +1657,9 @@ a.rl-link:hover { background: var(--accent-soft); color: var(--accent-text); }
 @media (hover: none) { .info-acts { opacity: 1; } }
 .icon-btn.danger-ic:hover { color: var(--danger); background: var(--danger-soft); }
 .card-empty { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border: 1px dashed var(--border-strong); border-radius: var(--r); font-size: 13px; }
+
+/* Иконки брендов (thesvg.org): цветные — картинкой, однотонные — маской цветом текста */
+.brand-ic { display: block; flex: none; object-fit: contain; }
+.brand-ic.mono { background: currentColor; -webkit-mask: var(--brand) center / contain no-repeat; mask: var(--brand) center / contain no-repeat; }
+.af-ic, .lf-ic { display: inline-flex; align-items: center; justify-content: center; }
+.af-ic .brand-ic.mono, .lf-ic .brand-ic.mono { color: var(--text-2); }

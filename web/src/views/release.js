@@ -6,6 +6,7 @@
 import Sortable from 'sortablejs';
 import { S, canEditTask, fmtDateTime, relTime, personById } from '../state.js';
 import { h, icon, fill, modal, toast, showErr, promptDlg } from '../ui.js';
+import { brandIcon, brandOf } from './brand.js';
 import { call, send } from '../api.js';
 
 const PHASES = [
@@ -82,7 +83,7 @@ export function releaseBlock(t, onChange) {
           : h('span', { class: 'rl-link', title: f.name }, h('span', { class: 'muted' }, f.name + ':'), data.app.info[f.id])))),
       h('div', { class: 'rl-sec' }, h('div', { class: 'rl-sec-title' }, 'От команды'),
         data.links.length ? h('div', { class: 'rl-links' }, data.links.map(l => h('a', { class: 'rl-link', href: l.url, target: '_blank', rel: 'noopener', title: l.url },
-          icon(linkIcon(l.kind), 13), h('span', null, l.name), h('span', { class: 'muted' }, '· ' + l.stage))))
+          brandIcon(brandOf(l.name, l.kind, l.url), 13, linkIcon(l.kind)), h('span', null, l.name), h('span', { class: 'muted' }, '· ' + l.stage))))
           : h('p', { class: 'muted', style: { margin: 0, fontSize: '12.5px' } }, 'Ссылок в этапах пока нет — дизайн, сборку, метаданные команда прикрепляет к своим этапам.')),
       h('p', { class: 'hint', style: { margin: 0 } }, icon('checklist', 12), ' Чеклист релиза — ниже; без закрытого чеклиста и обязательных полей отправить нельзя.'));
   };
