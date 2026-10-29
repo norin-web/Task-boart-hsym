@@ -1656,3 +1656,4 @@ a.rl-link:hover { background: var(--accent-soft); color: var(--accent-text); }
 .info-row:hover .info-acts, .info-acts:focus-within { opacity: 1; }
 @media (hover: none) { .info-acts { opacity: 1; } }
 .icon-btn.danger-ic:hover { color: var(--danger); background: var(--danger-soft); }
+.card-empty { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border: 1px dashed var(--border-strong); border-radius: var(--r); font-size: 13px; }
