@@ -337,7 +337,7 @@ function settingsMenu(anchor, reload) {
 /** Строки с подписанными колонками: приложение · юнит · статус · сейчас в работе · PM. */
 /** Подписи колонок списка — одна строка над всеми группами. */
 export const appHead = () => h('div', { class: 'ap-row ap-head', 'aria-hidden': 'true' },
-  h('span', null, 'Приложение'), h('span', null, 'Статус'), h('span', null, 'Сейчас в работе'), h('span', null, 'Обновлено'), h('span', null, 'PM'), h('span'));
+  h('span', null, 'Приложение'), h('span', null, 'Статус'), h('span', null, 'Приоритет'), h('span', null, 'Сейчас в работе'), h('span', null, 'Обновлено'), h('span', null, 'PM'), h('span'));
 
 /** Менеджер приложения: PM открытой задачи, иначе PM юнита. */
 export const appPm = a => { const req = (a.requests || []).find(r => !r.done); return (req && req.assigneeId) || ((pmsOf(a.unitId)[0] || {}).id) || ''; };
@@ -355,11 +355,13 @@ export function appTable(apps, reload, sel, onPick, withUnit) {
       return h('button', { class: 'ap-row' + (on ? ' picked' : '') + (po ? ' has-prio' : ''), style: po ? { '--pc': po.color } : null, 'aria-pressed': sel ? String(on) : null, onclick: () => (sel ? onPick(a.id) : openAppPanel(a, reload)) },
         h('span', { class: 'ap-name' }, sel && h('span', { class: 'aud-check pick-box' }, on && icon('check', 13)), appIcon(a),
           h('span', { class: 'ap-names' },
-            h('span', { class: 'ap-title' }, h('b', null, a.name), a.isTest && h('span', { class: 'test-tag' }, 'тест'), prioTag(a.priority)),
+            h('span', { class: 'ap-title' }, h('b', null, a.name), a.isTest && h('span', { class: 'test-tag' }, 'тест')),
             (a.storeName || withUnit) && h('small', { class: 'muted ap-store-name', title: a.storeName ? 'В App Store: ' + a.storeName : '' },
               withUnit && unitById(a.unitId) && h('span', { class: 'unit-dot', style: { background: unitById(a.unitId).color, margin: 0 } }),
               withUnit && unitById(a.unitId) && unitById(a.unitId).name + (a.storeName ? ' · ' : ''), a.storeName))),
         h('span', null, appStatusCell(st, a)),
+        // приоритет — своей колонкой: шеврон и название, как в Jira
+        h('span', { class: 'ap-prio' }, po ? [prioTag(a.priority), h('span', null, po.name)] : h('span', { class: 'muted' }, '—')),
         h('span', { class: 'ap-work' }, req ? workSummary(req) : h('span', { class: 'muted' }, '—')),
         h('span', { class: 'muted ap-upd', title: a.lastActivity ? fmtDate(a.lastActivity.slice(0, 10)) : '' }, a.lastActivity ? relTime(a.lastActivity) : '—'),
         h('span', null, pm ? avatar(pm, 'sm') : h('span', { class: 'muted' }, '—')),
