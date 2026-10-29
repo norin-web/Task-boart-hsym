@@ -624,9 +624,8 @@ function infoBlock(a, manage, ceo, save, redraw) {
     h('div', { class: 'up-head' }, h('h3', null, 'Info', rows.length > 0 && h('span', { class: 'muted sec-n' }, `${done} из ${rows.length}`))),
     rows.length
       ? h('div', { class: 'info-list' }, rows.map(r => h('div', { class: 'info-row' + (r.done ? ' on' : '') },
-        h('button', { class: 'info-check', role: 'checkbox', 'aria-checked': String(r.done), disabled: !manage, onclick: () => toggle(r) },
+        h('button', { class: 'info-check', role: 'checkbox', 'aria-checked': String(r.done), disabled: !manage, onclick: () => toggle(r), title: r.common ? 'Пункт для всех приложений' : 'Пункт только этого приложения' },
           h('span', { class: 'aud-check' }, r.done && icon('check', 13)), h('span', { class: 'info-name' }, r.name)),
-        h('span', { class: 'muted info-tag' }, r.common ? 'для всех' : 'только тут'),
         (r.common ? ceo : manage) ? h('span', { class: 'info-acts' },
           h('button', { class: 'icon-btn sm', title: 'Переименовать' + (r.common ? ' (для всех)' : ''), onclick: () => rename(r) }, icon('edit', 13)),
           h('button', { class: 'icon-btn sm danger-ic', title: r.common ? 'Убрать из всех приложений' : 'Удалить пункт', onclick: () => remove(r) }, icon('trash', 13)))
