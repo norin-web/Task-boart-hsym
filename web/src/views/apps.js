@@ -329,7 +329,14 @@ const appCardCenter = () => LS.get('cardMode', 'side') === 'center';
 export function openAppPanel(a, onChange) {
   const root = $('#panel-root');
   const close = () => { document.removeEventListener('keydown', onKey, true); fill(root); };
-  const onKey = e => { if (e.key === 'Escape' && !document.querySelector('.modal') && !document.querySelector('.menu')) { e.stopPropagation(); close(); } };
+  const onKey = e => {
+    if (e.key !== 'Escape' || document.querySelector('.modal') || document.querySelector('.menu')) return;
+    // Esc в поле карточки — отменить правку (поле обработает само) или просто выйти из поля, а не закрывать карточку
+    const f = document.activeElement;
+    if (f && panel.contains(f) && f.matches('input, textarea, select')) { if (!f.closest('.af-row')) f.blur(); return; }
+    e.stopPropagation();
+    close();
+  };
   document.addEventListener('keydown', onKey, true);
   const body = h('div', { class: 'up-body' });
   let notes = null;
@@ -620,21 +627,33 @@ function openTaskPool(a, onDone) {
 }
 
 /** Поле быстрого доступа: значение (ссылка открывается в новой вкладке) и правка на месте для CEO и PM юнита. */
+/** Строка «Быстрого доступа»: ссылка открывается, клик по строке — правка на месте, справа — скопировать значение. */
 function infoRow(a, f, editable, onSave) {
   const v = a.info[f.id] || '';
-  const row = h('div', { class: 'af-row' });
-  const show = () => fill(row,
-    h('span', { class: 'af-ic' }, icon(fieldIcon(f), 15)),
-    h('span', { class: 'af-name' }, f.name),
-    v ? (f.kind === 'link' ? h('a', { class: 'af-val', href: v, target: '_blank', rel: 'noopener', title: v }, v.replace(/^https?:\/\//, ''))
-      : h('span', { class: 'af-val' }, v)) : h('span', { class: 'af-val muted' }, '—'),
-    editable && h('button', { class: 'icon-btn sm', title: 'Изменить', 'aria-label': 'Изменить ' + f.name, onclick: edit }, icon('edit', 13)));
+  const row = h('div', { class: 'af-row' + (editable ? ' editable' : '') });
+  const copy = e => {
+    e.stopPropagation();
+    (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject())
+      .then(() => toast(`${f.name}: скопировано`), () => toast(v));
+  };
+  const show = () => {
+    fill(row,
+      h('span', { class: 'af-ic' }, icon(fieldIcon(f), 15)),
+      h('span', { class: 'af-name' }, f.name),
+      v ? (f.kind === 'link' ? h('a', { class: 'af-val', href: v, target: '_blank', rel: 'noopener', title: v, onclick: e => e.stopPropagation() }, v.replace(/^https?:\/\//, ''))
+        : h('span', { class: 'af-val' }, v)) : h('span', { class: 'af-val muted' }, editable ? (f.kind === 'link' ? 'Добавить ссылку' : 'Добавить') : '—'),
+      v ? h('button', { class: 'icon-btn sm', title: 'Скопировать', 'aria-label': 'Скопировать ' + f.name, onclick: copy }, icon('copy', 13)) : h('span'));
+    row.onclick = editable ? edit : null;
+    row.title = editable ? 'Нажмите, чтобы изменить' : '';
+  };
   const edit = () => {
     const inp = h('input', {
       class: 'inp sm', value: v, placeholder: f.kind === 'link' ? 'https://…' : '', maxlength: f.kind === 'link' ? 2000 : 500,
       onkeydown: e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') { e.stopPropagation(); show(); } },
       onblur: e => { if (e.target.value.trim() !== v) onSave(e.target.value.trim()); else show(); },
     });
+    row.onclick = null;
+    row.title = '';
     fill(row, h('span', { class: 'af-ic' }, icon(fieldIcon(f), 15)), h('span', { class: 'af-name' }, f.name), inp);
     inp.focus();
   };
