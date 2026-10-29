@@ -1695,3 +1695,24 @@ a.rc-more { text-decoration: none; }
 /* Список приложений: название шире, «Сейчас в работе» — тип, текущий этап и точки этапов */
 .ap-row { grid-template-columns: minmax(200px, 1.8fr) minmax(120px, .7fr) minmax(200px, 1.4fr) minmax(90px, .5fr) 40px 16px; }
 .ap-stage { font-weight: 500; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Фильтр приложений (как в Jira): разделы слева, значения с поиском справа, внизу — сброс и счётчик */
+.menu:has(> .flt) { padding: 0; max-height: none; overflow: visible; }
+.flt { display: grid; grid-template-columns: 180px 280px; grid-template-rows: minmax(0, 1fr) auto; width: 460px; max-width: calc(100vw - 16px); }
+.flt-nav { display: flex; flex-direction: column; gap: 2px; padding: 8px; border-right: 1px solid var(--border); }
+.flt-tab { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; font: inherit; font-size: 13px; color: var(--text-2); text-align: left; padding: 7px 10px; border-radius: 7px; position: relative; }
+.flt-tab:hover { background: var(--surface-2); color: var(--text); }
+.flt-tab.on { background: var(--accent-soft); color: var(--accent-text); font-weight: 500; }
+.flt-tab.on::before { content: ''; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; border-radius: 2px; background: var(--accent); }
+.flt-n { margin-left: auto; font-size: 11.5px; font-weight: 600; background: var(--accent); color: #fff; border-radius: 99px; padding: 0 6px; line-height: 17px; }
+.flt-n.muted { background: var(--surface-2); color: var(--muted); }
+.flt-save { margin-top: auto; padding: 8px 10px 4px; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.flt-pane { display: flex; flex-direction: column; gap: 6px; padding: 8px; min-height: 260px; max-height: 360px; }
+.flt-search { flex: none; }
+.flt-list { overflow-y: auto; display: grid; align-content: start; gap: 1px; }
+.flt-list .menu-item { width: 100%; }
+.flt-empty { padding: 10px; margin: 0; font-size: 13px; }
+.flt-foot { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; border-top: 1px solid var(--border); font-size: 12.5px; }
+.flt-foot-r { display: inline-flex; align-items: center; gap: 12px; }
+.aud-check.round { border-radius: 50%; }
+@media (max-width: 520px) { .flt { grid-template-columns: 1fr; width: calc(100vw - 16px); } .flt-nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); } .flt-tab { width: auto; white-space: nowrap; } .flt-save { display: none; } }

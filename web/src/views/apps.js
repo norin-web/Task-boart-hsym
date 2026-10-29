@@ -108,14 +108,21 @@ export async function renderApps({ unitId = '' } = {}) {
 
   // Только список: приложения по юнитам в сворачиваемых блоках, поиск по названию сверху
   let q = '';
-  // Фильтры: статус, менеджер (PM), давность работы; свои наборы — в профиле (prefs.appFilters)
-  const f = { statuses: [], pms: [], age: 0, workTop: true, ...LS.get('appsFilter', {}) };
+  // Фильтры (как в Jira): разделы слева — значения с поиском справа; свои наборы — в профиле (prefs.appFilters)
+  const EMPTY = { statuses: [], prios: [], pms: [], units: [], store: [], age: 0 };
+  const f = { ...EMPTY, workTop: true, ...LS.get('appsFilter', {}) };
+  for (const k of Object.keys(EMPTY)) if (k !== 'age' && !Array.isArray(f[k])) f[k] = [];
   const saveF = () => LS.set('appsFilter', f);
-  const active = () => f.statuses.length + f.pms.length + (f.age ? 1 : 0);
+  const storeState = a => (!appStoreUrl(a) ? 'nolink' : a.storeOk === false ? 'gone' : 'ok');
+  const active = () => f.statuses.length + f.prios.length + f.pms.length + f.units.length + f.store.length + (f.age ? 1 : 0);
   const chips = h('div', { class: 'feed-filters apps-chips' });
-  const filterBtn = h('button', { class: 'btn sm', onclick: e => { e.stopPropagation(); filterMenu(e.currentTarget); } });
+  const filterBtn = h('button', { class: 'btn sm', 'aria-haspopup': 'dialog', onclick: e => { e.stopPropagation(); filterMenu(e.currentTarget); } });
+  const groupBtn = h('button', { class: 'btn sm', 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); groupMenu(e.currentTarget); } });
   const passes = a => (!f.statuses.length || f.statuses.includes(a.status))
+    && (!f.prios.length || f.prios.includes(a.priority || ''))
     && (!f.pms.length || f.pms.includes(appPm(a)))
+    && (!f.units.length || f.units.includes(a.unitId))
+    && (!f.store.length || f.store.includes(storeState(a)))
     && (!f.age || !a.lastActivity || Date.now() - Date.parse(a.lastActivity) > f.age * 864e5);
   const saved = () => (((me() || {}).prefs || {}).appFilters || []);
   const setSaved = list => {
@@ -123,54 +130,97 @@ export async function renderApps({ unitId = '' } = {}) {
     if (p) p.prefs = { ...(p.prefs || {}), appFilters: list };
     send('setMyPrefs', { personId: S.meId, prefs: { appFilters: list } }).catch(showErr);
   };
-  const apply = next => { Object.assign(f, { statuses: [], pms: [], age: 0 }, next); saveF(); drawList(); };  // вид (workTop) фильтр не сбрасывает
-  const check = (on, label, dot, onclick) => h('button', {
-    class: 'menu-item aud-item' + (on ? ' on' : ''), role: 'menuitemcheckbox', 'aria-checked': String(on),
-    onclick: e => { e.stopPropagation(); onclick(); },
-  }, h('span', { class: 'aud-check' }, on && icon('check', 13)), dot, label);
+  const apply = next => { Object.assign(f, EMPTY, next); saveF(); drawList(); };  // группировку (workTop) фильтр не сбрасывает
+  const dot = c => h('span', { class: 'dot', style: { background: c } });
+  /** Разделы фильтра: [ключ, название, варианты { id, label, mark }, один вариант?]. */
+  const sections = () => [
+    ['statuses', 'Статус', S.appStatuses.map(st => ({ id: st.id, label: st.name, mark: dot(st.color) }))],
+    ['prios', 'Приоритет', [...S.priorityOptions.map((o, i) => ({ id: o.id, label: o.name, mark: prioMark(o, i, S.priorityOptions.length, 15) })).reverse(),
+      { id: '', label: 'Без приоритета', mark: h('span', { class: 'prio-mark muted' }, icon('circle', 13)) }]],
+    ['pms', 'Менеджер', S.people.filter(p => p.active && p.access === 'moderator').map(p => ({ id: p.id, label: p.name, mark: avatar(p, 'sm') }))],
+    !unitId && ['units', 'Юнит', units().map(u => ({ id: u.id, label: u.name, mark: dot(u.color) }))],
+    ['store', 'App Store', [{ id: 'ok', label: 'Открывается' }, { id: 'gone', label: 'Нет в App Store' }, { id: 'nolink', label: 'Нет ссылки' }]],
+    ['age', 'Не трогали', [[7, 'Больше недели'], [14, 'Больше 2 недель'], [30, 'Больше месяца']].map(([d, label]) => ({ id: d, label })), true],
+  ].filter(Boolean);
+  const countOf = key => (key === 'age' ? (f.age ? 1 : 0) : f[key].length);
+  let fsec = 'statuses';
   function filterMenu(anchor) {
-    const box = h('div', { class: 'af-menu' });
-    const toggle = (key, id) => { f[key] = f[key].includes(id) ? f[key].filter(x => x !== id) : [...f[key], id]; saveF(); drawList(); paint(); };
-    const paint = () => fill(box,
-      saved().length > 0 && [h('div', { class: 'menu-label' }, 'Мои фильтры'),
-        saved().map((s, i) => h('div', { class: 'af-saved' },
-          h('button', { class: 'menu-item', onclick: e => { e.stopPropagation(); apply(s.f); paint(); } }, icon('filter', 14), s.name),
-          h('button', { class: 'icon-btn sm', title: 'Удалить', onclick: e => { e.stopPropagation(); setSaved(saved().filter((_, j) => j !== i)); paint(); } }, icon('x', 13)))),
-        h('div', { class: 'menu-sep' })],
-      h('div', { class: 'menu-label' }, 'Статус'),
-      S.appStatuses.map(st => check(f.statuses.includes(st.id), st.name, h('span', { class: 'dot', style: { background: st.color } }), () => toggle('statuses', st.id))),
-      h('div', { class: 'menu-sep' }),
-      h('div', { class: 'menu-label' }, 'Менеджер'),
-      S.people.filter(p => p.active && p.access === 'moderator').map(p => check(f.pms.includes(p.id), p.name, avatar(p, 'sm'), () => toggle('pms', p.id))),
-      h('div', { class: 'menu-sep' }),
-      h('div', { class: 'menu-label' }, 'Вид'),
-      check(f.workTop, 'В работе — отдельно сверху', null, () => { f.workTop = !f.workTop; saveF(); drawList(); paint(); }),
-      h('div', { class: 'menu-sep' }),
-      h('div', { class: 'menu-label' }, 'Не трогали'),
-      [[0, 'Неважно'], [7, 'Больше недели'], [14, 'Больше 2 недель'], [30, 'Больше месяца']].map(([d, label]) =>
-        check(f.age === d, label, null, () => { f.age = d; saveF(); drawList(); paint(); })),
-      active() > 0 && [h('div', { class: 'menu-sep' }),
-        h('button', {
-          class: 'menu-item', onclick: async e => {
-            e.stopPropagation();
-            closeMenu();
-            const name = await promptDlg('Сохранить фильтр', 'Название', '');
-            if (name && name.trim()) setSaved([...saved(), { name: name.trim().slice(0, 40), f: { statuses: f.statuses, pms: f.pms, age: f.age } }]);
-          },
-        }, icon('plus', 14), 'Сохранить как свой фильтр'),
-        h('button', { class: 'menu-item', onclick: e => { e.stopPropagation(); apply({}); paint(); } }, icon('x', 14), 'Сбросить')]);
-    paint();
+    const box = h('div', { class: 'flt' });
+    let q = '';
+    const search = h('input', { class: 'inp flt-search', type: 'search', placeholder: 'Поиск', 'aria-label': 'Поиск значения',
+      oninput: e => { q = e.target.value.trim().toLowerCase(); paintList(); } });
+    const list = h('div', { class: 'flt-list', role: 'group' });
+    const nav = h('div', { class: 'flt-nav' });
+    const foot = h('div', { class: 'flt-foot' });
+    const changed = () => { saveF(); drawList(); paintNav(); paintList(); };
+    const pick = (key, id, single) => {
+      if (single) f.age = f.age === id ? 0 : id;
+      else f[key] = f[key].includes(id) ? f[key].filter(x => x !== id) : [...f[key], id];
+      changed();
+    };
+    const paintNav = () => fill(nav,
+      saved().length > 0 && h('button', { class: 'flt-tab' + (fsec === 'saved' ? ' on' : ''), onclick: e => { e.stopPropagation(); fsec = 'saved'; q = ''; search.value = ''; paintNav(); paintList(); } },
+        icon('filter', 13), 'Мои фильтры', h('span', { class: 'flt-n muted' }, saved().length)),
+      sections().map(([key, label]) => h('button', { class: 'flt-tab' + (fsec === key ? ' on' : ''), onclick: e => { e.stopPropagation(); fsec = key; q = ''; search.value = ''; paintNav(); paintList(); } },
+        label, countOf(key) > 0 && h('span', { class: 'flt-n' }, countOf(key)))),
+      active() > 0 && h('button', { class: 'flt-save link-btn', onclick: async e => {
+        e.stopPropagation();
+        closeMenu();
+        const name = await promptDlg('Сохранить фильтр', 'Название', '');
+        if (name && name.trim()) setSaved([...saved(), { name: name.trim().slice(0, 40), f: { statuses: f.statuses, prios: f.prios, pms: f.pms, units: f.units, store: f.store, age: f.age } }]);
+      } }, icon('plus', 13), 'Сохранить как свой'));
+    const paintList = () => {
+      if (fsec === 'saved') {
+        search.hidden = true;
+        fill(list, saved().map((sv, i) => h('div', { class: 'af-saved' },
+          h('button', { class: 'menu-item', onclick: e => { e.stopPropagation(); apply(sv.f); paintNav(); paintList(); } }, icon('filter', 14), sv.name),
+          h('button', { class: 'icon-btn sm', title: 'Удалить', onclick: e => { e.stopPropagation(); setSaved(saved().filter((_, j) => j !== i)); if (!saved().length) fsec = 'statuses'; paintNav(); paintList(); } }, icon('x', 13)))));
+        fill(foot, h('button', { class: 'link-btn', onclick: e => { e.stopPropagation(); apply({}); paintNav(); paintList(); } }, 'Сбросить всё'), h('span'));
+        return;
+      }
+      const sec = sections().find(x => x[0] === fsec) || sections()[0];
+      const [key, label, opts, single] = sec;
+      search.hidden = opts.length < 6;
+      search.placeholder = 'Поиск: ' + label.toLowerCase();
+      const shown = opts.filter(o => !q || String(o.label).toLowerCase().includes(q));
+      const isOn = o => (single ? f.age === o.id : f[key].includes(o.id));
+      fill(list, shown.length
+        ? shown.map(o => h('button', { class: 'menu-item aud-item' + (isOn(o) ? ' on' : ''), role: single ? 'menuitemradio' : 'menuitemcheckbox', 'aria-checked': String(isOn(o)),
+          onclick: e => { e.stopPropagation(); pick(key, o.id, single); } },
+          h('span', { class: 'aud-check' + (single ? ' round' : '') }, isOn(o) && icon('check', 13)), o.mark, o.label))
+        : h('p', { class: 'muted flt-empty' }, opts.length ? 'Ничего не найдено' : key === 'pms' ? 'PM пока нет' : 'Пусто'));
+      fill(foot,
+        h('button', { class: 'link-btn', onclick: e => { e.stopPropagation(); apply({}); paintNav(); paintList(); } }, 'Сбросить всё'),
+        h('span', { class: 'flt-foot-r' },
+          countOf(key) > 0 && h('button', { class: 'link-btn', onclick: e => { e.stopPropagation(); if (single) f.age = 0; else f[key] = []; changed(); } }, 'Очистить'),
+          h('span', { class: 'muted' }, `${shown.length} из ${opts.length}`)));
+    };
+    fill(box, nav, h('div', { class: 'flt-pane' }, search, list), foot);
+    paintNav();
+    paintList();
+    box.addEventListener('click', e => e.stopPropagation());
     menu(anchor, [box]);
+    if (!search.hidden) search.focus();
+  }
+  /** Группировка списка: «В работе» сверху отдельным разделом или только по юнитам. */
+  function groupMenu(anchor) {
+    menu(anchor, [{ title: 'Группировка' },
+      ...[[true, 'В работе сверху, затем по юнитам'], [false, 'Только по юнитам']].map(([v, label]) => ({
+        label, icon: f.workTop === v ? 'check' : null, action: () => { f.workTop = v; saveF(); drawList(); },
+      }))]);
   }
   const drawFilters = () => {
     const n = active();
     fill(filterBtn, icon('filter', 14), h('span', { class: 'btn-label' }, 'Фильтр'), n > 0 && h('span', { class: 'count-badge' }, n));
     filterBtn.classList.toggle('on', n > 0);
+    fill(groupBtn, icon('layers', 14), h('span', { class: 'btn-label' }, 'Группа: ' + (f.workTop ? 'в работе сверху' : 'по юнитам')));
     const chip = (label, onx) => h('span', { class: 'chip filter-chip' }, label, h('button', { class: 'chip-x', title: 'Убрать', onclick: onx }, icon('x', 11)));
+    const drop = (key, id) => () => { f[key] = f[key].filter(x => x !== id); saveF(); drawList(); };
+    const label = (key, id) => ((sections().find(x => x[0] === key) || [, , []])[2].find(o => o.id === id) || { label: id || '—' }).label;
     fill(chips,
-      f.statuses.map(id => chip((appStatusById(id) || { name: id }).name, () => { f.statuses = f.statuses.filter(x => x !== id); saveF(); drawList(); })),
-      f.pms.map(id => chip((personById(id) || { name: '—' }).name, () => { f.pms = f.pms.filter(x => x !== id); saveF(); drawList(); })),
-      f.age > 0 && chip(`не трогали > ${f.age} дн.`, () => { f.age = 0; saveF(); drawList(); }));
+      ['statuses', 'prios', 'pms', 'units', 'store'].flatMap(key => f[key].map(id => chip(label(key, id), drop(key, id)))),
+      f.age > 0 && chip(`не трогали > ${f.age} дн.`, () => { f.age = 0; saveF(); drawList(); }),
+      active() > 1 && h('button', { class: 'link-btn', onclick: () => apply({}) }, 'Сбросить всё'));
   };
   const collapsed = new Set(LS.get('appsCollapsed', []));
   const reload = () => load().then(() => { drawTools(); drawList(); }).catch(showErr);
@@ -248,6 +298,7 @@ export async function renderApps({ unitId = '' } = {}) {
   const drawTools = () => fill(tools,
     search,
     filterBtn,
+    groupBtn,
     isSuper() && apps.length > 0 && h('button', { class: 'btn sm' + (sel ? ' on' : ''), title: 'Выбрать несколько приложений, чтобы удалить', onclick: () => setPicking(!sel) }, icon('check', 14), h('span', { class: 'btn-label' }, 'Выбрать')),
     isSuper() && h('button', { class: 'icon-btn', title: 'Статусы и поля приложения', onclick: e => { e.stopPropagation(); settingsMenu(e.currentTarget, reload); } }, icon('settings', 17)),
     isSuper() && units().length > 0 && h('button', { class: 'btn sm', title: 'Уже существующие приложения: название и ссылка на App Store построчно', onclick: () => openImportApps(reload, unitId) }, icon('layers', 14), h('span', { class: 'btn-label' }, 'Добавить списком')),
