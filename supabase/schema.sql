@@ -1292,6 +1292,31 @@ create policy app_notes_insert on app_notes for insert to authenticated
   with check (author_id = my_person_id() and exists (select 1 from apps a where a.id = app_id));
 drop policy if exists app_notes_delete on app_notes;
 create policy app_notes_delete on app_notes for delete to authenticated using (author_id = my_person_id() or is_superadmin());
+-- История статусов приложения (блок «Недавнее» на дашборде CEO): пишет только триггер — при любой смене статуса,
+-- кнопкой, переносом в релиз или шагом RM; видит тот, кто видит приложение
+create table if not exists app_status_log (
+  id          text primary key default gen_random_uuid()::text,
+  app_id      text not null references apps(id) on delete cascade,
+  from_status text not null default '',
+  to_status   text not null,
+  by_id       text not null default '',
+  at          text not null
+);
+create index if not exists app_status_log_app on app_status_log(app_id);
+create index if not exists app_status_log_at on app_status_log(at);
+create or replace function log_app_status() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.status is distinct from old.status then
+    insert into app_status_log (app_id, from_status, to_status, by_id, at)
+    values (new.id, coalesce(old.status, ''), new.status, coalesce(my_person_id(), ''), coalesce(nullif(new.status_at, ''), to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')));
+  end if;
+  return new;
+end $$;
+drop trigger if exists log_app_status on apps;
+create trigger log_app_status after update on apps for each row execute function log_app_status();
+alter table app_status_log enable row level security;
+drop policy if exists app_status_log_read on app_status_log;
+create policy app_status_log_read on app_status_log for select to authenticated using (exists (select 1 from apps a where a.id = app_id));
 drop policy if exists apps_read on apps;
 create policy apps_read on apps for select to authenticated
   using ((not is_test or is_dev()) and (is_superadmin() or is_unit_member(unit_id)));

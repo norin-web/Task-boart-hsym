@@ -142,16 +142,33 @@ export function inProgress(d, reload) {
 
 /* ---------- недавно вышло ---------- */
 
+/** Что произошло: смена статуса «было → стало», начало разработки, задача по приложению готова. */
+function recentWhat(x) {
+  if (x.type === 'start') return h('span', { class: 'muted' }, ' · начало разработки');
+  if (x.type === 'done') return h('span', { class: 'muted' }, ' · ' + x.request.title + ' — готово');
+  const from = appStatusById(x.from), to = appStatusById(x.to);
+  return h('span', { class: 'rc-move' }, from && h('span', { class: 'muted' }, from.name + ' → '),
+    h('span', { class: 'rc-to', style: { '--sc': to ? to.color : 'var(--muted)' } }, to ? to.name : x.to));
+}
+
+/** «Недавнее» — движение приложений за 30 дней: 5 последних, остальное — «Показать все». */
 function recent(d, reload) {
-  return h('section', null,
-    h('div', { class: 'section-head', title: 'За 14 дней' }, h('h2', null, 'Недавно вышло')),
+  const LIMIT = 5;
+  const box = h('section');
+  let all = false;
+  const draw = () => fill(box,
+    h('div', { class: 'section-head', title: 'За 30 дней: смена статусов приложений, начало разработки, готовые задачи' },
+      h('h2', null, 'Недавнее', d.recent.length > 0 && h('span', { class: 'muted sec-n' }, d.recent.length))),
     d.recent.length
-      ? h('div', { class: 'card-box rc-list' }, d.recent.map(x => h('button', { class: 'rc-row', onclick: () => openAppById(x.app.id, reload) },
+      ? h('div', { class: 'card-box rc-list' }, (all ? d.recent : d.recent.slice(0, LIMIT)).map(x => h('button', { class: 'rc-row', onclick: () => openAppById(x.app.id, reload) },
         appIcon(x.app, 'xs'),
-        h('span', { class: 'rc-main' }, h('b', null, x.app.name),
-          h('span', { class: 'muted' }, x.type === 'live' ? ' в сторе' : ' · ' + x.request.title)),
-        h('span', { class: 'muted rc-at' }, relTime(x.at)))))
-      : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Пока ничего')));
+        h('span', { class: 'rc-main' }, h('b', null, x.app.name), ' ', recentWhat(x)),
+        h('span', { class: 'muted rc-at' }, relTime(x.at)))),
+        d.recent.length > LIMIT && h('button', { class: 'rc-more link-btn', onclick: () => { all = !all; draw(); } },
+          all ? 'Свернуть' : `Показать все · ${d.recent.length}`))
+      : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'За 30 дней статусы приложений не менялись')));
+  draw();
+  return box;
 }
 
 
@@ -172,7 +189,9 @@ function ceoBlocks(d, apps, reload) {
   const section = (title, body, n) => h('section', null, h('div', { class: 'section-head' }, h('h2', null, title, n != null && h('span', { class: 'muted sec-n' }, n))), body);
   const list = (items, empty) => (items.length ? h('div', { class: 'card-box rc-list' }, items) : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, empty)));
   const overdue = d.attention.filter(x => x.type === 'overdue').length;
-  const live30 = apps.filter(a => (appStatusById(a.status) || {}).kind === 'live' && ago(a.statusAt) <= 30);
+  // вышло за 30 дней — по истории статусов (импорт уже вышедших сюда не попадает)
+  const live30 = [...new Map(d.recent.filter(x => x.type === 'status' && (appStatusById(x.to) || {}).kind === 'live')
+    .map(x => [x.app.id, { ...(apps.find(a => a.id === x.app.id) || x.app), statusAt: x.at }])).values()];
   const done30 = apps.flatMap(a => a.requests.filter(r => r.done && ago(r.doneAt) <= 30).map(r => ({ a, r })));
   const stale = apps.filter(a => ago(a.lastActivity) > d.staleDays).sort((x, y) => String(x.lastActivity).localeCompare(String(y.lastActivity)));
   const pms = S.people.filter(p => p.active && p.access === 'moderator');
@@ -183,7 +202,7 @@ function ceoBlocks(d, apps, reload) {
     { id: 'storeCheck', title: 'Проверка App Store', col: 'full', render: () => storeCheckBlock(apps, reload, { compact: true }) },
     { id: 'attention', title: 'Требует внимания', col: 'left', render: () => attention(d, reload) },
     { id: 'inprogress', title: 'Работы в ходу', col: 'left', render: () => inProgress(d, reload) },
-    { id: 'recent', title: 'Недавно вышло', col: 'right', render: () => recent(d, reload) },
+    { id: 'recent', title: 'Недавнее', col: 'right', render: () => recent(d, reload) },
     // статистика — по умолчанию скрыта
     { id: 'kpi', title: 'Цифры', col: 'full', off: true, render: () => h('div', { class: 'cs-row' },
       stat(apps.length, 'приложений'), stat(open.length, 'задач в работе'),

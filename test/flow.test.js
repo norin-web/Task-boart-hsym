@@ -250,7 +250,11 @@ test('дашборд CEO: портфель, требует внимания, р�
   assert.ok(d.attention.some(x => x.type === 'waiting')); // запросы Weather и Fit PM ещё не разложил
   const sleep = d.inProgress.find(x => x.app.id === a1.id);
   assert.equal(sleep.current.step, 'design'); // текущий этап — тот, что в работе
-  assert.ok(d.recent.some(x => x.type === 'live' && x.app.id === a3.id));
+  // «Недавнее» — движение по статусам из истории + начало разработки (New App); импорт без смены статуса сюда не попадает
+  assert.ok(d.recent.some(x => x.type === 'status' && x.app.id === a3.id && x.from === 'dev' && x.to === 'live'));
+  assert.ok(d.recent.some(x => x.type === 'start' && x.app.id === a1.id));
+  const imp = await api.as(ceo, () => api('createApp', { name: 'Imported', unitId: gold.id, status: 'live', noRequest: true }));
+  assert.ok(!(await api.as(ceo, () => api('getCeoDashboard', { today: day }))).recent.some(x => x.app.id === imp.app.id));
   assert.equal(d.staleDays, 7);
 });
 

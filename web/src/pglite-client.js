@@ -1,7 +1,7 @@
 /**
  * Минимальный клиент с интерфейсом supabase-js поверх PGlite (Postgres в WebAssembly) — для тестов.
  * Поддерживает ровно то, что использует web/src/backend.js:
- * from().select/insert/update/upsert/delete + eq/neq/lt/in/is(null)/order/limit/range/maybeSingle, rpc().
+ * from().select/insert/update/upsert/delete + eq/neq/lt/gt/gte/in/is(null)/order/limit/range/maybeSingle, rpc().
  */
 const ident = c => '"' + String(c).replace(/"/g, '""') + '"';
 const cols = list => (list === '*' ? '*' : list.split(',').map(s => ident(s.trim())).join(', '));
@@ -34,6 +34,7 @@ class Query {
   neq(c, v) { this.filters.push([c, '<>', v]); return this; }
   lt(c, v) { this.filters.push([c, '<', v]); return this; }
   gt(c, v) { this.filters.push([c, '>', v]); return this; }
+  gte(c, v) { this.filters.push([c, '>=', v]); return this; }
   in(c, list) { this.filters.push([c, 'in', list]); return this; }
   is(c, v) { this.filters.push([c, 'is', v]); return this; } // только is null
   order(c, { ascending = true } = {}) { this.orders.push(`${ident(c)} ${ascending ? 'asc' : 'desc'}`); return this; }

@@ -1578,3 +1578,9 @@ a.rl-link:hover { background: var(--accent-soft); color: var(--accent-text); }
 .sc-gone-chip.open .sc-chip-chev { transform: rotate(180deg); }
 .store-check.compact.has-gone:not(:has(.sc-gone)) { border-color: var(--border); }
 @media (max-width: 640px) { .store-check.compact .sc-head { flex-wrap: wrap; } }
+
+/* «Недавнее» на дашборде CEO: было → стало, «Показать все» */
+.rc-move { white-space: nowrap; }
+.rc-to { display: inline-flex; align-items: center; gap: 5px; font-weight: 500; color: var(--text-2); }
+.rc-to::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--sc); }
+.rc-more { display: block; width: 100%; padding: 9px 12px; text-align: left; border-top: 1px solid var(--border); }

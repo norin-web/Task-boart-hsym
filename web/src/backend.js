@@ -1678,7 +1678,7 @@ export function createBackend(db, opts = {}) {
       const [apps, statuses, staleRow] = await Promise.all([methods.listApps({}), appStatuses(), setting('staleDays')]);
       const staleDays = Math.max(1, Number(staleRow) || 7);
       const staleBefore = new Date(Date.now() - staleDays * 864e5).toISOString();
-      const recentFrom = new Date(Date.now() - 14 * 864e5).toISOString();
+      const recentFrom = new Date(Date.now() - 30 * 864e5).toISOString();
       const kindOfStatus = id => (statuses.find(x => x.id === id) || {}).kind || '';
       const brief = a => ({ id: a.id, name: a.name, color: a.color, iconUrl: a.iconUrl, unitId: a.unitId, status: a.status, priority: a.priority, isTest: a.isTest });
       const portfolio = { byStatus: {}, byUnit: {} };
@@ -1690,8 +1690,9 @@ export function createBackend(db, opts = {}) {
       const attention = [], inProgress = [], recent = [];
       for (const a of apps) {
         if (kindOfStatus(a.status) === 'reject') attention.push({ type: 'reject', app: brief(a), at: a.statusAt });
-        if (kindOfStatus(a.status) === 'live' && a.statusAt >= recentFrom) recent.push({ type: 'live', app: brief(a), at: a.statusAt });
         for (const r of a.requests) {
+          // начало разработки — запрос «New App»
+          if (r.type === 'new_app' && r.createdAt >= recentFrom) recent.push({ type: 'start', app: brief(a), request: r, at: r.createdAt });
           if (r.done) {
             if (r.doneAt >= recentFrom) recent.push({ type: 'done', app: brief(a), request: r, at: r.doneAt });
             continue;
@@ -1708,10 +1709,17 @@ export function createBackend(db, opts = {}) {
           inProgress.push({ app: brief(a), request: r, current });
         }
       }
+      // движение по статусам приложений за 30 дней — из истории статусов (импорт и создание сюда не попадают)
+      const byId = Object.fromEntries(apps.map(a => [a.id, a]));
+      const log = await run(T('app_status_log').select('*').gte('at', recentFrom).order('at', { ascending: false }).limit(300));
+      for (const x of log) {
+        const a = byId[x.app_id];
+        if (a) recent.push({ type: 'status', app: brief(a), from: x.from_status, to: x.to_status, byId: x.by_id, at: x.at });
+      }
       const rank = { reject: 0, overdue: 1, nopm: 2, waiting: 3, stale: 4 };
       attention.sort((x, y) => rank[x.type] - rank[y.type] || String(x.at).localeCompare(String(y.at)));
       recent.sort((x, y) => String(y.at).localeCompare(String(x.at)));
-      return { portfolio, attention, inProgress, recent, staleDays, statuses };
+      return { portfolio, attention, inProgress, recent: recent.slice(0, 200), staleDays, statuses };
     },
 
     /**
