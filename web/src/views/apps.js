@@ -357,7 +357,8 @@ export const appHead = (sort, onSort) => h('div', { class: 'ap-row ap-head', rol
 const sortVal = (a, key) => {
   switch (key) {
     case 'name': return a.name.toLowerCase();
-    case 'status': return S.appStatuses.findIndex(x => x.id === a.status);
+    // как в колонке: «Нет в App Store» — отдельное состояние после всех статусов (по убыванию — сверху)
+    case 'status': return a.storeOk === false ? S.appStatuses.length : S.appStatuses.findIndex(x => x.id === a.status);
     case 'prio': return S.priorityOptions.findIndex(o => o.id === a.priority);
     case 'work': { const r = (a.requests || []).find(x => !x.done); return r ? 1 + (r.progress || 0) / 1000 : 0; }
     case 'updated': return a.lastActivity || '';
