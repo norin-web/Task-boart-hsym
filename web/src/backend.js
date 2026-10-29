@@ -268,7 +268,7 @@ const iconUrl = v => { const s = String(v || '').trim().slice(0, 500); return /^
 const appOut = r => ({
   id: r.id, unitId: r.unit_id, name: r.name, color: r.color || '', status: r.status, info: json(r.info, {}) || {},
   priority: r.priority || '', statusAt: r.status_at || '', iconUrl: r.icon_url || '', storeName: r.store_name || '',
-  storeOk: r.store_ok == null ? null : !!r.store_ok, storeCheckedAt: r.store_checked_at || '',
+  storeOk: r.store_ok == null ? null : !!r.store_ok, storeCheckedAt: r.store_checked_at || '', checks: cleanChecks(r.checks),
   order: r.ord, archived: !!r.archived, isTest: !!r.is_test, createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at,
 });
 
@@ -297,6 +297,35 @@ function cleanAppFields(list) {
     seen.add(id);
     return { id, name, kind: x.kind === 'text' ? 'text' : 'link' };
   }).filter(Boolean);
+}
+
+/** Общие пункты Info приложения: { id, name } — у каждого приложения своя отметка. */
+function cleanInfoItems(list) {
+  const seen = new Set();
+  return (Array.isArray(list) ? list : []).slice(0, 60).map(x => {
+    const name = str(x && x.name, 120);
+    if (!name) return null;
+    let id = /^[a-z0-9_]{1,40}$/.test((x && x.id) || '') ? x.id : uid('ii').toLowerCase();
+    if (seen.has(id)) id = uid('ii').toLowerCase();
+    seen.add(id);
+    return { id, name };
+  }).filter(Boolean);
+}
+/** Отметки Info у приложения: done — id отмеченных общих пунктов, own — свои пункты приложения. */
+function cleanChecks(v) {
+  const c = json(v, {}) || {};
+  const ids = new Set();
+  return {
+    done: [...new Set((Array.isArray(c.done) ? c.done : []).map(x => String(x)).filter(x => /^[\w-]{1,40}$/.test(x)))].slice(0, 100),
+    own: (Array.isArray(c.own) ? c.own : []).slice(0, 50).map(x => {
+      const name = str(x && x.name, 120);
+      if (!name) return null;
+      let id = /^[\w-]{1,40}$/.test((x && x.id) || '') ? x.id : uid('io').toLowerCase();
+      if (ids.has(id)) id = uid('io').toLowerCase();
+      ids.add(id);
+      return { id, name, done: !!x.done };
+    }).filter(Boolean),
+  };
 }
 
 /** Статусы приложения: { id, name, color, kind }, хотя бы один. */
@@ -472,6 +501,7 @@ export function createBackend(db, opts = {}) {
     return list.length ? list : cleanAppStatuses([{ id: 'dev', name: 'В разработке', kind: 'dev' }]);
   };
   const appFields = async () => cleanAppFields(await setting('appFields'));
+  const appInfoItems = async () => cleanInfoItems(await setting('appInfoItems'));
   /** Приоритет — вариант общего поля «Приоритет» (o_low…o_critical); пусто — без приоритета. */
   async function validPriority(v) {
     if (!v) return '';
@@ -709,12 +739,12 @@ export function createBackend(db, opts = {}) {
     /* ---------- общие данные, главная, поиск ---------- */
 
     async bootstrap(p) {
-      const [units, ppl, depts, lf, tpl, tm, apps, statuses, afields, gfields] = await Promise.all([unitsWithCounts(today(p.today)), people(), departments(), linkFields(), templates(), teams(),
-        all(() => T('apps').select('*').order('ord').order('id')), appStatuses(), appFields(), globalFields()]);
+      const [units, ppl, depts, lf, tpl, tm, apps, statuses, afields, gfields, info] = await Promise.all([unitsWithCounts(today(p.today)), people(), departments(), linkFields(), templates(), teams(),
+        all(() => T('apps').select('*').order('ord').order('id')), appStatuses(), appFields(), globalFields(), appInfoItems()]);
       const prio = gfields.find(f => f.role === 'priority');
       return {
         units: units.map(({ doneWeek, ...u }) => u), people: ppl, departments: depts, linkFields: lf, templates: tpl, teams: tm,
-        apps: apps.map(appOut), appStatuses: statuses, appFields: afields, priorityOptions: prio ? prio.options : [],
+        apps: apps.map(appOut), appStatuses: statuses, appFields: afields, appInfoItems: info, priorityOptions: prio ? prio.options : [],
       };
     },
 
@@ -1564,6 +1594,7 @@ export function createBackend(db, opts = {}) {
       if ('priority' in p) upd.priority = await validPriority(p.priority);
       if ('iconUrl' in p) upd.icon_url = iconUrl(p.iconUrl);
       if ('storeName' in p) upd.store_name = str(p.storeName, 200);
+      if ('checks' in p) upd.checks = cleanChecks(p.checks);
       if ('order' in p && Number.isFinite(Number(p.order))) upd.ord = Number(p.order);
       if ('unitId' in p && p.unitId !== a.unit_id) upd.unit_id = (await findUnit(p.unitId)).id;
       if ('info' in p) {
@@ -1661,6 +1692,13 @@ export function createBackend(db, opts = {}) {
     /** Поля приложения (быстрый доступ на карточке): ссылки и тексты. */
     async getAppFields() {
       return appFields();
+    },
+
+    /** Общие пункты Info (CEO): список { id, name }; отметки приложений по удалённым пунктам просто перестают показываться. */
+    async saveAppInfoItems(p) {
+      const list = cleanInfoItems(p.items);
+      await run(T('app_settings').upsert({ key: 'appInfoItems', value: list, updated_at: now() }, { onConflict: 'key' }));
+      return list;
     },
 
     async saveAppFields(p) {

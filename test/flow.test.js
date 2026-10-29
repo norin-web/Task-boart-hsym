@@ -520,3 +520,22 @@ test('проверка App Store: итог сохраняется, «Обнов�
   // PM чужого юнита отметку не поставит
   assert.equal((await api.as(pmRf, () => api('saveStoreCheck', { items: [{ id: ok.app.id, ok: false }] }))).saved, 0);
 });
+
+test('Info приложения: общие пункты (CEO), отметки и свои пункты у приложения', async () => {
+  const api = await setup();
+  const { ceo, pm, ios, gold } = await studio(api);
+  const items = await api.as(ceo, () => api('saveAppInfoItems', { items: [{ name: 'Продуктовый апдейт' }, { name: 'Новый пейвол' }, { name: ' ' }] }));
+  assert.deepEqual(items.map(x => x.name), ['Продуктовый апдейт', 'Новый пейвол']);
+  await api.as(pm, () => assert.rejects(() => api('saveAppInfoItems', { items: [] })));
+  const { app } = await api.as(ceo, () => api('createApp', { name: 'A', unitId: gold.id, noRequest: true }));
+  assert.deepEqual(app.checks, { done: [], own: [] });
+  // PM юнита отмечает пункт и добавляет свой
+  const upd = await api.as(pm, () => api('updateApp', { id: app.id, checks: { done: [items[0].id], own: [{ name: 'Интеграция с Roku API', done: false }] } }));
+  assert.deepEqual(upd.checks.done, [items[0].id]);
+  assert.equal(upd.checks.own[0].name, 'Интеграция с Roku API');
+  assert.ok(upd.checks.own[0].id);
+  // сотрудник отметки не меняет
+  await api.as(ios, () => assert.rejects(() => api('updateApp', { id: app.id, checks: { done: [] } })));
+  const boot = await api.as(ceo, () => api('bootstrap', {}));
+  assert.equal(boot.appInfoItems.length, 2);
+});

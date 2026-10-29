@@ -1613,3 +1613,21 @@ a.rl-link:hover { background: var(--accent-soft); color: var(--accent-text); }
   .team-row { grid-template-columns: auto minmax(0, 1fr) auto; }
   .team-pos { display: none; }
 }
+
+/* Карточка приложения: Info — пункты-галочки */
+.info-list { display: grid; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface); padding: 4px; margin-bottom: 8px; }
+.info-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 2px 4px 2px 0; border-radius: 8px; }
+.info-row + .info-row { border-top: 1px solid var(--border); }
+.info-check { display: flex; align-items: center; gap: 10px; min-width: 0; border: 0; background: none; padding: 8px; text-align: left; font: inherit; color: var(--text); border-radius: 6px; }
+.info-check:not(:disabled):hover { background: var(--surface-2); }
+.info-check:disabled { cursor: default; }
+.info-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.info-row.on .aud-check { background: var(--ok); border-color: var(--ok); }
+.info-tag { font-size: 12px; white-space: nowrap; }
+.info-more { opacity: 0; }
+.info-row:hover .info-more, .info-more:focus-visible { opacity: 1; }
+@media (hover: none) { .info-more { opacity: 1; } }
+.info-add { display: flex; gap: 8px; align-items: center; }
+.info-add .inp { flex: 1; min-width: 0; }
+.info-add .info-scope { flex: none; width: auto; }
+@media (max-width: 640px) { .info-add { flex-wrap: wrap; } .info-tag { display: none; } }

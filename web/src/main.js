@@ -78,6 +78,7 @@ async function boot() {
     S.apps = d.apps || [];
     S.appStatuses = d.appStatuses || [];
     S.appFields = d.appFields || [];
+    S.appInfoItems = d.appInfoItems || [];
     S.priorityOptions = d.priorityOptions || [];
     if (mode === 'local') {
       // локально «Войти как» меняет и права; режим разработчика остаётся за тем, у кого он включён

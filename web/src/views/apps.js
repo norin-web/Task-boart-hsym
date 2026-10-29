@@ -415,6 +415,7 @@ export function openAppPanel(a, onChange) {
                 who ? avatar(who, 'sm') : h('span', { class: 'avatar-gap' }));
             })
             : h('p', { class: 'muted', style: { margin: 0 } }, 'Открытых работ нет'))),
+      infoBlock(a, manage, ceo, save, draw),
       S.appFields.length > 0 && h('section', null,
         h('div', { class: 'up-head' }, h('h3', null, 'Быстрый доступ')),
         h('div', { class: 'af-list' }, S.appFields.map(f => infoRow(a, f, manage, v => (f === storeField() && v ? fromStore(v, { info: { [f.id]: v } }) : save({ info: { [f.id]: v } })))))),
@@ -479,6 +480,57 @@ export function openAppPanel(a, onChange) {
   loadNotes();
   panel.append(headBox, body);
   fill(root, backdrop, panel);
+}
+
+/**
+ * Info приложения: пункты-галочки (что у приложения уже есть). Общие пункты (S.appInfoItems) — во всех карточках, отметка у каждого
+ * приложения своя; свои пункты — только у этого. Отмечают CEO и PM юнита; общий пункт добавляет и правит CEO.
+ */
+function infoBlock(a, manage, ceo, save, redraw) {
+  const checks = a.checks || { done: [], own: [] };
+  const rows = [
+    ...S.appInfoItems.map(x => ({ id: x.id, name: x.name, done: checks.done.includes(x.id), common: true })),
+    ...checks.own.map(x => ({ ...x, common: false })),
+  ];
+  const put = next => { a.checks = next; redraw(); save({ checks: next }); };  // отметка видна сразу, сохранение — следом
+  const toggle = r => put(r.common
+    ? { ...checks, done: r.done ? checks.done.filter(id => id !== r.id) : [...checks.done, r.id] }
+    : { ...checks, own: checks.own.map(x => (x.id === r.id ? { ...x, done: !x.done } : x)) });
+  const saveCommon = items => send('saveAppInfoItems', { items }).then(list => { S.appInfoItems = list; redraw(); }).catch(showErr);
+  const rowMenu = (anchor, r) => menu(anchor, [
+    { label: 'Переименовать' + (r.common ? ' (для всех)' : ''), icon: 'edit', action: async () => {
+      const name = await promptDlg('Пункт Info', 'Название', r.name);
+      if (!name || !name.trim()) return;
+      if (r.common) saveCommon(S.appInfoItems.map(x => (x.id === r.id ? { ...x, name: name.trim() } : x)));
+      else put({ ...checks, own: checks.own.map(x => (x.id === r.id ? { ...x, name: name.trim() } : x)) });
+    } },
+    { sep: true },
+    r.common
+      ? { label: 'Убрать из всех приложений', icon: 'trash', danger: true, action: async () => {
+        if (await confirmDlg(`Убрать пункт «${r.name}» из Info всех приложений? Отметки по нему пропадут.`, { ok: 'Убрать', danger: true })) saveCommon(S.appInfoItems.filter(x => x.id !== r.id));
+      } }
+      : { label: 'Удалить пункт', icon: 'trash', danger: true, action: () => put({ ...checks, own: checks.own.filter(x => x.id !== r.id) }) },
+  ]);
+  const inp = h('input', { class: 'inp sm', maxlength: 120, placeholder: 'Новый пункт, например «Продуктовый апдейт»' });
+  const scope = h('select', { class: 'inp sm info-scope', title: 'Куда добавить пункт' },
+    h('option', { value: 'all' }, 'во все приложения'), h('option', { value: 'here' }, 'только сюда'));
+  const add = () => {
+    const name = inp.value.trim();
+    if (!name) return inp.focus();
+    if (ceo && scope.value === 'all') saveCommon([...S.appInfoItems, { name }]);
+    else put({ ...checks, own: [...checks.own, { name, done: false }] });
+  };
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+  const done = rows.filter(r => r.done).length;
+  return h('section', null,
+    h('div', { class: 'up-head' }, h('h3', null, 'Info', rows.length > 0 && h('span', { class: 'muted sec-n' }, `${done} из ${rows.length}`))),
+    rows.length > 0 && h('div', { class: 'info-list' }, rows.map(r => h('div', { class: 'info-row' + (r.done ? ' on' : '') },
+      h('button', { class: 'info-check', role: 'checkbox', 'aria-checked': String(r.done), disabled: !manage, onclick: () => toggle(r) },
+        h('span', { class: 'aud-check' }, r.done && icon('check', 13)), h('span', { class: 'info-name' }, r.name)),
+      h('span', { class: 'muted info-tag' }, r.common ? 'для всех' : 'только тут'),
+      (r.common ? ceo : manage) && h('button', { class: 'icon-btn sm info-more', title: 'Пункт', onclick: e => { e.stopPropagation(); rowMenu(e.currentTarget, r); } }, icon('more', 15))))),
+    !rows.length && h('p', { class: 'muted', style: { margin: '0 0 8px' } }, 'Пунктов пока нет — отмечайте, что у приложения уже есть: продуктовый апдейт, пейвол, локализации…'),
+    manage && h('div', { class: 'info-add' }, inp, ceo && scope, h('button', { class: 'btn sm', onclick: add }, icon('plus', 14), 'Пункт')));
 }
 
 /** «Поставить задачи» пачкой: несколько строк — каждая уходит PM юнита отдельной задачей. */
