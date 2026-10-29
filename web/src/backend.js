@@ -1491,7 +1491,7 @@ export function createBackend(db, opts = {}) {
       const ts = now();
       const app = {
         id: uid('app'), unit_id: unit.id, name: req(str(p.name, 120), 'Название'), color: color(p.color, PALETTE[Math.floor(Math.random() * PALETTE.length)]),
-        status: (statuses.find(x => x.kind === 'dev') || statuses[0]).id, info: {}, ord: (await maxOrd('apps', { unit_id: unit.id })) + 1,
+        status: (statuses.find(x => x.id === p.status) || statuses.find(x => x.kind === 'dev') || statuses[0]).id, info: {}, ord: (await maxOrd('apps', { unit_id: unit.id })) + 1,
         archived: false, is_test: !!p.test, created_by: actor(ctx), created_at: ts, updated_at: ts,
         priority: await validPriority(p.priority), status_at: ts, icon_url: iconUrl(p.iconUrl),
       };
@@ -1499,6 +1499,8 @@ export function createBackend(db, opts = {}) {
       const store = p.storeUrl && (await appFields()).find(f => f.kind === 'link' && /app ?store/i.test(f.name) && !/connect/i.test(f.name));
       if (store) { const v = linkUrl(p.storeUrl); if (v) app.info = { [store.id]: v }; }
       await run(T('apps').insert(app));
+      // уже существующее приложение (импорт списком) — без запроса «New App»
+      if (p.noRequest) return { app: appOut(app), request: null };
       const request = await methods.createRequest({
         appId: app.id, type: 'new_app', title: str(p.requestTitle, 500) || `New App: ${app.name}`, description: p.description,
         pmId: p.pmId, dueDate: p.dueDate, priority: app.priority,

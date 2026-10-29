@@ -180,6 +180,7 @@ export async function renderApps() {
     search,
     filterBtn,
     isSuper() && h('button', { class: 'icon-btn', title: 'Статусы и поля приложения', onclick: e => { e.stopPropagation(); settingsMenu(e.currentTarget, reload); } }, icon('settings', 17)),
+    isSuper() && units().length > 0 && h('button', { class: 'btn sm', title: 'Уже существующие приложения: название и ссылка на App Store построчно', onclick: () => openImportApps(reload) }, icon('layers', 14), h('span', { class: 'btn-label' }, 'Добавить списком')),
     isSuper() && units().length > 0 && h('button', { class: 'btn primary sm', onclick: () => openCreateApp(reload) }, icon('plus', 14), h('span', { class: 'btn-label' }, 'Новое приложение')));
   drawList();
 }
@@ -191,7 +192,8 @@ function emptyApps(reload) {
       ? [h('p', { style: { margin: 0 } }, 'Создайте приложение — запрос «New App» сразу уйдёт PM его юнита.'),
         h('div', { class: 'row', style: { justifyContent: 'center', gap: '8px' } },
           units().length
-            ? h('button', { class: 'btn primary', onclick: () => openCreateApp(reload) }, icon('plus', 15), 'Новое приложение')
+            ? [h('button', { class: 'btn primary', onclick: () => openCreateApp(reload) }, icon('plus', 15), 'Новое приложение'),
+              h('button', { class: 'btn', onclick: () => openImportApps(reload) }, icon('layers', 15), 'Добавить списком')]
             : h('span', { class: 'muted' }, 'Сначала нужен юнит (Gold, RF, MVP…) — режим Admin → Воркспейсы → +.'),
           mode === 'local' && !units().length && h('button', { class: 'btn', onclick: e => fillDemo(e.currentTarget) }, icon('layers', 15), 'Заполнить демо-данными'))]
       : h('p', { style: { margin: 0 } }, 'Здесь появятся приложения ваших юнитов.'));
@@ -629,6 +631,62 @@ export function openCreateApp(onDone, unitId) {
         await send('createApp', { name: name.value, unitId: unit.value, pmId: pm.el.value, dueDate: due.value, priority: prio.value, description: desc.value, storeUrl: store.value.trim(), iconUrl });
         close();
         toast(`«${name.value.trim()}» создано — задача ушла PM`);
+        if (onDone) onDone();
+      },
+    }],
+  });
+}
+
+/** id приложения в App Store из ссылки (…/id123456789). */
+const storeId = url => (/id(\d{5,})/.exec(url || '') || [])[1] || '';
+
+/**
+ * «Добавить списком» — уже существующие приложения: строка = название и ссылка на App Store (как копируется из таблицы).
+ * Иконка — из стора, название — ваше; статус по умолчанию «В сторе», запроса PM не создаётся. Уже добавленные (та же ссылка) пропускаются.
+ */
+export function openImportApps(onDone) {
+  const list = units();
+  const text = h('textarea', { class: 'inp mono', rows: 10, placeholder: 'PDF Converter v5\thttps://apps.apple.com/app/id6670748953\nCall Recorder v6\thttps://apps.apple.com/app/id6578445681' });
+  const unit = h('select', { class: 'inp' }, list.map(u => h('option', { value: u.id }, u.name)));
+  const live = S.appStatuses.find(x => x.kind === 'live');
+  const status = h('select', { class: 'inp' }, S.appStatuses.map(st => h('option', { value: st.id, selected: live && st.id === live.id }, st.name)));
+  const sf = storeField();
+  const known = new Set(S.apps.map(a => storeId(sf && a.info && a.info[sf.id])).filter(Boolean));
+  const summary = h('span');
+  const parse = () => text.value.split('\n').map(l => {
+    const url = (/https?:\/\/\S+/.exec(l) || [''])[0];
+    return { name: l.replace(url, '').replace(/\s+/g, ' ').trim(), url };
+  }).filter(x => x.name);
+  const count = () => {
+    const rows = parse();
+    const dup = rows.filter(x => known.has(storeId(x.url))).length;
+    summary.textContent = rows.length ? `${rows.length} ${plural(rows.length, ['приложение', 'приложения', 'приложений'])}` + (dup ? ` · уже есть: ${dup} — пропустим` : '') : 'Строка: название, затем ссылка (через Tab или пробел)';
+  };
+  text.addEventListener('input', count);
+  count();
+  modal({
+    title: 'Добавить приложения списком',
+    wide: true,
+    body: [
+      field('Приложения', text, summary),
+      h('div', { class: 'grid2' }, field('Юнит', unit, 'Потом можно перенести каждое в свой юнит'), field('Статус', status)),
+      h('p', { class: 'hint', style: { margin: 0 } }, 'Иконки подтянутся из App Store, ссылка ляжет в поле «App Store». Задачи PM не создаются.'),
+    ],
+    actions: [{ label: 'Отмена' }, {
+      label: 'Добавить', primary: true,
+      action: async close => {
+        const rows = parse().filter(x => !known.has(storeId(x.url)));
+        if (!rows.length) { text.focus(); return; }
+        // иконки из стора — параллельно, создание — по порядку списка
+        const icons = await Promise.all(rows.map(x => (x.url ? storeLookup(x.url) : null)));
+        let done = 0;
+        for (const [i, x] of rows.entries()) {
+          await send('createApp', { name: x.name, unitId: unit.value, status: status.value, noRequest: true, storeUrl: x.url, iconUrl: (icons[i] && icons[i].iconUrl) || '' });
+          done++;
+          known.add(storeId(x.url));
+        }
+        close();
+        toast(`Добавлено: ${done} ${plural(done, ['приложение', 'приложения', 'приложений'])}`);
         if (onDone) onDone();
       },
     }],

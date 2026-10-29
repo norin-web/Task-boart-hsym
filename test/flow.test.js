@@ -74,6 +74,11 @@ test('New App: CEO → PM юнита → этапы по флоу → блоки
   await api.as(ios, async () => assert.deepEqual((await api('listApps', {})).map(a => a.name), ['Sleep Sounds']));
   // создаёт приложения только CEO
   await api.as(pm, () => assert.rejects(() => api('createApp', { name: 'x', unitId: gold.id }), forbidden));
+  // импорт уже вышедшего приложения: свой статус, без запроса PM
+  const imported = await api.as(ceo, () => api('createApp', { name: 'Old App', unitId: gold.id, status: 'live', noRequest: true, storeUrl: 'https://apps.apple.com/app/id6470798112' }));
+  assert.equal(imported.app.status, 'live');
+  assert.equal(imported.request, null);
+  await api.as(ceo, () => api('updateApp', { id: imported.app.id, archived: true }));
 
   // PM раскладывает запрос по флоу
   const stages = await api.as(pm, () => api('decomposeRequest', { taskId: request.id }));
