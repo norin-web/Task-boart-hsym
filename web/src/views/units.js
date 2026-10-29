@@ -59,7 +59,7 @@ export async function deleteUnit(u) {
   }).catch(showErr);
 }
 
-/** onCreated — остаться на месте (дашборд CEO) и обновить экран; без него — переход на доску нового юнита. */
+/** После создания остаёмся на месте (панель админа, дашборд…): onCreated или перерисовка экрана; доска — по «Открыть» в тосте. */
 export function openCreateUnit(onCreated) {
   const name = h('input', { class: 'inp', placeholder: 'Например, Gold', maxlength: 80 });
   const key = h('input', { class: 'inp mono', placeholder: 'MKT', maxlength: 10 });
@@ -92,7 +92,8 @@ export function openCreateUnit(onCreated) {
           S.units.push(u);
           close();
           renderSidebar();
-          if (typeof onCreated === 'function') { toast(`Юнит «${u.name}» создан`); onCreated(u); } else navigate({ unit: u.id, mode: 'board' });
+          toast(`Юнит «${u.name}» создан`, { action: { label: 'Открыть', run: () => navigate({ unit: u.id, mode: 'board' }) } });
+          if (typeof onCreated === 'function') onCreated(u); else rerender();
         },
       },
     ],
