@@ -7,7 +7,7 @@ import { $, h, icon, avatar, topbar, showErr, fill, menu, modal, field } from '.
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
-import { openAppById, openCreateApp, openImportApps, openNewAppTask, appIcon, prioTag, stageDots, statusPill, appPm } from './apps.js';
+import { openAppById, openCreateApp, openImportApps, storeCheckBlock, openNewAppTask, appIcon, prioTag, stageDots, statusPill, appPm } from './apps.js';
 import { newsBlock, loadNotes, fillDemo, unitCard } from './home.js';
 import { renderLayout, editLayout } from './layout.js';
 import { openCreateUnit } from './units.js';
@@ -86,6 +86,7 @@ function portfolio(d, reload) {
 // Короткая пометка справа; красным — только то, что уже горит
 const ATT = {
   reject: { cls: 'danger', text: () => 'реджект' },
+  store: { cls: 'danger', text: () => 'нет в App Store' },
   overdue: { cls: 'danger', text: x => `просрочено ${daysLate(x.task.dueDate)} дн.` },
   nopm: { cls: 'muted', text: () => 'нет PM' },
   waiting: { cls: 'muted', text: () => 'не разложено' },
@@ -180,6 +181,7 @@ function ceoBlocks(d, apps, reload) {
   const blocks = [
     { id: 'news', title: 'Новое для вас', col: 'full', first: true, empty: 'Появится, когда что-то придёт вам', render: () => newsBlock() },
     { id: 'units', title: 'Юниты', col: 'full', render: () => portfolio(d, reload) },
+    { id: 'storeCheck', title: 'Проверка App Store', col: 'full', render: () => storeCheckBlock(apps, reload) },
     { id: 'attention', title: 'Требует внимания', col: 'left', render: () => attention(d, reload) },
     { id: 'inprogress', title: 'Работы в ходу', col: 'left', render: () => inProgress(d, reload) },
     { id: 'recent', title: 'Недавно вышло', col: 'right', render: () => recent(d, reload) },

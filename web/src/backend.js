@@ -268,6 +268,7 @@ const iconUrl = v => { const s = String(v || '').trim().slice(0, 500); return /^
 const appOut = r => ({
   id: r.id, unitId: r.unit_id, name: r.name, color: r.color || '', status: r.status, info: json(r.info, {}) || {},
   priority: r.priority || '', statusAt: r.status_at || '', iconUrl: r.icon_url || '', storeName: r.store_name || '',
+  storeOk: r.store_ok == null ? null : !!r.store_ok, storeCheckedAt: r.store_checked_at || '',
   order: r.ord, archived: !!r.archived, isTest: !!r.is_test, createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at,
 });
 
@@ -1508,6 +1509,22 @@ export function createBackend(db, opts = {}) {
       return { app: appOut(app), request };
     },
 
+    /**
+     * Итог проверки App Store (кнопка «Обновить»): items [{ id, ok, storeName?, iconUrl? }] — открывается ли страница в сторе.
+     * «Обновлено» у приложения не трогает: проверка — не работа над ним. Права — как на правку приложения (база).
+     */
+    async saveStoreCheck(p) {
+      const at = now();
+      let n = 0;
+      for (const x of (Array.isArray(p.items) ? p.items : []).slice(0, 2000)) {
+        const upd = { store_ok: !!x.ok, store_checked_at: at };
+        if (x.ok && x.storeName) upd.store_name = str(x.storeName, 200);
+        if (x.ok && x.iconUrl) upd.icon_url = iconUrl(x.iconUrl);
+        n += (await run(T('apps').update(upd).eq('id', String(x.id ?? '')).select('id'))).length;
+      }
+      return { saved: n, at };
+    },
+
     /** Массовая правка приложений: статус и/или юнит (юнит — только CEO, задачи едут вместе). Возвращает обновлённые. */
     async updateApps(p, ctx) {
       const ids = (Array.isArray(p.ids) ? p.ids : []).map(x => String(x ?? '')).filter(Boolean);
@@ -1673,6 +1690,7 @@ export function createBackend(db, opts = {}) {
       const attention = [], inProgress = [], recent = [];
       for (const a of apps) {
         if (kindOfStatus(a.status) === 'reject') attention.push({ type: 'reject', app: brief(a), at: a.statusAt });
+        if (a.storeOk === false) attention.push({ type: 'store', app: brief(a), at: a.storeCheckedAt });
         if (kindOfStatus(a.status) === 'live' && a.statusAt >= recentFrom) recent.push({ type: 'live', app: brief(a), at: a.statusAt });
         for (const r of a.requests) {
           if (r.done) {
@@ -1691,7 +1709,7 @@ export function createBackend(db, opts = {}) {
           inProgress.push({ app: brief(a), request: r, current });
         }
       }
-      const rank = { reject: 0, overdue: 1, nopm: 2, waiting: 3, stale: 4 };
+      const rank = { reject: 0, store: 1, overdue: 2, nopm: 3, waiting: 4, stale: 5 };
       attention.sort((x, y) => rank[x.type] - rank[y.type] || String(x.at).localeCompare(String(y.at)));
       recent.sort((x, y) => String(y.at).localeCompare(String(x.at)));
       return { portfolio, attention, inProgress, recent, staleDays, statuses };

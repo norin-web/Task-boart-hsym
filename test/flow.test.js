@@ -496,3 +496,22 @@ test('массовая правка приложений: статус и юни
   // PM чужого юнита не может
   await api.as(pm, () => assert.rejects(() => api('updateApps', { ids, status: 'live' })));
 });
+
+test('проверка App Store: итог сохраняется, пропавшие — в «Требует внимания», «Обновлено» не трогает', async () => {
+  const api = await setup();
+  const { ceo, pmRf, gold } = await studio(api);
+  const { app } = await api.as(ceo, () => api('createApp', { name: 'Gone', unitId: gold.id, noRequest: true }));
+  const ok = await api.as(ceo, () => api('createApp', { name: 'Ok', unitId: gold.id, noRequest: true }));
+  assert.equal(app.storeOk, null);
+  await api.as(ceo, () => api('saveStoreCheck', { items: [{ id: app.id, ok: false }, { id: ok.app.id, ok: true, storeName: 'Ok Store' }] }));
+  const list = await api.as(ceo, () => api('listApps', {}));
+  const gone = list.find(x => x.id === app.id);
+  assert.equal(gone.storeOk, false);
+  assert.ok(gone.storeCheckedAt);
+  assert.equal(gone.updatedAt, app.updatedAt);
+  assert.equal(list.find(x => x.id === ok.app.id).storeName, 'Ok Store');
+  const d = await api.as(ceo, () => api('getCeoDashboard', {}));
+  assert.deepEqual(d.attention.filter(x => x.type === 'store').map(x => x.app.name), ['Gone']);
+  // PM чужого юнита отметку не поставит
+  assert.equal((await api.as(pmRf, () => api('saveStoreCheck', { items: [{ id: ok.app.id, ok: false }] }))).saved, 0);
+});

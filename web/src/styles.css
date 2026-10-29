@@ -1548,3 +1548,21 @@ a.rl-link:hover { background: var(--accent-soft); color: var(--accent-text); }
 .aph-link:hover { border-color: var(--border-strong); color: var(--text); }
 .aph-link img { border-radius: 4px; }
 @media (max-width: 640px) { .uc-icon.lg { width: 52px; height: 52px; border-radius: 12px; } .aph-title h2 { font-size: 17px; } }
+
+/* Проверка App Store (страница «Приложения» и дашборд CEO) */
+.store-check { border: 1px solid var(--border); border-radius: var(--r); background: var(--surface); margin-bottom: 18px; overflow: hidden; }
+.store-check.has-gone { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
+.sc-head { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+.sc-head > img { border-radius: 6px; flex: none; }
+.sc-title { display: grid; gap: 1px; min-width: 0; }
+.sc-sub { font-size: 12.5px; }
+.sc-gone { border-top: 1px solid var(--border); background: var(--danger-soft); padding: 6px 8px 8px; }
+.sc-gone-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; padding: 6px 6px 8px; color: var(--danger); font-size: 13px; }
+.sc-gone-head .muted { font-size: 12.5px; }
+.sc-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 4px 6px; border-radius: 8px; }
+.sc-row + .sc-row { border-top: 1px solid color-mix(in srgb, var(--danger) 15%, transparent); }
+.sc-app { display: inline-flex; align-items: center; gap: 10px; min-width: 0; border: 0; background: none; padding: 4px 0; text-align: left; }
+.sc-app:hover b { text-decoration: underline; }
+.sc-unit { font-size: 12.5px; }
+.store-badge.gone { color: var(--danger); }
+@media (max-width: 640px) { .sc-row { grid-template-columns: minmax(0, 1fr) auto; } .sc-unit { display: none; } }

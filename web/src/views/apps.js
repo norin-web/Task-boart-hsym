@@ -53,8 +53,10 @@ export async function storeLookup(url) {
 }
 /** Приложение в сторе — значок и подпись App Store вместо статуса. */
 export const storeBadge = () => h('span', { class: 'store-badge', title: 'В App Store' }, h('img', { src: appStoreSvg, alt: '', width: 18, height: 18 }), 'App Store');
-/** Статус в списке: «в сторе» — App Store, остальное — цветная плашка. */
-export const appStatusCell = st => (st && st.kind === 'live' ? storeBadge() : statusPill(st));
+/** Проверка показала, что страницы в сторе нет. */
+export const storeGoneBadge = () => h('span', { class: 'store-badge gone', title: 'Страница в App Store не открывается' }, icon('alert', 15), 'Нет в App Store');
+/** Статус в списке: пропало из стора — красная пометка; «в сторе» — App Store; остальное — цветная плашка. */
+export const appStatusCell = (st, a) => (a && a.storeOk === false ? storeGoneBadge() : st && st.kind === 'live' ? storeBadge() : statusPill(st));
 export const statusPill = st => (st ? h('span', { class: 'st-pill', style: { '--sc': st.color } }, h('span', { class: 'dot' }), st.name) : h('span', { class: 'muted' }, '—'));
 /** Приоритет: цветная метка с названием (не только цветом). */
 /** Высокий приоритет — два верхних варианта (High, Critical); плашку показываем только им. */
@@ -212,7 +214,7 @@ export async function renderApps() {
       .map(u => ({ u, list: rest.filter(a => (a.unitId || '') === u.id || (!u.id && !unitById(a.unitId))) }))
       .filter(g => g.list.length);
     const workOpen = !!q || !collapsed.has('__work');
-    fill(body, sel && pickBar(found), chips, groups.length || work.length ? [appHead(),
+    fill(body, !sel && !q && storeCheckBlock(apps, reload), sel && pickBar(found), chips, groups.length || work.length ? [appHead(),
       work.length > 0 && h('section', { class: 'ap-group ap-work-group' + (workOpen ? ' open' : '') },
         h('button', { class: 'ap-group-head', 'aria-expanded': String(workOpen), onclick: () => toggle('__work') },
           h('span', { class: 'ap-chev' }, icon('chevron', 14)), icon('progress', 14), h('b', null, 'В работе'),
@@ -290,7 +292,7 @@ export function appTable(apps, reload, sel, onPick, withUnit) {
             (a.storeName || withUnit) && h('small', { class: 'muted ap-store-name', title: a.storeName ? 'В App Store: ' + a.storeName : '' },
               withUnit && unitById(a.unitId) && h('span', { class: 'unit-dot', style: { background: unitById(a.unitId).color, margin: 0 } }),
               withUnit && unitById(a.unitId) && unitById(a.unitId).name + (a.storeName ? ' · ' : ''), a.storeName))),
-        h('span', null, appStatusCell(st)),
+        h('span', null, appStatusCell(st, a)),
         h('span', { class: 'ap-work' }, req ? workSummary(req) : h('span', { class: 'muted' }, '—')),
         h('span', { class: 'muted ap-upd', title: a.lastActivity ? fmtDate(a.lastActivity.slice(0, 10)) : '' }, a.lastActivity ? relTime(a.lastActivity) : '—'),
         h('span', null, pm ? avatar(pm, 'sm') : h('span', { class: 'muted' }, '—')),
@@ -733,6 +735,78 @@ export async function deleteAppsDlg(list) {
     toast(`Удалено: ${r.apps} ${plural(r.apps, ['приложение', 'приложения', 'приложений'])}` + (r.tasks ? ` и ${r.tasks} ${plural(r.tasks, ['задача', 'задачи', 'задач'])}` : ''));
     return true;
   } catch (e) { showErr(e); return false; }
+}
+
+/* ---------- проверка App Store ---------- */
+
+/** Ссылка на стор у приложения (поле «App Store»). */
+export const appStoreUrl = a => { const sf = storeField(); return (sf && a.info && a.info[sf.id]) || ''; };
+/**
+ * Есть ли приложение в App Store: iTunes Lookup по id, сначала страна из ссылки, потом крупные витрины
+ * (приложение может продаваться не везде). { ok, name, iconUrl } или null — сеть не ответила, итог неизвестен.
+ */
+async function storeCheck(url) {
+  const id = (/id(\d{5,})/.exec(url || '') || [])[1];
+  if (!id) return { ok: false };
+  const own = ((/apple\.com\/([a-z]{2})\//i.exec(url) || [])[1] || '').toLowerCase();
+  for (const c of [...new Set([own || 'us', 'us', 'gb', 'de', 'ru', 'fr', 'jp', 'br'])]) {
+    try {
+      const j = await (await fetch(`https://itunes.apple.com/lookup?id=${id}&country=${c}`)).json();
+      const x = j.results && j.results[0];
+      if (x) return { ok: true, name: x.trackName || '', iconUrl: x.artworkUrl512 || x.artworkUrl100 || '' };
+    } catch { return null; }
+  }
+  return { ok: false };
+}
+/** Проверить все приложения со ссылкой на стор и сохранить итог. onStep(done, total). */
+export async function runStoreCheck(apps, onStep) {
+  const list = apps.filter(a => appStoreUrl(a));
+  const items = [];
+  let done = 0;
+  for (let i = 0; i < list.length; i += 6) {
+    await Promise.all(list.slice(i, i + 6).map(async a => {
+      const r = await storeCheck(appStoreUrl(a));
+      if (r) items.push({ id: a.id, ok: r.ok, storeName: r.name, iconUrl: r.iconUrl });
+      onStep(++done, list.length);
+    }));
+  }
+  if (items.length) await send('saveStoreCheck', { items });
+  return { total: list.length, gone: items.filter(x => !x.ok).length, failed: list.length - items.length };
+}
+/**
+ * Блок «Проверка App Store»: когда проверяли, сколько открывается, «Обновить»; ниже — приложения, которых нет в сторе
+ * (возможно, удалены или сняты с продажи). Страница «Приложения» и дашборд CEO.
+ */
+export function storeCheckBlock(apps, reload) {
+  const withLink = apps.filter(a => appStoreUrl(a));
+  const gone = withLink.filter(a => a.storeOk === false);
+  const last = withLink.map(a => a.storeCheckedAt).filter(Boolean).sort().pop() || '';
+  const unchecked = withLink.filter(a => a.storeOk == null).length;
+  const status = h('span', { class: 'muted sc-sub' },
+    !withLink.length ? 'Нет приложений со ссылкой на App Store'
+      : last ? `проверено ${relTime(last)} · открываются ${withLink.length - gone.length - unchecked} из ${withLink.length}` + (unchecked ? ` · не проверено ${unchecked}` : '')
+        : `${withLink.length} ${plural(withLink.length, ['приложение', 'приложения', 'приложений'])} со ссылкой — ещё не проверяли`);
+  const btn = h('button', { class: 'btn sm', disabled: !withLink.length || !isStaff(), onclick: async () => {
+    btn.disabled = true;
+    try {
+      const r = await runStoreCheck(withLink, (d, t) => { fill(btn, h('span', { class: 'spinner' }), `Проверяю ${d}/${t}…`); });
+      toast(r.gone ? `Нет в App Store: ${r.gone}` : 'Все приложения открываются в App Store' + (r.failed ? ` · не удалось проверить ${r.failed}` : ''), r.gone ? { type: 'error' } : {});
+      reload();
+    } catch (e) { showErr(e); btn.disabled = false; }
+  } }, icon('refresh', 14), 'Обновить');
+  return h('section', { class: 'store-check' + (gone.length ? ' has-gone' : '') },
+    h('div', { class: 'sc-head' },
+      h('img', { src: appStoreSvg, alt: '', width: 22, height: 22 }),
+      h('span', { class: 'sc-title' }, h('b', null, 'Проверка App Store'), status),
+      h('span', { class: 'spacer' }), btn),
+    gone.length > 0 && h('div', { class: 'sc-gone' },
+      h('div', { class: 'sc-gone-head' }, icon('alert', 14), h('b', null, 'Требует внимания · ' + gone.length),
+        h('span', { class: 'muted' }, 'страница в сторе не открывается — возможно, удалено или снято с продажи')),
+      gone.map(a => h('div', { class: 'sc-row' },
+        h('button', { class: 'sc-app', onclick: () => openAppPanel(a, reload) }, appIcon(a, 'sm'),
+          h('span', { class: 'ap-names' }, h('b', null, a.name), a.storeName && h('small', { class: 'muted' }, a.storeName))),
+        h('span', { class: 'muted sc-unit' }, (unitById(a.unitId) || {}).name || ''),
+        h('a', { class: 'btn ghost sm', href: appStoreUrl(a), target: '_blank', rel: 'noopener', title: 'Проверить ссылку вручную' }, 'Открыть ссылку', icon('arrowUpRight', 13))))));
 }
 
 /**
