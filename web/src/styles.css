@@ -1724,3 +1724,12 @@ a.rc-more { text-decoration: none; }
 .flt-foot-r { display: inline-flex; align-items: center; gap: 12px; }
 .aud-check.round { border-radius: 50%; }
 @media (max-width: 520px) { .flt { grid-template-columns: 1fr; width: calc(100vw - 16px); } .flt-nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); } .flt-tab { width: auto; white-space: nowrap; } .flt-save { display: none; } }
+
+/* Список приложений: сортировка кликом по заголовку колонки */
+.ap-head .ap-sort { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; padding: 2px 4px; margin: -2px -4px; font: inherit; color: inherit; border-radius: 5px; width: fit-content; }
+.ap-head .ap-sort:hover { color: var(--text); background: var(--surface-2); }
+.ap-sort-ic { display: inline-flex; opacity: 0; transition: transform .15s, opacity .12s; }
+.ap-sort:hover .ap-sort-ic { opacity: .5; }
+.ap-sort.on { color: var(--text); }
+.ap-sort.on .ap-sort-ic { opacity: 1; color: var(--accent-text); }
+.ap-sort[aria-sort="ascending"] .ap-sort-ic { transform: rotate(180deg); }

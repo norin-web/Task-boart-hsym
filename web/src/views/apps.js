@@ -222,6 +222,13 @@ export async function renderApps({ unitId = '' } = {}) {
       f.age > 0 && chip(`не трогали > ${f.age} дн.`, () => { f.age = 0; saveF(); drawList(); }),
       active() > 1 && h('button', { class: 'link-btn', onclick: () => apply({}) }, 'Сбросить всё'));
   };
+  // сортировка по колонке (клик по заголовку): { key, dir: -1 по убыванию | 1 по возрастанию } или null — по приоритету
+  let sort = LS.get('appsSort', null);
+  const onSort = key => {
+    sort = !sort || sort.key !== key ? { key, dir: key === 'name' || key === 'pm' ? 1 : -1 } : sort.dir === (key === 'name' || key === 'pm' ? 1 : -1) ? { key, dir: -sort.dir } : null;
+    LS.set('appsSort', sort);
+    drawList();
+  };
   const collapsed = new Set(LS.get('appsCollapsed', []));
   const reload = () => load().then(() => { drawTools(); drawList(); }).catch(showErr);
   // выбор нескольких — чтобы удалить пачкой (только CEO)
@@ -277,22 +284,22 @@ export async function renderApps({ unitId = '' } = {}) {
       .map(u => ({ u, list: rest.filter(a => (a.unitId || '') === u.id || (!u.id && !unitById(a.unitId))) }))
       .filter(g => g.list.length);
     const workOpen = !!q || !collapsed.has('__work');
-    fill(body, !sel && !q && storeCheckBlock(apps, reload), sel && pickBar(found), chips, groups.length || work.length ? [appHead(),
+    fill(body, !sel && !q && storeCheckBlock(apps, reload), sel && pickBar(found), chips, groups.length || work.length ? [appHead(sort, onSort),
       work.length > 0 && h('section', { class: 'ap-group ap-work-group' + (workOpen ? ' open' : '') },
         h('button', { class: 'ap-group-head', 'aria-expanded': String(workOpen), onclick: () => toggle('__work') },
           h('span', { class: 'ap-chev' }, icon('chevron', 14)), icon('progress', 14), h('b', null, 'В работе'),
           h('span', { class: 'muted' }, work.length)),
-        workOpen && appTable(work, reload, sel, pick, true)),
+        workOpen && appTable(work, reload, sel, pick, true, sort)),
       ...groups.map(({ u, list }) => {
       // во вкладке юнита группа одна — без заголовка
-      if (unitId) return appTable(list, reload, sel, pick);
+      if (unitId) return appTable(list, reload, sel, pick, false, sort);
       const open = !!q || active() > 0 || !collapsed.has(u.id);
       return h('section', { class: 'ap-group' + (open ? ' open' : '') },
         h('button', { class: 'ap-group-head', 'aria-expanded': String(open), onclick: () => toggle(u.id) },
           h('span', { class: 'ap-chev' }, icon('chevron', 14)),
           h('span', { class: 'unit-dot', style: { background: u.color, margin: 0 } }), h('b', null, u.name),
           h('span', { class: 'muted' }, list.length)),
-        open && appTable(list, reload, sel, pick));
+        open && appTable(list, reload, sel, pick, false, sort));
     })] : h('p', { class: 'muted apps-none' }, 'Ничего не найдено'));
   };
   const drawTools = () => fill(tools,
@@ -336,17 +343,38 @@ function settingsMenu(anchor, reload) {
 
 /** Строки с подписанными колонками: приложение · юнит · статус · сейчас в работе · PM. */
 /** Подписи колонок списка — одна строка над всеми группами. */
-export const appHead = () => h('div', { class: 'ap-row ap-head', 'aria-hidden': 'true' },
-  h('span', null, 'Приложение'), h('span', null, 'Статус'), h('span', null, 'Приоритет'), h('span', null, 'Сейчас в работе'), h('span', null, 'Обновлено'), h('span', null, 'PM'), h('span'));
+const SORT_COLS = [['name', 'Приложение'], ['status', 'Статус'], ['prio', 'Приоритет'], ['work', 'Сейчас в работе'], ['updated', 'Обновлено'], ['pm', 'PM']];
+/** Шапка колонок; клик по колонке — сортировка: по убыванию → по возрастанию → как было (onSort(key)). */
+export const appHead = (sort, onSort) => h('div', { class: 'ap-row ap-head', role: 'row' },
+  SORT_COLS.map(([key, label]) => {
+    const on = sort && sort.key === key;
+    return onSort
+      ? h('button', { class: 'ap-sort' + (on ? ' on' : ''), role: 'columnheader', 'aria-sort': on ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none', title: 'Сортировать: ' + label.toLowerCase(), onclick: () => onSort(key) },
+        label, h('span', { class: 'ap-sort-ic' }, icon('chevron', 12)))
+      : h('span', { role: 'columnheader' }, label);
+  }), h('span'));
+/** Значение для сортировки по колонке. */
+const sortVal = (a, key) => {
+  switch (key) {
+    case 'name': return a.name.toLowerCase();
+    case 'status': return S.appStatuses.findIndex(x => x.id === a.status);
+    case 'prio': return S.priorityOptions.findIndex(o => o.id === a.priority);
+    case 'work': { const r = (a.requests || []).find(x => !x.done); return r ? 1 + (r.progress || 0) / 1000 : 0; }
+    case 'updated': return a.lastActivity || '';
+    case 'pm': return ((personById(appPm(a)) || {}).name || '').toLowerCase();
+    default: return 0;
+  }
+};
 
 /** Менеджер приложения: PM открытой задачи, иначе PM юнита. */
 export const appPm = a => { const req = (a.requests || []).find(r => !r.done); return (req && req.assigneeId) || ((pmsOf(a.unitId)[0] || {}).id) || ''; };
 
 /** sel — режим выбора (Set id): клик по строке отмечает её вместо открытия карточки; withUnit — показать юнит (раздел «В работе»). */
-export function appTable(apps, reload, sel, onPick, withUnit) {
+export function appTable(apps, reload, sel, onPick, withUnit, sort) {
   const rank = id => S.priorityOptions.findIndex(o => o.id === id);
+  const bySort = (a, b) => { const x = sortVal(a, sort.key), y = sortVal(b, sort.key); return (x < y ? -1 : x > y ? 1 : 0) * sort.dir || a.name.localeCompare(b.name, 'ru'); };
   return h('div', { class: 'ap-list' + (sel ? ' picking' : '') },
-    [...apps].sort((a, b) => rank(b.priority) - rank(a.priority) || (a.order || 0) - (b.order || 0)).map(a => {
+    [...apps].sort(sort ? bySort : (a, b) => rank(b.priority) - rank(a.priority) || (a.order || 0) - (b.order || 0)).map(a => {
       const st = appStatusById(a.status);
       const req = a.requests.find(r => !r.done) || null;
       const pm = personById(appPm(a));
