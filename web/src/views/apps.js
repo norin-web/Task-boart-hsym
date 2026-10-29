@@ -149,7 +149,20 @@ export async function renderApps() {
       f.age > 0 && chip(`не трогали > ${f.age} дн.`, () => { f.age = 0; saveF(); drawList(); }));
   };
   const collapsed = new Set(LS.get('appsCollapsed', []));
-  const reload = () => load().then(drawList).catch(showErr);
+  const reload = () => load().then(() => { drawTools(); drawList(); }).catch(showErr);
+  // выбор нескольких — чтобы удалить пачкой (только CEO)
+  let sel = null;
+  const pick = id => { if (sel.has(id)) sel.delete(id); else sel.add(id); drawList(); };
+  const setPicking = on => { sel = on ? new Set() : null; drawTools(); drawList(); };
+  const pickBar = found => h('div', { class: 'pick-bar' },
+    h('b', null, 'Выбрано: ' + sel.size),
+    h('button', { class: 'link-btn', onclick: () => { const all = found.every(a => sel.has(a.id)); found.forEach(a => (all ? sel.delete(a.id) : sel.add(a.id))); drawList(); } },
+      found.length && found.every(a => sel.has(a.id)) ? 'Снять все' : 'Выбрать все' + (q || active() ? ' найденные' : '')),
+    h('span', { class: 'spacer' }),
+    h('button', { class: 'btn sm danger', disabled: !sel.size, onclick: async () => {
+      if (await deleteAppsDlg(apps.filter(a => sel.has(a.id)))) { sel = null; drawTools(); reload(); }
+    } }, icon('trash', 14), 'Удалить'),
+    h('button', { class: 'btn sm', onclick: () => setPicking(false) }, 'Готово'));
   const search = h('input', {
     class: 'inp sm apps-search', type: 'search', placeholder: 'Поиск приложения', 'aria-label': 'Поиск приложения',
     oninput: e => { q = e.target.value.trim().toLowerCase(); drawList(); },
@@ -166,22 +179,24 @@ export async function renderApps() {
     const groups = [...units(), { id: '', name: 'Без юнита', color: 'var(--border-strong)' }]
       .map(u => ({ u, list: found.filter(a => (a.unitId || '') === u.id || (!u.id && !unitById(a.unitId))) }))
       .filter(g => g.list.length);
-    fill(body, chips, groups.length ? [appHead(), ...groups.map(({ u, list }) => {
+    fill(body, sel && pickBar(found), chips, groups.length ? [appHead(), ...groups.map(({ u, list }) => {
       const open = !!q || active() > 0 || !collapsed.has(u.id);
       return h('section', { class: 'ap-group' + (open ? ' open' : '') },
         h('button', { class: 'ap-group-head', 'aria-expanded': String(open), onclick: () => toggle(u.id) },
           h('span', { class: 'ap-chev' }, icon('chevron', 14)),
           h('span', { class: 'unit-dot', style: { background: u.color, margin: 0 } }), h('b', null, u.name),
           h('span', { class: 'muted' }, list.length)),
-        open && appTable(list, reload));
+        open && appTable(list, reload, sel, pick));
     })] : h('p', { class: 'muted apps-none' }, 'Ничего не найдено'));
   };
-  fill(tools,
+  const drawTools = () => fill(tools,
     search,
     filterBtn,
+    isSuper() && apps.length > 0 && h('button', { class: 'btn sm' + (sel ? ' on' : ''), title: 'Выбрать несколько приложений, чтобы удалить', onclick: () => setPicking(!sel) }, icon('check', 14), h('span', { class: 'btn-label' }, 'Выбрать')),
     isSuper() && h('button', { class: 'icon-btn', title: 'Статусы и поля приложения', onclick: e => { e.stopPropagation(); settingsMenu(e.currentTarget, reload); } }, icon('settings', 17)),
     isSuper() && units().length > 0 && h('button', { class: 'btn sm', title: 'Уже существующие приложения: название и ссылка на App Store построчно', onclick: () => openImportApps(reload) }, icon('layers', 14), h('span', { class: 'btn-label' }, 'Добавить списком')),
     isSuper() && units().length > 0 && h('button', { class: 'btn primary sm', onclick: () => openCreateApp(reload) }, icon('plus', 14), h('span', { class: 'btn-label' }, 'Новое приложение')));
+  drawTools();
   drawList();
 }
 
@@ -220,15 +235,17 @@ export const appHead = () => h('div', { class: 'ap-row ap-head', 'aria-hidden': 
 /** Менеджер приложения: PM открытой задачи, иначе PM юнита. */
 export const appPm = a => { const req = (a.requests || []).find(r => !r.done); return (req && req.assigneeId) || ((pmsOf(a.unitId)[0] || {}).id) || ''; };
 
-export function appTable(apps, reload) {
+/** sel — режим выбора (Set id): клик по строке отмечает её вместо открытия карточки. */
+export function appTable(apps, reload, sel, onPick) {
   const rank = id => S.priorityOptions.findIndex(o => o.id === id);
-  return h('div', { class: 'ap-list' },
+  return h('div', { class: 'ap-list' + (sel ? ' picking' : '') },
     [...apps].sort((a, b) => rank(b.priority) - rank(a.priority) || (a.order || 0) - (b.order || 0)).map(a => {
       const st = appStatusById(a.status);
       const req = a.requests.find(r => !r.done) || null;
       const pm = personById(appPm(a));
-      return h('button', { class: 'ap-row', onclick: () => openAppPanel(a, reload) },
-        h('span', { class: 'ap-name' }, appIcon(a), h('b', null, a.name), a.isTest && h('span', { class: 'test-tag' }, 'тест'), isHighPrio(a.priority) && prioTag(a.priority)),
+      const on = !!sel && sel.has(a.id);
+      return h('button', { class: 'ap-row' + (on ? ' picked' : ''), 'aria-pressed': sel ? String(on) : null, onclick: () => (sel ? onPick(a.id) : openAppPanel(a, reload)) },
+        h('span', { class: 'ap-name' }, sel && h('span', { class: 'aud-check pick-box' }, on && icon('check', 13)), appIcon(a), h('b', null, a.name), a.isTest && h('span', { class: 'test-tag' }, 'тест'), isHighPrio(a.priority) && prioTag(a.priority)),
         h('span', null, statusPill(st)),
         h('span', { class: 'ap-work' }, req ? workSummary(req) : h('span', { class: 'muted' }, '—')),
         h('span', { class: 'muted ap-upd', title: a.lastActivity ? fmtDate(a.lastActivity.slice(0, 10)) : '' }, a.lastActivity ? relTime(a.lastActivity) : '—'),
@@ -378,6 +395,7 @@ export function openAppPanel(a, onChange) {
       class: 'icon-btn', title: appCardCenter() ? 'Открывать справа' : 'Открывать по центру',
       onclick: () => { LS.set('cardMode', appCardCenter() ? 'side' : 'center'); panel.classList.toggle('center', appCardCenter()); backdrop.classList.toggle('center', appCardCenter()); fill(headBox, head()); },
     }, icon(appCardCenter() ? 'panelSide' : 'panelCenter', 16)),
+    isSuper() && h('button', { class: 'icon-btn', title: 'Удалить приложение', onclick: async () => { if (await deleteAppsDlg([a])) { close(); if (onChange) onChange(); } } }, icon('trash', 16)),
     h('button', { class: 'icon-btn', title: 'Закрыть', onclick: close }, icon('x', 18)));
   const headBox = h('div', null, head());
   const backdrop = h('div', { class: 'panel-backdrop' + (appCardCenter() ? ' center' : ''), onclick: close });
@@ -635,6 +653,20 @@ export function openCreateApp(onDone, unitId) {
       },
     }],
   });
+}
+
+/** Удалить приложения с подтверждением; задачи приложений удаляются вместе с ними. true — удалено. */
+export async function deleteAppsDlg(list) {
+  const n = list.length;
+  const what = n === 1 ? `«${list[0].name}»` : `${n} ${plural(n, ['приложение', 'приложения', 'приложений'])}`;
+  const ok = await confirmDlg(`Удалить ${what}? Задачи ${n === 1 ? 'приложения' : 'этих приложений'} (запросы, этапы, реджекты) удалятся вместе с ${n === 1 ? 'ним' : 'ними'}. Отменить нельзя.`,
+    { ok: 'Удалить', danger: true, title: n === 1 ? 'Удалить приложение' : 'Удалить приложения' });
+  if (!ok) return false;
+  try {
+    const r = await send('deleteApps', { ids: list.map(a => a.id) });
+    toast(`Удалено: ${r.apps} ${plural(r.apps, ['приложение', 'приложения', 'приложений'])}` + (r.tasks ? ` и ${r.tasks} ${plural(r.tasks, ['задача', 'задачи', 'задач'])}` : ''));
+    return true;
+  } catch (e) { showErr(e); return false; }
 }
 
 /** id приложения в App Store из ссылки (…/id123456789). */

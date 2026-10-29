@@ -1508,6 +1508,17 @@ export function createBackend(db, opts = {}) {
       return { app: appOut(app), request };
     },
 
+    /** Удалить приложения (только CEO) вместе с их задачами — запросами, этапами, реджектами. Возвращает число удалённых. */
+    async deleteApps(p) {
+      const ids = (Array.isArray(p.ids) ? p.ids : [p.id]).map(x => String(x ?? '')).filter(Boolean);
+      if (!ids.length) return { apps: 0, tasks: 0 };
+      const gone = await run(T('apps').delete().in('id', ids).select('id'));
+      if (!gone.length) fail('Недостаточно прав для этого действия', 'FORBIDDEN');
+      const done = gone.map(x => x.id);
+      const tasks = await run(T('tasks').delete().in('app_id', done).select('id'));
+      return { apps: done.length, tasks: tasks.length };
+    },
+
     /**
      * Поправить приложение: название, цвет, статус, приоритет, порядок (order — приоритет внутри колонки канбана), инфо-поля.
      * Юнит — только CEO (проверяет база): задачи приложения переезжают с ним, открытые запросы — PM нового юнита.

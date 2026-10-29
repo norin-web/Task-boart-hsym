@@ -1520,3 +1520,10 @@ a.rl-link:hover { background: var(--accent-soft); color: var(--accent-text); }
 
 .trow-status, .trow-due, .trow-unit { font-size: 12.5px; white-space: nowrap; flex: none; }
 .home-col > .cs-row, .page > .cs-row { margin-bottom: 8px; }
+
+/* Приложения: выбор нескольких (удаление пачкой) */
+.pick-bar { position: sticky; top: -16px; z-index: 3; display: flex; align-items: center; gap: 14px; padding: 10px 14px; margin-bottom: 12px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow); }
+.ap-list.picking .ap-row > .i:last-child { visibility: hidden; }
+.ap-row .pick-box { flex: none; }
+.ap-row.picked { border-color: var(--accent); background: var(--accent-soft); }
+.ap-row.picked .aud-check { background: var(--accent); border-color: var(--accent); }

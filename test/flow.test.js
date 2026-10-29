@@ -464,3 +464,18 @@ test('иконка из App Store: только картинки Apple; ссыл
   const bad = await api.as(ceo, () => api('updateApp', { id: app.id, iconUrl: 'https://evil.example.com/x.png' }));
   assert.equal(bad.iconUrl, '');
 });
+
+test('удаление приложений: только CEO, вместе с задачами', async () => {
+  const api = await setup();
+  const { ceo, pm, gold } = await studio(api);
+  const { app, request } = await api.as(ceo, () => api('createApp', { name: 'Gone', unitId: gold.id }));
+  const keep = await api.as(ceo, () => api('createApp', { name: 'Keep', unitId: gold.id, noRequest: true }));
+  await api.as(pm, () => assert.rejects(() => api('deleteApps', { ids: [app.id] }), forbidden));
+  const r = await api.as(ceo, () => api('deleteApps', { ids: [app.id] }));
+  assert.deepEqual(r, { apps: 1, tasks: 1 });
+  await api.as(ceo, async () => {
+    assert.deepEqual((await api('listApps', {})).map(a => a.name), ['Keep']);
+    await assert.rejects(() => api('getTask', { id: request.id }));
+  });
+  assert.ok(keep.app.id);
+});
