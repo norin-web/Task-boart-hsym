@@ -163,11 +163,31 @@ export async function renderApps() {
   let sel = null;
   const pick = id => { if (sel.has(id)) sel.delete(id); else sel.add(id); drawList(); };
   const setPicking = on => { sel = on ? new Set() : null; drawTools(); drawList(); };
+  async function bulk(patch, done, ids = [...sel]) {
+    try {
+      await send('updateApps', { ids, ...patch });
+      toast(`${done}: ${ids.length} ${plural(ids.length, ['приложение', 'приложения', 'приложений'])}`);
+      await load();
+      drawList();
+    } catch (e) { showErr(e); }
+  }
   const pickBar = found => h('div', { class: 'pick-bar' },
     h('b', null, 'Выбрано: ' + sel.size),
     h('button', { class: 'link-btn', onclick: () => { const all = found.every(a => sel.has(a.id)); found.forEach(a => (all ? sel.delete(a.id) : sel.add(a.id))); drawList(); } },
       found.length && found.every(a => sel.has(a.id)) ? 'Снять все' : 'Выбрать все' + (q || active() ? ' найденные' : '')),
     h('span', { class: 'spacer' }),
+    // массовая правка: статус и юнит
+    h('button', { class: 'btn sm', disabled: !sel.size, 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); menu(e.currentTarget, [{ title: 'Поставить статус' },
+      ...S.appStatuses.map(st => h('button', { class: 'menu-item', role: 'menuitem', onclick: () => { closeMenu(); bulk({ status: st.id }, `Статус «${st.name}»`); } },
+        h('span', { class: 'dot', style: { background: st.color } }), st.name))]); } }, 'Статус', icon('chevron', 13)),
+    isSuper() && h('button', { class: 'btn sm', disabled: !sel.size, 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); menu(e.currentTarget, [{ title: 'Перенести в юнит' },
+      ...units().map(u => ({ label: u.name, icon: 'board', action: async () => {
+        const list = apps.filter(a => sel.has(a.id) && a.unitId !== u.id);
+        if (!list.length) return toast('Выбранные уже в «' + u.name + '»');
+        const withWork = list.filter(a => a.requests.length).length;
+        if (withWork && !(await confirmDlg(`Перенести ${list.length} ${plural(list.length, ['приложение', 'приложения', 'приложений'])} в «${u.name}»? Задачи приложений переедут вместе с ними, открытые запросы получит PM «${u.name}».`, { ok: 'Перенести', title: 'Перенос в юнит' }))) return;
+        bulk({ unitId: u.id }, `Перенесено в «${u.name}»`, list.map(a => a.id));
+      } }))]); } }, 'В юнит', icon('chevron', 13)),
     h('button', { class: 'btn sm danger', disabled: !sel.size, onclick: async () => {
       if (await deleteAppsDlg(apps.filter(a => sel.has(a.id)))) { sel = null; drawTools(); reload(); }
     } }, icon('trash', 14), 'Удалить'),
@@ -413,8 +433,16 @@ export function openAppPanel(a, onChange) {
         })));
   };
   const panel = h('aside', { class: 'panel unit-panel' + (appCardCenter() ? ' center' : ''), role: 'dialog', 'aria-label': a.name });
-  const head = () => h('div', { class: 'panel-head' },
-    appIcon(a), h('b', null, a.name), a.storeName && h('span', { class: 'muted', title: 'Название в App Store' }, a.storeName), a.isTest && h('span', { class: 'test-tag' }, 'тест'), h('span', { class: 'spacer' }),
+  // шапка: крупная иконка, своё название, название в сторе и ссылка на App Store
+  const storeUrl = (() => { const sf = storeField(); return (sf && a.info && a.info[sf.id]) || ''; })();
+  const head = () => h('div', { class: 'panel-head app-panel-head' },
+    appIcon(a, 'lg'),
+    h('div', { class: 'aph-names' },
+      h('div', { class: 'aph-title' }, h('h2', null, a.name), a.isTest && h('span', { class: 'test-tag' }, 'тест')),
+      a.storeName && h('span', { class: 'muted aph-store', title: 'Название в App Store' }, a.storeName),
+      storeUrl && h('a', { class: 'aph-link', href: storeUrl, target: '_blank', rel: 'noopener' },
+        h('img', { src: appStoreSvg, alt: '', width: 16, height: 16 }), 'Открыть в App Store', icon('arrowUpRight', 13))),
+    h('span', { class: 'spacer' }),
     h('button', {
       class: 'icon-btn', title: appCardCenter() ? 'Открывать справа' : 'Открывать по центру',
       onclick: () => { LS.set('cardMode', appCardCenter() ? 'side' : 'center'); panel.classList.toggle('center', appCardCenter()); backdrop.classList.toggle('center', appCardCenter()); fill(headBox, head()); },

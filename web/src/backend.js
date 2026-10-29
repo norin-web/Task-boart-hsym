@@ -1508,6 +1508,18 @@ export function createBackend(db, opts = {}) {
       return { app: appOut(app), request };
     },
 
+    /** Массовая правка приложений: статус и/или юнит (юнит — только CEO, задачи едут вместе). Возвращает обновлённые. */
+    async updateApps(p, ctx) {
+      const ids = (Array.isArray(p.ids) ? p.ids : []).map(x => String(x ?? '')).filter(Boolean);
+      const patch = {};
+      if (p.status) patch.status = String(p.status);
+      if (p.unitId) patch.unitId = String(p.unitId);
+      if (!ids.length || !Object.keys(patch).length) return [];
+      const out = [];
+      for (const id of ids) out.push(await methods.updateApp({ id, ...patch }, ctx));
+      return out;
+    },
+
     /** Удалить приложения (только CEO) вместе с их задачами — запросами, этапами, реджектами. Возвращает число удалённых. */
     async deleteApps(p) {
       const ids = (Array.isArray(p.ids) ? p.ids : [p.id]).map(x => String(x ?? '')).filter(Boolean);

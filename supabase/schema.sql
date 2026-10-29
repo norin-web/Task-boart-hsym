@@ -490,8 +490,23 @@ insert into app_settings (key, value, updated_at) values ('appStatuses', '[
   {"id": "release", "name": "Релиз", "color": "#8b5cf6", "kind": "release"},
   {"id": "review", "name": "Ревью Apple", "color": "#f59e0b", "kind": "review"},
   {"id": "live", "name": "В сторе", "color": "#0d9488", "kind": "live"},
+  {"id": "button", "name": "На кнопке", "color": "#0ea5e9", "kind": ""},
   {"id": "reject", "name": "Реджект", "color": "#ef4444", "kind": "reject"}
 ]'::jsonb, '') on conflict (key) do nothing;
+-- Статус «На кнопке» в уже настроенный список — один раз (метка в app_settings), после «В сторе»; удалённый CEO не возвращается
+do $$ begin
+  if not exists (select 1 from app_settings where key = 'migr_status_button') then
+    update app_settings set value = (
+      select jsonb_agg(x order by i) from (
+        select x, i::numeric as i from jsonb_array_elements(value) with ordinality t(x, i)
+        union all
+        select '{"id": "button", "name": "На кнопке", "color": "#0ea5e9", "kind": ""}'::jsonb,
+          coalesce((select i from jsonb_array_elements(value) with ordinality t(x, i) where x ->> 'kind' = 'live' limit 1), 999) + 0.5
+      ) z)
+    where key = 'appStatuses' and not exists (select 1 from jsonb_array_elements(value) x where x ->> 'id' = 'button');
+    insert into app_settings (key, value, updated_at) values ('migr_status_button', 'true'::jsonb, '') on conflict (key) do nothing;
+  end if;
+end $$;
 
 -- Поля приложения (быстрый доступ на карточке): ссылки и тексты; значения — в apps.info { id поля → значение }.
 insert into app_settings (key, value, updated_at) values ('appFields', '[

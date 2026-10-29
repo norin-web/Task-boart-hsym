@@ -174,10 +174,10 @@ test('статусы приложения и флоу настраиваются
   const { ceo, gold } = await studio(api);
   await api.as(ceo, async () => {
     const list = await api('getAppStatuses', {});
-    assert.deepEqual(list.map(x => x.kind), ['dev', 'release', 'review', 'live', 'reject']);
+    assert.deepEqual(list.map(x => x.kind), ['dev', 'release', 'review', 'live', '', 'reject']);
     const next = await api('saveAppStatuses', { statuses: [...list, { name: 'Пауза', color: '#64748b' }] });
-    assert.equal(next.length, 6);
-    assert.equal(next[5].kind, '');
+    assert.equal(next.length, 7);
+    assert.equal(next[6].kind, '');
     await assert.rejects(() => api('saveAppStatuses', { statuses: [] }), /хотя бы один/);
     const flows = await api('saveFlow', { type: 'other', steps: [{ key: 'design', title: 'Макет', positionId: 'd_design' }, { key: 'bad', title: 'x', dependsOn: ['nope', 'design'] }] });
     assert.deepEqual(flows.other.map(s => s.key), ['design', 'bad']);
@@ -480,4 +480,19 @@ test('удаление приложений: только CEO, вместе с �
     await assert.rejects(() => api('getTask', { id: request.id }));
   });
   assert.ok(keep.app.id);
+});
+
+test('массовая правка приложений: статус и юнит', async () => {
+  const api = await setup();
+  const { ceo, pm, gold, rf } = await studio(api);
+  const a = await api.as(ceo, () => api('createApp', { name: 'A', unitId: gold.id, noRequest: true }));
+  const b = await api.as(ceo, () => api('createApp', { name: 'B', unitId: gold.id }));
+  const ids = [a.app.id, b.app.id];
+  const r = await api.as(ceo, () => api('updateApps', { ids, status: 'button', unitId: rf.id }));
+  assert.deepEqual(r.map(x => [x.status, x.unitId]), [['button', rf.id], ['button', rf.id]]);
+  // задачи переехали вместе с приложением
+  const apps = await api.as(ceo, () => api('listApps', {}));
+  assert.ok(apps.find(x => x.id === b.app.id).requests.every(q => q.unitId === rf.id));
+  // PM чужого юнита не может
+  await api.as(pm, () => assert.rejects(() => api('updateApps', { ids, status: 'live' })));
 });

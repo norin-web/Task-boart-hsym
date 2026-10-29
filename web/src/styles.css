@@ -1536,3 +1536,15 @@ a.rl-link:hover { background: var(--accent-soft); color: var(--accent-text); }
 .store-badge { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 500; color: var(--text-2); white-space: nowrap; }
 .store-badge img { border-radius: 5px; flex: none; }
 .ap-work-group .ap-group-head > .i { color: var(--st-progress); }
+
+/* Карточка приложения: шапка с крупной иконкой и ссылкой на App Store */
+.app-panel-head { align-items: flex-start; gap: 14px; padding: 16px 14px 16px 20px; min-height: 0; }
+.uc-icon.lg { width: 64px; height: 64px; border-radius: 15px; font-size: 20px; box-shadow: 0 0 0 1px var(--border); }
+.aph-names { display: grid; gap: 3px; min-width: 0; padding-top: 2px; }
+.aph-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.aph-title h2 { font-size: 19px; font-weight: 650; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aph-store { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aph-link { display: inline-flex; align-items: center; gap: 6px; width: fit-content; margin-top: 4px; padding: 4px 10px 4px 6px; border: 1px solid var(--border); border-radius: 8px; font-size: 12.5px; font-weight: 500; color: var(--text-2); text-decoration: none; background: var(--surface); }
+.aph-link:hover { border-color: var(--border-strong); color: var(--text); }
+.aph-link img { border-radius: 4px; }
+@media (max-width: 640px) { .uc-icon.lg { width: 52px; height: 52px; border-radius: 12px; } .aph-title h2 { font-size: 17px; } }
