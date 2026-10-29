@@ -181,7 +181,7 @@ function ceoBlocks(d, apps, reload) {
   const blocks = [
     { id: 'news', title: 'Новое для вас', col: 'full', first: true, empty: 'Появится, когда что-то придёт вам', render: () => newsBlock() },
     { id: 'units', title: 'Юниты', col: 'full', render: () => portfolio(d, reload) },
-    { id: 'storeCheck', title: 'Проверка App Store', col: 'full', render: () => storeCheckBlock(apps, reload) },
+    { id: 'storeCheck', title: 'Проверка App Store', col: 'full', render: () => storeCheckBlock(apps, reload, { compact: true }) },
     { id: 'attention', title: 'Требует внимания', col: 'left', render: () => attention(d, reload) },
     { id: 'inprogress', title: 'Работы в ходу', col: 'left', render: () => inProgress(d, reload) },
     { id: 'recent', title: 'Недавно вышло', col: 'right', render: () => recent(d, reload) },

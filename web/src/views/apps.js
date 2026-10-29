@@ -777,7 +777,7 @@ export async function runStoreCheck(apps, onStep) {
  * Блок «Проверка App Store»: когда проверяли, сколько открывается, «Обновить»; ниже — приложения, которых нет в сторе
  * (возможно, удалены или сняты с продажи). Страница «Приложения» и дашборд CEO.
  */
-export function storeCheckBlock(apps, reload) {
+export function storeCheckBlock(apps, reload, { compact = false } = {}) {
   const withLink = apps.filter(a => appStoreUrl(a));
   const gone = withLink.filter(a => a.storeOk === false);
   const last = withLink.map(a => a.storeCheckedAt).filter(Boolean).sort().pop() || '';
@@ -794,19 +794,53 @@ export function storeCheckBlock(apps, reload) {
       reload();
     } catch (e) { showErr(e); btn.disabled = false; }
   } }, icon('refresh', 14), 'Обновить');
+  // дашборд: одна строка, пропавшие — выпадающим списком по красной кнопке
+  if (compact) {
+    const box = h('section', { class: 'store-check compact' + (gone.length ? ' has-gone' : '') });
+    const draw = () => {
+      const open = gone.length > 0 && LS.get('storeGoneOpenHome', false);
+      fill(box,
+        h('div', { class: 'sc-head' },
+          h('img', { src: appStoreSvg, alt: '', width: 22, height: 22 }),
+          h('span', { class: 'sc-title' }, h('b', null, 'Проверка App Store'), status),
+          h('span', { class: 'spacer' }),
+          gone.length > 0 && h('button', { class: 'sc-gone-chip' + (open ? ' open' : ''), 'aria-expanded': String(open), onclick: () => { LS.set('storeGoneOpenHome', !open); draw(); } },
+            icon('alert', 14), 'Нет в App Store: ' + gone.length, h('span', { class: 'sc-chip-chev' }, icon('chevron', 13))),
+          btn),
+        open && h('div', { class: 'sc-gone' }, goneRows(gone, reload)));
+    };
+    draw();
+    return box;
+  }
   return h('section', { class: 'store-check' + (gone.length ? ' has-gone' : '') },
     h('div', { class: 'sc-head' },
       h('img', { src: appStoreSvg, alt: '', width: 22, height: 22 }),
       h('span', { class: 'sc-title' }, h('b', null, 'Проверка App Store'), status),
       h('span', { class: 'spacer' }), btn),
-    gone.length > 0 && h('div', { class: 'sc-gone' },
-      h('div', { class: 'sc-gone-head' }, icon('alert', 14), h('b', null, 'Требует внимания · ' + gone.length),
+    gone.length > 0 && goneList(gone, reload));
+}
+
+/** Строки пропавших из стора: приложение (клик — карточка), юнит, ссылка для ручной проверки. */
+const goneRows = (gone, reload) => gone.map(a => h('div', { class: 'sc-row' },
+  h('button', { class: 'sc-app', onclick: () => openAppPanel(a, reload) }, appIcon(a, 'sm'),
+    h('span', { class: 'ap-names' }, h('b', null, a.name), a.storeName && h('small', { class: 'muted' }, a.storeName))),
+  h('span', { class: 'muted sc-unit' }, (unitById(a.unitId) || {}).name || ''),
+  h('a', { class: 'btn ghost sm', href: appStoreUrl(a), target: '_blank', rel: 'noopener', title: 'Проверить ссылку вручную' }, 'Открыть ссылку', icon('arrowUpRight', 13))));
+
+/** «Требует внимания» в проверке App Store — сворачивается заголовком, состояние запоминается. */
+function goneList(gone, reload) {
+  const box = h('div', { class: 'sc-gone' });
+  const draw = () => {
+    const open = !LS.get('storeGoneCollapsed', false);
+    box.classList.toggle('collapsed', !open);
+    fill(box,
+      h('button', { class: 'sc-gone-head', 'aria-expanded': String(open), onclick: () => { LS.set('storeGoneCollapsed', open); draw(); } },
+        h('span', { class: 'ap-chev' }, icon('chevron', 14)), icon('alert', 14), h('b', null, 'Требует внимания · ' + gone.length),
         h('span', { class: 'muted' }, 'страница в сторе не открывается — возможно, удалено или снято с продажи')),
-      gone.map(a => h('div', { class: 'sc-row' },
-        h('button', { class: 'sc-app', onclick: () => openAppPanel(a, reload) }, appIcon(a, 'sm'),
-          h('span', { class: 'ap-names' }, h('b', null, a.name), a.storeName && h('small', { class: 'muted' }, a.storeName))),
-        h('span', { class: 'muted sc-unit' }, (unitById(a.unitId) || {}).name || ''),
-        h('a', { class: 'btn ghost sm', href: appStoreUrl(a), target: '_blank', rel: 'noopener', title: 'Проверить ссылку вручную' }, 'Открыть ссылку', icon('arrowUpRight', 13))))));
+      open && goneRows(gone, reload));
+  };
+  draw();
+  return box;
 }
 
 /**

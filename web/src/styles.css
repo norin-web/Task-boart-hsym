@@ -1566,3 +1566,15 @@ a.rl-link:hover { background: var(--accent-soft); color: var(--accent-text); }
 .sc-unit { font-size: 12.5px; }
 .store-badge.gone { color: var(--danger); }
 @media (max-width: 640px) { .sc-row { grid-template-columns: minmax(0, 1fr) auto; } .sc-unit { display: none; } }
+.sc-gone-head { width: 100%; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; border-radius: 6px; }
+.sc-gone-head .ap-chev { color: var(--danger); transform: none; }
+.sc-gone.collapsed { padding-bottom: 6px; }
+.sc-gone.collapsed .sc-gone-head { padding-bottom: 6px; }
+.sc-gone.collapsed .ap-chev { transform: rotate(-90deg); }
+/* на дашборде — одна строка, пропавшие раскрываются красной кнопкой */
+.sc-gone-chip { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px 0 10px; border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent); border-radius: 8px; background: var(--danger-soft); color: var(--danger); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.sc-gone-chip:hover { border-color: var(--danger); }
+.sc-chip-chev { display: inline-flex; transition: transform .15s; }
+.sc-gone-chip.open .sc-chip-chev { transform: rotate(180deg); }
+.store-check.compact.has-gone:not(:has(.sc-gone)) { border-color: var(--border); }
+@media (max-width: 640px) { .store-check.compact .sc-head { flex-wrap: wrap; } }
