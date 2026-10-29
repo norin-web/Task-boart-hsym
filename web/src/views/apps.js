@@ -474,7 +474,7 @@ export function openAppPanel(a, onChange) {
     return [
       { label: appCardCenter() ? 'Открывать справа' : 'Открывать по центру', icon: appCardCenter() ? 'panelSide' : 'panelCenter',
         action: () => { LS.set('cardMode', appCardCenter() ? 'side' : 'center'); panel.classList.toggle('center', appCardCenter()); backdrop.classList.toggle('center', appCardCenter()); } },
-      { label: 'Настроить карточку', icon: 'layers', action: () => openAppCardLayout(draw) },
+      { label: 'Настроить карточку', icon: 'layers', action: () => openCardSettings(a, { ceo, manage: canManage(a.unitId), save, redraw: draw }) },
       ceo && { sep: true },
       ceo && { label: 'Поставить задачи', icon: 'plus', action: () => openTaskPool(a, refresh) },
       ceo && { label: 'Апдейт', icon: 'plus', action: () => openCreateRequest(a, 'update', refresh) },
@@ -509,36 +509,92 @@ function saveAppCardLayout(L) {
   if (p) p.prefs = { ...(p.prefs || {}), appCard: L };
   send('setMyPrefs', { personId: S.meId, prefs: { appCard: L } }).catch(showErr);
 }
-/** «Настроить карточку»: блоки перетаскиваются за ручку, галочка — показывать; меняется сразу и только у вас. */
-function openAppCardLayout(redraw) {
+/**
+ * «Настроить карточку» (меню «⋯»): вкладки
+ *  · Блоки — какие показывать и порядок (только у вас, меняется сразу);
+ *  · Быстрый доступ — поля: для всех приложений (CEO) и только у этого (CEO и PM юнита);
+ *  · Info — пункты: для всех (CEO) и только у этого. Поля и пункты сохраняются кнопкой «Сохранить».
+ */
+function openCardSettings(a, { ceo, manage, save, redraw }) {
   const L = appCardLayout();
   const name = Object.fromEntries(CARD_BLOCKS);
-  const list = h('div', { class: 'col-edit-list card-layout' });
-  const apply = () => { saveAppCardLayout(L); redraw(); };
-  const draw = () => fill(list, L.order.map(id => {
+  const fieldsAll = S.appFields.map(x => ({ ...x }));
+  const fieldsOwn = (a.ownFields || []).map(x => ({ ...x }));
+  const infoAll = S.appInfoItems.map(x => ({ ...x }));
+  const infoOwn = ((a.checks || {}).own || []).map(x => ({ ...x }));
+  let tab = 'blocks';
+
+  // Блоки — сразу
+  const blocks = h('div', { class: 'col-edit-list card-layout' });
+  const applyBlocks = () => { saveAppCardLayout(L); redraw(); };
+  const drawBlocks = () => fill(blocks, L.order.map(id => {
     const on = !L.hidden.includes(id);
     return h('div', { class: 'col-edit-row le-row', dataset: { id } },
       h('span', { class: 'drag', title: 'Перетащите, чтобы изменить порядок' }, icon('grip', 16)),
       h('button', { class: 'menu-item aud-item cl-pick' + (on ? ' on' : ''), role: 'checkbox', 'aria-checked': String(on),
-        onclick: () => { L.hidden = on ? [...L.hidden, id] : L.hidden.filter(x => x !== id); draw(); apply(); } },
+        onclick: () => { L.hidden = on ? [...L.hidden, id] : L.hidden.filter(x => x !== id); drawBlocks(); applyBlocks(); } },
         h('span', { class: 'aud-check' }, on && icon('check', 13)), name[id]));
   }));
-  draw();
-  Sortable.create(list, { handle: '.drag', animation: 150, forceFallback: true, onEnd: () => {
-    L.order = [...list.children].map(el => el.dataset.id);
-    apply();
-  } });
+  drawBlocks();
+  Sortable.create(blocks, { handle: '.drag', animation: 150, forceFallback: true, onEnd: () => { L.order = [...blocks.children].map(el => el.dataset.id); applyBlocks(); } });
+
+  // поля и пункты — редакторы списков (название, для полей ещё тип)
+  const fieldEditor = list => listEditor(list, (x, i, draw) => [
+    h('input', { class: 'inp', value: x.name, maxlength: 40, placeholder: 'Например, RevenueCat', 'aria-label': 'Название поля', oninput: e => { x.name = e.target.value; } }),
+    h('select', { class: 'inp qf-kind', 'aria-label': 'Тип поля', onchange: e => { x.kind = e.target.value; } },
+      [['link', 'Ссылка'], ['text', 'Текст']].map(([k, label]) => h('option', { value: k, selected: k === x.kind }, label))),
+    h('button', { class: 'icon-btn sm', title: 'Удалить поле (значения сотрутся)', onclick: () => { list.splice(i, 1); draw(); } }, icon('x', 14)),
+  ], () => list.push({ id: '', name: '', kind: 'link', value: '' }), 'Поле');
+  const itemEditor = list => listEditor(list, (x, i, draw) => [
+    h('input', { class: 'inp', value: x.name, maxlength: 120, placeholder: 'Например, Продуктовый апдейт', 'aria-label': 'Пункт', oninput: e => { x.name = e.target.value; } }),
+    h('button', { class: 'icon-btn sm', title: 'Удалить пункт (отметки по нему пропадут)', onclick: () => { list.splice(i, 1); draw(); } }, icon('x', 14)),
+  ], () => list.push({ id: '', name: '', done: false }), 'Пункт');
+  const readOnly = list => h('p', { class: 'muted' }, (list.map(x => x.name).join(', ') || 'Пока нет') + ' · меняет CEO');
+  const panes = {
+    blocks: [h('p', { class: 'hint', style: { margin: '0 0 10px' } }, 'Какие блоки показывать и в каком порядке — только у вас, во всех карточках приложений.'), blocks],
+    quick: [h('h3', { class: 'qf-h' }, 'Для всех приложений'), ceo ? fieldEditor(fieldsAll) : readOnly(fieldsAll),
+      h('h3', { class: 'qf-h' }, 'Только у «' + a.name + '»'), fieldEditor(fieldsOwn)],
+    info: [h('h3', { class: 'qf-h' }, 'Для всех приложений'), ceo ? itemEditor(infoAll) : readOnly(infoAll),
+      h('h3', { class: 'qf-h' }, 'Только у «' + a.name + '»'), itemEditor(infoOwn)],
+  };
+  const TABS = [['blocks', 'Блоки'], manage && ['quick', 'Быстрый доступ'], manage && ['info', 'Info']].filter(Boolean);
+  const seg = h('div', { class: 'seg cs-tabs', role: 'tablist' });
+  const body = h('div', { class: 'cs-pane' });
+  const show = () => {
+    fill(seg, TABS.map(([id, label]) => h('button', { class: tab === id ? 'on' : '', role: 'tab', 'aria-selected': String(tab === id), onclick: () => { tab = id; show(); } }, label)));
+    fill(body, panes[tab]);
+  };
+  show();
   modal({
-    title: 'Настроить карточку приложения',
-    body: [h('p', { class: 'hint', style: { margin: '0 0 10px' } }, 'Какие блоки показывать и в каком порядке — только у вас, во всех карточках приложений.'), list],
-    footLeft: h('button', { class: 'btn ghost sm', onclick: () => { L.order = CARD_BLOCKS.map(([id]) => id); L.hidden = []; draw(); apply(); } }, 'Как было'),
-    actions: [{ label: 'Готово' }],
+    title: 'Настроить карточку',
+    wide: true,
+    body: [TABS.length > 1 && seg, body],
+    footLeft: h('button', { class: 'btn ghost sm', title: 'Блоки — как было по умолчанию', onclick: () => { L.order = CARD_BLOCKS.map(([id]) => id); L.hidden = []; drawBlocks(); applyBlocks(); } }, 'Блоки как было'),
+    actions: manage
+      ? [{ label: 'Отмена' }, {
+        label: 'Сохранить', primary: true,
+        action: async close => {
+          if (ceo) {
+            [S.appFields, S.appInfoItems] = await Promise.all([
+              send('saveAppFields', { fields: fieldsAll.filter(x => x.name.trim()) }),
+              send('saveAppInfoItems', { items: infoAll.filter(x => x.name.trim()) })]);
+          }
+          const checks = a.checks || { done: [], own: [] };
+          a.ownFields = fieldsOwn.filter(x => x.name.trim());
+          a.checks = { ...checks, own: infoOwn.filter(x => x.name.trim()) };
+          await save({ ownFields: a.ownFields, checks: a.checks });
+          close();
+          toast('Карточка настроена');
+          redraw();
+        },
+      }]
+      : [{ label: 'Готово' }],
   });
 }
 
 /**
  * Info приложения: пункты-галочки (что у приложения уже есть). Общие пункты (S.appInfoItems) — во всех карточках, отметка у каждого
- * приложения своя; свои пункты — только у этого. Отмечают CEO и PM юнита; общий пункт добавляет и правит CEO.
+ * приложения своя; свои пункты — только у этого. Отмечают CEO и PM юнита; состав пунктов — в «Настроить карточку».
  */
 function infoBlock(a, manage, ceo, save, redraw) {
   const checks = a.checks || { done: [], own: [] };
@@ -550,41 +606,15 @@ function infoBlock(a, manage, ceo, save, redraw) {
   const toggle = r => put(r.common
     ? { ...checks, done: r.done ? checks.done.filter(id => id !== r.id) : [...checks.done, r.id] }
     : { ...checks, own: checks.own.map(x => (x.id === r.id ? { ...x, done: !x.done } : x)) });
-  const saveCommon = items => send('saveAppInfoItems', { items }).then(list => { S.appInfoItems = list; redraw(); }).catch(showErr);
-  const rowMenu = (anchor, r) => menu(anchor, [
-    { label: 'Переименовать' + (r.common ? ' (для всех)' : ''), icon: 'edit', action: async () => {
-      const name = await promptDlg('Пункт Info', 'Название', r.name);
-      if (!name || !name.trim()) return;
-      if (r.common) saveCommon(S.appInfoItems.map(x => (x.id === r.id ? { ...x, name: name.trim() } : x)));
-      else put({ ...checks, own: checks.own.map(x => (x.id === r.id ? { ...x, name: name.trim() } : x)) });
-    } },
-    { sep: true },
-    r.common
-      ? { label: 'Убрать из всех приложений', icon: 'trash', danger: true, action: async () => {
-        if (await confirmDlg(`Убрать пункт «${r.name}» из Info всех приложений? Отметки по нему пропадут.`, { ok: 'Убрать', danger: true })) saveCommon(S.appInfoItems.filter(x => x.id !== r.id));
-      } }
-      : { label: 'Удалить пункт', icon: 'trash', danger: true, action: () => put({ ...checks, own: checks.own.filter(x => x.id !== r.id) }) },
-  ]);
-  const inp = h('input', { class: 'inp sm', maxlength: 120, placeholder: 'Новый пункт, например «Продуктовый апдейт»' });
-  const scope = h('select', { class: 'inp sm info-scope', title: 'Куда добавить пункт' },
-    h('option', { value: 'all' }, 'во все приложения'), h('option', { value: 'here' }, 'только сюда'));
-  const add = () => {
-    const name = inp.value.trim();
-    if (!name) return inp.focus();
-    if (ceo && scope.value === 'all') saveCommon([...S.appInfoItems, { name }]);
-    else put({ ...checks, own: [...checks.own, { name, done: false }] });
-  };
-  inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
   const done = rows.filter(r => r.done).length;
   return h('section', null,
     h('div', { class: 'up-head' }, h('h3', null, 'Info', rows.length > 0 && h('span', { class: 'muted sec-n' }, `${done} из ${rows.length}`))),
-    rows.length > 0 && h('div', { class: 'info-list' }, rows.map(r => h('div', { class: 'info-row' + (r.done ? ' on' : '') },
-      h('button', { class: 'info-check', role: 'checkbox', 'aria-checked': String(r.done), disabled: !manage, onclick: () => toggle(r) },
-        h('span', { class: 'aud-check' }, r.done && icon('check', 13)), h('span', { class: 'info-name' }, r.name)),
-      h('span', { class: 'muted info-tag' }, r.common ? 'для всех' : 'только тут'),
-      (r.common ? ceo : manage) && h('button', { class: 'icon-btn sm info-more', title: 'Пункт', onclick: e => { e.stopPropagation(); rowMenu(e.currentTarget, r); } }, icon('more', 15))))),
-    !rows.length && h('p', { class: 'muted', style: { margin: '0 0 8px' } }, 'Пунктов пока нет — отмечайте, что у приложения уже есть: продуктовый апдейт, пейвол, локализации…'),
-    manage && h('div', { class: 'info-add' }, inp, ceo && scope, h('button', { class: 'btn sm', onclick: add }, icon('plus', 14), 'Пункт')));
+    rows.length
+      ? h('div', { class: 'info-list' }, rows.map(r => h('div', { class: 'info-row' + (r.done ? ' on' : '') },
+        h('button', { class: 'info-check', role: 'checkbox', 'aria-checked': String(r.done), disabled: !manage, onclick: () => toggle(r) },
+          h('span', { class: 'aud-check' }, r.done && icon('check', 13)), h('span', { class: 'info-name' }, r.name)),
+        h('span', { class: 'muted info-tag' }, r.common ? 'для всех' : 'только тут'))))
+      : h('p', { class: 'muted', style: { margin: 0 } }, 'Пунктов пока нет — добавьте: «⋯» → «Настроить карточку» → «Info» (продуктовый апдейт, пейвол, локализации…).'));
 }
 
 /** «Поставить задачи» пачкой: несколько строк — каждая уходит PM юнита отдельной задачей. */
@@ -626,7 +656,7 @@ function openTaskPool(a, onDone) {
 
 /** Поле быстрого доступа: значение (ссылка открывается в новой вкладке) и правка на месте для CEO и PM юнита. */
 /**
- * «Быстрый доступ»: общие поля (S.appFields) и свои поля приложения (ownFields). Состав полей — в настройках (шестерёнка в заголовке):
+ * «Быстрый доступ»: общие поля (S.appFields) и свои поля приложения (ownFields). Состав полей — в «Настроить карточку»:
  * общие правит CEO, свои — CEO и PM юнита. В самой карточке — значения: клик по строке — правка, справа — скопировать.
  */
 function quickBlock(a, manage, ceo, save, fromStore, redraw) {
@@ -634,46 +664,12 @@ function quickBlock(a, manage, ceo, save, fromStore, redraw) {
   if (!S.appFields.length && !own.length && !manage) return null;
   const putOwn = next => { a.ownFields = next; redraw(); save({ ownFields: next }); };
   return h('section', null,
-    h('div', { class: 'up-head' }, h('h3', null, 'Быстрый доступ'),
-      manage && h('button', { class: 'icon-btn sm', title: 'Настроить поля', onclick: () => openQuickFieldsSettings(a, ceo, putOwn, redraw) }, icon('settings', 15))),
+    h('div', { class: 'up-head' }, h('h3', null, 'Быстрый доступ')),
     S.appFields.length || own.length
       ? h('div', { class: 'af-list' },
         S.appFields.map(f => infoRow(a, f, manage, v => (f === storeField() && v ? fromStore(v, { info: { [f.id]: v } }) : save({ info: { [f.id]: v } })))),
         own.map(f => infoRow(a, f, manage, v => putOwn(own.map(x => (x.id === f.id ? { ...x, value: v } : x))), { value: f.value })))
-      : h('p', { class: 'muted', style: { margin: 0 } }, 'Полей пока нет — добавьте в настройках (шестерёнка справа).'));
-}
-
-/** Настройки полей «Быстрого доступа»: общие для всех приложений (CEO) и свои у этого приложения. Перетаскивание — порядок. */
-function openQuickFieldsSettings(a, ceo, putOwn, redraw) {
-  const common = S.appFields.map(x => ({ ...x }));
-  const own = (a.ownFields || []).map(x => ({ ...x }));
-  // строка поля: название, тип, удалить; ручка порядка — у listEditor
-  const editor = list => listEditor(list, (x, i, draw) => [
-    h('input', { class: 'inp', value: x.name, maxlength: 40, placeholder: 'Например, RevenueCat', 'aria-label': 'Название поля', oninput: e => { x.name = e.target.value; } }),
-    h('select', { class: 'inp qf-kind', 'aria-label': 'Тип поля', onchange: e => { x.kind = e.target.value; } },
-      [['link', 'Ссылка'], ['text', 'Текст']].map(([k, label]) => h('option', { value: k, selected: k === x.kind }, label))),
-    h('button', { class: 'icon-btn sm', title: 'Удалить поле (значения сотрутся)', onclick: () => { list.splice(i, 1); draw(); } }, icon('x', 14)),
-  ], () => list.push({ id: '', name: '', kind: 'link', value: '' }), 'Поле');
-  modal({
-    title: 'Быстрый доступ · поля',
-    wide: true,
-    body: [
-      h('h3', { class: 'qf-h' }, 'Для всех приложений'),
-      ceo ? editor(common) : h('p', { class: 'muted' }, common.map(f => f.name).join(', ') || 'Нет', ' — меняет CEO'),
-      h('h3', { class: 'qf-h' }, 'Только у «' + a.name + '»'),
-      editor(own),
-    ],
-    actions: [{ label: 'Отмена' }, {
-      label: 'Сохранить', primary: true,
-      action: async close => {
-        if (ceo) S.appFields = await send('saveAppFields', { fields: common.filter(x => x.name.trim()) });
-        putOwn(own.filter(x => x.name.trim()));
-        close();
-        toast('Поля сохранены');
-        redraw();
-      },
-    }],
-  });
+      : h('p', { class: 'muted', style: { margin: 0 } }, 'Полей пока нет — добавьте: «⋯» → «Настроить карточку» → «Быстрый доступ».'));
 }
 
 /** Строка «Быстрого доступа»: ссылка открывается, клик по строке — правка на месте, справа — скопировать значение. */

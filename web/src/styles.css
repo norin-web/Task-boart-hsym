@@ -1648,3 +1648,5 @@ a.rl-link:hover { background: var(--accent-soft); color: var(--accent-text); }
 .qf-h { font-size: 13px; font-weight: 600; margin: 4px 0 8px; color: var(--text-2); }
 .qf-h:not(:first-child) { margin-top: 18px; }
 .qf-kind { width: auto; flex: none; }
+.cs-tabs { margin-bottom: 14px; }
+.cs-pane { min-height: 220px; }
