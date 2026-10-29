@@ -1569,11 +1569,12 @@ export function createBackend(db, opts = {}) {
       return { saved: n, at };
     },
 
-    /** Массовая правка приложений: статус и/или юнит (юнит — только CEO, задачи едут вместе). Возвращает обновлённые. */
+    /** Массовая правка приложений: статус, приоритет ('' — снять) и/или юнит (юнит — только CEO, задачи едут вместе). Возвращает обновлённые. */
     async updateApps(p, ctx) {
       const ids = (Array.isArray(p.ids) ? p.ids : []).map(x => String(x ?? '')).filter(Boolean);
       const patch = {};
       if (p.status) patch.status = String(p.status);
+      if ('priority' in p) patch.priority = String(p.priority ?? '');
       if (p.unitId) patch.unitId = String(p.unitId);
       if (!ids.length || !Object.keys(patch).length) return [];
       const out = [];

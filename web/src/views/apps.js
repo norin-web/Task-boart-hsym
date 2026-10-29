@@ -252,6 +252,11 @@ export async function renderApps({ unitId = '' } = {}) {
     h('button', { class: 'btn sm', disabled: !sel.size, 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); menu(e.currentTarget, [{ title: 'Поставить статус' },
       ...S.appStatuses.map(st => h('button', { class: 'menu-item', role: 'menuitem', onclick: () => { closeMenu(); bulk({ status: st.id }, `Статус «${st.name}»`); } },
         h('span', { class: 'dot', style: { background: st.color } }), st.name))]); } }, 'Статус', icon('chevron', 13)),
+    h('button', { class: 'btn sm', disabled: !sel.size, 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); menu(e.currentTarget, [{ title: 'Поставить приоритет' },
+      ...S.priorityOptions.map((o, i) => o).reverse().map(o => h('button', { class: 'menu-item', role: 'menuitem', onclick: () => { closeMenu(); bulk({ priority: o.id }, `Приоритет «${o.name}»`); } },
+        prioMark(o, S.priorityOptions.indexOf(o), S.priorityOptions.length, 15), o.name)),
+      { sep: true },
+      { label: 'Без приоритета', icon: 'x', action: () => bulk({ priority: '' }, 'Приоритет снят') }]); } }, 'Приоритет', icon('chevron', 13)),
     isSuper() && h('button', { class: 'btn sm', disabled: !sel.size, 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); menu(e.currentTarget, [{ title: 'Перенести в юнит' },
       ...units().map(u => ({ label: u.name, icon: 'board', action: async () => {
         const list = apps.filter(a => sel.has(a.id) && a.unitId !== u.id);

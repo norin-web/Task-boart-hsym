@@ -492,8 +492,9 @@ test('массовая правка приложений: статус и юни
   const a = await api.as(ceo, () => api('createApp', { name: 'A', unitId: gold.id, noRequest: true }));
   const b = await api.as(ceo, () => api('createApp', { name: 'B', unitId: gold.id }));
   const ids = [a.app.id, b.app.id];
-  const r = await api.as(ceo, () => api('updateApps', { ids, status: 'button', unitId: rf.id }));
-  assert.deepEqual(r.map(x => [x.status, x.unitId]), [['button', rf.id], ['button', rf.id]]);
+  const r = await api.as(ceo, () => api('updateApps', { ids, status: 'button', unitId: rf.id, priority: 'o_high' }));
+  assert.deepEqual(r.map(x => [x.status, x.unitId, x.priority]), [['button', rf.id, 'o_high'], ['button', rf.id, 'o_high']]);
+  assert.deepEqual((await api.as(ceo, () => api('updateApps', { ids, priority: '' }))).map(x => x.priority), ['', '']);
   // задачи переехали вместе с приложением
   const apps = await api.as(ceo, () => api('listApps', {}));
   assert.ok(apps.find(x => x.id === b.app.id).requests.every(q => q.unitId === rf.id));
