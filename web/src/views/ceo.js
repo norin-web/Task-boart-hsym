@@ -7,7 +7,7 @@ import { $, h, icon, avatar, topbar, showErr, fill, menu, modal, field } from '.
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
-import { openAppById, openCreateApp, openNewAppTask, appIcon, prioTag, stageDots, statusPill, appPm } from './apps.js';
+import { openAppById, openCreateApp, openImportApps, openNewAppTask, appIcon, prioTag, stageDots, statusPill, appPm } from './apps.js';
 import { newsBlock, loadNotes, fillDemo, unitCard } from './home.js';
 import { renderLayout, editLayout } from './layout.js';
 import { openCreateUnit } from './units.js';
@@ -34,7 +34,8 @@ export async function renderCeoHome() {
     S.apps = apps.map(({ requests, active, ...a }) => a);
     const total = apps.length;
     const person = me();
-    if (!total) {
+    // без юнитов показывать нечего; юниты есть, а приложений нет — дашборд целиком, сверху подсказка
+    if (!units().length) {
       return fill(page,
         h('div', { class: 'ceo-hello' }, h('h2', null, greeting() + (person ? ', ' + person.name.split(' ')[0] : ''))),
         newsBlock(),
@@ -58,6 +59,11 @@ export async function renderCeoHome() {
       h('div', { class: 'ceo-hello row' }, h('h2', null, greeting() + (person ? ', ' + person.name.split(' ')[0] : '')),
         h('span', { class: 'spacer' }),
         h('button', { class: 'btn ghost sm', title: 'Блоки, статистика и свои подборки', onclick: edit }, icon('layers', 14), 'Настроить')),
+      !total && h('div', { class: 'card-box empty-state sm' },
+        h('p', { style: { margin: 0 } }, 'Приложений пока нет — добавьте новое или уже существующие списком.'),
+        isSuper() && h('div', { class: 'row', style: { justifyContent: 'center', gap: '8px' } },
+          h('button', { class: 'btn primary sm', onclick: () => openCreateApp(load) }, icon('plus', 14), 'Новое приложение'),
+          h('button', { class: 'btn sm', onclick: () => openImportApps(load) }, icon('layers', 14), 'Добавить списком'))),
       renderLayout('ceoHome', blocks()));
     draw();
   }
