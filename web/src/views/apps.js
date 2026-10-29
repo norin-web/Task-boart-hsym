@@ -322,6 +322,7 @@ export function openAppPanel(a, onChange) {
   document.addEventListener('keydown', onKey, true);
   const body = h('div', { class: 'up-body' });
   let notes = null;
+  let noteBox = null;  // поле заметки — для «Добавить заметку» в меню
   const loadNotes = () => call('getAppNotes', { appId: a.id }).then(list => { notes = list; draw(); }).catch(showErr);
   const refresh = async () => {
     try {
@@ -382,6 +383,7 @@ export function openAppPanel(a, onChange) {
       send('addAppNote', { appId: a.id, text: noteInp.value }).then(n => { notes = [n, ...(notes || [])]; draw(); }).catch(showErr);
     };
     noteInp.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) addNote(); });
+    noteBox = noteInp;
     fill(body,
       h('section', { class: 'ap-props' },
         field('Статус', statusSel), field('Юнит', ceo ? unitSel : h('div', { class: 'ap-static' }, u ? u.name : '—')), field('Приоритет', prioSel)),
@@ -443,12 +445,23 @@ export function openAppPanel(a, onChange) {
       storeUrl && h('a', { class: 'aph-link', href: storeUrl, target: '_blank', rel: 'noopener' },
         h('img', { src: appStoreSvg, alt: '', width: 16, height: 16 }), 'Открыть в App Store', icon('arrowUpRight', 13))),
     h('span', { class: 'spacer' }),
-    h('button', {
-      class: 'icon-btn', title: appCardCenter() ? 'Открывать справа' : 'Открывать по центру',
-      onclick: () => { LS.set('cardMode', appCardCenter() ? 'side' : 'center'); panel.classList.toggle('center', appCardCenter()); backdrop.classList.toggle('center', appCardCenter()); fill(headBox, head()); },
-    }, icon(appCardCenter() ? 'panelSide' : 'panelCenter', 16)),
-    isSuper() && h('button', { class: 'icon-btn', title: 'Удалить приложение', onclick: async () => { if (await deleteAppsDlg([a])) { close(); if (onChange) onChange(); } } }, icon('trash', 16)),
+    h('button', { class: 'icon-btn', title: 'Действия', 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); menu(e.currentTarget, actions()); } }, icon('more', 18)),
     h('button', { class: 'icon-btn', title: 'Закрыть', onclick: close }, icon('x', 18)));
+  // быстрые действия карточки — в одном меню, чтобы не шуметь кнопками
+  const actions = () => {
+    const ceo = isSuper();
+    return [
+      { label: appCardCenter() ? 'Открывать справа' : 'Открывать по центру', icon: appCardCenter() ? 'panelSide' : 'panelCenter',
+        action: () => { LS.set('cardMode', appCardCenter() ? 'side' : 'center'); panel.classList.toggle('center', appCardCenter()); backdrop.classList.toggle('center', appCardCenter()); } },
+      ceo && { sep: true },
+      ceo && { label: 'Поставить задачи', icon: 'plus', action: () => openTaskPool(a, refresh) },
+      ceo && { label: 'Апдейт', icon: 'plus', action: () => openCreateRequest(a, 'update', refresh) },
+      ceo && { label: 'Реджект', icon: 'plus', action: () => openCreateRequest(a, 'reject', refresh) },
+      { label: 'Заметка', icon: 'edit', action: () => { if (noteBox) { noteBox.scrollIntoView({ block: 'center', behavior: 'smooth' }); noteBox.focus({ preventScroll: true }); } } },
+      ceo && { sep: true },
+      ceo && { label: 'Удалить приложение', icon: 'trash', danger: true, action: async () => { if (await deleteAppsDlg([a])) { close(); if (onChange) onChange(); } } },
+    ];
+  };
   const headBox = h('div', null, head());
   const backdrop = h('div', { class: 'panel-backdrop' + (appCardCenter() ? ' center' : ''), onclick: close });
   draw();
@@ -831,20 +844,24 @@ export function openNewAppTask(onDone, unitId) {
   title.focus();
 }
 
+/** type: update / other; reject — запрос «Реджект: причина» (как от RM), в разделе «Реджекты». */
 function openCreateRequest(a, type, onDone) {
-  const title = h('input', { class: 'inp', maxlength: 500, placeholder: type === 'update' ? 'Например, Апдейт 1.2: виджет' : 'Что сделать' });
+  const reject = type === 'reject';
+  if (reject) type = 'other';
+  const title = h('input', { class: 'inp', maxlength: 480, placeholder: reject ? 'Причина из письма Apple, например Guideline 3.1.2' : type === 'update' ? 'Например, Апдейт 1.2: виджет' : 'Что сделать' });
   const pm = pmPicker(a.unitId);
   const due = h('input', { class: 'inp', type: 'date' });
   const prio = prioPicker(a.priority);
   const desc = h('textarea', { class: 'inp', rows: 3 });
   modal({
-    title: (REQUEST_TYPES[type] || 'Задача') + ' · ' + a.name,
-    body: [field('Название', title), h('div', { class: 'grid2' }, field('PM', pm.el), field('Срок', due)),
+    title: (reject ? 'Реджект' : REQUEST_TYPES[type] || 'Задача') + ' · ' + a.name,
+    body: [field(reject ? 'Причина' : 'Название', title), h('div', { class: 'grid2' }, field('PM', pm.el), field('Срок', due)),
       field('Приоритет', prio, 'Перейдёт этапам, когда PM разложит задачу'), field('Описание', desc)],
     actions: [{ label: 'Отмена' }, {
       label: 'Поставить', primary: true,
       action: async close => {
-        await send('createRequest', { appId: a.id, type, title: title.value, pmId: pm.el.value, dueDate: due.value, priority: prio.value, description: desc.value });
+        if (reject && !title.value.trim()) { title.focus(); return; }
+        await send('createRequest', { appId: a.id, type, title: (reject ? 'Реджект: ' : '') + title.value, pmId: pm.el.value, dueDate: due.value, priority: prio.value, description: desc.value });
         close();
         toast('Задача ушла PM');
         if (onDone) onDone();

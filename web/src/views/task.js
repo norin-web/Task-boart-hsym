@@ -109,13 +109,7 @@ function buildPanel(t) {
       h('span', { class: 'key-badge' }, taskKey(t)),
       t.archived && h('span', { class: 'badge' }, 'в архиве')),
     h('span', { class: 'spacer' }),
-    S.peek && !ceoDefault() && h('button', { class: 'btn ghost sm', title: 'Перейти на доску юнита с этой задачей', onclick: () => openUnitBoard(t) }, icon('board', 14), h('span', { class: 'btn-label' }, 'Открыть доску')),
-    h('button', {
-      class: 'icon-btn', title: cardCenter() ? 'Открывать карточки справа' : 'Открывать карточки по центру',
-      onclick: () => { LS.set('cardMode', cardCenter() ? 'side' : 'center'); openTask(t.id); },
-    }, icon(cardCenter() ? 'panelSide' : 'panelCenter', 16)),
-    h('button', { class: 'icon-btn', title: 'Скопировать ссылку', onclick: () => copyLink(t) }, icon('copy', 16)),
-    staff && h('button', { class: 'icon-btn', title: 'Действия', onclick: e => panelMenu(e.currentTarget, t) }, icon('more', 18)),
+    h('button', { class: 'icon-btn', title: 'Действия', 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); panelMenu(e.currentTarget, t, staff); } }, icon('more', 18)),
     h('button', { class: 'icon-btn', title: 'Закрыть (Esc)', onclick: closeTask }, icon('x', 18)));
 
   return h('aside', { class: 'panel' + (cardCenter() ? ' center' : ''), role: 'dialog', 'aria-label': taskKey(t) },
@@ -238,14 +232,19 @@ function openUnitBoard(t) {
   navigate({ unit: unitId, mode: 'board', task: taskId });
 }
 
-function panelMenu(anchor, t) {
+/** Действия карточки задачи — одним меню «⋯»: вид, ссылка, доска; руководителю ещё дубль, перенос, архив, удаление. */
+function panelMenu(anchor, t, staff) {
   const others = S.board.units.filter(x => x.id !== S.board.unit.id && !x.archived);
   menu(anchor, [
-    { label: 'Дублировать', icon: 'copy', action: () => duplicateTask(t) },
-    others.length > 0 && { label: 'Перенести в другой юнит…', icon: 'arrow', action: () => moveTaskDialog(t) },
-    { label: t.archived ? 'Вернуть из архива' : 'В архив', icon: 'archive', action: () => { patchTask(t, { archived: !t.archived }); refreshPanel(t); } },
-    { sep: true },
-    { label: 'Удалить', icon: 'trash', danger: true, action: () => deleteTaskUndoable(t) },
+    { label: cardCenter() ? 'Открывать справа' : 'Открывать по центру', icon: cardCenter() ? 'panelSide' : 'panelCenter', action: () => { LS.set('cardMode', cardCenter() ? 'side' : 'center'); openTask(t.id); } },
+    { label: 'Скопировать ссылку', icon: 'link', action: () => copyLink(t) },
+    S.peek && !ceoDefault() && { label: 'Открыть на доске юнита', icon: 'board', action: () => openUnitBoard(t) },
+    staff && { sep: true },
+    staff && { label: 'Дублировать', icon: 'copy', action: () => duplicateTask(t) },
+    staff && others.length > 0 && { label: 'Перенести в другой юнит…', icon: 'arrow', action: () => moveTaskDialog(t) },
+    staff && { label: t.archived ? 'Вернуть из архива' : 'В архив', icon: 'archive', action: () => { patchTask(t, { archived: !t.archived }); refreshPanel(t); } },
+    staff && { sep: true },
+    staff && { label: 'Удалить', icon: 'trash', danger: true, action: () => deleteTaskUndoable(t) },
   ]);
 }
 
