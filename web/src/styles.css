@@ -1631,3 +1631,5 @@ a.rl-link:hover { background: var(--accent-soft); color: var(--accent-text); }
 .info-add .inp { flex: 1; min-width: 0; }
 .info-add .info-scope { flex: none; width: auto; }
 @media (max-width: 640px) { .info-add { flex-wrap: wrap; } .info-tag { display: none; } }
+.card-layout .le-row { display: flex; align-items: center; gap: 6px; }
+.card-layout .cl-pick { flex: 1; }

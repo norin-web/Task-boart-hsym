@@ -395,11 +395,12 @@ export function openAppPanel(a, onChange) {
     };
     noteInp.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) addNote(); });
     noteBox = noteInp;
-    fill(body,
-      h('section', { class: 'ap-props' },
+    // блоки карточки — по раскладке человека (порядок и видимость: «⋯» → «Настроить карточку»)
+    const parts = {
+      props: h('section', { class: 'ap-props' },
         field('Статус', statusSel), field('Юнит', ceo ? unitSel : h('div', { class: 'ap-static' }, u ? u.name : '—')), field('Приоритет', prioSel)),
       // где приложение сейчас: статус, с какого числа, текущие этапы открытых работ
-      h('section', null,
+      now: h('section', null,
         h('div', { class: 'up-head' }, h('h3', null, 'Сейчас')),
         h('div', { class: 'ap-now' },
           h('div', { class: 'ap-now-st' }, statusPill(st), a.statusAt && h('span', { class: 'muted' }, 'с ' + fmtDate(a.statusAt.slice(0, 10))),
@@ -415,24 +416,24 @@ export function openAppPanel(a, onChange) {
                 who ? avatar(who, 'sm') : h('span', { class: 'avatar-gap' }));
             })
             : h('p', { class: 'muted', style: { margin: 0 } }, 'Открытых работ нет'))),
-      infoBlock(a, manage, ceo, save, draw),
-      S.appFields.length > 0 && h('section', null,
+      info: infoBlock(a, manage, ceo, save, draw),
+      quick: S.appFields.length > 0 && h('section', null,
         h('div', { class: 'up-head' }, h('h3', null, 'Быстрый доступ')),
         h('div', { class: 'af-list' }, S.appFields.map(f => infoRow(a, f, manage, v => (f === storeField() && v ? fromStore(v, { info: { [f.id]: v } }) : save({ info: { [f.id]: v } })))))),
-      h('section', null,
+      tasks: h('section', null,
         h('div', { class: 'up-head' }, h('h3', null, 'Задачи'),
           ceo && h('button', { class: 'btn ghost sm', onclick: () => openTaskPool(a, refresh) }, icon('plus', 14), 'Поставить задачи')),
         open.length ? open.map(r => requestCard(r, refresh)) : h('p', { class: 'muted' }, 'Открытых задач нет'),
         closed.length > 0 && h('div', { class: 'ap-closed' }, closed.map(r => h('button', { class: 'ap-done-row', onclick: () => peekTask(r.unitId, r.id) },
           icon('check', 14), h('span', { class: 'ap-done-title' }, r.title))))),
-      h('section', null,
+      updates: h('section', null,
         h('div', { class: 'up-head' }, h('h3', null, 'Апдейты', updates.length > 0 && h('span', { class: 'muted sec-n' }, updates.length)),
           ceo && h('button', { class: 'btn ghost sm', onclick: () => openCreateRequest(a, 'update', refresh) }, icon('plus', 14), 'Апдейт')),
         updates.length ? h('div', { class: 'ap-num-list' }, numbered(updates, 'Апдейт')) : h('p', { class: 'muted' }, 'Апдейтов не было')),
-      h('section', null,
+      rejects: h('section', null,
         h('div', { class: 'up-head' }, h('h3', null, 'Реджекты', rejects.length > 0 && h('span', { class: 'muted sec-n' }, rejects.length))),
         rejects.length ? h('div', { class: 'ap-num-list' }, numbered(rejects, 'Реджект')) : h('p', { class: 'muted' }, 'Реджектов не было')),
-      h('section', null,
+      notes: h('section', null,
         h('div', { class: 'up-head' }, h('h3', null, 'Заметки')),
         h('div', { class: 'ap-note-add' }, noteInp, h('button', { class: 'btn sm', onclick: addNote }, 'Добавить')),
         notes == null ? h('p', { class: 'muted' }, 'Загрузка…') : notes.map(n => {
@@ -444,7 +445,10 @@ export function openAppPanel(a, onChange) {
               class: 'icon-btn sm', title: 'Удалить заметку',
               onclick: () => send('deleteAppNote', { id: n.id }).then(() => { notes = notes.filter(x => x !== n); draw(); }).catch(showErr),
             }, icon('x', 13)));
-        })));
+        })),
+    };
+    const L = appCardLayout();
+    fill(body, L.order.filter(id => !L.hidden.includes(id)).map(id => parts[id]));
   };
   const panel = h('aside', { class: 'panel unit-panel' + (appCardCenter() ? ' center' : ''), role: 'dialog', 'aria-label': a.name });
   // шапка: крупная иконка, своё название, название в сторе и ссылка на App Store
@@ -465,6 +469,7 @@ export function openAppPanel(a, onChange) {
     return [
       { label: appCardCenter() ? 'Открывать справа' : 'Открывать по центру', icon: appCardCenter() ? 'panelSide' : 'panelCenter',
         action: () => { LS.set('cardMode', appCardCenter() ? 'side' : 'center'); panel.classList.toggle('center', appCardCenter()); backdrop.classList.toggle('center', appCardCenter()); } },
+      { label: 'Настроить карточку', icon: 'layers', action: () => openAppCardLayout(draw) },
       ceo && { sep: true },
       ceo && { label: 'Поставить задачи', icon: 'plus', action: () => openTaskPool(a, refresh) },
       ceo && { label: 'Апдейт', icon: 'plus', action: () => openCreateRequest(a, 'update', refresh) },
@@ -480,6 +485,50 @@ export function openAppPanel(a, onChange) {
   loadNotes();
   panel.append(headBox, body);
   fill(root, backdrop, panel);
+}
+
+/* ---------- раскладка карточки приложения (у каждого своя) ---------- */
+
+const CARD_BLOCKS = [['props', 'Статус, юнит, приоритет'], ['now', 'Сейчас'], ['info', 'Info'], ['quick', 'Быстрый доступ'],
+  ['tasks', 'Задачи'], ['updates', 'Апдейты'], ['rejects', 'Реджекты'], ['notes', 'Заметки']];
+/** Порядок и скрытые блоки карточки — prefs.appCard; новые блоки встают в конец. */
+function appCardLayout() {
+  const saved = ((me() || {}).prefs || {}).appCard || {};
+  const known = CARD_BLOCKS.map(([id]) => id);
+  const order = (saved.order || []).filter(id => known.includes(id));
+  known.forEach(id => { if (!order.includes(id)) order.push(id); });
+  return { order, hidden: (saved.hidden || []).filter(id => known.includes(id)) };
+}
+function saveAppCardLayout(L) {
+  const p = me();
+  if (p) p.prefs = { ...(p.prefs || {}), appCard: L };
+  send('setMyPrefs', { personId: S.meId, prefs: { appCard: L } }).catch(showErr);
+}
+/** «Настроить карточку»: блоки перетаскиваются за ручку, галочка — показывать; меняется сразу и только у вас. */
+function openAppCardLayout(redraw) {
+  const L = appCardLayout();
+  const name = Object.fromEntries(CARD_BLOCKS);
+  const list = h('div', { class: 'col-edit-list card-layout' });
+  const apply = () => { saveAppCardLayout(L); redraw(); };
+  const draw = () => fill(list, L.order.map(id => {
+    const on = !L.hidden.includes(id);
+    return h('div', { class: 'col-edit-row le-row', dataset: { id } },
+      h('span', { class: 'drag', title: 'Перетащите, чтобы изменить порядок' }, icon('grip', 16)),
+      h('button', { class: 'menu-item aud-item cl-pick' + (on ? ' on' : ''), role: 'checkbox', 'aria-checked': String(on),
+        onclick: () => { L.hidden = on ? [...L.hidden, id] : L.hidden.filter(x => x !== id); draw(); apply(); } },
+        h('span', { class: 'aud-check' }, on && icon('check', 13)), name[id]));
+  }));
+  draw();
+  Sortable.create(list, { handle: '.drag', animation: 150, forceFallback: true, onEnd: () => {
+    L.order = [...list.children].map(el => el.dataset.id);
+    apply();
+  } });
+  modal({
+    title: 'Настроить карточку приложения',
+    body: [h('p', { class: 'hint', style: { margin: '0 0 10px' } }, 'Какие блоки показывать и в каком порядке — только у вас, во всех карточках приложений.'), list],
+    footLeft: h('button', { class: 'btn ghost sm', onclick: () => { L.order = CARD_BLOCKS.map(([id]) => id); L.hidden = []; draw(); apply(); } }, 'Как было'),
+    actions: [{ label: 'Готово' }],
+  });
 }
 
 /**
