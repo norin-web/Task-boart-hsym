@@ -132,7 +132,7 @@ export function team(d, period, setPeriod) {
         [['Сотрудник'], ['Сделано', 'Закрыто за период'], ['В срок', 'Доля закрытых в срок'], ['Ср. время', 'От «в работе» до «готово»'], ['В работе', 'Сейчас'], ['Просрочено', 'Сейчас']]
           .map(([t, tip], i) => h('span', { role: 'columnheader', class: i ? 'num' : '', title: tip || '' }, t))),
       rows.map(k => h('div', { class: 'kt-row', role: 'row' },
-        h('span', { class: 'kt-who', role: 'cell' }, avatar(k.p, 'sm'), h('span', null, h('b', null, k.p.name),
+        h('span', { class: 'kt-who', role: 'cell' }, avatar(k.p, 'sm'), h('span', { 'data-pcard': k.p.id }, h('b', null, k.p.name),
           h('small', { class: 'muted' }, (k.p.positionIds || []).map(id => (deptById(id) || {}).name).filter(Boolean).join(', ')))),
         h('span', { class: 'num', role: 'cell', 'data-label': 'Сделано' }, h('b', null, k.done)),
         h('span', { class: 'num', role: 'cell', 'data-label': 'В срок' }, pct(k.onTime)),

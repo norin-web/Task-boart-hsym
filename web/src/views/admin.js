@@ -73,7 +73,7 @@ function overview(d, ov) {
     class: 'kpi', title: 'Показать', onclick: e => { e.stopPropagation(); kpiPopover(e.currentTarget, label, list()); },
   }, h('div', { class: 'kpi-val' }, value), h('div', { class: 'kpi-label' }, label));
   const peopleList = arr => () => arr.length ? arr.map(p => h('div', { class: 'kp-row' }, avatar(p, 'sm'),
-    h('span', { class: 'kp-name' }, p.name), h('span', { class: 'kp-sub' }, teamChips(p.teamIds || []), positionChips(p.positionIds || [])))) : [h('p', { class: 'muted kp-empty' }, 'Никого')];
+    h('span', { class: 'kp-name', 'data-pcard': p.id }, p.name), h('span', { class: 'kp-sub' }, teamChips(p.teamIds || []), positionChips(p.positionIds || [])))) : [h('p', { class: 'muted kp-empty' }, 'Никого')];
   const unitList = () => units.length ? units.map(u => {
     const c = u.counts || emptyCounts();
     return link({ unit: u.id, mode: 'board' }, { class: 'kp-row kp-link' },
@@ -234,7 +234,7 @@ function openUnitPanel(u, onChange) {
           h('button', { class: 'btn ghost sm', onclick: async () => { if (await addMemberDialog(u.id)) { u.members = unitById(u.id).members || u.members; draw(); } } }, icon('plus', 14), 'Добавить')),
         groups.length ? groups.map(g => h('div', { class: 'up-team' },
           h('div', { class: 'up-team-name' }, h('span', { class: 'dot', style: { background: g.t.color } }), g.t.name, h('span', { class: 'muted' }, g.people.length)),
-          g.people.map(p => h('div', { class: 'up-person' }, avatar(p, 'sm'), h('span', { class: 'up-pname' }, p.name),
+          g.people.map(p => h('div', { class: 'up-person' }, avatar(p, 'sm'), h('span', { class: 'up-pname', 'data-pcard': p.id }, p.name),
             h('span', { class: 'muted up-pos' }, (p.positionIds || []).map(id => (deptById(id) || {}).name).filter(Boolean).join(', ')),
             h('button', { class: 'icon-btn sm', title: 'Убрать из юнита', onclick: () => remove(p).catch(showErr) }, icon('x', 14))))))
           : h('p', { class: 'muted' }, 'В юните пока никого — добавьте участников.')),

@@ -10,6 +10,7 @@ import { renderUnread } from './views/sidebar.js';
 import { refreshNews } from './views/home.js';
 import { openCreateTask, closeTask } from './views/task.js';
 import { openShortcuts } from './views/people.js';
+import { initPersonCard } from './views/personcard.js';
 
 // «Работать здесь» на экране блокировки — забрать базу у другой вкладки
 let takeOver = false;
@@ -80,6 +81,13 @@ async function boot() {
     S.appFields = d.appFields || [];
     S.appInfoItems = d.appInfoItems || [];
     S.priorityOptions = d.priorityOptions || [];
+    // часовой пояс для карточки сотрудника — из браузера, пока человек не указал свой
+    const self = S.people.find(p => p.id === S.meId);
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (self && !self.timezone && tz && S.meId === (S.realMeId || S.meId)) {
+      self.timezone = tz;
+      call('updatePerson', { id: self.id, timezone: tz }).catch(() => {});
+    }
     if (mode === 'local') {
       // локально «Войти как» меняет и права; режим разработчика остаётся за тем, у кого он включён
       const dev = S.people.find(p => p.isDev);
@@ -96,6 +104,7 @@ async function boot() {
   S.route = parseLocation();
   render();
   startPulse();
+  initPersonCard();
 }
 
 /** Пульс раз в минуту (пока вкладка открыта): «я в сети», кто ещё в сети, сколько новых уведомлений. */

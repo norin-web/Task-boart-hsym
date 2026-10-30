@@ -108,6 +108,7 @@ export function renderSidebar() {
   const r = S.route;
   const units = S.units.filter(u => !u.archived).sort(byOrder);
   const person = me();
+  const [themeLabel, themeIcon] = THEMES[LS.get('theme', 'auto')] || THEMES.auto;
   const list = h('div', { class: 'nav-units' }, units.map(u => unitItem(u, r)));
   const staff = isStaff();
   const ceo = isSuper();
@@ -143,6 +144,7 @@ export function renderSidebar() {
       onclick: () => import('./dev.js').then(m => m.openDevPanel()),
     }, icon('code'), h('span', { class: 'nav-label' }, 'Режим разработчика'), h('kbd', null, isMac ? '⌥D' : 'Alt D')),
     navLink({ view: 'settings' }, 'settings', 'Настройки'),
+    h('button', { class: 'nav-item', onclick: cycleTheme, title: 'Переключить тему' }, icon(themeIcon), h('span', { class: 'nav-label' }, themeLabel)),
     h('button', { class: 'nav-item me', onclick: e => meMenu(e.currentTarget), title: mode === 'local' ? 'Локальный режим: данные только в этом браузере' : 'Профиль' },
       avatar(person, 'sm'),
       h('span', { class: 'nav-label me-label' }, h('span', null, person ? person.name : '—'),
@@ -181,7 +183,6 @@ function meMenu(anchor) {
   menu(anchor, [
     { label: 'Мой профиль', icon: 'user', action: openMyProfile },
     { label: 'Настройки', icon: 'settings', action: () => navigate({ view: 'settings' }) },
-    { label: 'Тема: ' + THEMES[LS.get('theme', 'auto')][0].replace('Тема: ', ''), icon: THEMES[LS.get('theme', 'auto')][1], action: cycleTheme },
     mode === 'local' && { title: 'Локальный режим: данные только в этом браузере' },
     mode === 'local' && { label: 'Войти как…', icon: 'users', action: openActAs },
     mode === 'local' && { sep: true },

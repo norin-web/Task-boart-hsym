@@ -127,7 +127,7 @@ export function renderUnitTeam() {
         const t = mine(p.id), late = t.filter(x => x.dueDate && x.dueDate < today).length;
         return h('div', { class: 'team-row' },
           avatar(p, 'sm'),
-          h('span', { class: 'team-who' }, h('b', null, p.name), h('small', { class: 'muted' }, ACCESS_LABELS[p.access] || '')),
+          h('span', { class: 'team-who', 'data-pcard': p.id }, h('b', null, p.name), h('small', { class: 'muted' }, ACCESS_LABELS[p.access] || '')),
           h('span', { class: 'muted team-pos' }, (deptById(m.departmentId) || deptById(p.positionId) || {}).name || '—'),
           h('span', { class: 'team-load' }, t.length ? `${t.length} ${plural(t.length, ['задача', 'задачи', 'задач'])}` : h('span', { class: 'muted' }, 'нет задач'),
             late > 0 && h('span', { class: 'warn-text' }, ` · просрочено ${late}`)));
@@ -163,6 +163,6 @@ function owner(u, reload) {
       isSuper() && h('button', { class: 'btn ghost sm', onclick: e => { e.stopPropagation(); pick(e.currentTarget); } }, 'Сменить')),
     h('div', { class: 'card-box owner-box' },
       pms.length
-        ? pms.map(p => h('div', { class: 'owner-row' }, avatar(p, 'sm'), h('b', null, p.name), h('span', { class: 'muted' }, ACCESS_LABELS[p.access])))
+        ? pms.map(p => h('div', { class: 'owner-row' }, avatar(p, 'sm'), h('b', { 'data-pcard': p.id }, p.name), h('span', { class: 'muted' }, ACCESS_LABELS[p.access])))
         : h('p', { class: 'muted', style: { margin: 0 } }, 'Не назначен')));
 }

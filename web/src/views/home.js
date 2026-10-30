@@ -266,7 +266,7 @@ export function attentionBlock(ov) {
     forms: ['участник без задач', 'участника без задач', 'участников без задач'],
     row: (p, done) => {
       const free = ov.unassignedTasks.filter(t => (ov.unitMembers[t.unit.id] || []).includes(p.id) && !t.assigneeId);
-      return [h('span', { class: 'att-who' }, avatar(p, 'sm'), p.name, h('small', { class: 'muted' }, personCaption(p))),
+      return [h('span', { class: 'att-who', 'data-pcard': p.id }, avatar(p, 'sm'), p.name, h('small', { class: 'muted' }, personCaption(p))),
         quickSelect(free.length ? 'Дать задачу…' : 'Свободных задач нет', free.map(t => [t.id, t.key + ' ' + t.title]),
           v => call('updateTask', { id: v, patch: { assigneeId: p.id } }).then(() => {
             ov.unassignedTasks.find(t => t.id === v).assigneeId = p.id;

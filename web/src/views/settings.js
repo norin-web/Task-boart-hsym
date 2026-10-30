@@ -379,7 +379,7 @@ function teamSection() {
           // Позиции — из профиля человека (меняются в «Люди и доступы»)
           return h('div', { class: 'member-row' },
             avatar(p),
-            h('span', { class: 'person-text' }, h('span', { class: 'person-name' }, p.name), p.role && h('span', { class: 'person-sub' }, p.role)),
+            h('span', { class: 'person-text', 'data-pcard': p.id }, h('span', { class: 'person-name' }, p.name), p.role && h('span', { class: 'person-sub' }, p.role)),
             positionChips(p.positionIds || [p.positionId]),
             h('button', { class: 'icon-btn sm', title: 'Убрать из команды', onclick: () => remove(m).catch(showErr) }, icon('x', 15)));
         })

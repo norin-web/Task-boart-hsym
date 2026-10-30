@@ -223,7 +223,7 @@ export const isMenuOpen = () => !!openMenuEl;
  * menu(anchorEl | {x, y}, items)
  * item: { label, icon, action, danger } | { sep: true } | { title } | Node
  */
-export function menu(anchor, items, { cls = '' } = {}) {
+export function menu(anchor, items, { cls = '', align = 'right' } = {}) {
   closeMenu();
   const m = h('div', { class: 'menu' + (cls ? ' ' + cls : ''), role: 'menu' }, items.filter(Boolean).map(it => {
     if (it instanceof Node) return it;
@@ -247,7 +247,7 @@ export function menu(anchor, items, { cls = '' } = {}) {
   document.body.append(m);
   const r = anchor instanceof Element ? anchor.getBoundingClientRect() : { left: anchor.x, right: anchor.x, top: anchor.y, bottom: anchor.y };
   const w = m.offsetWidth, hgt = m.offsetHeight;
-  const left = anchor instanceof Element ? r.right - w : r.left;
+  const left = anchor instanceof Element && align === 'right' ? r.right - w : r.left;
   const top = r.bottom + 4 + hgt > window.innerHeight ? Math.max(8, r.top - hgt - 4) : r.bottom + 4;
   m.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, left)) + 'px';
   m.style.top = top + 'px';

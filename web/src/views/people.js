@@ -201,7 +201,7 @@ export function peopleManager({ search = false } = {}) {
     const editableTarget = isSuper() || p.access !== 'superadmin';
     return h('div', { class: 'access-row' + (p.active ? '' : ' inactive') },
       avatar(p),
-      h('span', { class: 'person-text' },
+      h('span', { class: 'person-text', 'data-pcard': p.id },
         h('span', { class: 'person-name' }, p.name, S.meId === p.id && h('span', { class: 'badge' }, 'вы')),
         h('span', { class: 'person-sub' }, [p.email || 'без email', p.linked ? 'вход есть' : mode === 'supabase' ? 'нет входа' : ''].filter(Boolean).join(' · '))),
       teamsPicker(() => p.teamIds || [], ids => { p.teamIds = ids; save(p, { teamIds: ids }); }, { disabled: !editableTarget }),
@@ -296,6 +296,8 @@ export function openMyProfile() {
   if (!p) return;
   const name = h('input', { class: 'inp', value: p.name, maxlength: 80 });
   const role = h('input', { class: 'inp', value: p.role, maxlength: 80, placeholder: 'Например, Senior iOS' });
+  const tg = h('input', { class: 'inp', value: p.telegram ? '@' + p.telegram : '', maxlength: 60, placeholder: '@username', autocomplete: 'off' });
+  const tz = timezoneSelect(p.timezone);
   const preview = h('span');
   let pic = p.avatar || '';
   const drawPreview = () => fill(preview, avatar({ ...p, color: color.value(), avatar: pic }, 'xl'));
@@ -314,6 +316,7 @@ export function openMyProfile() {
         h('div', null, h('div', { style: { fontWeight: 600 } }, p.name), h('div', { class: 'hint' }, [ACCESS_LABELS[p.access], posNames, p.email].filter(Boolean).join(' · ')))),
       field('Аватар', picker),
       h('div', { class: 'grid2' }, field('Имя', name), field('Должность', role, 'Свободный текст; позицию назначает администратор')),
+      h('div', { class: 'grid2' }, field('Telegram', tg, 'Видно в карточке сотрудника'), field('Часовой пояс', tz, 'Коллеги видят ваше местное время')),
       colorField,
       mode === 'supabase' && passwordBlock(),
     ],
@@ -322,7 +325,7 @@ export function openMyProfile() {
       {
         label: 'Сохранить', primary: true, action: async close => {
           if (!name.value.trim()) return name.focus();
-          Object.assign(p, await send('updatePerson', { id: p.id, name: name.value, role: role.value, color: color.value(), avatar: pic }));
+          Object.assign(p, await send('updatePerson', { id: p.id, name: name.value, role: role.value, color: color.value(), avatar: pic, telegram: tg.value, timezone: tz.value }));
           close();
           renderSidebar();
           rerender();
@@ -330,6 +333,23 @@ export function openMyProfile() {
       },
     ],
   });
+}
+
+/** Часовой пояс: популярные сверху, дальше все из браузера; подпись — город и смещение от UTC. */
+function timezoneSelect(value) {
+  const own = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const TOP = ['Europe/Moscow', 'Europe/Kaliningrad', 'Europe/Samara', 'Asia/Yekaterinburg', 'Asia/Novosibirsk', 'Asia/Almaty', 'Asia/Tbilisi', 'Asia/Yerevan', 'Europe/Minsk', 'Europe/Kyiv', 'Europe/Istanbul', 'Europe/Berlin', 'Europe/London', 'Asia/Dubai', 'Asia/Bangkok', 'America/New_York'];
+  const all = (Intl.supportedValuesOf ? Intl.supportedValuesOf('timeZone') : TOP);
+  const label = z => {
+    let off = '';
+    try { off = new Intl.DateTimeFormat('en-US', { timeZone: z, timeZoneName: 'shortOffset' }).formatToParts(new Date()).find(x => x.type === 'timeZoneName').value.replace('GMT', 'UTC'); } catch { /* старый браузер */ }
+    return z.split('/').pop().replace(/_/g, ' ') + (off ? ' · ' + (off === 'UTC' ? 'UTC+0' : off) : '');
+  };
+  const cur = value || own;
+  const top = [...new Set([cur, own, ...TOP])].filter(z => all.includes(z) || z === cur);
+  return h('select', { class: 'inp' },
+    h('optgroup', { label: 'Часто' }, top.map(z => h('option', { value: z, selected: z === cur }, label(z)))),
+    h('optgroup', { label: 'Все' }, all.filter(z => !top.includes(z)).map(z => h('option', { value: z }, label(z)))));
 }
 
 /**

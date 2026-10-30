@@ -2005,3 +2005,22 @@ button.rh-row:hover { background: var(--surface-2); }
 .av-opt:hover { transform: scale(1.06); }
 .av-opt.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent-soft); }
 .av-more { justify-self: start; font-size: 12.5px; }
+
+/* ---------- карточка сотрудника (клик по аватару) ---------- */
+.avatar[data-pid], [data-pcard] { cursor: pointer; }
+[data-pcard]:hover b, [data-pcard]:hover .person-name { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--border-strong); }
+.av-btn .avatar[data-pid], .who-card .avatar[data-pid], .menu .avatar[data-pid], .modal .avatar[data-pid] { cursor: inherit; }
+.avatar.xxl { width: 88px; height: 88px; font-size: 28px; }
+.menu.pc-menu { width: 320px; padding: 0; }
+.pc-head { display: flex; align-items: center; gap: 14px; padding: 16px; border-bottom: 1px solid var(--border); }
+.pc-who { display: grid; gap: 2px; min-width: 0; }
+.pc-who b { font-size: 16px; font-weight: 600; }
+.pc-who span, .pc-who small { font-size: 12.5px; }
+.pc-lines { display: grid; padding: 6px; }
+.pc-line { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 7px; color: var(--text); text-decoration: none; }
+.pc-line > .i { color: var(--muted); flex: none; }
+a.pc-line:hover { background: var(--surface-2); }
+.pc-line-text { display: grid; min-width: 0; }
+.pc-line-text > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-line-text small { font-size: 12px; }
+.pc-empty { margin: 6px 10px 8px; font-size: 13px; }

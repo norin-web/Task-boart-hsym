@@ -480,6 +480,12 @@ test('профили: свой профиль, роли меняет тольк�
     assert.equal((await api('updatePerson', { id: designer.id, avatar: 'data:image/webp;base64,UklGRg==' })).avatar, 'data:image/webp;base64,UklGRg==');
     assert.equal((await api('updatePerson', { id: designer.id, avatar: 'https://evil.example/a.png' })).avatar, '');
     assert.equal((await api('updatePerson', { id: designer.id, avatar: 'data:image/svg+xml;base64,PHN2Zz4=' })).avatar, '');
+    // карточка сотрудника: Telegram без @, часовой пояс IANA
+    const card = await api('updatePerson', { id: designer.id, telegram: 'https://t.me/ira_design', timezone: 'Europe/Moscow' });
+    assert.deepEqual([card.telegram, card.timezone], ['ira_design', 'Europe/Moscow']);
+    assert.equal((await api('updatePerson', { id: designer.id, telegram: '@ira_design2' })).telegram, 'ira_design2');
+    await assert.rejects(() => api('updatePerson', { id: designer.id, telegram: 'не ник' }));
+    assert.equal((await api('updatePerson', { id: designer.id, timezone: 'x; drop' })).timezone, '');
     await assert.rejects(() => api('updatePerson', { id: designer.id, access: 'superadmin' }), forbidden);
     await assert.rejects(() => api('updatePerson', { id: designer.id, positionId: 'd_ios' }), forbidden);
     await assert.rejects(() => api('updatePerson', { id: dev.id, name: 'x' }), forbidden);

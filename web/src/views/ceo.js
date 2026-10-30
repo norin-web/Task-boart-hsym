@@ -211,7 +211,7 @@ export function statBlocks(d, apps, reload) {
     { id: 'pmload', title: 'Загрузка PM', col: 'right', render: () => section('Загрузка PM', list(pms.map(p => {
       const mine = open.filter(x => x.r.assigneeId === p.id);
       const late = mine.filter(x => x.r.dueDate && x.r.dueDate < todayStr()).length;
-      return h('div', { class: 'rc-row' }, avatar(p, 'sm'), h('span', { class: 'rc-main' }, h('b', null, p.name)),
+      return h('div', { class: 'rc-row' }, avatar(p, 'sm'), h('span', { class: 'rc-main', 'data-pcard': p.id }, h('b', null, p.name)),
         h('span', { class: 'muted rc-at' }, mine.length + ' в работе', late > 0 && h('span', { class: 'warn-text' }, ' · ' + late + ' просроч.')));
     }), 'PM нет')) },
     { id: 'stale', title: 'Забытые приложения', col: 'right', render: () => section('Давно не трогали', list(stale.map(a => appRow(a, h('span', { class: 'muted rc-at' }, relTime(a.lastActivity)))), 'Таких нет'), stale.length || null) },

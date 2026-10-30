@@ -249,10 +249,14 @@ const avatarValue = v => {
   if (s.length <= 120000 && /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(s)) return s;
   return '';
 };
+/** Telegram: @username (5–32 символа: буквы, цифры, _) — храним без @; ссылка t.me/… тоже подходит. */
+const telegramValue = v => { const m = /^(?:https?:\/\/)?(?:t\.me\/)?@?([A-Za-z0-9_]{5,32})$/.exec(String(v || '').trim()); return m ? m[1] : ''; };
+/** Часовой пояс IANA: «Europe/Moscow», «Asia/Almaty», «UTC». */
+const timezoneValue = v => { const s = String(v || '').trim(); return /^[A-Za-z_]+(\/[A-Za-z0-9_+-]+){0,2}$/.test(s) && s.length <= 50 ? s : ''; };
 const personOut = r => ({
   id: r.id, name: r.name, email: r.email, role: r.role || '', color: r.color || '', active: !!r.active,
   access: r.access || 'member', positionId: r.position_id || '', linked: !!r.user_id, prefs: json(r.prefs, {}) || {},
-  lastSeenAt: r.last_seen_at || '', isDev: !!r.is_dev, avatar: r.avatar || '',
+  lastSeenAt: r.last_seen_at || '', isDev: !!r.is_dev, avatar: r.avatar || '', telegram: r.telegram || '', timezone: r.timezone || '',
   extraPositionIds: json(r.extra_positions, []) || [],
   teamIds: json(r.team_ids, []) || [],
   positionIds: [r.position_id || 'd_other', ...(json(r.extra_positions, []) || [])],
@@ -2473,6 +2477,8 @@ export function createBackend(db, opts = {}) {
       if ('role' in p) upd.role = str(p.role, 80);
       if ('color' in p) upd.color = color(p.color, '');
       if ('avatar' in p) upd.avatar = avatarValue(p.avatar);
+      if ('telegram' in p) upd.telegram = String(p.telegram || '').trim() ? telegramValue(p.telegram) || fail('Telegram: @username — от 5 символов, латиница, цифры и _') : '';
+      if ('timezone' in p) upd.timezone = timezoneValue(p.timezone);
       if ('active' in p) upd.active = !!p.active;
       if ('access' in p) upd.access = ACCESS.includes(p.access) ? p.access : fail('Неизвестная роль');
       if ('positionId' in p) upd.position_id = (await validDept(p.positionId)) || 'd_other';
