@@ -2176,6 +2176,35 @@ export function createBackend(db, opts = {}) {
       return { rows: out.slice(0, 500), stats };
     },
 
+    /**
+     * Последний релиз каждого приложения (ids) — для «Отслеживаю» у RM: фаза, реджект, когда отправили / вышло,
+     * чего не хватает до отправки. Нет релиза — приложения нет в ответе.
+     */
+    async getAppReleases(p) {
+      const ids = (Array.isArray(p.ids) ? p.ids : []).map(x => String(x ?? '')).filter(Boolean).slice(0, 200);
+      if (!ids.length) return {};
+      const [rows, units, settings] = await Promise.all([
+        run(T('tasks').select('*').eq('step', 'release').eq('archived', false).in('app_id', ids).order('created_at')),
+        all(() => T('units').select('id,key').order('id')),
+        methods.getReleaseSettings(),
+      ]);
+      const U = Object.fromEntries(units.map(u => [u.id, u]));
+      const required = settings.fields.filter(f => f.required);
+      const out = {};
+      for (const t of rows) {
+        const rel = json(t.release, {}) || {};
+        const cl = json(t.checklist, []) || [];
+        out[t.app_id] = {
+          id: t.id, unitId: t.unit_id, key: U[t.unit_id] ? `${U[t.unit_id].key}-${t.num}` : '', assigneeId: t.assignee_id,
+          phase: t.assignee_id ? rel.phase || '' : 'waiting', reason: rel.reason || '', rejectNo: rel.rejectNo || 0, pmId: rel.pmId || '',
+          submittedAt: rel.submittedAt || '', rejectedAt: rel.rejectedAt || '', liveAt: rel.liveAt || '', fixedAt: rel.fixedAt || '',
+          version: (rel.values || {}).version || '', missing: required.filter(f => !(rel.values || {})[f.id]).map(f => f.name),
+          checklist: { done: cl.filter(i => i.done).length, total: cl.length }, attempts: (rel.history || []).length,
+        };
+      }
+      return out;
+    },
+
     async getRmDashboard(p) {
       const [rows, units, apps, settings] = await Promise.all([
         all(() => T('tasks').select('*').eq('step', 'release').eq('archived', false).neq('assignee_id', '').order('created_at').order('id')),

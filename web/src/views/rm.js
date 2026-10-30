@@ -30,7 +30,7 @@ export async function renderRmHome() {
       h('div', { class: 'ceo-hello' }, h('h2', null, greeting() + (person ? ', ' + person.name.split(' ')[0] : ''))),
       newsBlock(),
       // свои приложения и задачи «в фокусе» — статус обновляется сам
-      watchBlock([], { openApp: id => openAppById(id, load), openTask: peekTask, appIcon, appStatusCell, stageDots }),
+      watchBlock([], { openApp: id => openAppById(id, load), openTask: peekTask, appIcon, appStatusCell, stageDots, release: true, prioTag }),
       section('Очередь на релиз', 'Очередь пуста', d.queue, x => [
         x.fixedAt && h('span', { class: 'ok-text rq-line' }, `реджект №${x.rejectNo || ''} исправлен — отправьте снова`),
         x.missing.length || x.checklist.done < x.checklist.total

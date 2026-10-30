@@ -33,10 +33,14 @@ const snapTask = t => [t.status, t.assigneeId, t.dueDate].join('|');
 /**
  * Блок «Отслеживаю». apps — уже загруженные приложения дашборда (listApps), openApp / openTask — открыть карточку.
  */
-export function watchBlock(apps, { openApp, openTask, appIcon, appStatusCell, stageDots }) {
-  const box = h('section', { class: 'watch' });
+/**
+ * release: true — вид для RM: приложение показывается его релизом (фаза, ревью Apple, реджект, что не готово),
+ * клик — карточка релиза; prioTag — шеврон приоритета.
+ */
+export function watchBlock(apps, { openApp, openTask, appIcon, appStatusCell, stageDots, release = false, prioTag = null }) {
+  const box = h('section', { class: 'watch' + (release ? ' rel' : '') });
   const prev = new Map();
-  let appsNow = apps, tasks = [], at = Date.now(), timer = null, busy = false;
+  let appsNow = apps, tasks = [], rels = {}, at = Date.now(), timer = null, busy = false;
 
   async function refresh(force) {
     if (busy || (!force && document.hidden)) return;
@@ -49,12 +53,38 @@ export function watchBlock(apps, { openApp, openTask, appIcon, appStatusCell, st
         w.some(x => x.t === 'app') || !appsNow.length ? call('listApps', {}) : Promise.resolve(appsNow), // пустой список (дашборд RM) — для поиска при добавлении
         taskIds.length ? call('queryTasks', { ids: taskIds }) : Promise.resolve([]),
       ]);
+      const appIds = w.filter(x => x.t === 'app').map(x => x.id);
+      if (release && appIds.length) rels = await call('getAppReleases', { ids: appIds });
       at = Date.now();
       draw();
     } catch { /* сеть моргнула — следующая попытка по таймеру */ } finally { busy = false; }
   }
   const onChange = () => refresh(true);
   const onVis = () => { if (!document.hidden) refresh(false); };
+
+  /** Строка RM: как в «Релизах» — приложение и состояние его релиза. */
+  function rowRelease(a) {
+    const r = rels[a.id];
+    const days = iso => Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 864e5));
+    const pm = r && personById(r.pmId);
+    const line = !r ? h('span', { class: 'muted' }, 'релиза ещё не было')
+      : r.phase === 'waiting' ? h('span', { class: 'muted' }, 'идёт разработка — релиз ещё не передан')
+        : r.phase === '' ? (r.fixedAt ? h('span', { class: 'ok-text' }, `реджект №${r.rejectNo} исправлен — отправьте снова`)
+          : r.missing.length || r.checklist.done < r.checklist.total
+            ? h('span', { class: 'warn-text' }, [r.missing.length && 'не заполнено: ' + r.missing.join(', '), r.checklist.total && `чеклист ${r.checklist.done}/${r.checklist.total}`].filter(Boolean).join(' · '))
+            : h('span', { class: 'muted' }, 'готово к отправке'))
+          : r.phase === 'submitted' ? h('span', { class: 'muted' }, 'на ревью Apple' + (days(r.submittedAt) ? ` · ждёт ${days(r.submittedAt)} дн.` : ' · отправлено сегодня'))
+            : r.phase === 'rejected' ? h('span', null, h('span', { class: 'danger-text' }, `реджект №${r.rejectNo} · ${r.reason}`), h('span', { class: 'muted' }, ' · исправляет ' + (pm ? pm.name : 'PM')))
+              : h('span', { class: 'ok-text' }, 'в App Store' + (r.liveAt ? ' · ' + fmtDate(r.liveAt.slice(0, 10)) : ''));
+    const PH = { '': 'К отправке', waiting: 'В разработке', submitted: 'Ревью Apple', rejected: 'Реджект', live: 'В сторе' };
+    return [
+      appIcon(a, 'sm'),
+      h('span', { class: 'w-main' }, h('span', { class: 'w-title' }, h('b', null, a.name), prioTag && prioTag(a.priority)), h('small', { class: 'w-line' }, line)),
+      h('span', { class: 'w-phase' + (r ? ' ph-' + (r.phase || 'queue') : '') }, r ? PH[r.phase] : '—'),
+      h('span', { class: 'w-now' }, r && r.version ? 'v' + r.version + (r.attempts > 1 ? ` · попытка ${r.attempts}` : '') : ''),
+      h('span', { class: 'muted w-at' }, r ? relTime(r.liveAt || r.rejectedAt || r.submittedAt || a.lastActivity || '') || '—' : '—'),
+    ];
+  }
 
   function rowApp(a) {
     const r = (a.requests || []).find(x => !x.done);
@@ -83,7 +113,12 @@ export function watchBlock(apps, { openApp, openTask, appIcon, appStatusCell, st
   function draw() {
     const w = watchList();
     const items = w.map(x => {
-      if (x.t === 'app') { const a = appsNow.find(y => y.id === x.id); return a && { x, key: 'a:' + a.id, snap: snapApp(a), cells: rowApp(a), open: () => openApp(a.id), name: a.name }; }
+      if (x.t === 'app') {
+        const a = appsNow.find(y => y.id === x.id);
+        if (!a) return null;
+        if (release) { const r = rels[a.id]; return { x, key: 'a:' + a.id, snap: r ? [r.phase, r.rejectNo, r.submittedAt, r.missing.length, r.checklist.done].join('|') : '', cells: rowRelease(a), open: () => (r ? openTask(r.unitId, r.id) : openApp(a.id)), name: a.name }; }
+        return { x, key: 'a:' + a.id, snap: snapApp(a), cells: rowApp(a), open: () => openApp(a.id), name: a.name };
+      }
       const t = tasks.find(y => y.id === x.id);
       return t && { x, key: 't:' + t.id, snap: snapTask(t), cells: rowTask(t), open: () => openTask(t.unitId, t.id), name: t.title };
     }).filter(Boolean);

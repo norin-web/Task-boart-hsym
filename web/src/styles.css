@@ -1899,3 +1899,12 @@ button.rh-row:hover { background: var(--surface-2); }
 .rel-team-title { font-size: 12px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); }
 .rel-team-people { display: grid; gap: 6px; }
 .rel-person { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; }
+/* «Отслеживаю» у RM — строки как в «Релизах»: фаза релиза плашкой */
+.w-title { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.w-line { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.w-phase { justify-self: start; font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 99px; background: var(--surface-2); color: var(--text-2); white-space: nowrap; }
+.w-phase.ph-submitted { background: var(--warn-soft); color: var(--warn); }
+.w-phase.ph-rejected { background: var(--danger-soft); color: var(--danger); }
+.w-phase.ph-live { background: var(--ok-soft); color: var(--ok); }
+.w-phase.ph-queue { background: var(--accent-soft); color: var(--accent-text); }
+.watch.rel .w-row:not(.task) .w-open { grid-template-columns: 32px minmax(0, 2.6fr) 110px minmax(60px, .5fr) 90px; }
