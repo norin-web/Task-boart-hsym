@@ -1951,7 +1951,7 @@ button.rh-row:hover { background: var(--surface-2); }
 .who-n { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* ---------- настройки ---------- */
-.prefs-page { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 32px; align-items: start; padding: 24px 28px 48px 16px; }
+.prefs-page { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 32px; align-items: start; align-content: start; padding: 24px 28px 48px 16px; }
 .prefs-nav { display: grid; gap: 1px; position: sticky; top: 0; }
 .prefs-sec { font-size: 12px; font-weight: 500; color: var(--muted); padding: 14px 10px 4px; }
 .prefs-sec:first-child { padding-top: 0; }

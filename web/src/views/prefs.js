@@ -1,15 +1,15 @@
 /**
  * Настройки (#/settings?tab=…) — всё в одном месте. Слева разделы:
- *   Личное (у всех): профиль, внешний вид, уведомления, доски, дашборд;
+ *   Личное (у всех): профиль, внешний вид, уведомления, доски;
  *   Студия: CEO и PM — люди и доступы, юниты, автоматизации, журнал; CEO — приложения; CEO и RM — релизы.
  * Раздел студии рисует admin.js (renderStudio), редакторы приложений и релизов открываются своими окнами.
  */
-import { S, LS, me, isStaff, isSuper, myAccess, ceoMode, ACCESS_LABELS, deptById } from '../state.js';
+import { S, LS, me, isStaff, isSuper, myAccess, ACCESS_LABELS, deptById } from '../state.js';
 import { $, h, icon, avatar, topbar, fill, showErr, toast } from '../ui.js';
 import { send } from '../api.js';
-import { link, navigate, currentView } from '../router.js';
+import { link, currentView } from '../router.js';
 import { mode, supabase } from '../data.js';
-import { THEME_LIST, setTheme, setCeoMode, resetLocal } from './sidebar.js';
+import { THEME_LIST, setTheme, resetLocal } from './sidebar.js';
 import { openMyProfile, openActAs } from './people.js';
 import { renderStudio, STUDIO_TABS } from './admin.js';
 
@@ -18,7 +18,6 @@ const PERSONAL = [
   ['look', 'Внешний вид', 'sun'],
   ['notify', 'Уведомления', 'bell'],
   ['boards', 'Доски', 'board'],
-  ['dashboard', 'Дашборд', 'home'],
 ];
 
 /** Разделы студии, доступные вошедшему. */
@@ -53,7 +52,7 @@ export function renderPrefs(tab) {
         studio().length > 0 && [h('div', { class: 'prefs-sec' }, 'Студия'), studio().map(item)]),
       body));
 
-  const SECTIONS = { profile, look, notify, boards, dashboard, apps: appsSection, releases: releasesSection };
+  const SECTIONS = { profile, look, notify, boards, apps: appsSection, releases: releasesSection };
   if (SECTIONS[tab]) fill(body, SECTIONS[tab]());
   else renderStudio(body, tab, key);
 }
@@ -140,19 +139,6 @@ function boards() {
         act('Настроить', () => import('./cltemplates.js').then(m => m.openTemplatesEditor()))),
       myAccess() === 'rm' && row('Карточка релиза', 'Какие блоки показывать в карточке релиза',
         act('Настроить', () => import('./release.js').then(m => m.openReleaseCardSettings())))),
-  ];
-}
-
-function dashboard() {
-  return [
-    head('Дашборд'),
-    card(
-      row('Блоки дашборда', 'Порядок, колонки и какие блоки показывать', act('Открыть дашборд', () => navigate({ view: 'home' }))),
-      isStaff() && row('Аналитика', 'Цифры, статусы, загрузка и KPI команды', act('Открыть', () => navigate({ view: 'analytics' }))),
-      isSuper() && row('Режим CEO', 'Default — приложения и приоритеты; Admin — ещё доски, задачи и настройки юнитов',
-        h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Режим CEO' }, [['default', 'Default'], ['admin', 'Admin']].map(([m, label]) =>
-          h('button', { class: ceoMode() === m ? 'on' : '', role: 'radio', 'aria-checked': String(ceoMode() === m),
-            onclick: async () => { await setCeoMode(m); if (currentView() && currentView().startsWith('settings')) renderPrefs('dashboard'); } }, label))))),
   ];
 }
 

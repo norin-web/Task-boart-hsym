@@ -5,9 +5,8 @@ import { send } from '../api.js';
 import { link, navigate, rerender } from '../router.js';
 import { openPalette } from './palette.js';
 import { unitMenu, openCreateUnit } from './units.js';
-import { openActAs, openMyProfile } from './people.js';
 import { personCaption } from './my.js';
-import { mode, supabase, resetLocalData } from '../data.js';
+import { resetLocalData } from '../data.js';
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 
@@ -143,13 +142,13 @@ export function renderSidebar() {
       class: 'nav-item dev-item' + (isHere(r, { view: 'dev' }) ? ' active' : ''), title: 'Смотреть как, шорткаты-сценарии, тестовые данные',
       onclick: () => import('./dev.js').then(m => m.openDevPanel()),
     }, icon('code'), h('span', { class: 'nav-label' }, 'Режим разработчика'), h('kbd', null, isMac ? '⌥D' : 'Alt D')),
-    navLink({ view: 'settings' }, 'settings', 'Настройки'),
     h('button', { class: 'nav-item', onclick: cycleTheme, title: 'Переключить тему' }, icon(themeIcon), h('span', { class: 'nav-label' }, themeLabel)),
-    h('button', { class: 'nav-item me', onclick: e => meMenu(e.currentTarget), title: mode === 'local' ? 'Локальный режим: данные только в этом браузере' : 'Профиль' },
+    // аккаунт и есть вход в настройки
+    link({ view: 'settings' }, { class: 'nav-item me' + (isHere(r, { view: 'settings' }) ? ' active' : ''), title: 'Настройки' },
       avatar(person, 'sm'),
       h('span', { class: 'nav-label me-label' }, h('span', null, person ? person.name : '—'),
         person && h('small', null, (S.session && S.session.user.email) || personCaption(person) || ACCESS_LABELS[person.access])),
-      icon('chevron', 14)));
+      icon('settings', 15)));
 
   if (staff && units.length > 1) {
     Sortable.create(list, {
@@ -177,18 +176,6 @@ export async function setCeoMode(m) {
   try { await send('setMyPrefs', { personId: p.id, prefs: { ceoMode: m } }); } catch (e) { showErr(e); }
   if (m === 'default' && ((S.route.unit && S.route.mode === 'settings') || ['my', 'myboard'].includes(S.route.view))) navigate({ view: 'home' });
   else rerender();
-}
-
-function meMenu(anchor) {
-  menu(anchor, [
-    { label: 'Мой профиль', icon: 'user', action: openMyProfile },
-    mode === 'local' && { title: 'Локальный режим: данные только в этом браузере' },
-    mode === 'local' && { label: 'Войти как…', icon: 'users', action: openActAs },
-    mode === 'local' && { sep: true },
-    mode === 'local' && { label: 'Очистить локальную базу', icon: 'trash', danger: true, action: resetLocal },
-    mode === 'supabase' && { sep: true },
-    mode === 'supabase' && { label: 'Выйти', icon: 'back', action: () => supabase.auth.signOut() },
-  ]);
 }
 
 /** Лёгкое обновление счётчиков без перерисовки (после правок на доске). */
