@@ -1579,7 +1579,15 @@ a.rl-link:hover { background: var(--accent-soft); color: var(--accent-text); }
 .sc-chip-chev { display: inline-flex; transition: transform .15s; }
 .sc-gone-chip.open .sc-chip-chev { transform: rotate(180deg); }
 .store-check.compact.has-gone:not(:has(.sc-gone)) { border-color: var(--border); }
-@media (max-width: 640px) { .store-check.compact .sc-head { flex-wrap: wrap; } }
+/* блок живёт и в узкой колонке дашборда: заголовок — своей строкой, кнопки под ним */
+.store-check { container-type: inline-size; }
+.sc-head .btn, .sc-gone-chip { white-space: nowrap; flex: none; }
+@container (max-width: 560px) {
+  .sc-head { flex-wrap: wrap; gap: 8px 12px; }
+  .sc-title { flex: 1 1 calc(100% - 34px); }
+  .sc-head > .spacer { display: none; }
+  .sc-head > .btn:last-child { margin-left: auto; }
+}
 
 /* «Недавнее» на дашборде CEO: было → стало, «Показать все» */
 .rc-move { white-space: nowrap; }
