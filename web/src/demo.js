@@ -1,7 +1,6 @@
 /**
- * Демо-процесс (Tasks 2.0): рабочий процесс по иерархии — CEO ставит приложения, PM раскладывают их по этапам,
- * лиды и сотрудники делают и ревьюят, RM выпускает. Задействованы все роли и позиции, все состояния задач:
- * не начато, в работе, на ревью, готово, заблокировано, релиз у RM; статусы приложений — от разработки до реджекта.
+ * Демо-процесс: 10 приложений уже в App Store, одно в разработке (разложено по этапам, идёт дизайн) и одно на ревью Apple.
+ * Всё остальное — без шума: ни лишних задач, ни реджектов.
  *   seedDemo()    — пустая локальная база: юниты Gold / RF / MVP, люди и процесс (обычные данные).
  *   seedProcess() — режим разработчика: тот же процесс поверх текущей базы, всё с пометкой «тест»
  *                   (недостающих людей и юниты добавляет). Только локальный режим.
@@ -9,18 +8,30 @@
 import { getBackend, asSystem } from './data.js';
 import { LS } from './state.js';
 
-/** Демо-приложения из App Store: название → ссылка на стор и иконка (iTunes Lookup). */
+/** Демо-приложения из App Store: название → ссылка на стор и иконка (iTunes Search). */
 const STORE = {
   'Sleep Cycle - Tracker & Sounds': { storeUrl: 'https://apps.apple.com/us/app/sleep-cycle-tracker-sounds/id320606217', iconUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/e4/f5/03/e4f503c8-58f2-2d9a-a15b-05f6d70a9198/AppIconSleepCycle-0-0-1x_U007epad-0-1-0-0-85-220.png/512x512bb.jpg' },
-  'Nike Training Club': { storeUrl: 'https://apps.apple.com/us/app/nike-training-club/id301521403', iconUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/ab/9f/77/ab9f77b6-732e-00d6-223b-69f784ef5012/AppIcon-0-0-1x_U007emarketing-0-6-0-85-220.png/512x512bb.jpg' },
-  'CARROT Weather: Alerts & Radar': { storeUrl: 'https://apps.apple.com/us/app/carrot-weather-alerts-radar/id961390574', iconUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/0c/6e/8c/0c6e8c1d-b032-899e-4093-9a46af46d645/AppIcon-0-0-1x_U007epad-0-0-0-1-0-0-sRGB-0-85-220.png/512x512bb.jpg' },
   'Calm': { storeUrl: 'https://apps.apple.com/us/app/calm/id571800810', iconUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/95/3e/7b/953e7b88-6a4a-c88d-fb68-7d4ee4083ec8/AppIcon-0-0-1x_U007emarketing-0-11-0-85-220.png/512x512bb.jpg' },
-  'Moshi Kids: Sleep, Relax, Play': { storeUrl: 'https://apps.apple.com/us/app/moshi-kids-sleep-relax-play/id1306719339', iconUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/18/cf/7c/18cf7cff-0aed-f877-21c7-90d6034434f5/app_icon-0-0-1x_U007epad-0-1-0-0-85-220.png/512x512bb.jpg' },
+  'Headspace: Sleep & Meditation': { storeUrl: 'https://apps.apple.com/us/app/headspace-sleep-meditation/id493145008', iconUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/ec/20/88/ec208862-22e5-ef28-fd52-eff6151054fe/AppIcon-0-0-1x_U007epad-0-1-85-220.png/512x512bb.jpg' },
+  'Forest: Focus for Productivity': { storeUrl: 'https://apps.apple.com/us/app/forest-focus-for-productivity/id866450515', iconUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/de/50/39/de5039f7-6b36-a851-b254-539e9b968109/AppIcon-0-0-1x_U007epad-0-1-0-0-sRGB-85-220.png/512x512bb.jpg' },
+  'Day One: Daily Journal & Diary': { storeUrl: 'https://apps.apple.com/us/app/day-one-daily-journal-diary/id1044867788', iconUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/de/28/99/de28999a-d405-a70a-293e-306d566c81f6/AppIcon-0-0-1x_U007epad-0-1-0-sRGB-85-220.png/512x512bb.jpg' },
+  'Things 3': { storeUrl: 'https://apps.apple.com/us/app/things-3/id904237743', iconUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/91/24/46/91244651-a9f2-8417-51d4-8e9c5de63f77/AppIcon-0-0-1x_U007ephone-0-0-0-1-0-0-85-220.png/512x512bb.jpg' },
+  'Fantastical Calendar': { storeUrl: 'https://apps.apple.com/us/app/fantastical-calendar/id718043190', iconUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/25/48/9d/25489d17-651c-298b-bc6e-891084b59f6d/AppIcon-0-0-1x_U007epad-0-1-0-sRGB-85-220.png/512x512bb.jpg' },
+  'Overcast Podcast App': { storeUrl: 'https://apps.apple.com/us/app/overcast-podcast-app/id888422857', iconUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/2e/d4/4a/2ed44a6e-ba84-ded6-5f77-9215863b8f3c/AppIcon-0-0-1x_U007epad-0-1-sRGB-85-220.png/512x512bb.jpg' },
+  'Bear Markdown Notes & Journal': { storeUrl: 'https://apps.apple.com/us/app/bear-markdown-notes-journal/id1016366447', iconUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/58/b1/2d/58b12d9a-9b95-f2b4-0c78-c7be215e5b66/AppIcon-26-0-0-1x_U007epad-0-0-0-1-0-0-85-220.png/512x512bb.jpg' },
+  'Flo Cycle & Period Tracker': { storeUrl: 'https://apps.apple.com/us/app/flo-cycle-period-tracker/id1038369065', iconUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/6a/de/7b/6ade7b4c-5971-411c-edf3-dfdbcdd646ab/AppIcon-0-0-1x_U007ephone-0-1-0-sRGB-85-220.png/512x512bb.jpg' },
+  'CARROT Weather: Alerts & Radar': { storeUrl: 'https://apps.apple.com/us/app/carrot-weather-alerts-radar/id961390574', iconUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/0c/6e/8c/0c6e8c1d-b032-899e-4093-9a46af46d645/AppIcon-0-0-1x_U007epad-0-0-0-1-0-0-sRGB-0-85-220.png/512x512bb.jpg' },
   'Streaks': { storeUrl: 'https://apps.apple.com/us/app/streaks/id963034692', iconUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/80/c5/78/80c57847-4c05-f8b4-1a8b-3e42423e4392/orange_normal-0-0-1x_U007epad-0-1-0-85-220.png/512x512bb.jpg' },
 };
 
+/** Уже в App Store: название → юнит и цвет. */
+const LIVE = [
+  ['Sleep Cycle - Tracker & Sounds', 'GLD', '#6366f1'], ['Calm', 'GLD', '#14b8a6'], ['Headspace: Sleep & Meditation', 'GLD', '#f59e0b'], ['Flo Cycle & Period Tracker', 'GLD', '#ec4899'],
+  ['Forest: Focus for Productivity', 'RF', '#10b981'], ['Overcast Podcast App', 'RF', '#ef4444'], ['Fantastical Calendar', 'RF', '#0ea5e9'],
+  ['Things 3', 'MVP', '#3b82f6'], ['Day One: Daily Journal & Diary', 'MVP', '#8b5cf6'], ['Bear Markdown Notes & Journal', 'MVP', '#64748b'],
+];
+
 const day = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
-const cl = (...items) => items.map(([text, done]) => ({ text, done: !!done }));
 
 // ключ, имя, должность, email, роль, позиция, команда, юниты
 const PEOPLE = [
@@ -124,127 +135,45 @@ async function setupUnits(api, P, U) {
  * Кто что делает — от имени этого человека (actorId), права обходит системный режим.
  */
 async function runProcess(api, P, U, test) {
-  const prio = (await api('getGlobalFields', {})).find(f => f.role === 'priority');
-  const opt = name => (prio ? { [prio.id]: prio.options.find(o => o.name === name).id } : {});
   const act = (who, method, payload) => api(method, payload, P[who].id);
-  const move = (id, status, who) => act(who, 'updateTask', { id, patch: { status } });
   const set = (id, patch, who) => act(who, 'updateTask', { id, patch });
-  /** Закрыть задачу как положено: исполнитель — на ревью, PM юнита — «Аппрув» (в «готово» мимо ревью исполнителю нельзя). */
-  const close = async (id, who, pm) => {
-    await act(who, 'saveDevForm', { taskId: id, answers: DEV_ANSWERS }).catch(() => null); // только у этапа iOS
-    await move(id, 'review', who).catch(() => null);
-    await act(pm, 'reviewDecision', { taskId: id, approve: true });
+  const move = (id, status, who) => set(id, { status }, who);
+  /** Закрыть этап как положено: чеклист закрыт, исполнитель — на ревью, PM юнита — «Аппрув». */
+  const close = async (stage, who, pm) => {
+    if ((stage.checklist || []).length) await set(stage.id, { checklist: stage.checklist.map(i => ({ ...i, done: true })) }, who);
+    await act(who, 'saveDevForm', { taskId: stage.id, answers: DEV_ANSWERS }).catch(() => null); // только у этапа iOS
+    await move(stage.id, 'review', who).catch(() => null);
+    await act(pm, 'reviewDecision', { taskId: stage.id, approve: true });
   };
-  // демо-приложения — настоящие из App Store: ссылка на стор и иконка (как при вставке ссылки в «Новое приложение»)
-  const app = (name, unit, color, extra = {}) => act('anna', 'createApp', { name, unitId: U[unit].id, color, test, ...(STORE[name] || {}), ...extra });
+  const app = (name, unit, color, extra = {}) => act('anna', 'createApp', { name, unitId: U[unit].id, color, test, ...STORE[name], ...extra });
   const steps = async (requestId, pm) => Object.fromEntries((await act(pm, 'decomposeRequest', { taskId: requestId })).map(t => [t.step, t]));
-  /**
-   * Всё до релиза закрыто, PM передал релиз RM. phase — докуда RM довёл: '' (к отправке), submitted (ревью Apple),
-   * rejected (реджект с причиной — PM получает задачу), live (в сторе). version — релизные поля заполнены.
-   */
-  const ship = async (s, pm, phase, version, reason) => {
-    // что команда прикладывает к этапам — RM видит это в карточке релиза («От команды»)
-    const links = { design: ['lf_figma', 'https://figma.com/design/demo-app'], ios: ['lf_github', 'https://github.com/studio/demo-app'], meta: ['lf_meta', 'https://docs.google.com/document/d/demo-meta'] };
-    for (const [k, [fieldId, url]] of Object.entries(links)) if (s[k]) await act('anna', 'setTaskLink', { taskId: s[k].id, fieldId, url });
-    for (const k of ['design', 'ios', 'qa', 'meta']) if (s[k]) await close(s[k].id, s[k].assigneeId ? keyOf(P, s[k].assigneeId) : pm, pm);
-    await act(pm, 'sendToRelease', { taskId: s.release.id });
-    if (!version) return null;
-    await act('sergey', 'saveReleaseValues', { taskId: s.release.id, values: { version, build: String(100 + Number(version.replace(/\D/g, '').slice(0, 3))), whatsnew: 'Новые функции и исправления' } });
-    if (!phase) return null;
-    // чеклист — из шаблона RM (авточеклиста больше нет)
-    await set(s.release.id, { checklist: ['Скриншоты и метаданные', 'Покупки в песочнице', 'Политика и условия'].map(text => ({ text, done: true })) }, 'sergey');
-    await act('sergey', 'releaseStep', { taskId: s.release.id, action: 'submit' });
-    if (phase === 'live') await act('sergey', 'releaseStep', { taskId: s.release.id, action: 'live' });
-    if (phase === 'rejected') return (await act('sergey', 'releaseStep', { taskId: s.release.id, action: 'reject', reason })).rejectRequestId;
-    return null;
-  };
   let apps = 0;
 
-  // ВЕРХ — CEO: Sleep Cycle (Gold), New App в самом разгаре.
-  // СЕРЕДИНА — PM Олег раскладывает по флоу. НИЗ — дизайнер сдаёт на ревью лиду, ASO параллельно, iOS/QA/релиз ждут.
-  const sleep = await app('Sleep Cycle - Tracker & Sounds', 'GLD', '#6366f1', { dueDate: day(40), priority: 'o_high', description: 'Звуки для сна: подписка, 30 звуков на старте, виджет. Рынки — US, UK.' });
-  await act('anna', 'updateApp', { id: sleep.app.id, info: { figma: 'https://figma.com/design/sleep-sounds', drive: 'https://drive.google.com/drive/folders/sleep-sounds' } });
-  apps++;
-  const s1 = await steps(sleep.request.id, 'oleg');
-  await set(s1.design.id, { assigneeId: P.julia.id, checklist: cl(['Онбординг', 1], ['Пейволл', 1], ['Плеер', 1], ['Виджет']) }, 'oleg');
-  await move(s1.design.id, 'in_progress', 'julia');
-  await move(s1.design.id, 'review', 'julia'); // → ревью у лида дизайна (Мария)
-  await act('julia', 'addComment', { taskId: s1.design.id, text: 'Виджет догоню к четвергу, остальное можно смотреть' });
-  await set(s1.meta.id, { checklist: cl(['Семантика US', 1], ['Название и подзаголовок'], ['Описание']), fields: opt('Medium') }, 'oleg');
-  await move(s1.meta.id, 'in_progress', 'pavel');
-
-  // Nike Training Club (Gold): в сторе, идёт апдейт — дизайн у лида готов, iOS в работе, QA и релиз ждут
-  const fit = await app('Nike Training Club', 'GLD', '#ef4444', { requestTitle: 'Старт приложения' });
-  apps++;
-  const s0 = await steps(fit.request.id, 'oleg');
-  await ship(s0, 'oleg', 'live', '1.0');
-  await act('anna', 'updateApp', { id: fit.app.id, priority: 'o_medium',
-    info: { appstore: 'https://apps.apple.com/app/id1000000001', asc: 'https://appstoreconnect.apple.com/apps/1000000001', figma: 'https://figma.com/design/fitness-coach' } });
-  const upd = await act('anna', 'createRequest', { appId: fit.app.id, type: 'update', title: 'Апдейт 3.5: персональный план', dueDate: day(14),
-    description: 'Персональный план тренировок на онбординге, новые достижения.' });
-  const s2 = await steps(upd.id, 'oleg');
-  await move(s2.design.id, 'in_progress', 'masha');
-  await close(s2.design.id, 'masha', 'oleg');
-  await set(s2.ios.id, { assigneeId: P.alex.id, fields: opt('High'), checklist: cl(['Экран плана', 1], ['Достижения'], ['Аналитика']) }, 'oleg');
-  await move(s2.ios.id, 'in_progress', 'alex');
-
-  // Calm (MVP): всё сделано — PM Катя передала релиз, RM Сергей выпускает
-  const calm = await app('Calm', 'MVP', '#14b8a6', { dueDate: day(3), priority: 'o_high', description: 'Звуки дождя: один экран, подписка.' });
-  apps++;
-  const s3 = await steps(calm.request.id, 'kate');
-  await ship(s3, 'kate', '', '1.0'); // у RM в очереди: поля заполнены, чеклист ещё нет
-  await move(s3.release.id, 'in_progress', 'sergey');
-
-  // Moshi Kids (RF): выпущено, на ревью Apple
-  const med = await app('Moshi Kids: Sleep, Relax, Play', 'RF', '#8b5cf6', { requestTitle: 'Старт приложения' });
-  apps++;
-  await ship(await steps(med.request.id, 'kate'), 'kate', 'submitted', '1.0'); // ждёт ответа Apple
-
-  // CARROT Weather (RF): RM отметил реджект Apple — PM получил задачу «Реджект: …» и отдал исправление лиду iOS (просрочено)
-  const wx = await app('CARROT Weather: Alerts & Radar', 'RF', '#0ea5e9', { requestTitle: 'Старт приложения' });
-  apps++;
-  await act('anna', 'updateApp', { id: wx.app.id, priority: 'o_critical', info: { asc: 'https://appstoreconnect.apple.com/apps/1000000002' } });
-  const rejId = await ship(await steps(wx.request.id, 'kate'), 'kate', 'rejected', '2.1', 'Guideline 3.1.2 — нет условий подписки на пейволле');
-  await set(rejId, { dueDate: day(-1) }, 'kate');
-  const rej = { id: rejId };
-  await move(rej.id, 'in_progress', 'kate');
-  await act('kate', 'createTask', { unitId: U.RF.id, title: 'Пейволл: ссылки на условия подписки', parentId: rej.id, appId: wx.app.id,
-    assigneeId: P.dima.id, departmentId: 'd_ios', dueDate: day(-1), fields: opt('Critical'), test });
-
-  // свой флоу New App у MVP (настройки юнита): плюс промо-ролик параллельно — его PM увидит в окне «Разложить» у Streaks
-  if (!test) {
-    await act('kate', 'saveFlow', { unitId: U.MVP.id, type: 'new_app', steps: [
-      { key: 'design', title: 'Дизайн', positionId: 'd_design' },
-      { key: 'ios', title: 'Разработка iOS', positionId: 'd_ios', dependsOn: ['design'] },
-      { key: 'qa', title: 'Тестирование', positionId: 'd_qa', dependsOn: ['ios'] },
-      { key: 'meta', title: 'Мета (ASO)', positionId: 'd_aso' },
-      { key: 'promo', title: 'Промо-ролик', positionId: 'd_design', dependsOn: ['design'] },
-      { key: 'release', title: 'Релиз', positionId: 'd_release', dependsOn: ['design', 'ios', 'qa', 'meta', 'promo'], release: true },
-    ] });
+  // 10 приложений уже в App Store: без запросов и задач
+  for (const [name, unit, color] of LIVE) {
+    await app(name, unit, color, { status: 'live', noRequest: true });
+    apps++;
   }
 
-  // Streaks (MVP): запрос только что пришёл — у PM во входящих, ещё не разложен
-  await app('Streaks', 'MVP', '#10b981', { dueDate: day(60), description: 'Трекер привычек: стрики, напоминания, виджеты.' });
+  // Ревью Apple: вся разработка позади, RM отправил сборку и ждёт ответа
+  const wx = await app('CARROT Weather: Alerts & Radar', 'RF', '#0ea5e9', { requestTitle: 'Старт приложения', priority: 'o_high' });
   apps++;
+  const s = await steps(wx.request.id, 'kate');
+  const links = { design: ['lf_figma', 'https://figma.com/design/carrot-weather'], ios: ['lf_github', 'https://github.com/studio/carrot-weather'],
+    meta: ['lf_meta', 'https://docs.google.com/document/d/carrot-weather-texts'], retext: ['lf_drive', 'https://drive.google.com/drive/folders/carrot-weather-sources'] };
+  for (const [k, [fieldId, url]] of Object.entries(links)) await act('anna', 'setTaskLink', { taskId: s[k].id, fieldId, url });
+  for (const k of ['design', 'ios', 'qa', 'meta', 'retext', 'l10n']) await close(s[k], s[k].assigneeId ? keyOf(P, s[k].assigneeId) : 'kate', 'kate');
+  await act('kate', 'sendToRelease', { taskId: s.release.id });
+  await act('sergey', 'saveReleaseValues', { taskId: s.release.id, values: { version: '1.0', build: '101', whatsnew: 'Первый выпуск' } });
+  await set(s.release.id, { checklist: ['Скриншоты и метаданные', 'Покупки в песочнице', 'Политика и условия'].map(text => ({ text, done: true })) }, 'sergey');
+  await act('sergey', 'releaseStep', { taskId: s.release.id, action: 'submit' });
 
-  // НИЗ — обычные задачи сотрудников во всех состояниях
-  const plain = [
-    ['GLD', 'Регресс перед релизом 3.5', 'ira', 'd_qa', 'todo', 6, 'Medium'],
-    ['GLD', 'Падение при открытии истории тренировок', 'alex', 'd_ios', 'review', 1, 'High'], // → ревью у лида iOS
-    ['GLD', 'Ответы на отзывы за октябрь', 'pavel', 'd_aso', 'done', null, 'Low'],
-    ['RF', 'Локализация скриншотов на RU', 'julia', 'd_design', 'in_progress', 4, 'Medium'],
-    ['RF', 'Тест-план для Moshi Kids 1.1', 'ira', 'd_qa', 'done', null, 'Medium'],
-    ['MVP', 'Исследование конкурентов: трекеры привычек', 'pavel', 'd_aso', 'in_progress', 5, 'Medium'],
-    ['MVP', 'Дизайн-система для новых продуктов', 'masha', 'd_design', 'todo', 12, 'Low'],
-  ];
-  for (const [u, title, who, dept, status, due, p] of plain) {
-    const t = await act('kate', 'createTask', { unitId: U[u].id, title, assigneeId: P[who].id, departmentId: dept, dueDate: due === null ? '' : day(due), fields: opt(p), test });
-    if (status !== 'todo') {
-      if (status !== 'in_progress') await move(t.id, 'in_progress', who);
-      if (status === 'done') await close(t.id, who, u === 'GLD' ? 'oleg' : 'kate');
-      else await move(t.id, status, who);
-    }
-  }
+  // В разработке: запрос разложен по всем этапам, идёт первый — дизайн (онбординг готов), остальные ждут
+  const streaks = await app('Streaks', 'MVP', '#f59e0b', { dueDate: day(45), description: 'Трекер привычек: стрики, напоминания, виджеты.' });
+  apps++;
+  const d = await steps(streaks.request.id, 'kate');
+  await set(d.design.id, { assigneeId: P.julia.id, checklist: d.design.checklist.map((i, n) => ({ ...i, done: n === 0 })) }, 'kate');
+  await move(d.design.id, 'in_progress', 'julia');
   return apps;
 }
 
