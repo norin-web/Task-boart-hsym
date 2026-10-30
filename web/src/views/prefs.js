@@ -61,10 +61,15 @@ export function renderPrefs(tab) {
 /* ---------- общее ---------- */
 
 const head = (title, sub) => h('div', { class: 'prefs-head' }, h('h2', null, title), sub && h('p', { class: 'muted' }, sub));
-/** Строка настройки: название, пояснение, справа — действие. */
-const row = (title, sub, action) => h('div', { class: 'prefs-row' },
-  h('div', { class: 'prefs-row-text' }, h('b', null, title), sub && h('small', { class: 'muted' }, sub)), action);
-const btn = (label, onclick, cls = 'btn sm') => h('button', { class: cls, onclick }, label);
+/** Действие строки (act): вся строка — кнопка, при наведении подсветка и стрелка; без кнопок у правого края. */
+const act = (label, onclick, { danger = false } = {}) => ({ label, onclick, danger });
+/** Строка настройки: название, пояснение; action — act(…) или свой элемент справа (переключатель). */
+const row = (title, sub, action) => {
+  const text = h('span', { class: 'prefs-row-text' }, h('b', null, title), sub && h('small', { class: 'muted' }, sub));
+  return action && action.onclick
+    ? h('button', { class: 'prefs-row click' + (action.danger ? ' danger' : ''), type: 'button', 'aria-label': `${title}: ${action.label}`, onclick: action.onclick }, text, h('span', { class: 'prefs-go' }, icon('chevron', 15)))
+    : h('div', { class: 'prefs-row' }, text, action);
+};
 const card = (...rows) => h('div', { class: 'card-box prefs-card' }, rows);
 
 /* ---------- личное ---------- */
@@ -77,15 +82,15 @@ function profile() {
   return [
     head('Профиль'),
     card(
-      h('div', { class: 'prefs-me' }, avatar(p, 'lg'),
-        h('div', null, h('b', null, p.name), h('small', { class: 'muted' }, [ACCESS_LABELS[p.access], pos, email].filter(Boolean).join(' · '))),
-        h('span', { class: 'spacer' }), btn('Изменить', openMyProfile))),
+      h('button', { class: 'prefs-me prefs-row click', type: 'button', 'aria-label': 'Изменить профиль', 'data-no-card': '', onclick: openMyProfile }, avatar(p, 'lg'),
+        h('span', { class: 'prefs-row-text' }, h('b', null, p.name), h('small', { class: 'muted' }, [ACCESS_LABELS[p.access], pos, email].filter(Boolean).join(' · '))),
+        h('span', { class: 'prefs-go' }, icon('chevron', 15)))),
     head('Аккаунт'),
     card(
       mode === 'local' && row('Локальный режим', 'Данные хранятся только в этом браузере', null),
-      mode === 'local' && row('Войти как…', 'Посмотреть тулзу глазами другого человека', btn('Выбрать', openActAs)),
-      mode === 'local' && row('Очистить локальную базу', 'Стереть всё и начать с пустой тулзы', btn('Стереть', resetLocal, 'btn sm danger')),
-      mode === 'supabase' && row('Выйти', email, btn('Выйти', () => supabase.auth.signOut()))),
+      mode === 'local' && row('Войти как…', 'Посмотреть тулзу глазами другого человека', act('Выбрать', openActAs)),
+      mode === 'local' && row('Очистить локальную базу', 'Стереть всё и начать с пустой тулзы', act('Стереть', resetLocal, { danger: true })),
+      mode === 'supabase' && row('Выйти', email, act('Выйти', () => supabase.auth.signOut()))),
   ];
 }
 
@@ -130,11 +135,11 @@ function boards() {
     head('Доски'),
     card(
       row('Колонки «Моей доски»', 'Свои колонки между обязательными To Do, In Progress, Review и Done',
-        btn('Настроить', () => import('./myboard.js').then(m => m.editColumns(() => toast('Сохранено'))))),
+        act('Настроить', () => import('./myboard.js').then(m => m.editColumns(() => toast('Сохранено'))))),
       lead && row('Шаблоны чеклистов', 'Готовые пункты для подзадач и этапов — «Из шаблона» в чеклисте',
-        btn('Настроить', () => import('./cltemplates.js').then(m => m.openTemplatesEditor()))),
+        act('Настроить', () => import('./cltemplates.js').then(m => m.openTemplatesEditor()))),
       myAccess() === 'rm' && row('Карточка релиза', 'Какие блоки показывать в карточке релиза',
-        btn('Настроить', () => import('./release.js').then(m => m.openReleaseCardSettings())))),
+        act('Настроить', () => import('./release.js').then(m => m.openReleaseCardSettings())))),
   ];
 }
 
@@ -142,8 +147,8 @@ function dashboard() {
   return [
     head('Дашборд'),
     card(
-      row('Блоки дашборда', 'Порядок, колонки и какие блоки показывать', btn('Открыть дашборд', () => navigate({ view: 'home' }))),
-      isStaff() && row('Аналитика', 'Цифры, статусы, загрузка и KPI команды', btn('Открыть', () => navigate({ view: 'analytics' }))),
+      row('Блоки дашборда', 'Порядок, колонки и какие блоки показывать', act('Открыть дашборд', () => navigate({ view: 'home' }))),
+      isStaff() && row('Аналитика', 'Цифры, статусы, загрузка и KPI команды', act('Открыть', () => navigate({ view: 'analytics' }))),
       isSuper() && row('Режим CEO', 'Default — приложения и приоритеты; Admin — ещё доски, задачи и настройки юнитов',
         h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Режим CEO' }, [['default', 'Default'], ['admin', 'Admin']].map(([m, label]) =>
           h('button', { class: ceoMode() === m ? 'on' : '', role: 'radio', 'aria-checked': String(ceoMode() === m),
@@ -158,9 +163,9 @@ function appsSection() {
   return [
     head('Приложения', 'Общие для всей студии'),
     card(
-      row('Статусы приложения', 'В разработке, Релиз, Ревью Apple, В сторе, Реджект…', btn('Настроить', open('openStatusesEditor'))),
-      row('Поля приложения', 'Ссылки и тексты: App Store, App Store Connect, Figma…', btn('Настроить', open('openFieldsEditor'))),
-      row('Шаблоны апдейтов', 'Название, описание, пункты и нужные этапы', btn('Настроить', open('openUpdateTemplates')))),
+      row('Статусы приложения', 'В разработке, Релиз, Ревью Apple, В сторе, Реджект…', act('Настроить', open('openStatusesEditor'))),
+      row('Поля приложения', 'Ссылки и тексты: App Store, App Store Connect, Figma…', act('Настроить', open('openFieldsEditor'))),
+      row('Шаблоны апдейтов', 'Название, описание, пункты и нужные этапы', act('Настроить', open('openUpdateTemplates')))),
   ];
 }
 
@@ -168,7 +173,7 @@ function releasesSection() {
   return [
     head('Релизы', 'Один набор на студию — настраивают CEO и RM'),
     card(
-      row('Релизные поля и чеклист', 'Что заполнить перед «Отправить в Apple»', btn('Настроить', () => import('./release.js').then(m => m.openReleaseSettings()))),
-      myAccess() === 'rm' && row('Карточка релиза', 'Какие блоки показывать', btn('Настроить', () => import('./release.js').then(m => m.openReleaseCardSettings())))),
+      row('Релизные поля и чеклист', 'Что заполнить перед «Отправить в Apple»', act('Настроить', () => import('./release.js').then(m => m.openReleaseSettings()))),
+      myAccess() === 'rm' && row('Карточка релиза', 'Какие блоки показывать', act('Настроить', () => import('./release.js').then(m => m.openReleaseCardSettings())))),
   ];
 }
