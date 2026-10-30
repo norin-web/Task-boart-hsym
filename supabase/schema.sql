@@ -1288,6 +1288,21 @@ begin
   return n;
 end $$;
 
+-- Личные настройки: слить ключи одной командой (без «прочитать — записать», иначе две записи подряд затирают друг друга).
+-- Права — обычные правила people (своя строка или администратор).
+create or replace function merge_prefs(p_person text, p_prefs jsonb) returns jsonb
+language plpgsql set search_path = public as $$
+declare r jsonb;
+begin
+  update people set prefs = coalesce(prefs, '{}'::jsonb) || coalesce(p_prefs, '{}'::jsonb) where id = p_person returning prefs into r;
+  if r is null and exists (select 1 from people where id = p_person) then
+    raise exception 'Недостаточно прав для этого действия' using errcode = '42501';
+  end if;
+  if r is null then raise exception 'Человек не найден' using errcode = 'P0001'; end if;
+  if length(r::text) > 20000 then raise exception 'Слишком большие настройки' using errcode = 'P0001'; end if;
+  return r;
+end $$;
+
 -- Итог проверки App Store: p_items [{ id, ok, storeName, iconUrl }]. Только эти поля, «Обновлено» не трогает.
 -- Обновляют все, кто видит «Приложения» (CEO, PM юнита, RM и лиды юнита) — RM приложения сам не правит, а проверка — не правка.
 create or replace function save_store_check(p_items jsonb) returns integer

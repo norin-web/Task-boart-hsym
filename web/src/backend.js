@@ -2434,11 +2434,8 @@ export function createBackend(db, opts = {}) {
 
     /** Личные настройки интерфейса: сливаем переданные ключи с сохранёнными. */
     async setMyPrefs(p) {
-      const person = (await one('people', p.personId)) || fail('Человек не найден', 'NOT_FOUND');
-      const prefs = { ...(json(person.prefs, {}) || {}), ...(p.prefs || {}) };
-      if (JSON.stringify(prefs).length > 20000) fail('Слишком большие настройки');
-      await updateOne('people', person.id, { prefs });
-      return prefs;
+      // слияние — в базе одной командой: две записи подряд (раскладка и «Отслеживаю») не затирают друг друга
+      return json(await rpc('merge_prefs', { p_person: String(p.personId ?? ''), p_prefs: p.prefs || {} }), {}) || {};
     },
 
     /**

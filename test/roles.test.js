@@ -482,6 +482,10 @@ test('профили: свой профиль, роли меняет тольк�
     // личная раскладка главной — только своя
     const prefs = await api('setMyPrefs', { personId: designer.id, prefs: { memberHome: { hidden: ['units'] } } });
     assert.deepEqual(prefs.memberHome.hidden, ['units']);
+    // две записи разом не затирают друг друга
+    await Promise.all([api('setMyPrefs', { personId: designer.id, prefs: { watch: [] } }), api('setMyPrefs', { personId: designer.id, prefs: { myHome: { order: [] } } })]);
+    const both = await api('setMyPrefs', { personId: designer.id, prefs: {} });
+    assert.deepEqual([both.watch, both.myHome, both.memberHome.hidden], [[], { order: [] }, ['units']]);
     await assert.rejects(() => api('setMyPrefs', { personId: dev.id, prefs: { x: 1 } }), forbidden);
   });
   await api.as(mod, async () => {
