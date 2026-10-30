@@ -2008,7 +2008,6 @@ button.rh-row:hover { background: var(--surface-2); }
 
 /* ---------- карточка сотрудника (клик по аватару) ---------- */
 .avatar[data-pid], [data-pcard] { cursor: pointer; }
-[data-pcard]:hover b, [data-pcard]:hover .person-name { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--border-strong); }
 .av-btn .avatar[data-pid], .who-card .avatar[data-pid], .menu .avatar[data-pid], .modal .avatar[data-pid] { cursor: inherit; }
 .avatar.xxl { width: 88px; height: 88px; font-size: 28px; }
 .menu.pc-menu { width: 320px; padding: 0; }

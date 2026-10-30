@@ -210,6 +210,15 @@ export function showErr(e) {
 let openMenuEl = null;
 let menuAnchor = null;
 
+/** Меню стоит на экране (position: fixed) — прокрутили страницу под ним, закрываем, чтобы не «отрывалось» от кнопки. */
+function onPageScroll(e) {
+  if (!openMenuEl || (e.target instanceof Node && openMenuEl.contains(e.target))) return;
+  // печатают в поле меню (поиск в фильтре) — клавиатура телефона двигает страницу, меню не закрываем
+  if (openMenuEl.contains(document.activeElement) && document.activeElement.matches('input, textarea')) return;
+  closeMenu();
+}
+document.addEventListener('scroll', onPageScroll, true);
+
 export function closeMenu() {
   if (!openMenuEl) return;
   const hadFocus = openMenuEl.contains(document.activeElement);
