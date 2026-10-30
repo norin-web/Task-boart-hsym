@@ -601,3 +601,35 @@ test('ТЗ, наследование от родителя (ТЗ, описани
   const fields = (await api.as(pm, () => api('getTaskExtras', { taskId: t1.id }))).activity.map(a => a.field).filter(f => f.startsWith('checklist'));
   assert.deepEqual(fields.sort(), ['checklist:add', 'checklist:done', 'checklist:rename']);
 });
+
+test('«Раздать»: лид раскладывает свой этап на подзадачи сотрудникам; наследование; этап закрывается сам', async () => {
+  const api = await setup();
+  const { ceo, pm, lead, ios, gold } = await studio(api);
+  const des = await api('createPerson', { name: 'Дизайнер', email: 'des@x.ru', access: 'member', positionId: 'd_design' });
+  await api.pg.query('update people set user_id = $1 where id = $2', [UID(99), des.id]);
+  const designer = { ...des, uid: UID(99) };
+  await api('setMember', { unitId: gold.id, personId: designer.id });
+  const { request } = await api.as(ceo, () => api('createApp', { name: 'Split', unitId: gold.id }));
+  await api.as(ceo, () => api('updateTask', { id: request.id, patch: { specUrl: 'https://spec.example/1' } }));
+  const st = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: request.id }))).map(t => [t.step, t]));
+  assert.equal(st.design.assigneeId, lead.id);
+  // чужому (не позиции) раздать нельзя; не лид — нельзя
+  await api.as(lead, () => assert.rejects(() => api('splitTask', { taskId: st.design.id, items: [{ title: 'x', assigneeId: ios.id }] }), /позиции/));
+  await api.as(designer, () => assert.rejects(() => api('splitTask', { taskId: st.design.id, items: [{ title: 'x', assigneeId: designer.id }] })));
+  const parts = await api.as(lead, () => api('splitTask', { taskId: st.design.id, items: [
+    { title: 'Онбординг', assigneeId: designer.id, checklist: ['Экран 1', 'Экран 2'] },
+    { title: 'Пейвол', assigneeId: designer.id },
+  ] }));
+  assert.equal(parts.length, 2);
+  assert.equal(parts[0].specUrl, 'https://spec.example/1');
+  assert.deepEqual(parts[0].checklist.map(i => i.text), ['Экран 1', 'Экран 2']);
+  assert.ok(parts.every(p => p.parentId === st.design.id && p.assigneeId === designer.id));
+  // у лида — «Раздано»: этап и его подзадачи с исполнителем
+  const ld = await api.as(lead, () => api('getMyDashboard', { personId: lead.id }));
+  assert.deepEqual(ld.lead.split.map(x => [x.id, x.parts.length, x.done]), [[st.design.id, 2, 0]]);
+  assert.ok(ld.lead.split[0].parts.every(c => c.workerId === designer.id));
+  // закрыли обе подзадачи (через ревью) — этап закрылся сам
+  for (const p of parts) await finish(api, designer, pm, p.id);
+  const board = await api.as(pm, () => api('getBoard', { unitId: gold.id }));
+  assert.equal(board.tasks.find(t => t.id === st.design.id).status, 'done');
+});

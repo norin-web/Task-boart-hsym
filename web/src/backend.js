@@ -1928,7 +1928,7 @@ export function createBackend(db, opts = {}) {
       const tomorrow = new Date(Date.parse(day) + 864e5).toISOString().slice(0, 10);
       const meId = str(p.personId, 40);
       const [tasks, units, apps, ppl, members] = await Promise.all([
-        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,due_date,archived,kind,step,app_id,depends_on,fields,review_from,department_id,updated_at')
+        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,due_date,archived,kind,step,app_id,depends_on,fields,review_from,department_id,updated_at,parent_id')
           .eq('archived', false).order('id')),
         all(() => T('units').select('id,key,name,color,settings').eq('archived', false).order('ord').order('id')),
         all(() => T('apps').select('id,name,color,icon_url,priority').order('id')),
@@ -1972,7 +1972,30 @@ export function createBackend(db, opts = {}) {
         return { personId: x.id, open: own.length, inProgress: own.filter(t => kindOfRow(t) === 'progress').length,
           overdue: own.filter(t => t.due_date && t.due_date < day).length, waiting: own.filter(blocked).length };
       }).sort((a, b) => b.open - a.open);
-      return { focus, lead: { reviews, team } };
+      // розданное: мои этапы с подзадачами (step = part) — кто делает, где сейчас, срок; этап — пока не закрыт
+      const split = vis.filter(t => t.assignee_id === meId && !done(t) && vis.some(c => c.parent_id === t.id && c.step === 'part')).map(t => {
+        const parts = vis.filter(c => c.parent_id === t.id && c.step === 'part').map(c => ({
+          ...brief(c), workerId: c.review_from || c.assignee_id, inReview: reviewing(c), late: !done(c) && !!c.due_date && c.due_date < day,
+        }));
+        return { ...brief(t), parts, done: parts.filter(c => c.kind === 'done').length };
+      });
+      return { focus, lead: { reviews, team, split } };
+    },
+
+    /**
+     * «Раздать» (лид — свой этап, или PM): подзадачи сотрудникам позиции. items: [{ title, assigneeId, dueDate, checklist: [text] }].
+     * Подзадачи наследуют ТЗ, описание, ссылки; этап закроется сам, когда закрыты все подзадачи. Возвращает созданные задачи.
+     */
+    async splitTask(p) {
+      const t = await findTask(p.taskId);
+      const items = (Array.isArray(p.items) ? p.items : []).slice(0, 30).map(x => ({
+        title: str(x && x.title, 500), assigneeId: str(x && x.assigneeId, 40), dueDate: date(x && x.dueDate),
+        checklist: (Array.isArray(x && x.checklist) ? x.checklist : []).map(i => str(i, 300)).filter(Boolean).slice(0, 50),
+      })).filter(x => x.title);
+      if (!items.length) fail('Добавьте хотя бы одну подзадачу');
+      const res = await rpc('lead_split', { p_task: t.id, p_items: items });
+      const ids = (Array.isArray(res) ? res : [res]).map(x => (typeof x === 'string' ? x : x && (x.lead_split || Object.values(x)[0]))).filter(Boolean);
+      return ids.length ? (await run(T('tasks').select('*').in('id', ids))).map(taskOut) : [];
     },
 
     /** Лид передаёт свою задачу сотруднику своей позиции в юните (проверяет база). */

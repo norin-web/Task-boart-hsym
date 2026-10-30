@@ -11,7 +11,7 @@ import { activityFeed } from './feed.js';
 import { appIcon } from './apps.js';
 import { renderLayout, editLayout } from './layout.js';
 import { openPeople } from './people.js';
-import { focusBlock, reviewsBlock, teamLoadBlock } from './employee.js';
+import { focusBlock, reviewsBlock, teamLoadBlock, splitBlock } from './employee.js';
 
 /* ---------- «Новое для вас»: задачи, которые на меня назначили ---------- */
 
@@ -509,6 +509,7 @@ async function renderMemberHome() {
     NEWS_BLOCK,
     { id: 'focus', title: 'Фокус', col: 'left', render: () => focusBlock(md) },
     md.lead && { id: 'reviews', title: 'Ждут вашего ревью', col: 'right', render: () => reviewsBlock(md, () => rerender()) },
+    md.lead && { id: 'split', title: 'Раздано', col: 'left', render: () => splitBlock(md) },
     md.lead && { id: 'teamLoad', title: 'Загрузка позиции', col: 'right', render: () => teamLoadBlock(md) },
     { id: 'stats', title: 'Статистика', col: 'full', render: () => h('div', { class: 'cs-row' },
       h('div', { class: 'cs' }, h('div', { class: 'cs-n' }, open.length), h('div', { class: 'cs-label' }, 'открытых задач')),

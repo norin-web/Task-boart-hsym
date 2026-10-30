@@ -61,3 +61,23 @@ export function teamLoadBlock(d) {
         x.overdue > 0 && h('span', { class: 'warn-text' }, x.overdue + ' просроч.')))))
       : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Никого нет')));
 }
+
+/** Розданное лидом: этапы и прогресс их подзадач — кто, где сейчас, срок; клик — карточка. */
+export function splitBlock(d) {
+  const rows = (d.lead && d.lead.split) || [];
+  return h('section', null,
+    h('div', { class: 'section-head' }, h('h2', null, 'Раздано', rows.length > 0 && h('span', { class: 'news-count' }, rows.length))),
+    rows.length ? h('div', { class: 'card-box split-list' }, rows.map(s => h('div', { class: 'split-item' },
+      h('button', { class: 'link-btn split-parent', onclick: () => peekTask(s.unitId, s.id) },
+        s.app ? appIcon(s.app, 'xs') : null, h('b', null, s.title), h('span', { class: 'muted' }, ` · ${s.done} из ${s.parts.length}`)),
+      h('div', { class: 'progress' }, h('div', { style: { width: Math.round(s.done / Math.max(1, s.parts.length) * 100) + '%' } })),
+      s.parts.map(c => {
+        const p = personById(c.workerId);
+        return h('button', { class: 'split-part', onclick: () => peekTask(c.unitId, c.id) },
+          p ? avatar(p, 'sm') : h('span'),
+          h('span', { class: 'fc-title' + (c.kind === 'done' ? ' done' : '') }, c.title),
+          h('span', { class: 'muted split-st' + (c.inReview ? ' accent' : '') }, c.inReview ? 'на ревью у вас' : c.statusName),
+          h('span', { class: c.late ? 'danger-text split-due' : 'muted split-due' }, c.dueDate ? fmtDate(c.dueDate) : ''));
+      }))))
+      : h('div', { class: 'card-box empty-state sm' }, h('p', null, 'Пока ничего не роздано — откройте свой этап и нажмите «Раздать».')));
+}

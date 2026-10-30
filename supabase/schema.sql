@@ -850,6 +850,79 @@ begin
   perform set_config('app.system', 'off', true);
 end $$;
 
+-- «Раздать» (лид): свой этап — на подзадачи сотрудникам своей позиции в юните. p_items: [{ title, assigneeId, dueDate, checklist: [text] }].
+-- Подзадачи (step = 'part') наследуют ТЗ, описание, ссылки, приложение и приоритет; лид остаётся исполнителем этапа (ревьюер).
+-- Возвращает id созданных задач. Этап закрывается сам, когда закрыты все его подзадачи (close_split_parent).
+create or replace function lead_split(p_task text, p_items jsonb) returns setof text
+language plpgsql security definer set search_path = public as $$
+declare
+  t tasks;
+  v_me text := my_person_id();
+  at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+  it jsonb;
+  v_id text;
+  v_who text;
+  v_first text;
+  v_n int := 0;
+begin
+  select * into t from tasks where id = p_task;
+  if t.id is null then raise exception 'Задача не найдена' using errcode = 'P0001'; end if;
+  if not (can_manage(t.unit_id) or (my_access() = 'lead' and t.assignee_id = v_me)) then
+    raise exception 'Раздать может лид — свою задачу (или PM юнита)' using errcode = '42501';
+  end if;
+  if task_done(t.id) then raise exception 'Задача уже готова' using errcode = 'P0001'; end if;
+  if jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then raise exception 'Добавьте хотя бы одну подзадачу' using errcode = 'P0001'; end if;
+  select c ->> 'id' into v_first from units u, jsonb_array_elements(u.settings -> 'columns') c where u.id = t.unit_id limit 1;
+  perform set_config('app.system', 'on', true);
+  for it in select * from jsonb_array_elements(p_items) loop
+    v_who := coalesce(it ->> 'assigneeId', '');
+    if btrim(coalesce(it ->> 'title', '')) = '' then continue; end if;
+    if v_who <> '' and not exists (select 1 from people p join unit_members m on m.person_id = p.id and m.unit_id = t.unit_id
+                    where p.id = v_who and p.active and (t.department_id = '' or t.department_id = p.position_id or p.extra_positions ? t.department_id)) then
+      perform set_config('app.system', 'off', true);
+      raise exception 'Раздать можно людям этой позиции в юните' using errcode = 'P0001';
+    end if;
+    v_id := 't_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12);
+    insert into tasks (id, unit_id, num, title, description, status, assignee_id, department_id, due_date, ord, fields, checklist,
+                       archived, done_at, created_by, created_at, updated_at, parent_id, kind, app_id, step, is_test, spec_url, started_at)
+    values (v_id, t.unit_id, next_task_num(t.unit_id), left(btrim(it ->> 'title'), 500), t.description, coalesce(v_first, t.status), v_who,
+            t.department_id, coalesce(nullif(it ->> 'dueDate', ''), t.due_date), v_n, t.fields - '__none',
+            coalesce((select jsonb_agg(jsonb_build_object('id', 'k_' || substr(md5(random()::text || x), 1, 10), 'text', left(x, 300), 'done', false))
+                        from jsonb_array_elements_text(coalesce(it -> 'checklist', '[]'::jsonb)) x where btrim(x) <> ''), '[]'::jsonb),
+            false, '', v_me, at_, at_, t.id, '', t.app_id, 'part', t.is_test, coalesce(t.spec_url, ''), '');
+    insert into task_links (task_id, field_id, unit_id, url, updated_at)
+      select v_id, l.field_id, t.unit_id, l.url, at_ from task_links l where l.task_id = t.id;
+    insert into activity (id, unit_id, task_id, action, field, from_val, to_val, actor_id, at)
+    values ('a_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), t.unit_id, v_id, 'create', '', '', to_jsonb(left(btrim(it ->> 'title'), 500))::text, coalesce(v_me, ''), at_);
+    v_n := v_n + 1;
+    return next v_id;
+  end loop;
+  perform set_config('app.system', 'off', true);
+end $$;
+
+-- Этап, розданный на подзадачи (step = 'part'), закрывается сам, когда закрыты все его подзадачи.
+create or replace function close_split_parent() returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_done text;
+  at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+  p tasks;
+begin
+  if new.step <> 'part' or new.parent_id = '' or new.status is not distinct from old.status or not task_done(new.id) then return new; end if;
+  if exists (select 1 from tasks c where c.parent_id = new.parent_id and c.step = 'part' and not c.archived and c.id <> new.id and not task_done(c.id)) then return new; end if;
+  select * into p from tasks where id = new.parent_id;
+  if p.id is null or task_done(p.id) then return new; end if;
+  select c ->> 'id' into v_done from units u, jsonb_array_elements(u.settings -> 'columns') c where u.id = p.unit_id and c ->> 'kind' = 'done' limit 1;
+  if v_done is null then return new; end if;
+  perform set_config('app.system', 'on', true);
+  update tasks set status = v_done, done_at = at_, updated_at = at_ where id = p.id;
+  insert into activity (id, unit_id, task_id, action, field, from_val, to_val, actor_id, at)
+  values ('a_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), p.unit_id, p.id, 'update', 'status', to_jsonb(p.status)::text, to_jsonb(v_done)::text, '', at_);
+  perform set_config('app.system', 'off', true);
+  return new;
+end $$;
+drop trigger if exists close_split_parent on tasks;
+create trigger close_split_parent after update on tasks for each row execute function close_split_parent();
+
 -- Сроки своих задач: просрочено (kind 'overdue') и срок сегодня/завтра ('due_soon'). Зовёт приложение вошедшего
 -- (пульс и загрузка уведомлений) с его сегодняшней датой — без крона. На каждый срок — одно уведомление.
 create or replace function scan_due(p_today text) returns void language plpgsql security definer set search_path = public as $$

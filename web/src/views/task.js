@@ -14,6 +14,7 @@ import { releaseBlock } from './release.js';
 import { brandIcon, brandOf } from './brand.js';
 import { isWatched, toggleWatch } from './watch.js';
 import { reviewButtons } from './review.js';
+import { clTemplates, templateSelect, openTemplatesEditor } from './cltemplates.js';
 
 /* ================= Панель задачи ================= */
 
@@ -105,7 +106,7 @@ function buildPanel(t) {
         h('button', { class: 'btn sm', onclick: () => recallReview(t) }, icon('back', 13), 'Забрать из ревью'))
       : !editable && h('div', { class: 'readonly-note' }, icon('alert', 14), 'Только просмотр: менять можно свои задачи'),
     t.step === 'release' && t.assigneeId && releaseBlock(t, () => reloadBoard().catch(() => {})),
-    t.kind === 'request' || t.kind === 'stage' ? flowBlock(t) : treeBlock(t),
+    t.kind === 'request' || t.kind === 'stage' ? [flowBlock(t), t.kind === 'stage' && treeBlock(t)] : treeBlock(t),
     !B.description.hidden && descriptionBlock(t, B.description.label, editable),
     specBlock(t, editable),
     linksBlock(t, editable),
@@ -221,6 +222,65 @@ function handoverPeople(t) {
   return (S.board.members || []).map(m => personById(m.personId))
     .filter(p => p && p.active && p.id !== S.meId && (!t.departmentId || (p.positionIds || []).includes(t.departmentId)))
     .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+}
+
+/** Меню «Из шаблона»: свои шаблоны чеклистов; onPick(items). */
+function templateMenu(anchor, onPick) {
+  const list = clTemplates();
+  menu(anchor, [{ title: 'Шаблон чеклиста' },
+    ...list.map(x => ({ label: `${x.name} · ${x.items.length}`, icon: 'checklist', action: () => onPick(x.items) })),
+    !list.length && h('p', { class: 'muted', style: { padding: '4px 10px', margin: 0 } }, 'Шаблонов пока нет'),
+    { sep: true },
+    { label: 'Шаблоны чеклистов…', icon: 'settings', action: () => openTemplatesEditor() }]);
+}
+
+/**
+ * «Раздать» (лид — свой этап): строки «что сделать — кому — срок — шаблон чеклиста». Сотрудники — люди позиции в юните,
+ * рядом — сколько у них открытых задач. ТЗ, описание и ссылки подзадачи берут из этапа; этап закроется, когда закроют все.
+ */
+function openSplit(t, people) {
+  const load = id => (S.board && S.board.unit.id === t.unitId ? S.board.tasks.filter(x => !x.archived && !taskDone(x) && x.assigneeId === id).length : null);
+  const rows = h('div', { class: 'split-rows' });
+  const lines = [];
+  const add = (focus = true) => {
+    const title = h('input', { class: 'inp', maxlength: 500, placeholder: 'Что сделать, например «Онбординг»' });
+    const who = h('select', { class: 'inp', 'aria-label': 'Кому' }, h('option', { value: '' }, '— кому —'),
+      people.map(p => { const n = load(p.id); return h('option', { value: p.id }, p.name + (n == null ? '' : ` · ${n} в работе`)); }));
+    if (people.length === 1) who.value = people[0].id;
+    const due = h('input', { class: 'inp', type: 'date', value: t.dueDate || '', 'aria-label': 'Срок' });
+    const tpl = templateSelect(() => {});
+    const row = h('div', { class: 'split-row' }, title, who, due, tpl,
+      h('button', { class: 'icon-btn sm', title: 'Убрать строку', onclick: () => { lines.splice(lines.indexOf(line), 1); row.remove(); } }, icon('x', 14)));
+    const line = { title, who, due, tpl };
+    lines.push(line);
+    rows.append(row);
+    title.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); add(); } });
+    if (focus) title.focus();
+  };
+  add(false);
+  modal({
+    title: 'Раздать · ' + t.title,
+    wide: true,
+    body: [
+      h('p', { class: 'hint', style: { margin: '0 0 10px' } }, 'Подзадачи получат ТЗ, описание и ссылки этого этапа. Вы — ревьюер; этап закроется сам, когда примете все подзадачи.'),
+      h('div', { class: 'split-head muted' }, h('span', null, 'Что сделать'), h('span', null, 'Кому'), h('span', null, 'Срок'), h('span', null, 'Чеклист'), h('span')),
+      rows,
+      h('button', { class: 'btn sm', onclick: () => add() }, icon('plus', 13), 'Строка'),
+    ],
+    actions: [{ label: 'Отмена' }, {
+      label: 'Раздать', primary: true,
+      action: async close => {
+        const items = lines.map(l => ({ title: l.title.value.trim(), assigneeId: l.who.value, dueDate: l.due.value, checklist: l.tpl.items() })).filter(x => x.title);
+        if (!items.length) { lines[0] && lines[0].title.focus(); return; }
+        if (items.some(x => !x.assigneeId)) { toast('Выберите, кому каждая подзадача', { type: 'error' }); return; }
+        const created = await send('splitTask', { taskId: t.id, items });
+        close();
+        toast(`Роздано: ${created.length}`);
+        if (S.board && S.board.unit.id === t.unitId) { await reloadBoard().catch(() => {}); }
+        refreshPanel(t);
+      },
+    }],
+  });
 }
 
 async function handOver(t, p) {
@@ -405,6 +465,7 @@ function checklistBlock(t, editable) {
       h('div', { class: 'block-title' }, 'Чеклист',
         items.length > 0 && h('span', { class: 'muted', style: { fontWeight: 400 } }, done + ' из ' + items.length),
         h('span', { class: 'spacer' }),
+        h('button', { class: 'link-btn', onclick: e => { e.stopPropagation(); templateMenu(e.currentTarget, list => update(items.concat(list.map(text => ({ id: 'k_' + Math.random().toString(36).slice(2, 12), text, done: false }))))); } }, 'Из шаблона'),
         done > 0 && h('button', { class: 'link-btn', onclick: () => update(items.filter(i => !i.done)) }, 'Убрать выполненные')),
       items.length > 0 && h('div', { class: 'progress' }, h('div', { style: { width: pct + '%' } })),
       h('div', { class: 'cl-list' }, items.map(it => h('div', { class: 'cl-item' + (it.done ? ' done' : '') },
@@ -557,10 +618,12 @@ function sideBlock(t, { staff, editable }) {
     // лид может отдать свою задачу сотруднику своей позиции в этом юните
     const handover = me() && me().access === 'lead' && t.assigneeId === S.meId && !taskDone(t) && handoverPeople(t);
     prop(B.assignee.label, ro(p && h('span', { class: 'row', style: { gap: '6px', flexWrap: 'nowrap' } }, avatar(p, 'sm'), p.name)), {
-      after: handover && handover.length > 0 && h('div', { class: 'quick-chips' }, h('button', {
-        class: 'quick-chip', onclick: e => { e.stopPropagation(); menu(e.currentTarget, [{ title: 'Передать сотруднику' },
-          ...handover.map(x => ({ label: x.name, icon: 'user', action: () => handOver(t, x) }))]); },
-      }, icon('users', 12), 'Передать сотруднику')),
+      after: handover && handover.length > 0 && h('div', { class: 'quick-chips' },
+        h('button', { class: 'quick-chip primary', title: 'Разложить на подзадачи сотрудникам позиции', onclick: () => openSplit(t, handover) }, icon('layers', 12), 'Раздать'),
+        h('button', {
+          class: 'quick-chip', onclick: e => { e.stopPropagation(); menu(e.currentTarget, [{ title: 'Передать целиком' },
+            ...handover.map(x => ({ label: x.name, icon: 'user', action: () => handOver(t, x) }))]); },
+        }, icon('users', 12), 'Передать целиком')),
     });
   } else if (!B.assignee.hidden) {
     prop(B.assignee.label, assigneeSelect(t.assigneeId, v => {

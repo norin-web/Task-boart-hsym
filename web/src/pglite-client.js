@@ -110,8 +110,8 @@ export function pgliteClient(pg) {
       try {
         const r = await pg.query(`select * from ${ident(fn)}(${keys.map((k, i) => `${k} => $${i + 1}`).join(', ')})`, keys.map(k => args[k]));
         const names = r.fields.map(f => f.name);
-        // скалярная функция → значение, как в supabase-js
-        if (names.length === 1 && names[0] === fn) return { data: r.rows[0] ? r.rows[0][fn] : null, error: null };
+        // скалярная функция → значение, setof скаляров (несколько строк) → массив значений, как в supabase-js
+        if (names.length === 1 && names[0] === fn) return { data: r.rows.length > 1 ? r.rows.map(x => x[fn]) : r.rows[0] ? r.rows[0][fn] : null, error: null };
         if (names.length === 1 && r.rows.every(x => x[names[0]] === '')) return { data: null, error: null }; // void
         return { data: r.rows, error: null };
       } catch (e) {
