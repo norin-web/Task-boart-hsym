@@ -1661,18 +1661,14 @@ export function createBackend(db, opts = {}) {
 
     /**
      * Итог проверки App Store (кнопка «Обновить»): items [{ id, ok, storeName?, iconUrl? }] — открывается ли страница в сторе.
-     * «Обновлено» у приложения не трогает: проверка — не работа над ним. Права — как на правку приложения (база).
+     * «Обновлено» у приложения не трогает: проверка — не работа над ним. Могут CEO, PM, RM и лиды юнита (функция базы).
      */
     async saveStoreCheck(p) {
-      const at = now();
-      let n = 0;
-      for (const x of (Array.isArray(p.items) ? p.items : []).slice(0, 2000)) {
-        const upd = { store_ok: !!x.ok, store_checked_at: at };
-        if (x.ok && x.storeName) upd.store_name = str(x.storeName, 200);
-        if (x.ok && x.iconUrl) upd.icon_url = iconUrl(x.iconUrl);
-        n += (await run(T('apps').update(upd).eq('id', String(x.id ?? '')).select('id'))).length;
-      }
-      return { saved: n, at };
+      const items = (Array.isArray(p.items) ? p.items : []).slice(0, 2000).map(x => ({
+        id: String(x.id ?? ''), ok: !!x.ok, storeName: str(x.storeName, 200), iconUrl: iconUrl(x.iconUrl),
+      }));
+      const saved = items.length ? Number(await rpc('save_store_check', { p_items: items })) || 0 : 0;
+      return { saved, at: now() };
     },
 
     /** Массовая правка приложений: статус, приоритет ('' — снять) и/или юнит (юнит — только CEO, задачи едут вместе). Возвращает обновлённые. */

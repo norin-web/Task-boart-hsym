@@ -557,7 +557,7 @@ test('массовая правка приложений: статус и юни
 
 test('проверка App Store: итог сохраняется, «Обновлено» не трогает; в «Требует внимания» дашборда не дублируется', async () => {
   const api = await setup();
-  const { ceo, pmRf, gold } = await studio(api);
+  const { ceo, pmRf, rm, ios, gold } = await studio(api);
   const { app } = await api.as(ceo, () => api('createApp', { name: 'Gone', unitId: gold.id, noRequest: true }));
   const ok = await api.as(ceo, () => api('createApp', { name: 'Ok', unitId: gold.id, noRequest: true }));
   assert.equal(app.storeOk, null);
@@ -573,6 +573,12 @@ test('проверка App Store: итог сохраняется, «Обнов�
   assert.ok(!d.attention.some(x => x.app.id === app.id));
   // PM чужого юнита отметку не поставит
   assert.equal((await api.as(pmRf, () => api('saveStoreCheck', { items: [{ id: ok.app.id, ok: false }] }))).saved, 0);
+  // RM юнита обновляет проверку (иконка — только с mzstatic), сотрудник — нет
+  assert.equal((await api.as(rm, () => api('saveStoreCheck', { items: [{ id: app.id, ok: true, iconUrl: 'https://evil.example/x.png' }] }))).saved, 1);
+  const back = (await api.as(ceo, () => api('listApps', {}))).find(x => x.id === app.id);
+  assert.equal(back.storeOk, true);
+  assert.equal(back.iconUrl, '');
+  assert.equal((await api.as(ios, () => api('saveStoreCheck', { items: [{ id: app.id, ok: false }] }))).saved, 0);
 });
 
 test('Info приложения: общие пункты (CEO), отметки и свои пункты у приложения', async () => {

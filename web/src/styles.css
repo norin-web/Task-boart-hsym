@@ -1428,7 +1428,8 @@ a.rl-link:hover { background: var(--accent-soft); color: var(--accent-text); }
 .apps-search { width: 220px; }
 .ap-group + .ap-group { margin-top: 18px; }
 .apps-page > .ap-head { margin-bottom: 4px; }
-.ap-group-head { display: flex; align-items: center; gap: 8px; border: 0; background: none; font: inherit; color: var(--text); padding: 4px 2px; margin-bottom: 8px; cursor: pointer; border-radius: 6px; }
+.ap-group-head { display: flex; align-items: center; gap: 8px; border: 0; background: none; font: inherit; color: var(--text); text-align: left; padding: 6px 8px; margin: 0 -8px 8px; width: calc(100% + 16px); cursor: pointer; border-radius: 8px; }
+.ap-group-head:hover { background: var(--surface-2); }
 .ap-group-head b { font-size: 14px; font-weight: 600; }
 .ap-group-head .muted { font-size: 13px; font-variant-numeric: tabular-nums; }
 .ap-group-head:hover .ap-chev { color: var(--text); }

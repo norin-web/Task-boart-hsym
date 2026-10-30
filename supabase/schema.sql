@@ -1288,6 +1288,30 @@ begin
   return n;
 end $$;
 
+-- Итог проверки App Store: p_items [{ id, ok, storeName, iconUrl }]. Только эти поля, «Обновлено» не трогает.
+-- Обновляют все, кто видит «Приложения» (CEO, PM юнита, RM и лиды юнита) — RM приложения сам не правит, а проверка — не правка.
+create or replace function save_store_check(p_items jsonb) returns integer
+language plpgsql security definer set search_path = public as $$
+declare
+  at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+  x jsonb;
+  ok boolean;
+  n int := 0;
+  k int;
+begin
+  for x in select * from jsonb_array_elements(coalesce(p_items, '[]'::jsonb)) limit 2000 loop
+    ok := coalesce((x->>'ok')::boolean, false);
+    update apps a set store_ok = ok, store_checked_at = at_,
+           store_name = case when ok and coalesce(x->>'storeName', '') <> '' then left(x->>'storeName', 200) else a.store_name end,
+           icon_url = case when ok and coalesce(x->>'iconUrl', '') ~ '^https://[A-Za-z0-9.-]+\.mzstatic\.com/' then left(x->>'iconUrl', 500) else a.icon_url end
+     where a.id = coalesce(x->>'id', '') and (not a.is_test or is_dev())
+       and (can_manage(a.unit_id) or (my_access() in ('rm', 'lead') and is_unit_member(a.unit_id)));
+    get diagnostics k = row_count;
+    n := n + k;
+  end loop;
+  return n;
+end $$;
+
 -- Шаги релиза (RM). Фаза: '' — очередь, submitted — на ревью Apple, rejected — реджект (исправляет PM), live — в сторе.
 -- Статус этапа «Релиз» на доске следует за фазой (очередь — в работе, ревью Apple — колонка ревью, в сторе — готово).
 -- rel.history — попытки: [{ n, submittedAt, result: live | reject, at, reason, shot, rejectNo }]; номер реджекта — по приложению.

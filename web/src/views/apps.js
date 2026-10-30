@@ -4,7 +4,7 @@
  * справа: статус, юнит, приоритет, поля быстрого доступа, работы (запросы CEO и их этапы).
  */
 import Sortable from 'sortablejs';
-import { S, isSuper, isStaff, me, personById, unitById, appStatusById, prioById, REQUEST_TYPES, LS, plural, fmtDate, PALETTE, between, todayStr, relTime } from '../state.js';
+import { S, isSuper, isStaff, seesApps, me, personById, unitById, appStatusById, prioById, REQUEST_TYPES, LS, plural, fmtDate, PALETTE, between, todayStr, relTime } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, modal, field, toast, menu, closeMenu, confirmDlg, promptDlg, prioMark, prioSelect } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
@@ -1086,7 +1086,7 @@ export function storeCheckBlock(apps, reload, { compact = false } = {}) {
     !withLink.length ? 'Нет приложений со ссылкой на App Store'
       : last ? `проверено ${relTime(last)} · открываются ${withLink.length - gone.length - unchecked} из ${withLink.length}` + (unchecked ? ` · не проверено ${unchecked}` : '')
         : `${withLink.length} ${plural(withLink.length, ['приложение', 'приложения', 'приложений'])} со ссылкой — ещё не проверяли`);
-  const btn = h('button', { class: 'btn sm', disabled: !withLink.length || !isStaff(), onclick: async () => {
+  const btn = h('button', { class: 'btn sm', disabled: !withLink.length || !seesApps(), onclick: async () => {
     btn.disabled = true;
     try {
       const r = await runStoreCheck(withLink, (d, t) => { fill(btn, h('span', { class: 'spinner' }), `Проверяю ${d}/${t}…`); });
