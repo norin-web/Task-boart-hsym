@@ -2050,3 +2050,11 @@ button.prefs-row { width: 100%; border: 0; border-radius: 0; background: none; c
 }
 .panel.center.unit-panel { width: min(640px, calc(100vw - 32px)); max-height: min(760px, calc(100vh - 48px)); display: flex; flex-direction: column; }
 .unit-panel .panel-head { flex-wrap: wrap; }
+
+/* меню аккаунта */
+.menu.me-menu { min-width: 260px; }
+.menu-item.me-card { gap: 10px; padding-block: 8px; }
+.me-card .avatar { width: 32px; height: 32px; }
+.me-card-text { display: grid; min-width: 0; line-height: 1.3; }
+.me-card-text b { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.me-card-text small { font-size: 12px; }

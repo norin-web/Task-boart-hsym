@@ -220,6 +220,7 @@ function onPageScroll(e) {
 document.addEventListener('scroll', onPageScroll, true);
 
 export function closeMenu() {
+  document.removeEventListener('click', closeMenu); // иначе следующий клик закроет только что открытое меню
   if (!openMenuEl) return;
   const hadFocus = openMenuEl.contains(document.activeElement);
   openMenuEl.remove(); openMenuEl = null;

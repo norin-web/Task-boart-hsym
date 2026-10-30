@@ -5,8 +5,9 @@ import { send } from '../api.js';
 import { link, navigate, rerender } from '../router.js';
 import { openPalette } from './palette.js';
 import { unitMenu, openCreateUnit } from './units.js';
+import { openActAs, openMyProfile } from './people.js';
 import { personCaption } from './my.js';
-import { resetLocalData } from '../data.js';
+import { mode, supabase, resetLocalData } from '../data.js';
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 
@@ -143,12 +144,11 @@ export function renderSidebar() {
       onclick: () => import('./dev.js').then(m => m.openDevPanel()),
     }, icon('code'), h('span', { class: 'nav-label' }, 'Режим разработчика'), h('kbd', null, isMac ? '⌥D' : 'Alt D')),
     h('button', { class: 'nav-item', onclick: cycleTheme, title: 'Переключить тему' }, icon(themeIcon), h('span', { class: 'nav-label' }, themeLabel)),
-    // аккаунт и есть вход в настройки
-    link({ view: 'settings' }, { class: 'nav-item me' + (isHere(r, { view: 'settings' }) ? ' active' : ''), title: 'Настройки' },
+    h('button', { class: 'nav-item me', onclick: e => meMenu(e.currentTarget), title: 'Аккаунт', 'aria-haspopup': 'menu' },
       avatar(person, 'sm'),
       h('span', { class: 'nav-label me-label' }, h('span', null, person ? person.name : '—'),
         person && h('small', null, (S.session && S.session.user.email) || personCaption(person) || ACCESS_LABELS[person.access])),
-      icon('settings', 15)));
+      icon('chevron', 14)));
 
   if (staff && units.length > 1) {
     Sortable.create(list, {
@@ -176,6 +176,24 @@ export async function setCeoMode(m) {
   try { await send('setMyPrefs', { personId: p.id, prefs: { ceoMode: m } }); } catch (e) { showErr(e); }
   if (m === 'default' && ((S.route.unit && S.route.mode === 'settings') || ['my', 'myboard'].includes(S.route.view))) navigate({ view: 'home' });
   else rerender();
+}
+
+/** Меню аккаунта: сверху кто я (клик — профиль), настройки, дальше локальные действия или выход. */
+function meMenu(anchor) {
+  const p = me();
+  const email = (S.session && S.session.user.email) || (p && p.email) || '';
+  menu(anchor, [
+    p && h('button', { class: 'menu-item me-card', role: 'menuitem', onclick: () => { closeMenu(); openMyProfile(); } },
+      avatar(p), h('span', { class: 'me-card-text' }, h('b', null, email || p.name), h('small', { class: 'muted' }, ACCESS_LABELS[p.access]))),
+    { sep: true },
+    { label: 'Настройки', icon: 'settings', action: () => navigate({ view: 'settings' }) },
+    mode === 'local' && { title: 'Локальный режим: данные только в этом браузере' },
+    mode === 'local' && { label: 'Войти как…', icon: 'users', action: openActAs },
+    mode === 'local' && { sep: true },
+    mode === 'local' && { label: 'Очистить локальную базу', icon: 'trash', danger: true, action: resetLocal },
+    mode === 'supabase' && { sep: true },
+    mode === 'supabase' && { label: 'Выйти', icon: 'back', action: () => supabase.auth.signOut() },
+  ], { cls: 'me-menu' });
 }
 
 /** Лёгкое обновление счётчиков без перерисовки (после правок на доске). */
