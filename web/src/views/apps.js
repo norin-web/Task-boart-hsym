@@ -111,7 +111,7 @@ export async function renderApps({ unitId = '' } = {}) {
   let q = '';
   // Фильтры (как в Jira): разделы слева — значения с поиском справа; свои наборы — в профиле (prefs.appFilters)
   const EMPTY = { statuses: [], prios: [], pms: [], units: [], store: [], age: 0 };
-  const f = { ...EMPTY, workTop: true, ...LS.get('appsFilter', {}) };
+  const f = { ...EMPTY, workFirst: false, ...LS.get('appsFilter', {}) };
   for (const k of Object.keys(EMPTY)) if (k !== 'age' && !Array.isArray(f[k])) f[k] = [];
   const saveF = () => LS.set('appsFilter', f);
   const storeState = a => (!appStoreUrl(a) ? 'nolink' : a.storeOk === false ? 'gone' : 'ok');
@@ -131,7 +131,7 @@ export async function renderApps({ unitId = '' } = {}) {
     if (p) p.prefs = { ...(p.prefs || {}), appFilters: list };
     send('setMyPrefs', { personId: S.meId, prefs: { appFilters: list } }).catch(showErr);
   };
-  const apply = next => { Object.assign(f, EMPTY, next); saveF(); drawList(); };  // группировку (workTop) фильтр не сбрасывает
+  const apply = next => { Object.assign(f, EMPTY, next); saveF(); drawList(); };  // группировку (workFirst) фильтр не сбрасывает
   const dot = c => h('span', { class: 'dot', style: { background: c } });
   /** Разделы фильтра: [ключ, название, варианты { id, label, mark }, один вариант?]. */
   const sections = () => [
@@ -207,14 +207,14 @@ export async function renderApps({ unitId = '' } = {}) {
   function groupMenu(anchor) {
     menu(anchor, [{ title: 'Группировка' },
       ...[[true, 'В работе сверху, затем по юнитам'], [false, 'Только по юнитам']].map(([v, label]) => ({
-        label, icon: f.workTop === v ? 'check' : null, action: () => { f.workTop = v; saveF(); drawList(); },
+        label, icon: f.workFirst === v ? 'check' : null, action: () => { f.workFirst = v; saveF(); drawList(); },
       }))]);
   }
   const drawFilters = () => {
     const n = active();
     fill(filterBtn, icon('filter', 14), h('span', { class: 'btn-label' }, 'Фильтр'), n > 0 && h('span', { class: 'count-badge' }, n));
     filterBtn.classList.toggle('on', n > 0);
-    fill(groupBtn, icon('layers', 14), h('span', { class: 'btn-label' }, 'Группа: ' + (f.workTop ? 'в работе сверху' : 'по юнитам')));
+    fill(groupBtn, icon('layers', 14), h('span', { class: 'btn-label' }, 'Группа: ' + (f.workFirst ? 'в работе сверху' : 'по юнитам')));
     const chip = (label, onx) => h('span', { class: 'chip filter-chip' }, label, h('button', { class: 'chip-x', title: 'Убрать', onclick: onx }, icon('x', 11)));
     const drop = (key, id) => () => { f[key] = f[key].filter(x => x !== id); saveF(); drawList(); };
     const label = (key, id) => ((sections().find(x => x[0] === key) || [, , []])[2].find(o => o.id === id) || { label: id || '—' }).label;
@@ -284,8 +284,8 @@ export async function renderApps({ unitId = '' } = {}) {
     if (!apps.length) return fill(body, emptyApps(reload));
     const found = apps.filter(a => (!q || a.name.toLowerCase().includes(q) || (a.storeName || '').toLowerCase().includes(q)) && passes(a));
     // в работе (есть открытый запрос) — отдельным разделом сверху, из юнитов ниже убираются
-    const work = f.workTop ? found.filter(a => a.active > 0) : [];
-    const rest = f.workTop ? found.filter(a => !(a.active > 0)) : found;
+    const work = f.workFirst ? found.filter(a => a.active > 0) : [];
+    const rest = f.workFirst ? found.filter(a => !(a.active > 0)) : found;
     const groups = (unitId ? units().filter(u => u.id === unitId) : [...units(), { id: '', name: 'Без юнита', color: 'var(--border-strong)' }])
       .map(u => ({ u, list: rest.filter(a => (a.unitId || '') === u.id || (!u.id && !unitById(a.unitId))) }))
       .filter(g => g.list.length);
