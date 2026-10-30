@@ -199,7 +199,7 @@ export function statBlocks(d, apps, reload) {
 
   return [
     { id: 'kpi', title: 'Цифры', col: 'full', render: () => h('div', { class: 'cs-row' },
-      stat(apps.length, 'приложений'), stat(open.length, 'задач в работе'),
+      stat(apps.length, plural(apps.length, ['приложение', 'приложения', 'приложений'])), stat(open.length, plural(open.length, ['задача в работе', 'задачи в работе', 'задач в работе'])),
       stat(overdue, 'просрочено', null, overdue ? 'danger' : ''), stat(live30.length + done30.length, 'выпущено за 30 дней'),
       stat(stale.length, 'не трогали', d.staleDays + '+ дн.')) },
     { id: 'statuses', title: 'Приложения по статусам', col: 'full', render: () => section('По статусам', h('div', { class: 'card-box st-sum' },

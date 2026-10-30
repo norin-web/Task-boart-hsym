@@ -160,7 +160,7 @@ async function runProcess(api, P, U, test) {
   apps++;
   const s = await steps(wx.request.id, 'kate');
   const links = { design: ['lf_figma', 'https://figma.com/design/carrot-weather'], ios: ['lf_github', 'https://github.com/studio/carrot-weather'],
-    meta: ['lf_meta', 'https://docs.google.com/document/d/carrot-weather-texts'], retext: ['lf_drive', 'https://drive.google.com/drive/folders/carrot-weather-sources'] };
+    meta: ['lf_meta', 'https://docs.google.com/document/d/carrot-weather-texts'], retext: ['lf_drive', 'https://drive.google.com/drive/folders/carrot-weather-sources'], l10n: ['lf_l10n', 'https://docs.google.com/spreadsheets/d/carrot-weather-l10n'] };
   for (const [k, [fieldId, url]] of Object.entries(links)) await act('anna', 'setTaskLink', { taskId: s[k].id, fieldId, url });
   for (const k of ['design', 'ios', 'qa', 'meta', 'retext', 'l10n']) await close(s[k], s[k].assigneeId ? keyOf(P, s[k].assigneeId) : 'kate', 'kate');
   await act('kate', 'sendToRelease', { taskId: s.release.id });

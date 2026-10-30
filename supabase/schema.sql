@@ -167,8 +167,9 @@ create table if not exists link_fields (
 );
 insert into link_fields (id, name, kind, ord) values
   ('lf_figma', 'Figma', 'figma', 1), ('lf_github', 'GitHub', 'github', 2),
-  ('lf_drive', 'Google Drive', 'drive', 3), ('lf_meta', 'Metadata', 'meta', 4)
+  ('lf_drive', 'Google Drive', 'drive', 3), ('lf_meta', 'Тексты и метаданные', 'meta', 4), ('lf_l10n', 'Локализации', 'drive', 5)
 on conflict (id) do nothing;
+update link_fields set name = 'Тексты и метаданные' where id = 'lf_meta' and name = 'Metadata';
 
 -- Значения ссылок — отдельной таблицей, чтобы скрытое поле не уходило в браузер вместе с задачей.
 create table if not exists task_links (
