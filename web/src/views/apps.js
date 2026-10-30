@@ -342,6 +342,7 @@ function settingsMenu(anchor, reload) {
     { label: 'Статусы приложения…', icon: 'progress', action: () => openStatusesEditor(reload) },
     { label: 'Поля приложения…', icon: 'link', action: () => openFieldsEditor(reload) },
     { label: 'Релиз: поля и чеклист…', icon: 'rocket', action: () => import('./release.js').then(m => m.openReleaseSettings()) },
+    { label: 'Шаблоны апдейтов…', icon: 'layers', action: () => openUpdateTemplates() },
   ]);
 }
 
@@ -871,7 +872,9 @@ export async function openDecomposeDialog(req) {
   try { flow = (await call('getFlows', { unitId: req.unitId }))[req.type] || []; } catch (e) { showErr(e); return false; }
   const u = unitById(req.unitId);
   const team = ((u && u.members) || []).map(personById).filter(p => p && p.active);
-  const steps = flow.map(st => ({ ...st, on: true, assigneeId: st.release ? '' : suggest(st.positionId), dueDate: req.dueDate || '' }));
+  // запрос из шаблона апдейта — отмечены только его этапы (остальные можно включить)
+  const only = req.flowSteps || [];
+  const steps = flow.map(st => ({ ...st, on: !only.length || only.includes(st.key), assigneeId: st.release ? '' : suggest(st.positionId), dueDate: req.dueDate || '' }));
   function suggest(positionId) {
     const withPos = team.filter(p => (p.positionIds || []).includes(positionId));
     return (withPos.find(p => p.access === 'lead') || withPos[0] || {}).id || '';
@@ -1258,20 +1261,87 @@ function openCreateRequest(a, type, onDone) {
   const due = h('input', { class: 'inp', type: 'date' });
   const prio = prioPicker(a.priority);
   const desc = h('textarea', { class: 'inp', rows: 3 });
+  // апдейт: свой текст или шаблон (название, описание, пункты и нужные этапы)
+  let tplId = '';
+  const tplInfo = h('div', { class: 'hint tpl-info' });
+  const tplSel = type === 'update' && h('select', { class: 'inp', 'aria-label': 'Шаблон апдейта' });
+  const paintTpl = () => tplSel && fill(tplSel, h('option', { value: '' }, 'Свой текст'),
+    updateTemplates().map(x => h('option', { value: x.id, selected: x.id === tplId }, x.name)),
+    isStaff() && h('option', { value: '__edit' }, 'Шаблоны апдейтов…'));
+  paintTpl();
+  if (tplSel) tplSel.addEventListener('change', () => {
+    if (tplSel.value === '__edit') { tplSel.value = tplId; openUpdateTemplates(paintTpl); return; }
+    tplId = tplSel.value;
+    const x = updateTemplates().find(y => y.id === tplId);
+    if (x) { title.value = x.title || title.value; desc.value = x.description || desc.value; }
+    fill(tplInfo, x && [
+      x.steps.length > 0 && h('div', null, 'Этапы: ' + x.steps.map(k => (STEP_NAMES[k] || k)).join(' → ')),
+      x.checklist.length > 0 && h('div', null, 'Пункты: ' + x.checklist.map(i => i.text).join(' · '))]);
+  });
   modal({
     title: (reject ? 'Реджект' : REQUEST_TYPES[type] || 'Задача') + ' · ' + a.name,
-    body: [field(reject ? 'Причина' : 'Название', title), h('div', { class: 'grid2' }, field('PM', pm.el), field('Срок', due)),
+    body: [tplSel && field('Шаблон', tplSel, tplInfo), field(reject ? 'Причина' : 'Название', title), h('div', { class: 'grid2' }, field('PM', pm.el), field('Срок', due)),
       field('Приоритет', prio, 'Перейдёт этапам, когда PM разложит задачу'), field('Описание', desc)],
     actions: [{ label: 'Отмена' }, {
       label: 'Поставить', primary: true,
       action: async close => {
         if (reject && !title.value.trim()) { title.focus(); return; }
-        await send('createRequest', { appId: a.id, type, title: (reject ? 'Реджект: ' : '') + title.value, pmId: pm.el.value, dueDate: due.value, priority: prio.value, description: desc.value });
+        await send('createRequest', { appId: a.id, type, title: (reject ? 'Реджект: ' : '') + title.value, pmId: pm.el.value, dueDate: due.value, priority: prio.value, description: desc.value, templateId: tplId });
         close();
         toast('Задача ушла PM');
         if (onDone) onDone();
       },
     }],
+  });
+}
+
+/* ---------- шаблоны апдейтов ---------- */
+
+const STEP_NAMES = { design: 'Дизайн', ios: 'Разработка iOS', qa: 'Тестирование', meta: 'Мета (ASO)', release: 'Релиз' };
+const updateTemplates = () => S.templates.filter(x => x.kind === 'update').sort((x, y) => (x.order || 0) - (y.order || 0));
+
+/** Шаблоны апдейтов (CEO и PM): название, заголовок задачи, описание, пункты и нужные этапы. */
+export function openUpdateTemplates(onDone) {
+  const items = updateTemplates().map(x => ({ ...x, lines: x.checklist.map(i => i.text).join('\n'), steps: [...x.steps] }));
+  const gone = [];
+  const box = h('div', { class: 'cl-tpl-list' });
+  const draw = () => fill(box,
+    items.length ? items.map((x, i) => h('div', { class: 'cl-tpl' },
+      h('div', { class: 'row', style: { gap: '8px' } },
+        h('input', { class: 'inp', value: x.name, maxlength: 60, placeholder: 'Название шаблона, например «Новый пейвол»', oninput: e => { x.name = e.target.value; } }),
+        h('button', { class: 'icon-btn sm', title: 'Удалить шаблон', onclick: () => { if (x.id) gone.push(x.id); items.splice(i, 1); draw(); } }, icon('trash', 14))),
+      h('input', { class: 'inp', value: x.title || '', maxlength: 500, placeholder: 'Название задачи, например «Апдейт: новый пейвол»', oninput: e => { x.title = e.target.value; } }),
+      h('textarea', { class: 'inp', rows: 2, placeholder: 'Описание (необязательно)', oninput: e => { x.description = e.target.value; } }, x.description || ''),
+      h('textarea', { class: 'inp', rows: 3, placeholder: 'Пункты — по одному в строке', oninput: e => { x.lines = e.target.value; } }, x.lines || ''),
+      h('div', { class: 'tpl-steps' }, h('span', { class: 'muted' }, 'Этапы:'), Object.entries(STEP_NAMES).map(([k, label]) => {
+        const on = !x.steps.length || x.steps.includes(k);
+        return h('button', { class: 'menu-item aud-item' + (on ? ' on' : ''), role: 'checkbox', 'aria-checked': String(on), onclick: () => {
+          const cur = x.steps.length ? x.steps : Object.keys(STEP_NAMES);
+          x.steps = on ? cur.filter(s => s !== k) : [...cur, k];
+          if (x.steps.length === Object.keys(STEP_NAMES).length) x.steps = [];
+          draw();
+        } }, h('span', { class: 'aud-check' }, on && icon('check', 13)), label);
+      }))))
+      : h('p', { class: 'muted', style: { margin: 0 } }, 'Шаблонов пока нет.'),
+    h('button', { class: 'btn sm', onclick: () => { items.push({ id: '', name: '', title: '', description: '', lines: '', steps: [] }); draw(); } }, icon('plus', 13), 'Шаблон'));
+  draw();
+  modal({
+    title: 'Шаблоны апдейтов',
+    wide: true,
+    body: [h('p', { class: 'hint', style: { margin: '0 0 10px' } }, 'При постановке апдейта — выбрать шаблон или свой текст. Пункты станут чеклистом задачи, при разбивке останутся только отмеченные этапы.'), box],
+    actions: [{ label: 'Отмена' }, { label: 'Сохранить', primary: true, action: async close => {
+      for (const id of gone) await send('deleteTemplate', { id });
+      S.templates = S.templates.filter(x => !gone.includes(x.id));
+      for (const x of items.filter(y => y.name.trim())) {
+        const saved = await send('saveTemplate', { id: x.id || undefined, kind: 'update', name: x.name.trim(), title: x.title, description: x.description,
+          checklist: String(x.lines || '').split('\n').map(t => t.trim()).filter(Boolean).map(text => ({ text })), steps: x.steps });
+        const i = S.templates.findIndex(y => y.id === saved.id);
+        if (i >= 0) S.templates[i] = saved; else S.templates.push(saved);
+      }
+      close();
+      toast('Шаблоны апдейтов сохранены');
+      if (onDone) onDone();
+    } }],
   });
 }
 

@@ -671,3 +671,19 @@ test('«@» в комментарии и описании — уведомлен
   await api.as(pm, () => api('updateTask', { id: st.ios.id, patch: { description: `Для @${ceo.name}` } }));
   assert.ok((await api.as(ceo, () => api('getNotifications', {}))).some(x => x.taskId === st.ios.id && x.kinds.includes('mention')));
 });
+
+test('шаблон апдейта: пункты и нужные этапы; запрос по шаблону раскладывается только на них', async () => {
+  const api = await setup();
+  const { ceo, pm, gold } = await studio(api);
+  const tpl = await api.as(pm, () => api('saveTemplate', { name: 'Пейвол', kind: 'update', title: 'Апдейт: новый пейвол', description: 'A/B пейвола',
+    checklist: [{ text: 'Макет' }, { text: 'Тексты' }], steps: ['design', 'ios', 'release'] }));
+  assert.equal(tpl.kind, 'update');
+  const { app } = await api.as(ceo, () => api('createApp', { name: 'Tpl', unitId: gold.id, noRequest: true }));
+  const r = await api.as(ceo, () => api('createRequest', { appId: app.id, type: 'update', templateId: tpl.id }));
+  assert.equal(r.title, 'Апдейт: новый пейвол');
+  assert.deepEqual(r.checklist.map(i => i.text), ['Макет', 'Тексты']);
+  const stages = await api.as(pm, () => api('decomposeRequest', { taskId: r.id }));
+  assert.deepEqual(stages.map(t => t.step), ['design', 'ios', 'release']);
+  const rel = stages.find(t => t.step === 'release');
+  assert.equal(rel.dependsOn.length, 2); // без убранного QA
+});

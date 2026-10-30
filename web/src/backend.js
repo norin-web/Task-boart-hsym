@@ -229,7 +229,7 @@ const taskOut = r => ({
   fields: json(r.fields, {}), checklist: json(r.checklist, []), archived: !!r.archived, doneAt: r.done_at,
   reviewFrom: r.review_from || '', reviewerId: r.reviewer_id || '', teamId: r.team_id || '', specUrl: r.spec_url || '',
   parentId: r.parent_id || '', kind: r.kind || '', startedAt: r.started_at || '',
-  release: json(r.release, {}) || {},
+  release: json(r.release, {}) || {}, flowSteps: json(r.flow_steps, []) || [],
   appId: r.app_id || '', requestType: r.request_type || '', step: r.step || '', dependsOn: json(r.depends_on, []) || [], isTest: !!r.is_test,
   createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at,
 });
@@ -384,6 +384,7 @@ const templateOut = r => ({
   id: r.id, name: r.name, title: r.title, description: r.description, departmentId: r.department_id,
   dueDays: Number(r.due_days), checklist: json(r.checklist, []) || [], order: r.ord,
   assigneeId: r.assignee_id || '', links: json(r.links, {}) || {}, teamId: r.team_id || '',
+  kind: r.kind || '', steps: json(r.steps, []) || [],
 });
 const commentOut = r => ({ id: r.id, taskId: r.task_id, text: r.text, authorId: r.author_id, at: r.at, editedAt: r.edited_at });
 
@@ -1065,6 +1066,7 @@ export function createBackend(db, opts = {}) {
         app_id: str(p.appId, 40), request_type: p.kind === 'request' && REQUEST_TYPES[p.requestType] ? p.requestType : '',
         step: str(p.step, 30), depends_on: (Array.isArray(p.dependsOn) ? p.dependsOn : []).map(x => str(x, 40)).filter(Boolean).slice(0, 20),
         is_test: !!p.test, started_at: kindOf(st, status) === 'todo' ? '' : ts, spec_url: linkUrl(p.specUrl),
+        flow_steps: (Array.isArray(p.flowSteps) ? p.flowSteps : []).map(x => str(x, 30)).filter(Boolean).slice(0, 20),
       };
       // наследование от родителя (этап от запроса, подзадача от этапа): ТЗ, описание (если своего нет) и ссылки
       const parent = task.parent_id && p.inherit !== false ? await one('tasks', task.parent_id) : null;
@@ -1601,7 +1603,7 @@ export function createBackend(db, opts = {}) {
       const apps = (await run(q.order('ord').order('created_at'))).map(appOut);
       if (!apps.length) return [];
       const [tasks, units] = await Promise.all([
-        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,due_date,archived,kind,request_type,step,parent_id,app_id,depends_on,fields,created_at,updated_at,done_at')
+        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,due_date,archived,kind,request_type,step,parent_id,app_id,depends_on,fields,created_at,updated_at,done_at,flow_steps')
           .in('app_id', apps.map(a => a.id)).eq('archived', false).order('created_at').order('id')),
         all(() => T('units').select('id,key,settings').order('id')),
       ]);
@@ -1617,7 +1619,7 @@ export function createBackend(db, opts = {}) {
           return {
             id: r.id, unitId: r.unit_id, key: U[r.unit_id] ? `${U[r.unit_id].key}-${r.num}` : '', title: r.title, type: r.request_type,
             assigneeId: r.assignee_id, dueDate: r.due_date, done: doneRow(r), statusKind: kindOfRow(r),
-            priority: (json(r.fields, {}) || {})[PRIORITY_FIELD] || '', createdAt: r.created_at, updatedAt: r.updated_at, doneAt: r.done_at || '',
+            priority: (json(r.fields, {}) || {})[PRIORITY_FIELD] || '', createdAt: r.created_at, updatedAt: r.updated_at, doneAt: r.done_at || '', flowSteps: json(r.flow_steps, []) || [],
             stages: stages.map(t => ({ id: t.id, unitId: t.unit_id, step: t.step, title: t.title, assigneeId: t.assignee_id, kind: kindOfRow(t),
               dueDate: t.due_date, updatedAt: t.updated_at,
               done: doneRow(t), blocked: !doneRow(t) && (json(t.depends_on, []) || []).some(id => { const d = own.find(x => x.id === id); return d && !doneRow(d); }) })),
@@ -1890,10 +1892,14 @@ export function createBackend(db, opts = {}) {
       const pms = await unitPeople(a.unit_id, 'moderator');
       const pmId = p.pmId && pms.some(x => x.id === p.pmId) ? p.pmId : pms.length ? pms[0].id : '';
       const prio = await validPriority('priority' in p ? p.priority : a.priority);
+      // шаблон апдейта: пункты — чеклистом запроса, нужные этапы — запоминаем для разбивки
+      const tpl = p.templateId ? await one('task_templates', String(p.templateId)) : null;
       return methods.createTask({
-        unitId: a.unit_id, title: str(p.title, 500) || `${REQUEST_TYPES[type]}: ${a.name}`, description: p.description,
+        unitId: a.unit_id, title: str(p.title, 500) || (tpl && tpl.title) || `${REQUEST_TYPES[type]}: ${a.name}`,
+        description: p.description || (tpl ? tpl.description : ''),
         assigneeId: pmId, dueDate: p.dueDate, kind: 'request', requestType: type, appId: a.id, test: !!a.is_test,
-        fields: prio ? { [PRIORITY_FIELD]: prio } : {},
+        fields: prio ? { [PRIORITY_FIELD]: prio } : {}, specUrl: p.specUrl,
+        checklist: tpl ? json(tpl.checklist, []) : p.checklist, flowSteps: tpl ? json(tpl.steps, []) : p.flowSteps,
       }, ctx);
     },
 
@@ -1909,7 +1915,10 @@ export function createBackend(db, opts = {}) {
       if (existing.length) fail('Запрос уже разложен по этапам');
       // план из окна предпросмотра (этапы, исполнители, сроки) или флоу юнита по умолчанию
       const plan = Array.isArray(p.plan) ? p.plan : null;
-      const steps = plan ? cleanFlow(plan) : (await flows(r.unit_id))[r.request_type] || [];
+      // запрос из шаблона апдейта — только его этапы (зависимости от убранных этапов снимаются)
+      const only = json(r.flow_steps, []) || [];
+      const pick_ = list => (only.length ? list.filter(s => only.includes(s.key)).map(s => ({ ...s, dependsOn: s.dependsOn.filter(k => only.includes(k)) })) : list);
+      const steps = plan ? cleanFlow(plan) : pick_((await flows(r.unit_id))[r.request_type] || []);
       if (!steps.length) fail(plan ? 'Оставьте хотя бы один этап' : 'Для этого типа запроса нет флоу — создайте задачи вручную');
       const extra = Object.fromEntries((plan || []).map(x => [x && x.key, x || {}]));
       const people = await unitPeople(r.unit_id);
@@ -2261,6 +2270,8 @@ export function createBackend(db, opts = {}) {
         assignee_id: p.assigneeId && (await one('people', p.assigneeId)) ? String(p.assigneeId) : '',
         team_id: await validTeam(p.teamId),
         links: {},
+        kind: p.kind === 'update' ? 'update' : '',
+        steps: (Array.isArray(p.steps) ? p.steps : []).map(x => str(x, 30)).filter(Boolean).slice(0, 20),
       };
       // ссылки шаблона: только существующие поля-ссылки и только http(s)
       const known = new Set((await linkFields()).map(f => f.id));

@@ -442,7 +442,7 @@ const DUE_DAYS = [[-1, 'Без срока'], [0, 'Сегодня'], [1, 'Зав�
 /** Шаблоны задач: общие для всех юнитов. Порядок — перетаскиванием, правка — в окне. */
 function templatesManager() {
   const list = h('div', { class: 'lf-list' });
-  const sorted = () => [...S.templates].sort(byOrder);
+  const sorted = () => S.templates.filter(x => x.kind !== 'update').sort(byOrder); // шаблоны апдейтов — отдельно, в «Приложениях»
   const remove = async t => {
     if (!(await confirmDlg(`Удалить шаблон «${t.name}»? Задачи, созданные по нему, останутся.`, { ok: 'Удалить', danger: true }))) return;
     await send('deleteTemplate', { id: t.id });
@@ -468,7 +468,7 @@ function templatesManager() {
   };
   let sortable = null;
   const draw = () => {
-    fill(list, S.templates.length ? sorted().map(row) : h('p', { class: 'muted', style: { padding: '12px 14px', margin: 0 } }, 'Шаблонов пока нет'));
+    fill(list, sorted().length ? sorted().map(row) : h('p', { class: 'muted', style: { padding: '12px 14px', margin: 0 } }, 'Шаблонов пока нет'));
     if (sortable) sortable.destroy();
     sortable = Sortable.create(list, {
       handle: '.drag', animation: 150, ghostClass: 'sortable-ghost', forceFallback: true, fallbackTolerance: 4,

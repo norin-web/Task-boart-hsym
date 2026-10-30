@@ -875,9 +875,10 @@ export function openCreateTask(opts = {}) {
     drawLinks();
     title.focus();
   };
-  const tplRow = S.templates.length > 0 && h('div', { class: 'quick-chips tpl-row' },
+  const taskTpls = S.templates.filter(x => x.kind !== 'update');
+  const tplRow = taskTpls.length > 0 && h('div', { class: 'quick-chips tpl-row' },
     h('span', { class: 'quick-note' }, 'Шаблон:'),
-    S.templates.map(tpl => h('button', { class: 'quick-chip', dataset: { id: tpl.id }, onclick: () => applyTemplate(tpl) }, tpl.name)),
+    taskTpls.map(tpl => h('button', { class: 'quick-chip', dataset: { id: tpl.id }, onclick: () => applyTemplate(tpl) }, tpl.name)),
     tplNote);
   const props = h('div', { class: 'grid2' });
 

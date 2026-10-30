@@ -1811,3 +1811,6 @@ a.rc-more { text-decoration: none; }
 .mention-item { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; font: inherit; font-size: 13.5px; color: var(--text); text-align: left; padding: 6px 8px; border-radius: 7px; }
 .mention-item.on, .mention-item:hover { background: var(--accent-soft); }
 .news-what { width: 180px; }
+.tpl-steps { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 13px; }
+.tpl-steps .menu-item { width: auto; padding: 4px 8px; }
+.tpl-info { display: grid; gap: 2px; }

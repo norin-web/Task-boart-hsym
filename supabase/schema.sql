@@ -218,6 +218,9 @@ create table if not exists task_templates (
 alter table task_templates add column if not exists assignee_id text not null default '';
 alter table task_templates add column if not exists links jsonb not null default '{}';
 alter table task_templates add column if not exists team_id text not null default '';
+-- Шаблон апдейта (kind = 'update'): пункты (checklist) и нужные этапы флоу (steps: ключи этапов, пусто — все)
+alter table task_templates add column if not exists kind text not null default '';
+alter table task_templates add column if not exists steps jsonb not null default '[]';
 
 -- ---------- атомарные операции ----------
 
@@ -476,6 +479,8 @@ alter table apps add column if not exists checks jsonb not null default '{}';
 alter table apps add column if not exists own_fields jsonb not null default '[]';
 -- ТЗ задачи — ссылка (наследуется этапами и подзадачами от родителя)
 alter table tasks add column if not exists spec_url text not null default '';
+-- Этапы флоу, которые нужны запросу (из шаблона апдейта); пусто — все этапы флоу
+alter table tasks add column if not exists flow_steps jsonb not null default '[]';
 alter table apps add column if not exists status_at text not null default '';
 
 -- Задачи 2.0: приложение; запрос CEO (kind request, request_type new_app / update / other);
