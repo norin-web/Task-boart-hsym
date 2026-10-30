@@ -73,13 +73,13 @@ export async function renderCeoHome() {
 
 /* ---------- юниты ---------- */
 
-/** Юниты карточками (команда, задачи, прогресс); последняя — «Новый юнит». */
+/** Юниты карточками (команда, задачи, прогресс); «Новый юнит» — кнопкой в заголовке, сетка без карточки-одиночки. */
 function portfolio(d, reload) {
   const count = u => S.apps.filter(a => a.unitId === u.id && !a.archived).length;
   return h('section', { class: 'ceo-portfolio' },
-    h('div', { class: 'section-head' }, h('h2', null, 'Юниты')),
-    h('div', { class: 'unit-grid' }, units().map(u => unitCard(u, { apps: count(u), to: 'overview' })),
-      isSuper() && h('button', { class: 'unit-card add', onclick: () => openCreateUnit(reload) }, icon('plus', 18), 'Новый юнит')));
+    h('div', { class: 'section-head' }, h('h2', null, 'Юниты'),
+      isSuper() && h('button', { class: 'btn ghost sm', onclick: () => openCreateUnit(reload) }, icon('plus', 14), 'Новый юнит')),
+    h('div', { class: 'unit-grid' }, units().map(u => unitCard(u, { apps: count(u), to: 'overview' }))));
 }
 
 /* ---------- требует внимания ---------- */

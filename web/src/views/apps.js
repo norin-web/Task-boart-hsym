@@ -1094,23 +1094,23 @@ export function storeCheckBlock(apps, reload, { compact = false } = {}) {
       reload();
     } catch (e) { showErr(e); btn.disabled = false; }
   } }, icon('refresh', 14), 'Обновить');
-  // дашборд: одна строка, пропавшие — выпадающим списком по красной кнопке
+  // дашборд: заголовок секции как у соседних блоков (с «Обновить»), в карточке — итог; пропавшие — выпадающим списком по красной кнопке
   if (compact) {
-    const box = h('section', { class: 'store-check compact' + (gone.length ? ' has-gone' : '') });
+    btn.className = 'btn ghost sm';
+    const box = h('div', { class: 'store-check compact' + (gone.length ? ' has-gone' : '') });
     const draw = () => {
       const open = gone.length > 0 && LS.get('storeGoneOpenHome', false);
       fill(box,
         h('div', { class: 'sc-head' },
           h('img', { src: appStoreSvg, alt: '', width: 22, height: 22 }),
-          h('span', { class: 'sc-title' }, h('b', null, 'Проверка App Store'), status),
+          h('span', { class: 'sc-title' }, status),
           h('span', { class: 'spacer' }),
           gone.length > 0 && h('button', { class: 'sc-gone-chip' + (open ? ' open' : ''), 'aria-expanded': String(open), onclick: () => { LS.set('storeGoneOpenHome', !open); draw(); } },
-            icon('alert', 14), 'Нет в App Store: ' + gone.length, h('span', { class: 'sc-chip-chev' }, icon('chevron', 13))),
-          btn),
+            icon('alert', 14), 'Нет в App Store: ' + gone.length, h('span', { class: 'sc-chip-chev' }, icon('chevron', 13)))),
         open && h('div', { class: 'sc-gone' }, goneRows(gone, reload)));
     };
     draw();
-    return box;
+    return h('section', null, h('div', { class: 'section-head' }, h('h2', null, 'Проверка App Store'), btn), box);
   }
   return h('section', { class: 'store-check' + (gone.length ? ' has-gone' : '') },
     h('div', { class: 'sc-head' },

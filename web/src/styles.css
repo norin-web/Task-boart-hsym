@@ -139,7 +139,7 @@ select.inp { cursor: pointer; }
 .stat-label { font-size: 12px; color: var(--muted); }
 .home-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; align-items: start; }
 .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.unit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.unit-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
 .unit-card { position: relative; text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 14px; box-shadow: var(--shadow-sm); cursor: pointer; display: flex; flex-direction: column; gap: 8px; min-height: 140px; transition: border-color .12s, box-shadow .12s, transform .12s; }
 .unit-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow); transform: translateY(-1px); }
 .unit-card.archived { opacity: .6; }
@@ -1582,11 +1582,11 @@ a.rl-link:hover { background: var(--accent-soft); color: var(--accent-text); }
 /* блок живёт и в узкой колонке дашборда: заголовок — своей строкой, кнопки под ним */
 .store-check { container-type: inline-size; }
 .sc-head .btn, .sc-gone-chip { white-space: nowrap; flex: none; }
+.store-check.compact { margin-bottom: 0; }
 @container (max-width: 560px) {
   .sc-head { flex-wrap: wrap; gap: 8px 12px; }
   .sc-title { flex: 1 1 calc(100% - 34px); }
   .sc-head > .spacer { display: none; }
-  .sc-head > .btn:last-child { margin-left: auto; }
 }
 
 /* «Недавнее» на дашборде CEO: было → стало, «Показать все» */
