@@ -1,6 +1,6 @@
 /**
  * Аналитика (#/analytics, CEO и PM): вся статистика в одном месте — цифры, приложения по статусам, юниты × статусы,
- * загрузка PM, давно не трогали, выпущено за 30 дней, команда и KPI за период. Сверху — юнит (для блоков по приложениям) и период KPI.
+ * загрузка PM, давно не трогали, выпущено за 30 дней, команда и KPI за период, загрузка команды. Сверху — юнит (для блоков по приложениям) и период KPI.
  * Раскладка блоков — своя у каждого (prefs.analytics).
  */
 import { S, LS, isSuper, todayStr } from '../state.js';
@@ -9,6 +9,7 @@ import { call } from '../api.js';
 import { currentView } from '../router.js';
 import { statBlocks } from './ceo.js';
 import { team, PERIODS } from './pm.js';
+import { workloadBlock } from './home.js';
 import { renderLayout, editLayout } from './layout.js';
 
 export async function renderAnalytics() {
@@ -17,11 +18,11 @@ export async function renderAnalytics() {
   fill($('#main'), topbar([h('h1', null, 'Аналитика')], [tools]), h('div', { class: 'view-body' }, page));
   let unit = LS.get('anUnit', '');
   let period = PERIODS.some(([k]) => k === LS.get('kpiPeriod', '')) ? LS.get('kpiPeriod', '') : 'month';
-  let d, apps, kpi;
+  let d, apps, kpi, ov;
 
   async function load() {
     try {
-      [d, apps, kpi] = await Promise.all([call('getCeoDashboard', { today: todayStr() }), call('listApps', {}), call('getPmDashboard', { today: todayStr(), period })]);
+      [d, apps, kpi, ov] = await Promise.all([call('getCeoDashboard', { today: todayStr() }), call('listApps', {}), call('getPmDashboard', { today: todayStr(), period }), call('getOverview', { today: todayStr() })]);
     } catch (e) { return showErr(e); }
     if (currentView() !== 'analytics') return;
     S.apps = apps.map(({ requests, active, ...a }) => a);
@@ -34,6 +35,7 @@ export async function renderAnalytics() {
     const defs = statBlocks(d, list, load).filter(b => isSuper() || b.id !== 'pmload');
     defs.push({ id: 'kpi-team', title: 'Команда и KPI', col: 'full',
       render: () => team(kpi, period, p => { period = p; LS.set('kpiPeriod', p); load(); }) });
+    defs.push({ id: 'workload', title: 'Загрузка команды', col: 'full', render: () => workloadBlock(ov, { all: true }) });
     return defs;
   };
 

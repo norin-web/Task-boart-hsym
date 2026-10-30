@@ -1,4 +1,4 @@
-/** Студия в «Настройках»: обзор, люди и доступы, юниты, автоматизации, журнал. Для CEO и PM. */
+/** Студия в «Настройках»: люди и доступы, юниты, автоматизации, журнал. Для CEO и PM. */
 import Sortable from 'sortablejs';
 import { AUTO_ARCHIVE, HIDE_DONE } from '../state.js';
 import { reviewSection, openFieldEditor, requiredLabel } from './settings.js';
@@ -8,7 +8,6 @@ import { $, h, icon, avatar, topbar, showErr, fill, toast, confirmDlg, menu, mod
 import { call, send } from '../api.js';
 import { currentView, link, rerender } from '../router.js';
 import { renderSidebar } from './sidebar.js';
-import { attentionBlock, workloadBlock, roleBadge } from './home.js';
 import { peopleManager, positionsManager, teamsManager, addPersonDialog, teamChips, positionChips, addMemberDialog } from './people.js';
 import { openCreateTask } from './task.js';
 import { activityFeed } from './feed.js';
@@ -16,7 +15,6 @@ import { openCreateUnit, archiveUnit, deleteUnit } from './units.js';
 
 /** Разделы студии: [id, подпись, иконка]. */
 export const STUDIO_TABS = [
-  ['overview', 'Обзор', 'home'],
   ['people', 'Люди и доступы', 'users'],
   ['units', 'Юниты', 'tree'],
   ['automations', 'Автоматизации', 'progress'],
@@ -27,7 +25,7 @@ export const STUDIO_TABS = [
 const MOVED = { positions: ['people', 'positions'], teams: ['people', 'teams'], templates: ['automations'], card: ['automations'] };
 
 /**
- * Раздел студии в «Настройках» (#/settings?tab=…): обзор, люди и доступы, структура (юниты и корзина), автоматизации, журнал.
+ * Раздел студии в «Настройках» (#/settings?tab=…): люди и доступы, структура (юниты и корзина), автоматизации, журнал.
  * page — куда рисовать, key — currentView(), при котором рисуем (ушли со страницы — не рисуем).
  */
 export async function renderStudio(page, tab, key) {
@@ -41,7 +39,7 @@ export async function renderStudio(page, tab, key) {
   try {
     [d, ov] = await Promise.all([
       call('getHome', { today: todayStr() }),
-      tab === 'overview' || tab === 'units' ? call('getOverview', { today: todayStr() }) : tab === 'trash' ? call('getAppSettings', {}) : null,
+      tab === 'units' ? call('getOverview', { today: todayStr() }) : tab === 'trash' ? call('getAppSettings', {}) : null,
     ]);
   } catch (e) {
     showErr(e);
@@ -55,65 +53,13 @@ export async function renderStudio(page, tab, key) {
   renderSidebar();
 
   switch (tab) {
-    case 'people': fill(page, peopleTab()); break;
     case 'automations': fill(page, automationsTab()); break;
     case 'units': fill(page, unitsTable(ov)); break;
     case 'trash': fill(page, trashTable(ov)); break;
     case 'journal': fill(page, activityFeed({ limit: 40, title: 'Журнал событий' })); break;
-    default: fill(page, overview(d, ov));
+    default: fill(page, peopleTab());
   }
 }
-
-function overview(d, ov) {
-  const active = d.people.filter(p => p.active);
-  const count = access => active.filter(p => p.access === access).length;
-  const units = d.units.filter(u => !u.archived);
-  // Плитка: клик показывает список прямо здесь (без перехода на другую вкладку)
-  const kpi = (label, value, list) => h('button', {
-    class: 'kpi', title: 'Показать', onclick: e => { e.stopPropagation(); kpiPopover(e.currentTarget, label, list()); },
-  }, h('div', { class: 'kpi-val' }, value), h('div', { class: 'kpi-label' }, label));
-  const peopleList = arr => () => arr.length ? arr.map(p => h('div', { class: 'kp-row' }, avatar(p, 'sm'),
-    h('span', { class: 'kp-name', 'data-pcard': p.id }, p.name), h('span', { class: 'kp-sub' }, teamChips(p.teamIds || []), positionChips(p.positionIds || [])))) : [h('p', { class: 'muted kp-empty' }, 'Никого')];
-  const unitList = () => units.length ? units.map(u => {
-    const c = u.counts || emptyCounts();
-    return link({ unit: u.id, mode: 'board' }, { class: 'kp-row kp-link' },
-      h('span', { class: 'uc-icon sm', style: { background: u.color } }, u.key.slice(0, 2)), h('span', { class: 'kp-name' }, u.name),
-      h('span', { class: 'kp-sub muted' }, (c.todo + c.in_progress) + ' откр.' + (c.overdue ? ' · ' + c.overdue + ' просроч.' : '')));
-  }) : [h('p', { class: 'muted kp-empty' }, 'Юнитов нет')];
-  return h('div', { class: 'admin-overview' },
-    h('div', { class: 'kpis' },
-      kpi('Людей в команде', active.length, peopleList(active)),
-      kpi('CEO', count('superadmin'), peopleList(active.filter(p => p.access === 'superadmin'))),
-      kpi('PM', count('moderator'), peopleList(active.filter(p => p.access === 'moderator'))),
-      kpi('RM и лиды', count('rm') + count('lead'), peopleList(active.filter(p => p.access === 'rm' || p.access === 'lead'))),
-      kpi('Сотрудники', count('member'), peopleList(active.filter(p => p.access === 'member'))),
-      kpi('Юниты', units.length, unitList)),
-    h('div', { class: 'home-grid' },
-      h('div', { class: 'home-col' }, attentionBlock(ov), workloadBlock(ov, { all: true })),
-      h('div', { class: 'home-col' },
-        h('section', null,
-          h('div', { class: 'section-head' }, h('h2', null, 'Быстрые действия')),
-          // всё открывается окном здесь же
-          h('div', { class: 'quick-actions-grid' },
-            h('button', { class: 'qa', onclick: () => openCreateTask() }, icon('checklist', 16), 'Новая задача'),
-            h('button', { class: 'qa', onclick: () => addPersonDialog(() => rerender()) }, icon('user', 16), 'Добавить человека'),
-            h('button', { class: 'qa', onclick: openCreateUnit }, icon('board', 16), 'Новый юнит'),
-            h('button', { class: 'qa', onclick: () => editTemplate(null, () => toast('Шаблон создан')) }, icon('copy', 16), 'Новый шаблон'))),
-        h('section', null,
-          h('div', { class: 'section-head' }, h('h2', null, 'Ваши права')),
-          h('div', { class: 'card-box rights' },
-            right(true, isSuper() ? 'Все юниты: задачи, поля, колонки, состав' : 'Свои юниты: задачи, поля, колонки, состав'),
-            right(true, 'Люди: добавление, позиции, вход и отключение'),
-            right(isSuper(), 'Приложения: создание, перенос между юнитами'),
-            right(isSuper(), 'Роли: PM, RM, Lead, CEO'))))));
-}
-
-/** Список у плитки обзора: открывается рядом, закрывается кликом мимо. */
-function kpiPopover(anchor, title, rows) {
-  menu(anchor, [{ title }, h('div', { class: 'kp-list' }, rows)]);
-}
-
-const right = (ok, text) => h('div', { class: 'right-row' + (ok ? '' : ' no') }, icon(ok ? 'check' : 'x', 14), text);
 
 /** Переключатель «Активные / Корзина» над таблицами юнитов. */
 function unitsSwitch(trash) {
