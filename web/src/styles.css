@@ -2048,3 +2048,5 @@ button.prefs-row { width: 100%; border: 0; border-radius: 0; background: none; c
   .field-row { flex-wrap: wrap; }
   .field-row .spacer { display: none; }
 }
+.panel.center.unit-panel { width: min(640px, calc(100vw - 32px)); max-height: min(760px, calc(100vh - 48px)); display: flex; flex-direction: column; }
+.unit-panel .panel-head { flex-wrap: wrap; }

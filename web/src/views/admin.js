@@ -3,10 +3,10 @@ import Sortable from 'sortablejs';
 import { AUTO_ARCHIVE, HIDE_DONE } from '../state.js';
 import { reviewSection, openFieldEditor, requiredLabel } from './settings.js';
 import { TYPE_LABELS } from '../state.js';
-import { S, LS, me, byOrder, unitById, emptyCounts, personById, todayStr, isSuper, plural, LINK_KINDS, activeDepts, deptById, activeTeams } from '../state.js';
+import { S, LS, me, ceoDefault, byOrder, unitById, emptyCounts, personById, todayStr, isSuper, plural, LINK_KINDS, activeDepts, deptById, activeTeams } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, toast, confirmDlg, menu, modal, field } from '../ui.js';
 import { call, send } from '../api.js';
-import { currentView, link, navigate, rerender } from '../router.js';
+import { currentView, link, rerender } from '../router.js';
 import { renderSidebar } from './sidebar.js';
 import { attentionBlock, workloadBlock, roleBadge } from './home.js';
 import { peopleManager, positionsManager, teamsManager, addPersonDialog, teamChips, positionChips, addMemberDialog } from './people.js';
@@ -173,7 +173,7 @@ function unitsTable(ov) {
     const c = u.counts || emptyCounts();
     const people = (u.members || []).map(personById).filter(p => p && p.active);
     const rv = unitReviewers(u);
-    return h('button', { class: 'un-row', onclick: () => navigate({ unit: u.id, mode: 'overview' }) },
+    return h('button', { class: 'un-row', onclick: () => openUnitPanel(u, draw) },
       h('span', { class: 'un-name' }, h('span', { class: 'uc-icon sm', style: { background: u.color } }, u.key.slice(0, 2)),
         h('b', null, u.name), h('span', { class: 'muted' }, u.key)),
       h('span', { class: 'un-col' }, h('span', { class: 'un-k' }, 'Люди'),
@@ -201,6 +201,62 @@ const unitReviewers = u => {
   if (!r.column) return [];
   return [...new Set([...Object.values(r.byPosition || {}), r.default].filter(Boolean))].map(personById).filter(Boolean);
 };
+
+/** Карточка юнита окном по центру: команды и люди (добавить/убрать), задачи, ревью; отсюда — в сам юнит, на доску, в настройки. */
+function openUnitPanel(u, onChange) {
+  const root = $('#panel-root');
+  const close = () => { document.removeEventListener('keydown', onKey, true); fill(root); onChange(); };
+  const onKey = e => { if (e.key === 'Escape' && !document.querySelector('.modal') && !document.querySelector('.menu')) { e.stopPropagation(); close(); } };
+  document.addEventListener('keydown', onKey, true);
+  const body = h('div', { class: 'up-body' });
+  const remove = async p => {
+    if (!(await confirmDlg(`Убрать ${p.name} из «${u.name}»? Его задачи в юните останутся за ним.`, { ok: 'Убрать', danger: true }))) return;
+    const list = await send('removeMember', { unitId: u.id, personId: p.id });
+    u.members = list.map(m => m.personId);
+    draw();
+  };
+  const draw = () => {
+    const c = u.counts || emptyCounts();
+    const people = (u.members || []).map(personById).filter(p => p && p.active);
+    const groups = activeTeams().map(t => ({ t, people: people.filter(p => (p.teamIds || []).includes(t.id)) })).filter(g => g.people.length);
+    const loose = people.filter(p => !(p.teamIds || []).some(id => activeTeams().some(t => t.id === id)));
+    if (loose.length) groups.push({ t: { name: 'Без команды', color: 'var(--muted)' }, people: loose });
+    const rv = unitReviewers(u);
+    const r = u.settings.review || {};
+    const col = r.column && u.settings.columns.find(x => x.id === r.column);
+    const stat = (label, n, cls) => h('div', { class: 'up-stat' + (cls ? ' ' + cls : '') }, h('b', null, n), h('span', null, label));
+    fill(body,
+      h('section', null,
+        h('div', { class: 'up-head' }, h('h3', null, 'Задачи')),
+        h('div', { class: 'up-stats' }, stat('не начато', c.todo), stat('в работе', c.in_progress), stat('готово', c.done), stat('просрочено', c.overdue, c.overdue ? 'warn' : ''))),
+      h('section', null,
+        h('div', { class: 'up-head' }, h('h3', null, 'Команды и люди'),
+          h('button', { class: 'btn ghost sm', onclick: async () => { if (await addMemberDialog(u.id)) { u.members = unitById(u.id).members || u.members; draw(); } } }, icon('plus', 14), 'Добавить')),
+        groups.length ? groups.map(g => h('div', { class: 'up-team' },
+          h('div', { class: 'up-team-name' }, h('span', { class: 'dot', style: { background: g.t.color } }), g.t.name, h('span', { class: 'muted' }, g.people.length)),
+          g.people.map(p => h('div', { class: 'up-person' }, avatar(p, 'sm'), h('span', { class: 'up-pname', 'data-pcard': p.id }, p.name),
+            h('span', { class: 'muted up-pos' }, (p.positionIds || []).map(id => (deptById(id) || {}).name).filter(Boolean).join(', ')),
+            h('button', { class: 'icon-btn sm', title: 'Убрать из юнита', onclick: () => remove(p).catch(showErr) }, icon('x', 14))))))
+          : h('p', { class: 'muted' }, 'В юните пока никого — добавьте участников.')),
+      h('section', null,
+        h('div', { class: 'up-head' }, h('h3', null, 'Ревью'),
+          h('button', { class: 'btn ghost sm', onclick: () => openReviewEditor(u, draw) }, icon('edit', 13), 'Настроить')),
+        col ? h('p', { class: 'up-line' }, 'Колонка «' + col.name + '» · ', rv.length ? rv.map(p => p.name).join(', ') : h('span', { class: 'warn-text' }, 'ревьюеры не выбраны'))
+          : h('p', { class: 'muted up-line' }, 'Выключено')));
+  };
+  draw();
+  fill(root,
+    h('div', { class: 'panel-backdrop center', onclick: close }),
+    h('aside', { class: 'panel center unit-panel', role: 'dialog', 'aria-label': u.name },
+      h('div', { class: 'panel-head' },
+        h('span', { class: 'uc-icon sm', style: { background: u.color } }, u.key.slice(0, 2)),
+        h('b', null, u.name), h('span', { class: 'muted' }, u.key), h('span', { class: 'spacer' }),
+        !ceoDefault() && link({ unit: u.id, mode: 'settings' }, { class: 'btn ghost sm', onclick: () => fill(root) }, icon('settings', 14), 'Настройки'),
+        link({ unit: u.id, mode: 'board' }, { class: 'btn sm', onclick: () => fill(root) }, icon('board', 14), 'Доска'),
+        link({ unit: u.id, mode: 'overview' }, { class: 'btn primary sm', onclick: () => fill(root) }, 'Открыть юнит', icon('arrowUpRight', 14)),
+        h('button', { class: 'icon-btn', title: 'Закрыть', onclick: close }, icon('x', 18))),
+      body));
+}
 
 /* ---------- карточка: поля-ссылки ---------- */
 
