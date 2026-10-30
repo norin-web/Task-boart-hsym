@@ -251,7 +251,8 @@ export function openReleaseHistory() {
       stat(s.avgReviewDays == null ? '—' : s.avgReviewDays < 1 ? '< 1 дн.' : s.avgReviewDays + ' дн.', 'среднее ревью Apple'));
     fill(list, d.rows.length
       ? [h('div', { class: 'rh-row rh-head muted' }, h('span', null, 'Приложение'), h('span', null, 'Версия'), h('span', null, 'Отправлено'), h('span', null, 'Итог'), h('span', null, 'Ревью')),
-        d.rows.map(x => h('button', { class: 'rh-row', onclick: () => import('./task.js').then(m => m.peekTask(x.unitId, x.taskId)) },
+        // карточка релиза открывается поверх всего — окно истории закрываем (не прятать карточку под ним)
+        d.rows.map(x => h('button', { class: 'rh-row', onclick: () => { closeHistory(); import('./task.js').then(m => m.peekTask(x.unitId, x.taskId)); } },
           h('span', { class: 'rh-app' }, x.app ? h('b', null, x.app.name) : x.key, x.n > 1 && h('span', { class: 'muted' }, ` · попытка ${x.n}`)),
           h('span', { class: 'muted' }, x.version || '—'),
           h('span', null, fmtD(x.submittedAt)),
@@ -262,7 +263,7 @@ export function openReleaseHistory() {
   }
   paintSeg();
   paintApps();
-  modal({
+  const closeHistory = modal({
     title: 'История релизов',
     wide: true,
     body: [h('div', { class: 'rh-bar' }, seg, dates), h('div', { class: 'rh-filters' }, unitSel, appSel, resSel), stats, list],
