@@ -780,6 +780,8 @@ declare
   v_kind text := 'assigned';
 begin
   if new.assignee_id is not distinct from v_old then return new; end if;
+  -- этап ещё ждёт предыдущих — исполнитель его пока не видит; когда откроется, придёт «Можно начинать»
+  if new.depends_on <> '[]'::jsonb and open_deps(new.depends_on) is not null then return new; end if;
   -- тестовые задачи (шорткаты разработчика) не беспокоят реальных людей
   if new.is_test and not exists (select 1 from people where id = new.assignee_id and is_dev) then return new; end if;
   if tg_op = 'UPDATE' and new.status is distinct from old.status then
@@ -898,6 +900,53 @@ begin
     return next v_id;
   end loop;
   perform set_config('app.system', 'off', true);
+end $$;
+
+-- QA нашёл баги: «Вернуть в разработку» — закрытые этапы, от которых зависит тестирование (обычно iOS), снова в работе
+-- у их исполнителей; список багов — комментарием к этим этапам и уведомление «вернули»; этап QA — снова «не начат» и ждёт.
+create or replace function qa_return(p_task text, p_text text) returns integer
+language plpgsql security definer set search_path = public as $$
+declare
+  t tasks;
+  d tasks;
+  v_me text := my_person_id();
+  at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+  v_todo text;
+  v_prog text;
+  n int := 0;
+begin
+  select * into t from tasks where id = p_task;
+  if t.id is null then raise exception 'Задача не найдена' using errcode = 'P0001'; end if;
+  if not (can_manage(t.unit_id) or t.assignee_id = v_me) then
+    raise exception 'Вернуть в разработку может исполнитель тестирования (или PM)' using errcode = '42501';
+  end if;
+  if btrim(coalesce(p_text, '')) = '' then raise exception 'Опишите баги' using errcode = 'P0001'; end if;
+  perform set_config('app.system', 'on', true);
+  for d in select * from tasks where id in (select jsonb_array_elements_text(t.depends_on)) and task_done(id) loop
+    select c ->> 'id' into v_prog from units u, jsonb_array_elements(u.settings -> 'columns') c
+     where u.id = d.unit_id and c ->> 'kind' = 'progress' limit 1;
+    update tasks set status = coalesce(v_prog, status), done_at = '', updated_at = at_ where id = d.id;
+    insert into comments (id, task_id, text, author_id, at)
+    values ('c_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), d.id, left('Баги от QA: ' || btrim(p_text), 5000), coalesce(v_me, ''), at_);
+    insert into activity (id, unit_id, task_id, action, field, from_val, to_val, actor_id, at)
+    values ('a_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), d.unit_id, d.id, 'update', 'status', to_jsonb(d.status)::text, to_jsonb(coalesce(v_prog, d.status))::text, coalesce(v_me, ''), at_);
+    if d.assignee_id <> '' then
+      delete from notifications where task_id = d.id and person_id = d.assignee_id and read_at = '';
+      insert into notifications (id, person_id, task_id, kind, actor_id, at)
+      values ('n_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), d.assignee_id, d.id, 'returned', coalesce(v_me, ''), at_);
+    end if;
+    n := n + 1;
+  end loop;
+  if n = 0 then
+    perform set_config('app.system', 'off', true);
+    raise exception 'Возвращать нечего: этапы до тестирования ещё не закрыты' using errcode = 'P0001';
+  end if;
+  select c ->> 'id' into v_todo from units u, jsonb_array_elements(u.settings -> 'columns') c where u.id = t.unit_id and c ->> 'kind' = 'todo' limit 1;
+  update tasks set status = coalesce(v_todo, status), done_at = '', updated_at = at_ where id = t.id;
+  insert into activity (id, unit_id, task_id, action, field, from_val, to_val, actor_id, at)
+  values ('a_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), t.unit_id, t.id, 'comment', '', '', to_jsonb(left('Вернул в разработку: ' || btrim(p_text), 200))::text, coalesce(v_me, ''), at_);
+  perform set_config('app.system', 'off', true);
+  return n;
 end $$;
 
 -- Этап, розданный на подзадачи (step = 'part'), закрывается сам, когда закрыты все его подзадачи.

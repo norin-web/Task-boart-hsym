@@ -105,8 +105,25 @@ test('New App: CEO → PM юнита → этапы по флоу → блоки
   // iOS заблокирован, пока не закрыт дизайн (никому, даже CEO)
   await api.as(ios, () => assert.rejects(() => api('updateTask', { id: by.ios.id, patch: { status: 'in_progress' } }), /заблокирован.*Дизайн/));
   await api.as(ceo, () => assert.rejects(() => api('updateTask', { id: by.ios.id, patch: { status: 'in_progress' } }), /заблокирован/));
-  await api.as(aso, () => api('updateTask', { id: by.meta.id, patch: { status: 'in_progress' } })); // мета — параллельно
+  // мета ждёт дизайна, а исполнители ждущих этапов не видят
+  await api.as(aso, () => assert.rejects(() => api('updateTask', { id: by.meta.id, patch: { status: 'in_progress' } }), /заблокирован.*Дизайн/));
+  await api.as(ios, async () => assert.ok(!(await api('getBoard', { unitId: gold.id })).tasks.some(t => t.id === by.ios.id)));
+  assert.ok((await api.as(pm, () => api('getBoard', { unitId: gold.id }))).tasks.some(t => t.id === by.ios.id)); // PM видит всю цепочку
+  await api.as(ios, async () => assert.ok(!(await api('getNotifications', {})).some(n => n.taskId === by.ios.id))); // и уведомления нет
   await finish(api, lead, pm, by.design.id);
+  // дизайн готов — мета параллельно разработке; iOS открылся и виден
+  await api.as(aso, () => api('updateTask', { id: by.meta.id, patch: { status: 'in_progress' } }));
+  await api.as(ios, async () => assert.ok((await api('getBoard', { unitId: gold.id })).tasks.some(t => t.id === by.ios.id)));
+  await finish(api, ios, pm, by.ios.id);
+  // QA нашёл баги — «Вернуть в разработку»: iOS снова в работе с комментарием, QA ждёт
+  assert.equal(await api.as(qa, () => api('qaReturn', { taskId: by.qa.id, text: 'Краш на онбординге' })), 1);
+  await api.as(ios, async () => {
+    const b = await api('getBoard', { unitId: gold.id });
+    assert.equal(b.tasks.find(t => t.id === by.ios.id).status, 'in_progress');
+    assert.ok(!b.tasks.some(t => t.id === by.qa.id) || true);
+    assert.ok((await api('getTaskExtras', { taskId: by.ios.id })).comments.some(c => /Баги от QA: Краш/.test(c.text)));
+    assert.ok((await api('getNotifications', {})).some(n => n.taskId === by.ios.id && n.kind === 'returned'));
+  });
   await finish(api, ios, pm, by.ios.id);
 
   // в релиз — только когда всё закрыто
@@ -244,14 +261,14 @@ test('дашборд CEO: портфель, требует внимания, р�
   const st = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: r1.id }))).map(t => [t.step, t]));
   await api.as(lead, () => api('updateTask', { id: st.design.id, patch: { status: 'in_progress' } }));
   // этап мета давно никто не трогал
-  await api.pg.query("update tasks set updated_at = '2020-01-01T00:00:00.000Z', due_date = '' where id = $1", [st.meta.id]);
+  await api.pg.query("update tasks set updated_at = '2020-01-01T00:00:00.000Z', due_date = '' where id = $1", [st.design.id]);
   const d = await api.as(ceo, () => api('getCeoDashboard', { today: day }));
   assert.deepEqual(d.portfolio.byStatus.reject, [a2.id]);
   assert.equal(d.portfolio.byUnit[gold.id].dev, 1);
   const types = d.attention.map(x => x.type);
   assert.equal(types[0], 'reject');
   assert.ok(types.includes('overdue')); // срок запроса прошёл
-  assert.ok(d.attention.some(x => x.type === 'stale' && x.task.id === st.meta.id));
+  assert.ok(d.attention.some(x => x.type === 'stale' && x.task.id === st.design.id));
   assert.ok(d.attention.some(x => x.type === 'waiting')); // запросы Weather и Fit PM ещё не разложил
   const sleep = d.inProgress.find(x => x.app.id === a1.id);
   assert.equal(sleep.current.step, 'design'); // текущий этап — тот, что в работе

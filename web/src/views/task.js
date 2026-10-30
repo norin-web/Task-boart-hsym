@@ -105,6 +105,10 @@ function buildPanel(t) {
         h('span', null, 'На ревью у ' + ((personById(t.assigneeId) || {}).name || 'ревьюера') + '. Что-то забыли?'),
         h('button', { class: 'btn sm', onclick: () => recallReview(t) }, icon('back', 13), 'Забрать из ревью'))
       : !editable && h('div', { class: 'readonly-note' }, icon('alert', 14), 'Только просмотр: менять можно свои задачи'),
+    // тестирование: нашли баги — вернуть предыдущий этап (разработку) в работу со списком багов
+    t.step === 'qa' && !taskDone(t) && (t.assigneeId === S.meId || isStaff()) && h('div', { class: 'qa-bar' }, icon('alert', 15),
+      h('span', null, 'Нашли баги?'), h('span', { class: 'spacer' }),
+      h('button', { class: 'btn sm', onclick: () => openQaReturn(t) }, icon('back', 13), 'Вернуть в разработку')),
     t.step === 'release' && t.assigneeId && releaseBlock(t, () => reloadBoard().catch(() => {})),
     t.kind === 'request' || t.kind === 'stage' ? [flowBlock(t), t.kind === 'stage' && treeBlock(t)] : treeBlock(t),
     !B.description.hidden && descriptionBlock(t, B.description.label, editable),
@@ -222,6 +226,25 @@ function handoverPeople(t) {
   return (S.board.members || []).map(m => personById(m.personId))
     .filter(p => p && p.active && p.id !== S.meId && (!t.departmentId || (p.positionIds || []).includes(t.departmentId)))
     .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+}
+
+/** QA: «Вернуть в разработку» — список багов уйдёт комментарием в этап разработки, он снова в работе, тестирование ждёт. */
+function openQaReturn(t) {
+  const ta = h('textarea', { class: 'inp', rows: 6, maxlength: 5000, placeholder: '1. Краш при открытии онбординга\n2. Кнопка «Купить» не реагирует на iPhone SE\n…' });
+  modal({
+    title: 'Вернуть в разработку',
+    body: [h('p', { class: 'hint', style: { margin: '0 0 8px' } }, 'Этап разработки снова будет в работе у исполнителя, баги — комментарием в нём. Тестирование подождёт исправлений.'),
+      field('Баги', ta)],
+    actions: [{ label: 'Отмена' }, { label: 'Вернуть', primary: true, action: async close => {
+      if (!ta.value.trim()) { ta.focus(); return; }
+      await send('qaReturn', { taskId: t.id, text: ta.value.trim() });
+      close();
+      toast('Вернули в разработку');
+      if (S.board && S.board.unit.id === t.unitId) await reloadBoard().catch(() => {});
+      refreshPanel(t);
+    } }],
+  });
+  setTimeout(() => ta.focus(), 0);
 }
 
 /** Меню «Из шаблона»: свои шаблоны чеклистов; onPick(items). */

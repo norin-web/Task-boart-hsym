@@ -1802,3 +1802,5 @@ a.rc-more { text-decoration: none; }
 .split-st.accent { color: var(--accent-text); }
 .split-due { font-size: 12px; text-align: right; }
 .fc-title.done { text-decoration: line-through; color: var(--muted); }
+.qa-bar { display: flex; align-items: center; gap: 10px; padding: 9px 12px; margin-bottom: 14px; border-radius: var(--r); border: 1px solid var(--border); background: var(--surface-2); font-size: 13.5px; }
+.qa-bar > .i { color: var(--warn); }

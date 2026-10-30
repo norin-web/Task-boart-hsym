@@ -23,7 +23,7 @@ export const DEFAULT_FLOWS = {
     { key: 'design', title: 'Дизайн', positionId: 'd_design', dependsOn: [] },
     { key: 'ios', title: 'Разработка iOS', positionId: 'd_ios', dependsOn: ['design'] },
     { key: 'qa', title: 'Тестирование', positionId: 'd_qa', dependsOn: ['ios'] },
-    { key: 'meta', title: 'Мета (ASO)', positionId: 'd_aso', dependsOn: [] },
+    { key: 'meta', title: 'Мета (ASO)', positionId: 'd_aso', dependsOn: ['design'] }, // после дизайна, параллельно разработке и тестированию
     { key: 'release', title: 'Релиз', positionId: 'd_release', dependsOn: ['design', 'ios', 'qa', 'meta'], release: true },
   ],
   update: [
@@ -592,6 +592,32 @@ export function createBackend(db, opts = {}) {
     return s.length > 1000 ? JSON.stringify(String(v).slice(0, 300) + '…') : s;
   };
 
+  /**
+   * Ждущие этапы (есть незакрытые зависимости) — исполнителям не показываем (решение заказчика): ни на доске, ни в «Моих задачах».
+   * CEO и PM юнита видят всю цепочку. rows — строки tasks; возвращает без ждущих.
+   */
+  async function hideWaiting(rows) {
+    const deps = [...new Set(rows.flatMap(r => json(r.depends_on, []) || []))];
+    if (!deps.length) return rows;
+    const known = Object.fromEntries(rows.map(r => [r.id, r]));
+    const missing = deps.filter(id => !known[id]);
+    const more = missing.length ? await run(T('tasks').select('id,unit_id,status').in('id', missing)) : [];
+    const all_ = { ...known, ...Object.fromEntries(more.map(r => [r.id, r])) };
+    const unitIds = [...new Set(Object.values(all_).map(r => r.unit_id))];
+    const units = unitIds.length ? await run(T('units').select('id,settings').in('id', unitIds)) : [];
+    const ST = Object.fromEntries(units.map(u => [u.id, unitSettings(u.settings)]));
+    const done = r => !!r && !!ST[r.unit_id] && kindOf(ST[r.unit_id], r.status) === 'done';
+    const out = [];
+    for (const r of rows) {
+      const ds = json(r.depends_on, []) || [];
+      if (!ds.length) { out.push(r); continue; }
+      // зависимость может быть не видна этому человеку (чужая позиция) — тогда спрашиваем базу
+      if (ds.some(id => !all_[id])) { if (!(await rpc('open_deps', { p_deps: ds }))) out.push(r); continue; }
+      if (!ds.some(id => !done(all_[id]))) out.push(r);
+    }
+    return out;
+  }
+
   async function log(entries, ctx) {
     if (!entries.length) return;
     const by = actor(ctx);
@@ -874,6 +900,7 @@ export function createBackend(db, opts = {}) {
         return b.order('updated_at', { ascending: false }).order('id');
       });
       rows = rows.filter(r => units[r.unit_id]);
+      if (p.assigneeId) rows = await hideWaiting(rows); // «Мои задачи»: ждущие этапы появятся, когда откроются
       if (q) rows = rows.filter(r => `${units[r.unit_id].key}-${r.num} ${r.title} ${r.description}`.toLowerCase().includes(q));
       return rows.slice(0, Math.min(Number(p.limit) || 50, 500)).map(r => {
         const u = units[r.unit_id];
@@ -888,14 +915,17 @@ export function createBackend(db, opts = {}) {
     async getBoard(p) {
       const unit = await findUnit(p.unitId);
       await autoArchive(unit);
-      const [fields, tasks, counts, units, ppl, depts, members, links] = await Promise.all([
+      const [fields, allTasks, counts, units, ppl, depts, members, links, manages] = await Promise.all([
         unitFields(unit.id),
         all(() => T('tasks').select('*').eq('unit_id', unit.id).order('id')),
         rpc('comment_counts', { p_unit: unit.id }),
         all(() => T('units').select('id,name,key,color,archived').order('ord').order('id')),
         people(), departments(), unitMembers(unit.id),
         all(() => T('task_links').select('task_id,field_id,url').eq('unit_id', unit.id).order('task_id').order('field_id')),
+        rpc('can_manage', { p_unit: unit.id }),
       ]);
+      // исполнителям ждущие этапы не показываем; CEO и PM юнита видят всю цепочку (с пометкой «ждёт»)
+      const tasks = manages ? allTasks : await hideWaiting(allTasks);
       const cc = Object.fromEntries((counts || []).map(c => [c.task_id, Number(c.n)]));
       const lk = {};
       links.forEach(l => { (lk[l.task_id] || (lk[l.task_id] = {}))[l.field_id] = l.url; });
@@ -1368,7 +1398,7 @@ export function createBackend(db, opts = {}) {
         all(() => T('tasks').select('*').eq('assignee_id', me).eq('archived', false).order('id')),
         all(() => T('tasks').select('*').eq('review_from', me).eq('archived', false).order('id')),
       ]);
-      const rows = [...mine, ...sent.filter(t => !mine.some(x => x.id === t.id))];
+      const rows = await hideWaiting([...mine, ...sent.filter(t => !mine.some(x => x.id === t.id))]);
       const unitIds = [...new Set(rows.map(t => t.unit_id))];
       const [units, places] = await Promise.all([
         unitIds.length ? run(T('units').select('id,name,key,color,settings,archived').in('id', unitIds)) : [],
@@ -1996,6 +2026,12 @@ export function createBackend(db, opts = {}) {
       const res = await rpc('lead_split', { p_task: t.id, p_items: items });
       const ids = (Array.isArray(res) ? res : [res]).map(x => (typeof x === 'string' ? x : x && (x.lead_split || Object.values(x)[0]))).filter(Boolean);
       return ids.length ? (await run(T('tasks').select('*').in('id', ids))).map(taskOut) : [];
+    },
+
+    /** QA: «Вернуть в разработку» со списком багов — предыдущие этапы снова в работе, QA ждёт. Возвращает число этапов. */
+    async qaReturn(p) {
+      const t = await findTask(p.taskId);
+      return rpc('qa_return', { p_task: t.id, p_text: str(p.text, 5000) });
     },
 
     /** Лид передаёт свою задачу сотруднику своей позиции в юните (проверяет база). */
