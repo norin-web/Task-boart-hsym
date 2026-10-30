@@ -1,4 +1,4 @@
-import { S, greeting, me, personById, plural, emptyCounts, isStaff, deptById, todayStr, fmtDate, activeDepts, ACCESS_LABELS, relTime, dueInfo } from '../state.js';
+import { S, todayLabel, me, personById, plural, emptyCounts, isStaff, deptById, todayStr, fmtDate, activeDepts, ACCESS_LABELS, relTime, dueInfo } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, toast, menu, closeMenu, modal } from '../ui.js';
 import { call } from '../api.js';
 import { currentView, link, navigate, taskLink, rerender } from '../router.js';
@@ -204,7 +204,7 @@ export async function renderHome() {
   const draw = () => fill(page,
     h('div', { class: 'hero' },
       h('div', null,
-        h('h1', { class: 'row', style: { gap: '10px' } }, greeting() + (person ? ', ' + person.name.split(' ')[0] : ''), roleBadge(person)),
+        h('h1', { class: 'row', style: { gap: '10px' } }, todayLabel(), roleBadge(person)),
         h('p', null, dateStr[0].toUpperCase() + dateStr.slice(1) + ' · ' + summary(st))),
       h('div', { class: 'row' },
         h('button', { class: 'btn ghost', title: 'Настроить главную под себя', onclick: () => editLayout('home', BLOCKS, page, draw) }, icon('layers', 15), 'Настроить'),
@@ -267,7 +267,7 @@ export function attentionBlock(ov) {
     row: (p, done) => {
       const free = ov.unassignedTasks.filter(t => (ov.unitMembers[t.unit.id] || []).includes(p.id) && !t.assigneeId);
       return [h('span', { class: 'att-who', 'data-pcard': p.id }, avatar(p, 'sm'), p.name, h('small', { class: 'muted' }, personCaption(p))),
-        quickSelect(free.length ? 'Дать задачу…' : 'Свободных задач нет', free.map(t => [t.id, t.key + ' ' + t.title]),
+        quickSelect(free.length ? 'Поставить задачу…' : 'Свободных задач нет', free.map(t => [t.id, t.key + ' ' + t.title]),
           v => call('updateTask', { id: v, patch: { assigneeId: p.id } }).then(() => {
             ov.unassignedTasks.find(t => t.id === v).assigneeId = p.id;
             done('Задача назначена: ' + p.name);
@@ -361,7 +361,7 @@ export function workloadBlock(ov, { all = false } = {}) {
         const list = (await call('queryTasks', { assigneeId: p.id, limit: 200 })).filter(t => t.statusKind !== 'done' && (!flt.unit || t.unit.id === flt.unit));
         if (!opened.has(p.id)) return;
         fill(tasks, list.length ? taskGroups(list) : h('p', { class: 'muted', style: { margin: '4px 0' } }, 'Открытых задач нет'),
-          h('button', { class: 'btn ghost sm', style: { marginTop: '6px' }, onclick: () => give(p) }, icon('plus', 13), 'Дать задачу'));
+          h('button', { class: 'btn ghost sm', style: { marginTop: '6px' }, onclick: () => give(p) }, icon('plus', 13), 'Поставить задачу'));
       } catch (e) { showErr(e); }
     };
     const toggle = () => {
@@ -411,8 +411,8 @@ export function workloadBlock(ov, { all = false } = {}) {
     fill(body,
       shown.length ? shown.map(r => personRow(r, max)) : h('p', { class: 'muted', style: { margin: 0 } }, flt.pos || flt.unit ? 'Никого по этим фильтрам' : 'Участников пока нет'),
       !flt.unit && !flt.pos && pos.length > 0 && h('div', { class: 'load-pos' }, pos.map(({ d, c }) => h('button', {
-        class: 'chip', title: 'Показать только ' + d.name, onclick: () => { flt.pos = d.id; draw(); },
-        style: { background: `color-mix(in srgb, ${d.color} 16%, transparent)`, color: d.color },
+        class: 'chip tag', title: 'Показать только ' + d.name, onclick: () => { flt.pos = d.id; draw(); },
+        style: { '--dc': d.color },
       }, d.name + ': ' + c.open + (c.overdue ? ' · ' + c.overdue + ' просроч.' : '')))));
   };
   draw();
@@ -446,7 +446,7 @@ function stat(label, value, ic, color, pick) {
     new MutationObserver((_, obs) => { if (!m.isConnected) { anchor.classList.remove('on'); obs.disconnect(); } }).observe(document.body, { childList: true });
   };
   return h(pick ? 'button' : 'div', { class: 'stat' + (pick ? ' clickable' : ''), onclick: pick && value ? open : null },
-    h('div', { class: 'stat-ic', style: { background: `color-mix(in srgb, ${color} 14%, transparent)`, color } }, icon(ic, 18)),
+    h('div', { class: 'stat-ic' }, icon(ic, 18)),
     h('div', null, h('div', { class: 'stat-val' }, value), h('div', { class: 'stat-label' }, label)));
 }
 
@@ -543,7 +543,7 @@ async function renderMemberHome() {
   ].filter(Boolean);
   const draw = () => fill(page,
     h('div', { class: 'hero' },
-      h('h1', null, greeting() + (person ? ', ' + person.name.split(' ')[0] : '')),
+      h('h1', null, todayLabel()),
       h('button', { class: 'btn ghost sm', title: 'Настроить дашборд под себя', onclick: () => editLayout('memberHome', BLOCKS, page, draw) }, icon('layers', 14), 'Настроить')),
     renderLayout('memberHome', BLOCKS));
   draw();

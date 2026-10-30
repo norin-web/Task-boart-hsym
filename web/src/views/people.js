@@ -23,8 +23,8 @@ function dictChips(ids, byId, { main = false, empty = '' } = {}) {
   const list = ids.map(byId).filter(Boolean);
   if (!list.length) return h('span', { class: 'muted pos-empty' }, empty);
   return h('span', { class: 'pos-chips' }, list.map((d, i) => h('span', {
-    class: 'chip dept-chip' + (main && i === 0 ? ' main' : ''), title: main ? (i === 0 ? 'Основная' : 'Дополнительная') : d.name,
-    style: { background: `color-mix(in srgb, ${d.color} 16%, transparent)`, color: d.color },
+    class: 'chip tag dept-chip' + (main && i === 0 ? ' main' : ''), title: main ? (i === 0 ? 'Основная' : 'Дополнительная') : d.name,
+    style: { '--dc': d.color },
   }, d.name)));
 }
 

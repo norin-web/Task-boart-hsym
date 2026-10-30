@@ -269,6 +269,11 @@ export function fmtValue(f, v) {
   }
 }
 
+/** Заголовок дашборда: «Пятница, 1 ноября». */
+export function todayLabel() {
+  const t = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
 export function greeting() {
   const h = new Date().getHours();
   if (h < 5) return 'Доброй ночи';

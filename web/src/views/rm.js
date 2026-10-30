@@ -2,7 +2,7 @@
  * Дашборд RM (главная RM): очередь на релиз (переданные PM — чего не хватает до отправки), на ревью Apple (сколько ждут;
  * «Вышло в стор» / «Реджект» прямо здесь), реджекты (причина, кто исправляет; «Отправить снова»). Клик — карточка релиза.
  */
-import { me, personById, greeting, plural, relTime } from '../state.js';
+import { me, personById, todayLabel, plural, relTime } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, toast, confirmDlg } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
@@ -28,7 +28,7 @@ export async function renderRmHome() {
     if (currentView() !== 'home') return;
     const person = me();
     fill(page,
-      h('div', { class: 'ceo-hello' }, h('h2', null, greeting() + (person ? ', ' + person.name.split(' ')[0] : ''))),
+      h('div', { class: 'ceo-hello' }, h('h2', null, todayLabel())),
       newsBlock(),
       // свои приложения и задачи «в фокусе» — статус обновляется сам
       watchBlock([], { openApp: id => openAppById(id, load), openTask: peekTask, appIcon, appStatusCell, stageDots, release: true, prioTag }),

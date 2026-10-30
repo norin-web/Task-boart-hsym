@@ -2,7 +2,7 @@
  * Дашборд CEO (главная CEO в обоих режимах): портфель приложений по статусам и юнитам, что требует внимания,
  * работы в ходу (запросы и текущий этап), что недавно вышло. Клик — карточка приложения или задача поверх.
  */
-import { S, isSuper, personById, unitById, REQUEST_TYPES, greeting, me, plural, fmtDate, relTime, todayStr, appStatusById } from '../state.js';
+import { S, isSuper, personById, unitById, REQUEST_TYPES, todayLabel, me, plural, fmtDate, relTime, todayStr, appStatusById } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, menu, modal, field } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
@@ -38,7 +38,7 @@ export async function renderCeoHome() {
     // без юнитов показывать нечего; юниты есть, а приложений нет — дашборд целиком, сверху подсказка
     if (!units().length) {
       return fill(page,
-        h('div', { class: 'ceo-hello' }, h('h2', null, greeting() + (person ? ', ' + person.name.split(' ')[0] : ''))),
+        h('div', { class: 'ceo-hello' }, h('h2', null, todayLabel())),
         newsBlock(),
         h('div', { class: 'card-box empty-state' },
           h('h2', null, 'Приложений пока нет'),
@@ -57,7 +57,7 @@ export async function renderCeoHome() {
       onDelete: id => { setCustomBlocks(customBlocks().filter(b => 'c:' + b.id !== id)); edit(); },
     });
     const draw = () => fill(page,
-      h('div', { class: 'ceo-hello row' }, h('h2', null, greeting() + (person ? ', ' + person.name.split(' ')[0] : '')),
+      h('div', { class: 'ceo-hello row' }, h('h2', null, todayLabel()),
         h('span', { class: 'spacer' }),
         h('button', { class: 'btn ghost sm', title: 'Блоки, статистика и свои подборки', onclick: edit }, icon('layers', 14), 'Настроить')),
       !total && h('div', { class: 'card-box empty-state sm' },
@@ -121,7 +121,7 @@ export function inProgress(d, reload) {
     || (a.request.dueDate || '9999').localeCompare(b.request.dueDate || '9999'));
   const today = todayStr();
   return h('section', null,
-    h('div', { class: 'section-head' }, h('h2', null, 'Работы в ходу')),
+    h('div', { class: 'section-head' }, h('h2', null, 'Работы в процессе')),
     rows.length
       ? h('div', { class: 'card-box wip-list' },
         h('div', { class: 'wip-row wip-head', 'aria-hidden': 'true' },
@@ -214,7 +214,7 @@ export function statBlocks(d, apps, reload) {
       return h('div', { class: 'rc-row' }, avatar(p, 'sm'), h('span', { class: 'rc-main', 'data-pcard': p.id }, h('b', null, p.name)),
         h('span', { class: 'muted rc-at' }, mine.length + ' в работе', late > 0 && h('span', { class: 'warn-text' }, ' · ' + late + ' просроч.')));
     }), 'PM нет')) },
-    { id: 'stale', title: 'Забытые приложения', col: 'right', render: () => section('Давно не трогали', list(stale.map(a => appRow(a, h('span', { class: 'muted rc-at' }, relTime(a.lastActivity)))), 'Таких нет'), stale.length || null) },
+    { id: 'stale', title: 'Без движения', col: 'right', render: () => section('Давно не трогали', list(stale.map(a => appRow(a, h('span', { class: 'muted rc-at' }, relTime(a.lastActivity)))), 'Таких нет'), stale.length || null) },
     { id: 'shipped', title: 'Выпущено за 30 дней', col: 'right', render: () => section('Выпущено за 30 дней', list([
       ...live30.map(a => appRow(a, h('span', { class: 'muted rc-at' }, 'в сторе · ' + relTime(a.statusAt)))),
       ...done30.map(({ a, r }) => appRow(a, h('span', { class: 'muted rc-at' }, r.title.slice(0, 40) + ' · ' + relTime(r.doneAt))))], 'Пока ничего')) },
@@ -234,7 +234,7 @@ function ceoBlocks(d, apps, reload) {
     // внимание и недавнее — рядом, широкая таблица работ — на всю ширину под ними
     { id: 'attention', title: 'Требует внимания', col: 'left', render: () => attention(d, reload) },
     { id: 'recent', title: 'Недавнее', col: 'right', render: () => recent(d, reload) },
-    { id: 'inprogress', title: 'Работы в ходу', col: 'full', render: () => inProgress(d, reload) },
+    { id: 'inprogress', title: 'Работы в процессе', col: 'full', render: () => inProgress(d, reload) },
   ];
   // свои подборки
   for (const b of customBlocks()) blocks.push({ id: 'c:' + b.id, title: b.name, col: b.col || 'right', custom: true, render: () => customBlock(b, apps, reload) });

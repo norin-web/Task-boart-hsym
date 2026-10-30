@@ -3,7 +3,7 @@
  * «Передать в релиз»), проблемы (просрочено, долго на ревью, без исполнителя, без движения, готово к релизу)
  * и команда с KPI за неделю / месяц / квартал. Только юниты PM (видимость решает база).
  */
-import { S, me, personById, deptById, REQUEST_TYPES, LS, greeting, plural, fmtDate, todayStr } from '../state.js';
+import { S, me, personById, deptById, REQUEST_TYPES, LS, todayLabel, plural, fmtDate, todayStr } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill } from '../ui.js';
 import { call } from '../api.js';
 import { currentView } from '../router.js';
@@ -32,7 +32,7 @@ export async function renderPmHome() {
     if (currentView() !== 'home') return;
     const person = me();
     fill(page,
-      h('div', { class: 'ceo-hello' }, h('h2', null, greeting() + (person ? ', ' + person.name.split(' ')[0] : ''))),
+      h('div', { class: 'ceo-hello' }, h('h2', null, todayLabel())),
       newsBlock(),
       inbox(d, load),
       h('div', { class: 'home-grid' },

@@ -111,7 +111,7 @@ function buildPanel(t) {
       : !editable && h('div', { class: 'readonly-note' }, icon('alert', 14), 'Только просмотр: менять можно свои задачи'),
     // тестирование: нашли баги — вернуть предыдущий этап (разработку) в работу со списком багов
     t.step === 'qa' && !taskDone(t) && (t.assigneeId === S.meId || isStaff()) && h('div', { class: 'qa-bar' }, icon('alert', 15),
-      h('span', null, 'Нашли баги?'), h('span', { class: 'spacer' }),
+      h('span', null, 'Есть баги?'), h('span', { class: 'spacer' }),
       h('button', { class: 'btn sm', onclick: () => openQaReturn(t) }, icon('back', 13), 'Вернуть в разработку')),
     t.step === 'ios' && devFormBlock(t, t.assigneeId === S.meId || isStaff()),
     t.step === 'release' && t.assigneeId && releaseBlock(t, () => reloadBoard().catch(() => {})),
@@ -252,10 +252,10 @@ function openQaReturn(t) {
   setTimeout(() => ta.focus(), 0);
 }
 
-/** Команда релиза (для RM): PM, дизайн, разработка, тестирование, мета — кто делал приложение. */
+/** Команда релиза (для RM): PM, дизайн, разработка, тестирование, тексты — кто делал приложение. */
 function releaseTeamBlock(t) {
   const box = h('div', { class: 'rel-team' });
-  const ROLES = [['pm', 'PM'], ['design', 'Дизайн'], ['ios', 'Разработка'], ['qa', 'Тестирование'], ['meta', 'Мета (ASO)']];
+  const ROLES = [['pm', 'PM'], ['design', 'Дизайн'], ['ios', 'Разработка'], ['qa', 'Тестирование'], ['meta', 'Тексты ASO']];
   call('getReleaseTeam', { taskId: t.id }).then(team => {
     if (S.panelTaskId !== t.id) return;
     fill(box, h('div', { class: 'rel-team-title' }, 'Команда'),

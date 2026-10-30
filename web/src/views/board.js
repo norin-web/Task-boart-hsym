@@ -400,7 +400,7 @@ function onDragEnd(evt) {
 
 export function deptChip(id) {
   const d = deptById(id);
-  return d && h('span', { class: 'chip dept-chip', title: 'Позиция', style: { background: `color-mix(in srgb, ${d.color} 16%, transparent)`, color: d.color } }, d.name);
+  return d && h('span', { class: 'chip tag dept-chip', title: 'Позиция', style: { '--dc': d.color } }, d.name);
 }
 
 function taskCard(t, inLane) {
@@ -464,7 +464,7 @@ function taskCard(t, inLane) {
 export function fieldChip(f, t) {
   const v = t.fields[f.id];
   if (isEmpty(v)) return null;
-  const optChip = o => h('span', { class: 'chip', title: f.name, style: { background: `color-mix(in srgb, ${o.color} 16%, transparent)`, color: o.color } }, o.name);
+  const optChip = o => h('span', { class: 'chip tag', title: f.name, style: { '--dc': o.color } }, o.name);
   switch (f.type) {
     case 'select': { const o = optById(f, v); return o ? optChip(o) : null; }
     case 'multiselect': return (Array.isArray(v) ? v : []).map(id => optById(f, id)).filter(Boolean).map(optChip);
