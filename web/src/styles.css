@@ -1772,3 +1772,9 @@ a.rc-more { text-decoration: none; }
 .spec-row:hover { border-color: var(--border-strong); }
 .spec-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; }
 .spec-empty { display: inline-flex; align-items: center; gap: 8px; }
+
+/* Выбор приоритета: кнопка с шевроном вместо нативного select */
+.prio-select { display: flex; align-items: center; gap: 8px; text-align: left; cursor: pointer; }
+.prio-select:disabled { cursor: default; opacity: .7; }
+.prio-select-chev { margin-left: auto; display: inline-flex; color: var(--muted); }
+.menu-item .prio-mark { width: 16px; justify-content: center; }

@@ -403,3 +403,35 @@ export function prioMark(opt, i, n, size = 16) {
   svg.append(path);
   return h('span', { class: 'prio-mark', style: { color: opt.color }, title: 'Приоритет: ' + opt.name, role: 'img', 'aria-label': 'Приоритет: ' + opt.name }, svg);
 }
+
+/**
+ * Выбор приоритета (вместо нативного select): кнопка «шеврон + название», по клику — список вариантов с шевронами,
+ * сверху самый высокий. options — варианты по порядку от низкого к высокому ({ id, name, color }).
+ * У элемента есть .value — как у select, чтобы формы читали значение одинаково.
+ */
+export function prioSelect(options, value, onChange, { disabled = false, empty = 'Без приоритета' } = {}) {
+  let cur = value || '';
+  const btn = h('button', { type: 'button', class: 'inp prio-select', disabled, 'aria-haspopup': 'menu', 'aria-label': 'Приоритет' });
+  const paint = () => {
+    const i = options.findIndex(o => o.id === cur);
+    fill(btn, i >= 0 ? [prioMark(options[i], i, options.length, 15), h('span', null, options[i].name)] : h('span', { class: 'muted' }, empty),
+      h('span', { class: 'prio-select-chev' }, icon('chevron', 14)));
+  };
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    if (disabled) return;
+    const pick = id => { cur = id; paint(); if (onChange) onChange(id); };
+    menu(btn, [
+      ...options.map((o, i) => ({ o, i })).reverse().map(({ o, i }) => h('button', {
+        class: 'menu-item' + (o.id === cur ? ' on' : ''), role: 'menuitemradio', 'aria-checked': String(o.id === cur),
+        onclick: () => { closeMenu(); pick(o.id); },
+      }, prioMark(o, i, options.length, 15), o.name, o.id === cur && h('span', { class: 'spacer' }), o.id === cur && icon('check', 14))),
+      { sep: true },
+      h('button', { class: 'menu-item' + (!cur ? ' on' : ''), role: 'menuitemradio', 'aria-checked': String(!cur), onclick: () => { closeMenu(); pick(''); } },
+        h('span', { class: 'prio-mark muted' }, icon('x', 14)), empty),
+    ]);
+  });
+  Object.defineProperty(btn, 'value', { get: () => cur, set: v => { cur = v || ''; paint(); } });
+  paint();
+  return btn;
+}

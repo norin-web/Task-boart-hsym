@@ -2,7 +2,7 @@ import {
   S, LS, me, taskById, personById, activeFields, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDateTime, relTime, addDays,
   unitById, safeUrl, visibleLinkFields, REQUEST_TYPES, appById, isSuper, ceoDefault, KIND_COLORS, whoName, teamById, activeTeams, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, fmtValue,
 } from '../state.js';
-import { $, h, append, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, fill } from '../ui.js';
+import { $, h, append, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, fill, prioSelect } from '../ui.js';
 import { call, send } from '../api.js';
 import { navigate, rerender } from '../router.js';
 import { renderTasks, patchTask, reloadBoard, loadBoard, canRecall, recallReview } from './board.js';
@@ -679,6 +679,8 @@ export function personSelect(value, onChange) {
 
 /** Контрол для кастомного поля. onChange(value) — пустое значение означает «очистить». */
 export function fieldInput(f, v, onChange) {
+  // приоритет — свой список с шевронами (как по всей системе), не нативный select
+  if (f.role === 'priority' && f.type === 'select') return prioSelect(f.options || [], v || '', id => onChange(id || null));
   switch (f.type) {
     case 'longtext':
       return autosize(h('textarea', { class: 'inp', rows: 2, value: v == null ? '' : String(v), onchange: e => onChange(e.target.value.trim()) }));

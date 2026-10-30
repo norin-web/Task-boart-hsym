@@ -5,7 +5,7 @@
  */
 import Sortable from 'sortablejs';
 import { S, isSuper, isStaff, me, personById, unitById, appStatusById, prioById, REQUEST_TYPES, LS, plural, fmtDate, PALETTE, between, todayStr, relTime } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill, modal, field, toast, menu, closeMenu, confirmDlg, promptDlg, prioMark } from '../ui.js';
+import { $, h, icon, avatar, topbar, showErr, fill, modal, field, toast, menu, closeMenu, confirmDlg, promptDlg, prioMark, prioSelect } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
@@ -481,8 +481,7 @@ export function openAppPanel(a, onChange) {
         if (ok) save({ unitId: dest.id }); else e.target.value = a.unitId;
       },
     }, units().map(x => h('option', { value: x.id, selected: x.id === a.unitId }, x.name)));
-    const prioSel = h('select', { class: 'inp', 'aria-label': 'Приоритет', disabled: !manage, onchange: e => save({ priority: e.target.value }) },
-      h('option', { value: '' }, '—'), [...S.priorityOptions].reverse().map(o => h('option', { value: o.id, selected: o.id === a.priority }, o.name)));
+    const prioSel = prioSelect(S.priorityOptions, a.priority, v => save({ priority: v }), { disabled: !manage });
     const reqs = [...a.requests].sort(byCreated);
     const updates = reqs.filter(r => r.type === 'update');
     const rejects = reqs.filter(isReject);
@@ -973,8 +972,7 @@ function pmPicker(unitId) {
 }
 
 /** Приоритет: от высокого к низкому, «—» — без приоритета. */
-const prioPicker = value => h('select', { class: 'inp', 'aria-label': 'Приоритет' }, h('option', { value: '' }, '—'),
-  [...S.priorityOptions].reverse().map(o => h('option', { value: o.id, selected: o.id === value }, o.name)));
+const prioPicker = value => prioSelect(S.priorityOptions, value);
 
 /** unitId — сразу в этот юнит (со страницы юнита). */
 export function openCreateApp(onDone, unitId) {
