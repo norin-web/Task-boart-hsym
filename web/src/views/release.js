@@ -218,8 +218,8 @@ function valueRow(f, v, editable, onSave) {
     editable && h('button', { class: 'icon-btn sm', title: 'Изменить', 'aria-label': 'Изменить ' + f.name, onclick: edit }, icon('edit', 13)));
   const edit = () => {
     const inp = h(f.kind === 'longtext' ? 'textarea' : 'input', {
-      class: 'inp sm', value: v, rows: f.kind === 'longtext' ? 4 : undefined, placeholder: f.kind === 'link' ? 'https://…' : '',
-      onkeydown: e => { if (e.key === 'Enter' && (f.kind !== 'longtext' || e.metaKey || e.ctrlKey)) { e.preventDefault(); e.target.blur(); } if (e.key === 'Escape') { e.stopPropagation(); show(); } },
+      class: 'inp sm', value: v, rows: f.kind === 'longtext' ? 4 : undefined, placeholder: f.kind === 'link' ? 'https://…' : f.kind === 'longtext' ? 'Enter — сохранить, Shift+Enter — новая строка' : '',
+      onkeydown: e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.target.blur(); } if (e.key === 'Escape') { e.stopPropagation(); show(); } },
       onblur: e => { if (e.target.value.trim() !== v) onSave(e.target.value.trim()); else show(); },
     });
     fill(row, h('span', { class: 'af-name' }, f.name), inp);
