@@ -1,0 +1,127 @@
+/*
+ * Токены Tasks DS, выгрузка из Paper (файл «Canva», страница «Tasks DS»), 2026-10-30.
+ * Это справочник, а не подключённый файл: в приложении пока web/src/styles.css.
+ * В Paper токен хранит одно значение, поэтому t- это светлая тема, d- тёмная.
+ * В CSS это должен стать один набор имён, карта на листе «08 · Перенос в код».
+ */
+:root {
+  --color-t-bg: #F2F3F6;
+  --color-t-surface: #FFFFFF;
+  --color-t-surface-2: #F7F8FA;
+  --color-t-surface-3: #ECEEF2;
+  --color-t-border: #E3E5EA;
+  --color-t-border-strong: #8F95A3;
+  --color-t-text: #111318;
+  --color-t-text-2: #3D4250;
+  --color-t-muted: #646975;
+  --color-t-primary: #111318;
+  --color-t-primary-hover: #2B2E37;
+  --color-t-primary-pressed: #000000;
+  --color-t-on-primary: #FFFFFF;
+  --color-t-green: #5FCD74;
+  --color-t-green-hover: #4DB963;
+  --color-t-on-green: #FFFFFF;
+  --color-t-green-soft: #DDF6E1;
+  --color-t-green-ink: #0F6E1F;
+  --color-t-focus: #0F6E1F;
+  --color-t-danger: #BA3045;
+  --color-t-danger-soft: #FCE9EC;
+  --color-t-danger-hover: #FF160F;
+  --color-t-danger-pressed: #D60001;
+  --color-t-warn: #7F5500;
+  --color-t-warn-soft: #FFEFD1;
+  --color-t-warn-fill: #EC9900;
+  --color-t-info: #0064AD;
+  --color-t-info-soft: #D6EEFE;
+  --color-t-info-fill: #0087EA;
+  --color-t-violet: #5B35CC;
+  --color-t-violet-soft: #EEE7FD;
+  --color-t-violet-fill: #764BF2;
+  --color-t-neutral: #555A64;
+  --color-t-neutral-soft: #E7E8EC;
+  --color-t-neutral-fill: #787C87;
+  --color-t-review: #6200FF;
+  --color-t-selected: #E4E8EF;
+  --color-t-toast-undo: #FF0D07;
+  --color-t-toast-retry: #98ACFF;
+  --color-t-sidebar: #191D36;
+  --color-t-sidebar-active: #32405B;
+  --color-t-sidebar-text: #B9C1D6;
+  --color-t-sidebar-on-active: #FFFFFF;
+  --color-t-sidebar-border: #2A3050;
+
+  --color-d-bg: #0F1222;
+  --color-d-surface: #191D36;
+  --color-d-surface-2: #1F243C;
+  --color-d-surface-3: #293050;
+  --color-d-border: #2A3050;
+  --color-d-border-strong: #6D7594;
+  --color-d-text: #F4F5F9;
+  --color-d-text-2: #C8CDDD;
+  --color-d-muted: #9CA4BD;
+  --color-d-primary: #FFFFFF;
+  --color-d-primary-hover: #E4E6EE;
+  --color-d-primary-pressed: #C9CDDA;
+  --color-d-on-primary: #111318;
+  --color-d-green: #5FCD74;
+  --color-d-green-soft: #173A2A;
+  --color-d-green-ink: #7BE08F;
+  --color-d-focus: #5FCD74;
+  --color-d-danger: #FF8593;
+  --color-d-danger-soft: #40202B;
+  --color-d-warn: #F2B84B;
+  --color-d-warn-soft: #3A2E17;
+  --color-d-info: #6CC0FF;
+  --color-d-info-soft: #15324A;
+  --color-d-violet: #B59BFF;
+  --color-d-violet-soft: #2C2550;
+  --color-d-neutral: #B4BACB;
+  --color-d-neutral-soft: #2A3050;
+
+  --font-t: "Montserrat";
+  --text-t-12: 12px;
+  --text-t-13: 13px;
+  --text-t-14: 14px;
+  --text-t-16: 16px;
+  --text-t-20: 20px;
+  --text-t-24: 24px;
+  --text-t-32: 32px;
+  --font-weight-t-500: 500;
+  --font-weight-t-600: 600;
+  --tracking-t-heading: -0.02em;
+  --tracking-t-body: -0.01em;
+  --leading-t-16: 16px;
+  --leading-t-20: 20px;
+  --leading-t-24: 24px;
+  --leading-t-28: 28px;
+  --leading-t-32: 32px;
+  --leading-t-40: 40px;
+
+  --spacing-t-4: 4px;
+  --spacing-t-8: 8px;
+  --spacing-t-12: 12px;
+  --spacing-t-16: 16px;
+  --spacing-t-20: 20px;
+  --spacing-t-24: 24px;
+  --spacing-t-32: 32px;
+  --spacing-t-40: 40px;
+  --spacing-t-48: 48px;
+  --spacing-t-control: 32px;
+  --spacing-t-field: 36px;
+  --spacing-t-row: 48px;
+
+  --radius-t-6: 6px;
+  --radius-t-10: 10px;
+  --radius-t-16: 16px;
+  --radius-t-20: 20px;
+  --radius-t-28: 28px;
+  --radius-t-shell: 34px;
+  --radius-t-pill: 999px;
+
+  --container-t-sidebar: 256px;
+  --container-t-modal: 480px;
+  --container-t-drawer: 640px;
+  --container-t-page: 1180px;
+  --breakpoint-t-mobile: 640px;
+  --breakpoint-t-tablet: 900px;
+}

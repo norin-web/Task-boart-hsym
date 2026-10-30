@@ -11,6 +11,10 @@
 - Коммиты — по-русски, коротко, без Co-Authored-By и пометок ИИ.
 - Секретный ключ Supabase (service role) — только в Edge Function.
 
+## Дизайн-система
+
+Новая система Tasks DS в работе, в код ещё не перенесена. Старт и что дальше: [docs/design-system/README.md](docs/design-system/README.md).
+
 ## Первый день
 
 1. `npm install`, `npm test` (50 тестов, все зелёные), `npm run dev` → http://localhost:5177.
