@@ -595,6 +595,28 @@ export function createBackend(db, opts = {}) {
     return (await one('departments', id)) ? String(id) : '';
   }
 
+  /**
+   * Позиции разграничены: этап ведёт человек его позиции, релиз — только RM (у обычных задач позиция — это
+   * «кто видит», её можно задать отдельно от исполнителя). Кто не в юните — проверяют другие правила.
+   */
+  async function fitsAssignee(unitId, { kind, step, departmentId }, assigneeId) {
+    if (!assigneeId) return;
+    const person = (await unitPeople(unitId)).find(x => x.id === assigneeId);
+    if (!person) return;
+    if (kind === 'stage' && step === 'release') {
+      if (person.access !== 'rm') fail(`Релиз ведёт релиз-менеджер: ${person.name} им не является`, 'RULE');
+      return;
+    }
+    if (kind === 'stage' && departmentId && !person.positionIds.includes(departmentId)) {
+      const d = await one('departments', departmentId);
+      fail(`${person.name} — не ${d ? '«' + d.name + '»' : 'нужной позиции'}: выберите человека этой позиции`, 'RULE');
+    }
+  }
+  /** RM — это и роль, и позиция Release Manager: одно без другого не бывает. */
+  function checkRmPosition(access, positionIds) {
+    if (access === 'rm' && !positionIds.includes('d_release')) fail('Релиз-менеджеру нужна позиция Release Manager', 'RULE');
+  }
+
   /** Отдел (позиция) исполнителя — подставляется в задачу, если отдел не выбран. Сначала позиция из профиля. */
   async function memberDept(unitId, personId) {
     if (!personId) return '';
@@ -1080,6 +1102,7 @@ export function createBackend(db, opts = {}) {
       const status = st.columns.some(c => c.id === p.status) ? p.status : st.columns[0].id;
       const assignee = str(p.assigneeId, 40);
       const ts = now();
+      await fitsAssignee(unit.id, { kind: p.kind, step: str(p.step, 30), departmentId: await validDept(p.departmentId) || await memberDept(unit.id, assignee) }, assignee);
       const task = {
         id: uid('t'), unit_id: unit.id, num: (await rpc('next_task_num', { p_unit: unit.id })) ?? fail('Создавать задачи могут CEO и PM юнита', 'FORBIDDEN'),
         title: req(str(p.title, 500), 'Название задачи'), description: str(p.description, 20000), status,
@@ -1161,6 +1184,7 @@ export function createBackend(db, opts = {}) {
       if ('assigneeId' in patch) {
         const v = str(patch.assigneeId, 40);
         if (v !== t.assignee_id) {
+          await fitsAssignee(t.unit_id, { kind: t.kind, step: t.step, departmentId: 'departmentId' in patch ? await validDept(patch.departmentId) : t.department_id }, v);
           change('assigneeId', t.assignee_id, v);
           t.assignee_id = v;
           // Позиция задачи следует за исполнителем (если её не задали явно в этом же изменении)
@@ -2299,6 +2323,7 @@ export function createBackend(db, opts = {}) {
         access: ACCESS.includes(p.access) ? p.access : 'member', position_id: (await validDept(p.positionId)) || 'd_other',
       };
       person.extra_positions = (await cleanPositions(p.extraPositionIds)).filter(id => id !== person.position_id);
+      checkRmPosition(person.access, [person.position_id, ...person.extra_positions]);
       // команды: указанные или Other (если такая есть)
       person.team_ids = 'teamIds' in p ? await cleanTeams(p.teamIds) : (await validTeam('t_other')) ? ['t_other'] : [];
       await run(T('people').insert(person));
@@ -2319,6 +2344,7 @@ export function createBackend(db, opts = {}) {
         if (p.personId) return methods.updatePerson({ id: p.personId, email });
         return methods.createPerson({ ...p, email });
       }
+      checkRmPosition(ACCESS.includes(p.access) ? p.access : 'member', [str(p.positionId, 40), ...(await cleanPositions(p.extraPositionIds))]);
       const res = await invoke('admin-users', {
         action: 'create', email, password, personId: p.personId || null, name: str(p.name, 80),
         role: str(p.role, 80), access: ACCESS.includes(p.access) ? p.access : 'member', positionId: str(p.positionId, 40),
@@ -2514,6 +2540,7 @@ export function createBackend(db, opts = {}) {
       if ('teamIds' in p) upd.team_ids = await cleanTeams(p.teamIds);
       if ('extraPositionIds' in p) upd.extra_positions = (await cleanPositions(p.extraPositionIds)).filter(id => id !== main);
       else if (upd.position_id) upd.extra_positions = (json(person.extra_positions, []) || []).filter(id => id !== main);
+      checkRmPosition(upd.access || person.access, [main, ...(upd.extra_positions || json(person.extra_positions, []) || [])]);
       await updateOne('people', person.id, upd);
       // Отключённый человек не должен входить: блокируем аккаунт на сервере
       if ('active' in p && invoke && person.user_id && !!p.active !== !!person.active) {
