@@ -941,7 +941,7 @@ export async function openDecomposeDialog(req) {
           const on = steps.filter(s => s.on);
           if (!on.length) return toast('Оставьте хотя бы один этап', { type: 'error' });
           const keys = new Set(on.map(s => s.key));
-          const plan = on.map(s => ({ key: s.key, title: s.title.trim() || 'Этап', positionId: s.positionId, dependsOn: s.dependsOn.filter(k => keys.has(k)), release: s.release, assigneeId: s.assigneeId, dueDate: s.dueDate }));
+          const plan = on.map(s => ({ key: s.key, title: s.title.trim() || 'Этап', positionId: s.positionId, dependsOn: s.dependsOn.filter(k => keys.has(k)), release: s.release, checklist: s.checklist, assigneeId: s.assigneeId, dueDate: s.dueDate }));
           const made = await send('decomposeRequest', { taskId: req.id, plan });
           done = true;
           close();
@@ -1297,7 +1297,7 @@ function openCreateRequest(a, type, onDone) {
 
 /* ---------- шаблоны апдейтов ---------- */
 
-const STEP_NAMES = { design: 'Дизайн', ios: 'Разработка iOS', qa: 'Тестирование', meta: 'Мета (ASO)', release: 'Релиз' };
+const STEP_NAMES = { design: 'Дизайн', ios: 'Разработка iOS', qa: 'Тестирование', meta: 'Тексты OB / PW / ASO', retext: 'Тексты в дизайне', l10n: 'Локализации', release: 'Релиз' };
 const updateTemplates = () => S.templates.filter(x => x.kind === 'update').sort((x, y) => (x.order || 0) - (y.order || 0));
 
 /** Шаблоны апдейтов (CEO и PM): название, заголовок задачи, описание, пункты и нужные этапы. */

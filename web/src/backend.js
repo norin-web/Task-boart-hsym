@@ -22,11 +22,15 @@ export const REQUEST_TYPES = { new_app: 'New App', update: 'Апдейт', other
  */
 export const DEFAULT_FLOWS = {
   new_app: [
-    { key: 'design', title: 'Дизайн', positionId: 'd_design', dependsOn: [] },
+    { key: 'design', title: 'Дизайн', positionId: 'd_design', dependsOn: [], checklist: ['Онбординг (OB)', 'Пейволл (PW)', 'Скриншоты и иконка (ASO)'] },
     { key: 'ios', title: 'Разработка iOS', positionId: 'd_ios', dependsOn: ['design'] },
     { key: 'qa', title: 'Тестирование', positionId: 'd_qa', dependsOn: ['ios'] },
-    { key: 'meta', title: 'Мета (ASO)', positionId: 'd_aso', dependsOn: ['design'] }, // после дизайна, параллельно разработке и тестированию
-    { key: 'release', title: 'Релиз', positionId: 'd_release', dependsOn: ['design', 'ios', 'qa', 'meta'], release: true },
+    // тексты открываются, когда дизайнер закрыл в чеклисте дизайна OB, PW и ASO; идут параллельно разработке.
+    // Готовые тексты ASO возвращает дизайнеру: он ставит их в макеты и выгружает исходники на Google Drive; после — переводы.
+    { key: 'meta', title: 'Тексты OB / PW / ASO', positionId: 'd_aso', dependsOn: ['design'], checklist: ['Тексты онбординга', 'Тексты пейволла', 'Название, подзаголовок и описание', 'Ключевые слова'] },
+    { key: 'retext', title: 'Тексты в дизайне', positionId: 'd_design', dependsOn: ['meta'], checklist: ['Тексты OB заменены в макетах', 'Тексты PW заменены в макетах', 'Тексты ASO заменены в скриншотах', 'Исходники выгружены на Google Drive'] },
+    { key: 'l10n', title: 'Локализации', positionId: 'd_aso', dependsOn: ['retext'], checklist: ['Переводы приложения и пейволла', 'Переводы метаданных', 'Скриншоты на языках'] },
+    { key: 'release', title: 'Релиз', positionId: 'd_release', dependsOn: ['design', 'ios', 'qa', 'meta', 'retext', 'l10n'], release: true },
   ],
   update: [
     { key: 'design', title: 'Дизайн', positionId: 'd_design', dependsOn: [] },
@@ -376,6 +380,8 @@ function cleanFlow(list) {
     const title = str(x && x.title, 120);
     if (!key || !title) return null;
     const step = { key, title, positionId: str(x.positionId, 40), dependsOn: (Array.isArray(x.dependsOn) ? x.dependsOn : []).filter(k => keys.includes(k)), release: !!x.release };
+    const items = (Array.isArray(x.checklist) ? x.checklist : []).map(i => str(i, 300)).filter(Boolean).slice(0, 30);
+    if (items.length) step.checklist = items;
     keys.push(key);
     return step;
   }).filter(Boolean);
@@ -1951,6 +1957,7 @@ export function createBackend(db, opts = {}) {
           unitId: r.unit_id, title: `${st.title} · ${r.title.replace(/^New App:\s*/, '')}`, parentId: r.id, kind: 'stage', step: st.key,
           appId: r.app_id, departmentId: st.positionId, assigneeId: who(st), dueDate: due(st),
           dependsOn: st.dependsOn.map(k => ids[k]).filter(Boolean), test: !!r.is_test, fields: prio ? { [PRIORITY_FIELD]: prio } : {},
+          checklist: (st.checklist || []).map(text => ({ text })),
         }, ctx);
         ids[st.key] = t.id;
         created.push(t);

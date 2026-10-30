@@ -656,6 +656,15 @@ begin
          and exists (select 1 from jsonb_array_elements(new.checklist) i where not coalesce((i ->> 'done')::boolean, false)) then
         raise exception 'Сначала закройте чеклист: в «готово» нельзя с невыполненными пунктами' using errcode = 'P0001';
       end if;
+      -- этапы дизайна, текстов и локализаций уходят на ревью и в «готово» только с закрытым чеклистом
+      if new.kind = 'stage' and new.step in ('design', 'meta', 'retext', 'l10n')
+         and (new.status = coalesce((select u.settings -> 'review' ->> 'column' from units u where u.id = new.unit_id), '')
+              or coalesce((select c ->> 'kind' from units u, jsonb_array_elements(u.settings -> 'columns') c
+                            where u.id = new.unit_id and c ->> 'id' = new.status), '') = 'done')
+         and not exists (select 1 from tasks p where p.parent_id = new.id and p.step = 'part' and not p.archived)
+         and exists (select 1 from jsonb_array_elements(new.checklist) i where not coalesce((i ->> 'done')::boolean, false)) then
+        raise exception 'Сначала закройте чеклист этапа: на ревью и в «готово» только с выполненными пунктами' using errcode = 'P0001';
+      end if;
     end if;
   end if;
   return new;
@@ -1514,11 +1523,11 @@ language sql stable security definer set search_path = public as $$
   select 'pm', q.assignee_id from r join tasks q on q.id = r.parent_id where q.assignee_id <> ''
   union all
   select s.step, coalesce(nullif(p.review_from, ''), p.assignee_id)
-    from r join tasks s on s.parent_id = r.parent_id and s.step in ('design', 'ios', 'qa', 'meta') and r.parent_id <> ''
+    from r join tasks s on s.parent_id = r.parent_id and s.step in ('design', 'ios', 'qa', 'meta', 'retext', 'l10n') and r.parent_id <> ''
     join tasks p on p.parent_id = s.id and p.step = 'part' and not p.archived
   union all
   select s.step, coalesce(nullif(s.review_from, ''), s.assignee_id)
-    from r join tasks s on s.parent_id = r.parent_id and s.step in ('design', 'ios', 'qa', 'meta') and r.parent_id <> ''
+    from r join tasks s on s.parent_id = r.parent_id and s.step in ('design', 'ios', 'qa', 'meta', 'retext', 'l10n') and r.parent_id <> ''
    where s.assignee_id <> '' and not exists (select 1 from tasks p where p.parent_id = s.id and p.step = 'part' and not p.archived);
 $$;
 
