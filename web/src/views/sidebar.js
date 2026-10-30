@@ -182,7 +182,6 @@ export async function setCeoMode(m) {
 function meMenu(anchor) {
   menu(anchor, [
     { label: 'Мой профиль', icon: 'user', action: openMyProfile },
-    { label: 'Настройки', icon: 'settings', action: () => navigate({ view: 'settings' }) },
     mode === 'local' && { title: 'Локальный режим: данные только в этом браузере' },
     mode === 'local' && { label: 'Войти как…', icon: 'users', action: openActAs },
     mode === 'local' && { sep: true },
