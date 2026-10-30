@@ -88,7 +88,7 @@ export function getBackend() {
 /** Все люди (без учёта прав) — для выбора, от чьего имени работать. */
 export async function localPeople() {
   await actAsFn(pg, null);
-  const r = await pg.query(`select id, name, email, access, position_id, active, is_dev from people order by is_dev desc,
+  const r = await pg.query(`select id, name, email, access, position_id, active, is_dev, color, avatar from people order by is_dev desc,
     case access when 'superadmin' then 0 when 'moderator' then 1 when 'rm' then 2 when 'lead' then 3 else 4 end, name`);
   if (localActor) await actAsFn(pg, localActor.uid);
   return r.rows;

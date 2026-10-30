@@ -1993,3 +1993,15 @@ button.rh-row:hover { background: var(--surface-2); }
   .nt-row { grid-template-columns: minmax(0, 1fr) 56px 56px 64px; padding-inline: 12px; }
   .who-strip { padding-inline: 12px; }
 }
+
+/* ---------- аватар: фото и маскоты ---------- */
+.avatar.pic { background: var(--surface-3) !important; }
+.avatar > img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+.avatar.xl { width: 56px; height: 56px; font-size: 18px; }
+.av-pick { display: grid; gap: 10px; }
+.av-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 8px; }
+.av-opt { padding: 0; border: 2px solid transparent; border-radius: 50%; background: none; aspect-ratio: 1; overflow: hidden; cursor: pointer; transition: transform .12s ease-out; }
+.av-opt img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+.av-opt:hover { transform: scale(1.06); }
+.av-opt.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent-soft); }
+.av-more { justify-self: start; font-size: 12.5px; }

@@ -475,6 +475,11 @@ test('профили: свой профиль, роли меняет тольк�
   const { admin, mod, designer, dev, A, B } = await team(api);
   await api.as(designer, async () => {
     await api('updatePerson', { id: designer.id, name: 'Дизайнер Ира', color: '#ec4899' });
+    // аватар — свой: маскот или фото data:image; чужое (ссылки, скрипты) не сохраняется
+    assert.equal((await api('updatePerson', { id: designer.id, avatar: 'preset:design-2' })).avatar, 'preset:design-2');
+    assert.equal((await api('updatePerson', { id: designer.id, avatar: 'data:image/webp;base64,UklGRg==' })).avatar, 'data:image/webp;base64,UklGRg==');
+    assert.equal((await api('updatePerson', { id: designer.id, avatar: 'https://evil.example/a.png' })).avatar, '');
+    assert.equal((await api('updatePerson', { id: designer.id, avatar: 'data:image/svg+xml;base64,PHN2Zz4=' })).avatar, '');
     await assert.rejects(() => api('updatePerson', { id: designer.id, access: 'superadmin' }), forbidden);
     await assert.rejects(() => api('updatePerson', { id: designer.id, positionId: 'd_ios' }), forbidden);
     await assert.rejects(() => api('updatePerson', { id: dev.id, name: 'x' }), forbidden);

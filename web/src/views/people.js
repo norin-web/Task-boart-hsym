@@ -6,6 +6,7 @@ import { rerender } from '../router.js';
 import { mode, supabase, localPeople, localLogin } from '../data.js';
 import { LS } from '../state.js';
 import { columnsEditor } from './settings.js';
+import { PRESETS, PRESET_GROUPS, groupsFor, photoToAvatar } from '../avatars.js';
 import { renderSidebar } from './sidebar.js';
 
 const sortPeople = () => S.people.sort((a, b) => a.name.localeCompare(b.name));
@@ -296,16 +297,24 @@ export function openMyProfile() {
   const name = h('input', { class: 'inp', value: p.name, maxlength: 80 });
   const role = h('input', { class: 'inp', value: p.role, maxlength: 80, placeholder: 'Например, Senior iOS' });
   const preview = h('span');
-  const color = colorPicker(p.color, { auto: true, autoColor: colorFor(p.id), onChange: () => fill(preview, avatar({ ...p, color: color.value() }, 'lg')) });
-  fill(preview, avatar(p, 'lg'));
+  let pic = p.avatar || '';
+  const drawPreview = () => fill(preview, avatar({ ...p, color: color.value(), avatar: pic }, 'xl'));
+  const color = colorPicker(p.color, { auto: true, autoColor: colorFor(p.id), onChange: drawPreview });
+  // цвет нужен только инициалам: есть картинка — поле прячем
+  const colorField = field('Цвет аватара', color.el);
+  const syncColor = () => { colorField.hidden = !!pic; };
+  const picker = avatarPicker(p, () => pic, v => { pic = v; drawPreview(); syncColor(); });
+  drawPreview();
+  syncColor();
   const posNames = (p.positionIds || []).map(id => (deptById(id) || {}).name).filter(Boolean).join(', ');
   modal({
     title: 'Мой профиль',
     body: [
       h('div', { class: 'row', style: { gap: '14px', marginBottom: '14px', flexWrap: 'nowrap' } }, preview,
         h('div', null, h('div', { style: { fontWeight: 600 } }, p.name), h('div', { class: 'hint' }, [ACCESS_LABELS[p.access], posNames, p.email].filter(Boolean).join(' · ')))),
+      field('Аватар', picker),
       h('div', { class: 'grid2' }, field('Имя', name), field('Должность', role, 'Свободный текст; позицию назначает администратор')),
-      field('Цвет аватара', color.el),
+      colorField,
       mode === 'supabase' && passwordBlock(),
     ],
     actions: [
@@ -313,13 +322,51 @@ export function openMyProfile() {
       {
         label: 'Сохранить', primary: true, action: async close => {
           if (!name.value.trim()) return name.focus();
-          Object.assign(p, await send('updatePerson', { id: p.id, name: name.value, role: role.value, color: color.value() }));
+          Object.assign(p, await send('updatePerson', { id: p.id, name: name.value, role: role.value, color: color.value(), avatar: pic }));
           close();
+          renderSidebar();
           rerender();
         },
       },
     ],
   });
+}
+
+/**
+ * Выбор аватара: «Загрузить фото» (квадрат 160 px), готовые маскоты — сначала подходящие по роли и позиции,
+ * остальные по «Все аватарки»; «Без аватара» — инициалы.
+ */
+function avatarPicker(p, get, set) {
+  const box = h('div', { class: 'av-pick' });
+  const file = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', hidden: true,
+    onchange: async () => { try { set(await photoToAvatar(file.files[0])); mark(); } catch (e) { showErr(e); } file.value = ''; } });
+  const mine = groupsFor(p);
+  let all = !mine.length;
+  const grid = keys => h('div', { class: 'av-grid' }, keys.flatMap(g => Object.keys(PRESETS).filter(id => id.startsWith(g + '-'))).map(id => {
+    const on = get() === 'preset:' + id;
+    return h('button', { class: 'av-opt' + (on ? ' on' : ''), type: 'button', 'aria-pressed': String(on), title: (PRESET_GROUPS.find(([k]) => id.startsWith(k + '-')) || [])[1],
+      dataset: { id }, onclick: () => { set('preset:' + id); mark(); } }, h('img', { src: PRESETS[id], alt: '' }));
+  }));
+  // выбор — только подсветка, без перерисовки картинок
+  const mark = () => {
+    box.querySelectorAll('.av-opt').forEach(b => { const on = get() === 'preset:' + b.dataset.id; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
+    const off = box.querySelector('.av-clear');
+    if (off) off.disabled = !get();
+  };
+  function draw() {
+    const v = get();
+    const others = PRESET_GROUPS.map(([k]) => k).filter(k => !mine.includes(k));
+    fill(box,
+      h('div', { class: 'row', style: { gap: '8px' } },
+        // кнопки стоят всегда — ряд не прыгает при выборе
+        h('button', { class: 'btn sm', type: 'button', onclick: () => file.click() }, icon('plus', 14), 'Загрузить фото'),
+        h('button', { class: 'btn ghost sm av-clear', type: 'button', disabled: !v, onclick: () => { set(''); mark(); } }, 'Без аватара'), file),
+      mine.length > 0 && grid(mine),
+      mine.length > 0 && h('button', { class: 'link-btn av-more', type: 'button', 'aria-expanded': String(all), onclick: () => { all = !all; draw(); } }, all ? 'Скрыть остальные' : 'Все аватарки'),
+      all && grid(others));
+  }
+  draw();
+  return box;
 }
 
 /** Смена пароля для входа (Supabase Auth). */
@@ -360,7 +407,7 @@ export async function openActAs() {
           } catch (e) { showErr(e); }
         },
       },
-      avatar({ id: p.id, name: p.name }),
+      avatar({ id: p.id, name: p.name, color: p.color, avatar: p.avatar }),
       h('span', { class: 'person-text' },
         h('span', { class: 'person-name' }, p.name, S.meId === p.id && h('span', { class: 'badge' }, 'сейчас')),
         h('span', { class: 'person-sub' }, (deptById(p.position_id) || deptById('d_other') || {}).name || '')),

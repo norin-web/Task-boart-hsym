@@ -242,10 +242,17 @@ const fieldOut = r => ({
 
 /** Роли: superadmin — CEO, moderator — PM, rm — релиз-менеджер, lead — лид, member — сотрудник. */
 export const ACCESS = ['superadmin', 'moderator', 'rm', 'lead', 'member'];
+/** Аватар: готовый маскот (preset:ios-3) или фото data:image (webp/jpeg/png, до ~90 КБ). Иначе — пусто (инициалы). */
+const avatarValue = v => {
+  const s = String(v || '');
+  if (/^preset:[a-z]+-\d{1,2}$/.test(s)) return s;
+  if (s.length <= 120000 && /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(s)) return s;
+  return '';
+};
 const personOut = r => ({
   id: r.id, name: r.name, email: r.email, role: r.role || '', color: r.color || '', active: !!r.active,
   access: r.access || 'member', positionId: r.position_id || '', linked: !!r.user_id, prefs: json(r.prefs, {}) || {},
-  lastSeenAt: r.last_seen_at || '', isDev: !!r.is_dev,
+  lastSeenAt: r.last_seen_at || '', isDev: !!r.is_dev, avatar: r.avatar || '',
   extraPositionIds: json(r.extra_positions, []) || [],
   teamIds: json(r.team_ids, []) || [],
   positionIds: [r.position_id || 'd_other', ...(json(r.extra_positions, []) || [])],
@@ -2256,7 +2263,7 @@ export function createBackend(db, opts = {}) {
     async createPerson(p) {
       const person = {
         id: uid('p'), name: req(str(p.name, 80), 'Имя'), email: str(p.email, 120).toLowerCase(),
-        role: str(p.role, 80), color: color(p.color, ''), telegram_chat_id: '', active: true, created_at: now(),
+        role: str(p.role, 80), color: color(p.color, ''), avatar: avatarValue(p.avatar), telegram_chat_id: '', active: true, created_at: now(),
         access: ACCESS.includes(p.access) ? p.access : 'member', position_id: (await validDept(p.positionId)) || 'd_other',
       };
       person.extra_positions = (await cleanPositions(p.extraPositionIds)).filter(id => id !== person.position_id);
@@ -2465,6 +2472,7 @@ export function createBackend(db, opts = {}) {
       if ('email' in p) upd.email = str(p.email, 120).toLowerCase();
       if ('role' in p) upd.role = str(p.role, 80);
       if ('color' in p) upd.color = color(p.color, '');
+      if ('avatar' in p) upd.avatar = avatarValue(p.avatar);
       if ('active' in p) upd.active = !!p.active;
       if ('access' in p) upd.access = ACCESS.includes(p.access) ? p.access : fail('Неизвестная роль');
       if ('positionId' in p) upd.position_id = (await validDept(p.positionId)) || 'd_other';

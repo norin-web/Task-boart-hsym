@@ -247,6 +247,8 @@ alter table people add column if not exists access text not null default 'member
 alter table people add column if not exists position_id text not null default '';
 -- Личные настройки интерфейса (раскладка главной и т.п.); человек меняет только свои
 alter table people add column if not exists prefs jsonb not null default '{}';
+-- аватар: 'preset:<позиция>-<n>' (готовые маскоты) или фото data:image/…;base64 (сжатое в браузере до 160 px)
+alter table people add column if not exists avatar text not null default '';
 -- Когда человек последний раз был в приложении (онлайн-метка)
 alter table people add column if not exists last_seen_at text not null default '';
 do $$ begin

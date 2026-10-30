@@ -1,4 +1,5 @@
 /** UI-примитивы: DOM-хелпер, иконки, модалки, меню, тосты. */
+import { avatarSrc } from './avatars.js';
 import { PALETTE, colorFor, initials, safeUrl, isOnline, presenceText, personById } from './state.js';
 
 export const $ = (sel, root) => (root || document).querySelector(sel);
@@ -137,10 +138,11 @@ export function field(label, control, hint) {
 
 export function avatar(p, size) {
   if (!p) return h('span', { class: 'avatar empty' + (size ? ' ' + size : ''), title: 'Не назначено' }, icon('user', size === 'sm' ? 11 : 13));
+  const src = avatarSrc(p);
   return h('span', {
-    class: 'avatar' + (size ? ' ' + size : '') + (isOnline(p) ? ' online' : ''), title: p.name + ' · ' + presenceText(p),
+    class: 'avatar' + (size ? ' ' + size : '') + (isOnline(p) ? ' online' : '') + (src ? ' pic' : ''), title: p.name + ' · ' + presenceText(p),
     dataset: { pid: p.id }, style: { background: p.color || colorFor(p.id) },
-  }, initials(p.name));
+  }, src ? h('img', { src, alt: '', loading: 'lazy', decoding: 'async' }) : initials(p.name));
 }
 
 /** Обновить онлайн-точки на уже нарисованных аватарах (без перерисовки страницы). */

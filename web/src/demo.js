@@ -87,9 +87,14 @@ async function addPeople(api) {
   const teams = new Set((boot.teams || []).map(t => t.id));
   const byEmail = Object.fromEntries(boot.people.map(p => [(p.email || '').toLowerCase(), p]));
   const P = {};
+  // аватар-маскот по роли или позиции: ceo-1, pm-1, pm-2, ios-1…
+  const n = {};
+  const GROUP = { superadmin: 'ceo', moderator: 'pm', rm: 'release', d_design: 'design', d_ios: 'ios', d_qa: 'qa', d_release: 'release', d_aso: 'aso' };
   for (const [key, name, role, email, access, positionId, team] of PEOPLE) {
     const mail = email + '@example.com';
-    P[key] = byEmail[mail] || await api('createPerson', { name, role, email: mail, access, positionId, teamIds: teams.has(team) ? [team] : [] });
+    const g = GROUP[access] || GROUP[positionId];
+    const avatar = g ? `preset:${g}-${((n[g] = (n[g] || 0) + 1) - 1) % ({ release: 3, aso: 2 }[g] || 5) + 1}` : '';
+    P[key] = byEmail[mail] || await api('createPerson', { name, role, email: mail, access, positionId, avatar, teamIds: teams.has(team) ? [team] : [] });
   }
   return P;
 }
