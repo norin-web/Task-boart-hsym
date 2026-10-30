@@ -146,8 +146,8 @@ function renderNoAccess() {
 export function authError(error) {
   const m = String(error && error.message || error);
   if (/invalid login credentials/i.test(m)) return 'Неверный email или пароль.';
-  if (/email not confirmed/i.test(m)) return 'Email не подтверждён. Попросите администратора включить Auto Confirm для вашего аккаунта.';
-  if (/rate limit/i.test(m)) return 'Слишком много писем за час — это лимит Supabase. Войдите по паролю или попробуйте позже.';
+  if (/email not confirmed/i.test(m)) return 'Email не подтверждён. Попросите администратора подтвердить ваш аккаунт.';
+  if (/rate limit/i.test(m)) return 'Слишком много писем за час. Войдите по паролю или попробуйте позже.';
   if (/not allowed|signups|not found/i.test(m)) return 'Этого email нет в команде. Попросите администратора добавить вас.';
   if (/password.*(at least|characters)/i.test(m)) return 'Пароль должен быть не короче 6 символов.';
   if (/fetch|network/i.test(m)) return 'Нет связи с сервером входа. Проверьте интернет.';

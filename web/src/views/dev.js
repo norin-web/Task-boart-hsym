@@ -1,6 +1,6 @@
 /**
  * Режим разработчика (people.is_dev): «смотреть как» — интерфейс любого человека без перелогина,
- * шорткаты-сценарии, которые прогоняют флоу целиком, и удаление тестовых данных.
+ * быстрые сценарии, которые прогоняют флоу целиком, и удаление тестовых данных.
  * Всё, что создают шорткаты, помечено «тест»: реальные люди этого не видят и уведомлений не получают.
  * Шорткаты добавляются в SHORTCUTS.
  */
@@ -25,7 +25,7 @@ const SHORTCUTS = [
   },
   {
     id: 'process', title: 'Демо-процесс', icon: 'layers', localOnly: true,
-    hint: 'Весь цикл по уровням: CEO → PM → лиды и сотрудники → RM. Все роли и позиции; задачи не начаты, в работе, на ревью, готовы, заблокированы; релиз; статусы от разработки до реджекта',
+    hint: '10 приложений в App Store, одно в разработке (идёт дизайн), одно на ревью Apple',
     run: processScenario,
   },
 ];
@@ -50,7 +50,7 @@ export function renderDev() {
     h('div', { class: 'view-body' }, h('div', { class: 'page dev-page' },
       h('div', { class: 'dev-col' },
         h('section', { class: 'card-box dev-card' },
-          h('div', { class: 'dev-head' }, h('h3', null, 'Шорткаты'), h('span', { class: 'muted' }, 'всё созданное — с пометкой «тест»')),
+          h('div', { class: 'dev-head' }, h('h3', null, 'Быстрые сценарии'), h('span', { class: 'muted' }, 'всё созданное — с пометкой «тест»')),
           h('div', { class: 'dev-shortcuts' }, SHORTCUTS.filter(sc => !sc.localOnly || mode === 'local').map(sc => h('button', { class: 'dev-sc', onclick: () => sc.run() },
             h('span', { class: 'dev-sc-ic' }, icon(sc.icon, 16)),
             h('span', { class: 'dev-sc-text' }, h('b', null, sc.title), h('span', { class: 'muted' }, sc.hint)))))),
@@ -101,7 +101,7 @@ export async function viewAs(personId) {
 }
 
 async function clearTestData() {
-  if (!(await confirmDlg('Удалить все тестовые приложения и задачи (созданные шорткатами)? Настоящие данные не тронутся.', { ok: 'Удалить', danger: true }))) return;
+  if (!(await confirmDlg('Удалить все тестовые приложения и задачи (созданные быстрыми сценариями)? Настоящие данные не тронутся.', { ok: 'Удалить', danger: true }))) return;
   try {
     const r = await asDev(() => call('deleteTestData', {}));
     toast(`Удалено тестовых задач: ${r.tasks}`);
@@ -113,7 +113,7 @@ async function clearTestData() {
 
 /** Демо-процесс: тестовые приложения и задачи по всей иерархии поверх текущей базы (недостающих людей и юниты добавит). */
 async function processScenario(closePanel) {
-  if (!(await confirmDlg('Добавить демо-процесс: 6 тестовых приложений и задачи по всей иерархии — CEO, PM, RM, лиды, сотрудники; все состояния задач. Недостающих людей и юниты Gold / RF / MVP добавим. Удаляется кнопкой «Удалить тестовые данные» (люди и юниты останутся).', { ok: 'Добавить', title: 'Демо-процесс' }))) return;
+  if (!(await confirmDlg('Добавить демо-процесс: 12 тестовых приложений — 10 уже в App Store, одно в разработке и одно на ревью Apple. Недостающих людей и юниты Gold / RF / MVP добавим. Удаляется кнопкой «Удалить тестовые данные» (люди и юниты останутся).', { ok: 'Добавить', title: 'Демо-процесс' }))) return;
   if (closePanel) closePanel();
   toast('Собираем демо-процесс…');
   try {
@@ -133,7 +133,7 @@ function newAppScenario(closePanel) {
   const unit = h('select', { class: 'inp' }, list.map(u => h('option', { value: u.id }, u.name)));
   const decompose = h('input', { type: 'checkbox', checked: true });
   modal({
-    title: 'Шорткат: New App',
+    title: 'Быстрый сценарий: New App',
     body: [
       h('p', { class: 'hint', style: { marginTop: 0 } }, 'CEO создаёт приложение, запрос падает PM юнита, PM раскладывает его по флоу — этапы назначаются исполнителям.'),
       h('div', { class: 'grid2' }, field('Название', name), field('Юнит', unit)),
@@ -143,7 +143,7 @@ function newAppScenario(closePanel) {
       label: 'Запустить', primary: true,
       action: async close => {
         const r = await asDev(async () => {
-          const made = await call('createApp', { name: name.value, unitId: unit.value, test: true, description: 'Создано шорткатом New App (режим разработчика).' });
+          const made = await call('createApp', { name: name.value, unitId: unit.value, test: true, description: 'Создано быстрым сценарием New App (режим разработчика).' });
           const stages = decompose.checked ? await call('decomposeRequest', { taskId: made.request.id }) : [];
           return { ...made, stages };
         });

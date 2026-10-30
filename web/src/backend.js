@@ -1521,15 +1521,15 @@ export function createBackend(db, opts = {}) {
 
     async createDepartment(p) {
       const count = (await run(T('departments').select('id'))).length;
-      const d = { id: uid('d'), name: req(str(p.name, 40), 'Название отдела'), color: color(p.color, PALETTE[count % PALETTE.length]), ord: (await maxOrd('departments')) + 1, archived: false };
+      const d = { id: uid('d'), name: req(str(p.name, 40), 'Название позиции'), color: color(p.color, PALETTE[count % PALETTE.length]), ord: (await maxOrd('departments')) + 1, archived: false };
       await run(T('departments').insert(d));
       return deptOut(d);
     },
 
     async updateDepartment(p) {
-      const d = (await one('departments', p.id)) || fail('Отдел не найден', 'NOT_FOUND');
+      const d = (await one('departments', p.id)) || fail('Позиция не найдена', 'NOT_FOUND');
       const upd = {};
-      if ('name' in p) upd.name = req(str(p.name, 40), 'Название отдела');
+      if ('name' in p) upd.name = req(str(p.name, 40), 'Название позиции');
       if ('color' in p) upd.color = color(p.color, d.color);
       if ('archived' in p) upd.archived = !!p.archived;
       await updateOne('departments', d.id, upd);
@@ -1543,7 +1543,7 @@ export function createBackend(db, opts = {}) {
 
     /** Удаление: задачи и участники этого отдела остаются, но без отдела. */
     async deleteDepartment(p) {
-      const d = (await one('departments', p.id)) || fail('Отдел не найден', 'NOT_FOUND');
+      const d = (await one('departments', p.id)) || fail('Позиция не найдена', 'NOT_FOUND');
       await rpc('delete_department', { p_dept: d.id });
       return true;
     },

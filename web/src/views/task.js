@@ -217,7 +217,7 @@ function flowBlock(t) {
       stages.length > 0 && h('div', { class: 'progress' }, h('div', { style: { width: Math.round(done / stages.length * 100) + '%' } })),
       stages.length > 0 && h('div', { class: 'rq-stages' }, stages.map(n => stageRow(n, stages))),
       t.kind === 'request' && !stages.length && h('div', { class: 'rq-empty' },
-        h('span', { class: 'muted' }, manage ? 'Разложите задачу по этапам флоу: дизайн → iOS → QA, мета параллельно, релиз последним.' : 'PM ещё не разложил задачу по этапам.'),
+        h('span', { class: 'muted' }, manage ? 'Разложите задачу по этапам: дизайн → тексты → iOS и тестирование → релиз.' : 'PM ещё не разложил задачу по этапам.'),
         manage && h('button', { class: 'btn primary sm', onclick: () => import('./apps.js')
           .then(m => m.openDecomposeDialog({ id: t.id, unitId: t.unitId, type: t.requestType, title: t.title, dueDate: t.dueDate })).then(ok => ok && reload()) },
         icon('tree', 13), 'Разложить по флоу')));

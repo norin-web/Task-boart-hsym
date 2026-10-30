@@ -78,7 +78,7 @@ export const whoName = id => { const p = personById(id); return p ? p.name : id 
 /** Роли: внутренние значения в базе прежние, в интерфейсе — CEO / PM / RM / Lead / сотрудник. */
 export const ACCESS_LABELS = { superadmin: 'CEO', moderator: 'PM', rm: 'RM', lead: 'Lead', member: 'Сотрудник' };
 export const ACCESS_HINTS = {
-  superadmin: 'Всё: приложения, приоритеты, задачи PM, роли. Режимы Default и Admin',
+  superadmin: 'Всё: приложения, приоритеты, задачи PM, роли и доступы',
   moderator: 'Свои юниты: запросы CEO, этапы, команда, релиз',
   rm: 'Релизы своих юнитов — после всех этапов разработки',
   lead: 'Свои задачи и ревью своей позиции',

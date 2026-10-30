@@ -87,8 +87,8 @@ function profile() {
     head('Аккаунт'),
     card(
       mode === 'local' && row('Локальный режим', 'Данные хранятся только в этом браузере', null),
-      mode === 'local' && row('Войти как…', 'Посмотреть тулзу глазами другого человека', act('Выбрать', openActAs)),
-      mode === 'local' && row('Очистить локальную базу', 'Стереть всё и начать с пустой тулзы', act('Стереть', resetLocal, { danger: true })),
+      mode === 'local' && row('Войти как…', 'Посмотреть Tasks глазами другого человека', act('Выбрать', openActAs)),
+      mode === 'local' && row('Очистить локальную базу', 'Стереть всё и начать с чистой базы', act('Стереть', resetLocal, { danger: true })),
       mode === 'supabase' && row('Выйти', email, act('Выйти', () => supabase.auth.signOut()))),
   ];
 }
@@ -114,12 +114,12 @@ function notify() {
   const table = h('div', { class: 'card-box nt-table', role: 'table', 'aria-label': 'Уведомления' });
   const draw = () => fill(table,
     h('div', { class: 'nt-row nt-head', role: 'row' }, h('span', { role: 'columnheader' }, 'Событие'),
-      h('span', { role: 'columnheader' }, 'В тулзе'), h('span', { role: 'columnheader', class: 'muted', title: 'Скоро' }, 'Почта'), h('span', { role: 'columnheader', class: 'muted', title: 'Скоро' }, 'Telegram')),
+      h('span', { role: 'columnheader' }, 'В Tasks'), h('span', { role: 'columnheader', class: 'muted', title: 'Скоро' }, 'Почта'), h('span', { role: 'columnheader', class: 'muted', title: 'Скоро' }, 'Telegram')),
     NOTIFY.map(([title, sub, kinds]) => {
       const on = !kinds.every(k => off.includes(k));
       return h('div', { class: 'nt-row', role: 'row' },
         h('span', { class: 'prefs-row-text', role: 'cell' }, h('b', null, title), h('small', { class: 'muted' }, sub)),
-        h('span', { role: 'cell' }, h('input', { type: 'checkbox', checked: on, 'aria-label': title + ' — в тулзе',
+        h('span', { role: 'cell' }, h('input', { type: 'checkbox', checked: on, 'aria-label': title + ' — в Tasks',
           onchange: e => { off = e.target.checked ? off.filter(k => !kinds.includes(k)) : [...new Set([...off, ...kinds])]; save(); draw(); } })),
         h('span', { role: 'cell' }, h('input', { type: 'checkbox', disabled: true, title: 'Скоро', 'aria-label': title + ' — почта' })),
         h('span', { role: 'cell' }, h('input', { type: 'checkbox', disabled: true, title: 'Скоро', 'aria-label': title + ' — Telegram' })));

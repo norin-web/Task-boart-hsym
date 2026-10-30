@@ -329,7 +329,7 @@ function emptyApps(reload) {
           units().length
             ? [h('button', { class: 'btn primary', onclick: () => openCreateApp(reload) }, icon('plus', 15), 'Новое приложение'),
               h('button', { class: 'btn', onclick: () => openImportApps(reload) }, icon('layers', 15), 'Добавить списком')]
-            : h('span', { class: 'muted' }, 'Сначала нужен юнит (Gold, RF, MVP…) — режим Admin → Воркспейсы → +.'),
+            : h('span', { class: 'muted' }, 'Сначала нужен юнит (Gold, RF, MVP…): Настройки → Юниты.'),
           mode === 'local' && !units().length && h('button', { class: 'btn', onclick: e => fillDemo(e.currentTarget) }, icon('layers', 15), 'Заполнить демо-данными'))]
       : h('p', { style: { margin: 0 } }, 'Здесь появятся приложения ваших юнитов.'));
 }
@@ -734,7 +734,7 @@ function infoBlock(a, manage, ceo, save, redraw, configure) {
           h('button', { class: 'icon-btn sm danger-ic', title: r.common ? 'Убрать из всех приложений' : 'Удалить пункт', onclick: () => remove(r) }, icon('trash', 13)))
           : h('span'))))
       : h('div', { class: 'card-empty' },
-        h('span', { class: 'muted' }, 'Отмечайте, что у приложения уже есть: продуктовый апдейт, пейвол, локализации…'),
+        h('span', { class: 'muted' }, 'Отмечайте, что у приложения уже есть: продуктовый апдейт, пейволл, локализации…'),
         manage && h('button', { class: 'btn sm', onclick: configure }, icon('plus', 14), 'Добавить пункты')));
 }
 
@@ -1308,9 +1308,9 @@ export function openUpdateTemplates(onDone) {
   const draw = () => fill(box,
     items.length ? items.map((x, i) => h('div', { class: 'cl-tpl' },
       h('div', { class: 'row', style: { gap: '8px' } },
-        h('input', { class: 'inp', value: x.name, maxlength: 60, placeholder: 'Название шаблона, например «Новый пейвол»', oninput: e => { x.name = e.target.value; } }),
+        h('input', { class: 'inp', value: x.name, maxlength: 60, placeholder: 'Название шаблона, например «Новый пейволл»', oninput: e => { x.name = e.target.value; } }),
         h('button', { class: 'icon-btn sm', title: 'Удалить шаблон', onclick: () => { if (x.id) gone.push(x.id); items.splice(i, 1); draw(); } }, icon('trash', 14))),
-      h('input', { class: 'inp', value: x.title || '', maxlength: 500, placeholder: 'Название задачи, например «Апдейт: новый пейвол»', oninput: e => { x.title = e.target.value; } }),
+      h('input', { class: 'inp', value: x.title || '', maxlength: 500, placeholder: 'Название задачи, например «Апдейт: новый пейволл»', oninput: e => { x.title = e.target.value; } }),
       h('textarea', { class: 'inp', rows: 2, placeholder: 'Описание (необязательно)', oninput: e => { x.description = e.target.value; } }, x.description || ''),
       h('textarea', { class: 'inp', rows: 3, placeholder: 'Пункты — по одному в строке', oninput: e => { x.lines = e.target.value; } }, x.lines || ''),
       h('div', { class: 'tpl-steps' }, h('span', { class: 'muted' }, 'Этапы:'), Object.entries(STEP_NAMES).map(([k, label]) => {

@@ -164,9 +164,9 @@ function filterRest() {
     !B.dueDate.hidden && h('button', { class: 'fchip' + (f.overdue ? ' on' : ''), onclick: () => set('overdue', !f.overdue) }, icon('alert', 13), 'Просроченные'),
     h('button', { class: 'fchip' + (f.archived ? ' on' : ''), onclick: () => set('archived', !f.archived) }, icon('archive', 13), 'Архив'),
     S.route.mode === 'board' && isStaff() && !B.department.hidden && h('button', {
-      class: 'fchip' + (S.lanes === true ? ' on' : ''), title: 'Разложить задачи по отделам',
+      class: 'fchip' + (S.lanes === true ? ' on' : ''), title: 'Разложить задачи по позициям',
       onclick: () => { S.lanes = S.lanes === true ? false : true; renderTasks(); drawFilterRest(); },
-    }, icon('rows', 13), 'По отделам'),
+    }, icon('rows', 13), 'По позициям'),
     S.route.mode === 'board' && isStaff() && S.board.tasks.some(t => t.kind === 'request') && h('button', {
       class: 'fchip' + (S.lanes === 'kind' ? ' on' : ''), title: 'Запросы CEO — отдельной дорожкой над задачами',
       onclick: () => { S.lanes = S.lanes === 'kind' ? false : 'kind'; renderTasks(); drawFilterRest(); },
@@ -334,7 +334,7 @@ function renderLanes(board) {
     lanes = activeDepts().map(d => ({ id: d.id, name: d.name, color: d.color }))
       .filter(l => !S.filters.depts.length || S.filters.depts.includes(l.id));
     orphan = tasks.filter(t => !deptById(t.departmentId) || deptById(t.departmentId).archived);
-    if (orphan.length && !S.filters.depts.length) lanes.push({ id: '', name: 'Без отдела', color: 'var(--border-strong)' });
+    if (orphan.length && !S.filters.depts.length) lanes.push({ id: '', name: 'Без позиции', color: 'var(--border-strong)' });
   }
 
   const grid = h('div', { class: 'lanes-grid', style: { gridTemplateColumns: `repeat(${cols.length}, minmax(216px, 1fr)) 40px` } },
@@ -360,7 +360,7 @@ function renderLanes(board) {
     }
     grid.append(h('div'));
   }
-  fill(board, lanes.length ? grid : h('div', { class: 'card-box empty-state' }, h('h2', null, 'Нет отделов'), h('p', null, 'Добавьте отделы в справочнике «Отделы» в меню слева.')));
+  fill(board, lanes.length ? grid : h('div', { class: 'card-box empty-state' }, h('h2', null, 'Нет позиций'), h('p', null, 'Позиции настраиваются в Настройки → Люди и доступы → Позиции.')));
   done();
 }
 
@@ -400,7 +400,7 @@ function onDragEnd(evt) {
 
 export function deptChip(id) {
   const d = deptById(id);
-  return d && h('span', { class: 'chip dept-chip', title: 'Отдел', style: { background: `color-mix(in srgb, ${d.color} 16%, transparent)`, color: d.color } }, d.name);
+  return d && h('span', { class: 'chip dept-chip', title: 'Позиция', style: { background: `color-mix(in srgb, ${d.color} 16%, transparent)`, color: d.color } }, d.name);
 }
 
 function taskCard(t, inLane) {
@@ -498,7 +498,7 @@ export function cardMenu(anchor, t) {
     { title: 'Переместить' },
     ...cols.map(c => ({ label: c.name, icon: KIND_ICONS[c.kind], action: () => patchTask(t, { status: c.id }) })),
     !B.department.hidden && activeDepts().length > 0 && { sep: true },
-    !B.department.hidden && activeDepts().length > 0 && { title: 'Отдел' },
+    !B.department.hidden && activeDepts().length > 0 && { title: 'Позиция' },
     ...(!B.department.hidden ? activeDepts().filter(d => d.id !== t.departmentId).map(d => h('button', {
       class: 'menu-item', onclick: () => { closeMenu(); patchTask(t, { departmentId: d.id }); },
     }, h('span', { class: 'dot', style: { background: d.color, margin: '0 4px' } }), d.name)) : []),

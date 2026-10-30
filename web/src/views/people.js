@@ -93,7 +93,7 @@ const accessSelect = (value, onChange) => h('select', { class: 'inp', value, onc
 /** Окно «Отправьте коллеге»: ссылка, email и временный пароль. */
 function showCredentials(person, password) {
   const site = location.origin + location.pathname;
-  const text = `Вход в Tasks: ${site}\nEmail: ${person.email}\nВременный пароль: ${password}\nПосле входа смените пароль: аватар внизу слева → «Мой профиль».`;
+  const text = `Вход в Tasks: ${site}\nEmail: ${person.email}\nВременный пароль: ${password}\nПосле входа смените пароль: аккаунт внизу слева → «Настройки» → «Профиль».`;
   modal({
     title: 'Доступ создан',
     body: [
@@ -257,7 +257,7 @@ export function peopleManager({ search = false } = {}) {
       h('button', { class: 'btn primary', onclick: () => add().catch(showErr) }, icon('plus', 14), 'Добавить')),
     h('p', { class: 'hint' }, mode === 'supabase'
       ? 'С email — сразу создастся вход с временным паролем. Без email — только профиль (вход можно создать позже в меню ⋯).'
-      : 'Локальный режим: входа нет, проверяйте роли через «Войти как…» в меню профиля.'));
+      : 'Локальный режим: входа нет, проверяйте роли через «Настройки» → «Профиль» → «Войти как…».'));
   el.refresh = draw;
   return el;
 

@@ -239,7 +239,7 @@ function globalFieldsManager() {
     h('span', { class: 'badge' }, f.role === 'priority' ? 'приоритет' : TYPE_LABELS[f.type] || f.type),
     f.showOnCard && h('span', { class: 'badge' }, 'на карточке'),
     f.required && h('span', { class: 'badge' }, requiredLabel(f)),
-    f.staffOnly && h('span', { class: 'badge' }, 'меняют админы'),
+    f.staffOnly && h('span', { class: 'badge' }, 'меняют CEO и PM'),
     f.requiredOnCreate && h('span', { class: 'badge' }, 'при создании'),
     h('span', { class: 'spacer' }),
     h('button', { class: 'btn sm', onclick: () => edit(f) }, icon('edit', 13), 'Изменить'),
@@ -306,7 +306,7 @@ function linkFieldsManager() {
           () => set(on ? f.positions.filter(x => x !== d.id) : [...f.positions, d.id]));
       }),
       h('div', { class: 'menu-sep' }),
-      h('div', { class: 'hint aud-note' }, 'Администраторы видят все поля'));
+      h('div', { class: 'hint aud-note' }, 'CEO и PM видят все поля'));
     paint();
     menu(btn, [{ title: 'Кому видно' }, box]);
   };

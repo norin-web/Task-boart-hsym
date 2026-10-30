@@ -1,5 +1,5 @@
 import Sortable from 'sortablejs';
-import { S, TYPE_LABELS, PALETTE, unitById, byOrder, KINDS, KIND_LABELS, KIND_COLORS, colColor, personById, activeDepts } from '../state.js';
+import { S, TYPE_LABELS, PALETTE, unitById, byOrder, KINDS, KIND_LABELS, KIND_COLORS, colColor, personById, activeDepts, plural } from '../state.js';
 import { $, h, icon, avatar, field, topbar, menu, closeMenu, modal, confirmDlg, toast, showErr, colorPicker, fill } from '../ui.js';
 import { send } from '../api.js';
 import { link } from '../router.js';
@@ -40,7 +40,7 @@ export function renderSettings() {
       const orphans = b.tasks.filter(t => !ids.has(t.status));
       let remap = {};
       if (orphans.length) {
-        const ok = await confirmDlg(`${orphans.length} задач(и) из удалённых колонок переедут в «${st.columns[0].name}». Продолжить?`, { ok: 'Сохранить' });
+        const ok = await confirmDlg(`${orphans.length} ${plural(orphans.length, ['задача', 'задачи', 'задач'])} из удалённых колонок переедут в «${st.columns[0].name}». Продолжить?`, { ok: 'Сохранить' });
         if (!ok) { btn.disabled = false; return; }
         orphans.forEach(t => { remap[t.status] = st.columns[0].id; });
       }
@@ -79,7 +79,7 @@ export function renderSettings() {
     h('span', { class: 'badge' }, TYPE_LABELS[f.type] || f.type),
     f.showOnCard && h('span', { class: 'badge' }, 'на карточке'),
     f.required && h('span', { class: 'badge' }, requiredLabel(f)),
-    f.staffOnly && h('span', { class: 'badge' }, 'меняют админы'),
+    f.staffOnly && h('span', { class: 'badge' }, 'меняют CEO и PM'),
     f.requiredOnCreate && h('span', { class: 'badge' }, 'при создании'),
     h('span', { class: 'spacer' }),
     h('button', { class: 'btn sm', onclick: () => editField(f) }, icon('edit', 13), 'Изменить'),
@@ -371,7 +371,7 @@ function teamSection() {
         h('div', { class: 'row' },
           h('button', { class: 'btn ghost sm', onclick: openDepartments }, icon('layers', 14), 'Позиции'),
           h('button', { class: 'btn primary sm', onclick: async () => { if (await addMemberDialog(b.unit.id)) draw(); } }, icon('plus', 14), 'Участник'))),
-      h('p', { class: 'hint' }, 'Участники юнита. Каждый видит здесь только задачи своей позиции и работает только в своих задачах. Модераторы и супер-админы видят все юниты без добавления в команду.'),
+      h('p', { class: 'hint' }, 'Участники юнита. Каждый видит здесь только задачи своей позиции и работает только в своих задачах. CEO и PM видят все юниты без добавления в состав.'),
       b.members.length
         ? b.members.map(m => {
           const p = personById(m.personId);

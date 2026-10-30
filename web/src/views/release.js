@@ -81,7 +81,7 @@ export function releaseBlock(t, onChange) {
   const step = async action => {
     try {
       const r = await send('releaseStep', { taskId: t.id, action });
-      toast({ close_reject: 'Реджект закрыт — релиз в очереди', submit: 'Отправлено в Apple — приложение на ревью', resubmit: 'Отправлено снова', live: 'В сторе! Релиз и задача CEO закрыты' }[action]);
+      toast({ close_reject: 'Реджект закрыт — релиз в очереди', submit: 'Отправлено в Apple — приложение на ревью', resubmit: 'Отправлено снова', live: 'Вышло в App Store — релиз и задача CEO закрыты' }[action]);
       Object.assign(t, r.task);
       if (onChange) onChange();
       load();

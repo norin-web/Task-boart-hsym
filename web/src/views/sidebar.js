@@ -124,7 +124,7 @@ export function renderSidebar() {
       h('span', null, 'Как ', h('b', null, lens.name)),
       h('button', { class: 'link-btn', onclick: () => import('./dev.js').then(m => m.viewAs('')) }, 'Вернуться')),
     ceo && h('div', { class: 'ceo-mode' }, h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Режим CEO' },
-      [['default', 'Default', 'Приложения и приоритеты — без деталей разработки'], ['admin', 'Admin', 'Всё: доски, задачи, настройки юнитов']].map(([m, label, hint]) =>
+      [['default', 'Обзор', 'Приложения и приоритеты — без деталей разработки'], ['admin', 'Полный', 'Всё: доски, задачи, настройки юнитов']].map(([m, label, hint]) =>
         h('button', { class: ceoMode() === m ? 'on' : '', role: 'radio', 'aria-checked': String(ceoMode() === m), title: hint, onclick: () => setCeoMode(m) }, label)))),
     h('button', { class: 'search-btn', onclick: openPalette }, icon('search', 15), h('span', null, 'Поиск'), h('kbd', null, isMac ? '⌘K' : 'Ctrl K')),
     sec('Главное'),
@@ -140,7 +140,7 @@ export function renderSidebar() {
     h('div', { class: 'nav-spacer' }),
     sec('Другое'),
     isDev() && h('button', {
-      class: 'nav-item dev-item' + (isHere(r, { view: 'dev' }) ? ' active' : ''), title: 'Смотреть как, шорткаты-сценарии, тестовые данные',
+      class: 'nav-item dev-item' + (isHere(r, { view: 'dev' }) ? ' active' : ''), title: 'Смотреть как, быстрые сценарии, тестовые данные',
       onclick: () => import('./dev.js').then(m => m.openDevPanel()),
     }, icon('code'), h('span', { class: 'nav-label' }, 'Режим разработчика'), h('kbd', null, isMac ? '⌥D' : 'Alt D')),
     h('button', { class: 'nav-item', onclick: cycleTheme, title: 'Переключить тему' }, icon(themeIcon), h('span', { class: 'nav-label' }, themeLabel)),
@@ -209,7 +209,7 @@ export function updateSidebarCounts() {
 
 /** Локальный режим: всё стереть и начать с пустой тулзы (вход — «Администратор», супер-админ). */
 export async function resetLocal() {
-  const ok = await confirmDlg('Стереть все локальные данные этого браузера: юниты, задачи, людей, настройки? Начнётся пустая тулза. Отменить нельзя.',
+  const ok = await confirmDlg('Стереть все локальные данные этого браузера: юниты, задачи, людей, настройки? Начнётся пустая база. Отменить нельзя.',
     { ok: 'Стереть всё', danger: true, title: 'Очистить локальную базу' });
   if (!ok) return;
   await resetLocalData();

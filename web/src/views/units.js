@@ -40,7 +40,7 @@ export function archiveUnit(u, archived) {
   send('updateUnit', { id: u.id, archived }).then(saved => {
     Object.assign(u, saved);
     if (S.board && S.board.unit.id === u.id) Object.assign(S.board.unit, saved);
-    toast(archived ? `«${u.name}» в корзине — его можно восстановить в панели админа` : `«${u.name}» восстановлен`,
+    toast(archived ? `«${u.name}» в корзине — его можно восстановить: Настройки → Юниты` : `«${u.name}» восстановлен`,
       archived ? { action: { label: 'Отменить', run: () => archiveUnit(u, false) } } : {});
     if (archived && S.route.unit === u.id) navigate({ view: 'home' }); else rerender();
   }).catch(showErr);
