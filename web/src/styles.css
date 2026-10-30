@@ -1908,3 +1908,6 @@ button.rh-row:hover { background: var(--surface-2); }
 .w-phase.ph-live { background: var(--ok-soft); color: var(--ok); }
 .w-phase.ph-queue { background: var(--accent-soft); color: var(--accent-text); }
 .watch.rel .w-row:not(.task) .w-open { grid-template-columns: 32px minmax(0, 2.6fr) 110px minmax(60px, .5fr) 90px; }
+.rm-live { width: 100%; border: 0; background: none; font: inherit; color: var(--text); text-align: left; cursor: pointer; }
+.rm-live-at { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; white-space: nowrap; }
+.rm-more { display: flex; justify-content: space-between; gap: 12px; padding: 8px 12px; border-top: 1px solid var(--border); font-size: 13px; }

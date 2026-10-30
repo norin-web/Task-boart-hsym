@@ -23,7 +23,8 @@ export async function renderRmHome() {
     h('div', { class: 'view-body' }, page));
   async function load() {
     let d;
-    try { [d] = await Promise.all([call('getRmDashboard', {}), loadNotes()]); } catch (e) { return showErr(e); }
+    let live;
+    try { [d, live] = await Promise.all([call('getRmDashboard', {}), call('getReleaseHistory', { result: 'live' }), loadNotes()]); } catch (e) { return showErr(e); }
     if (currentView() !== 'home') return;
     const person = me();
     fill(page,
@@ -46,7 +47,8 @@ export async function renderRmHome() {
         const pm = personById(x.pmId);
         return [h('span', { class: 'rq-line' }, h('span', { class: 'att-what danger' }, `№${x.rejectNo || ''} · ${x.reason}`),
           h('span', { class: 'muted' }, ' · ' + (pm ? pm.name : 'PM') + ' · ' + relTime(x.rejectedAt)))];
-      }, x => h('button', { class: 'btn sm', title: 'Когда PM закроет задачу по реджекту, релиз сам вернётся в очередь; если исправили иначе — отправьте сразу', onclick: () => step(x, 'resubmit') }, icon('send', 13), 'Отправить снова')));
+      }, x => h('button', { class: 'btn sm', title: 'Когда PM закроет задачу по реджекту, релиз сам вернётся в очередь; если исправили иначе — отправьте сразу', onclick: () => step(x, 'resubmit') }, icon('send', 13), 'Отправить снова')),
+      storeBlock(live.rows));
   }
   async function step(x, action, reason) {
     try {
@@ -83,3 +85,29 @@ function section(title, hint, rows, line, actions, limit = 0) {
   return box;
 }
 
+
+/**
+ * «Релизы в App Store» — последние вышедшие: всегда не больше 3; «Показать ещё» раскрывает до 7;
+ * дальше — «Вся история» (окно истории с фильтром «В сторе»).
+ */
+function storeBlock(rows) {
+  const box = h('section');
+  let open = false;
+  const fmt = iso => (iso ? new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : '');
+  const row = x => h('button', { class: 'rm-row rm-live', onclick: () => peekTask(x.unitId, x.taskId) },
+    x.app ? appIcon(x.app, 'sm') : h('span'),
+    h('span', { class: 'rm-main' }, h('span', { class: 'rm-title' }, h('b', null, x.app ? x.app.name : x.key), x.version && h('span', { class: 'muted' }, ' v' + x.version)),
+      h('span', { class: 'rq-line muted' }, x.n > 1 ? `с ${x.n}-й попытки` : 'с первой попытки')),
+    h('span', { class: 'ok-text rm-live-at' }, icon('check', 13), fmt(x.at)));
+  const draw = () => fill(box,
+    h('div', { class: 'section-head' }, h('h2', null, 'Релизы в App Store', rows.length > 0 && h('span', { class: 'muted sec-n' }, rows.length)),
+      h('button', { class: 'btn ghost sm', onclick: () => openReleaseHistory({ result: 'live' }) }, icon('clock', 14), 'История')),
+    rows.length
+      ? h('div', { class: 'card-box att-list' }, rows.slice(0, open ? 7 : 3).map(row),
+        rows.length > 3 && h('div', { class: 'rm-more' },
+          h('button', { class: 'link-btn', onclick: () => { open = !open; draw(); } }, open ? 'Свернуть' : `Показать ещё ${Math.min(rows.length, 7) - 3}`),
+          open && rows.length > 7 && h('button', { class: 'link-btn', onclick: () => openReleaseHistory({ result: 'live' }) }, `Вся история · ${rows.length}`)))
+      : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'В стор пока ничего не выходило')));
+  draw();
+  return box;
+}

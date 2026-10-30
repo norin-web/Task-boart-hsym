@@ -255,11 +255,11 @@ export async function openReleaseSettings(onDone) {
  * История релизов (RM, CEO, PM): сводка за период (вышло в стор, с 1-го раза, реджекты, отправки, ср. ревью Apple)
  * и список попыток с фильтрами — юнит, приложение, итог. Период: неделя / месяц / квартал / свои даты.
  */
-export function openReleaseHistory() {
+export function openReleaseHistory(preset = {}) {
   const day = d => d.toISOString().slice(0, 10);
   const ago = n => day(new Date(Date.now() - n * 864e5));
   const PERIODS = [['week', 'Неделя', 7], ['month', 'Месяц', 30], ['quarter', 'Квартал', 91], ['custom', 'Свои даты', 0]];
-  const f = { period: 'month', from: ago(30), to: day(new Date()), unitId: '', appId: '', result: '' };
+  const f = { period: 'month', from: ago(30), to: day(new Date()), unitId: '', appId: '', result: '', ...(preset && typeof preset === 'object' && !(preset instanceof Event) ? preset : {}) };
   const seg = h('div', { class: 'seg' });
   const from = h('input', { class: 'inp', type: 'date', value: f.from, onchange: e => { f.from = e.target.value; load(); } });
   const to = h('input', { class: 'inp', type: 'date', value: f.to, onchange: e => { f.to = e.target.value; load(); } });
@@ -270,7 +270,7 @@ export function openReleaseHistory() {
   const paintApps = () => fill(appSel, h('option', { value: '' }, 'Все приложения'),
     (S.apps || []).filter(a => !f.unitId || a.unitId === f.unitId).sort((x, y) => x.name.localeCompare(y.name)).map(a => h('option', { value: a.id }, a.name)));
   const resSel = h('select', { class: 'inp', onchange: e => { f.result = e.target.value; load(); } },
-    [['', 'Любой итог'], ['live', 'В сторе'], ['reject', 'Реджект'], ['pending', 'Ждёт Apple']].map(([v, l]) => h('option', { value: v }, l)));
+    [['', 'Любой итог'], ['live', 'В сторе'], ['reject', 'Реджект'], ['pending', 'Ждёт Apple']].map(([v, l]) => h('option', { value: v, selected: v === f.result }, l)));
   const stats = h('div', { class: 'cs-row rh-stats' });
   const list = h('div', { class: 'card-box rh-list' });
   const paintSeg = () => {
