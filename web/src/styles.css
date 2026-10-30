@@ -1877,7 +1877,7 @@ button.rh-row:hover { background: var(--surface-2); }
 
 /* Карточка релиза — разгружено: тонкая шкала, одна строка состояния, одно главное действие, поля по клику */
 .rl-block { border: 0; padding: 0; background: none; }
-.rl-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px; }
+.rl-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; min-height: 30px; }
 .rl-try { font-size: 12px; }
 .rl-track { list-style: none; margin: 0 0 16px; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); position: relative; }
 .rl-track::before { content: ''; position: absolute; left: 8px; right: 8px; top: 8px; height: 2px; background: var(--border); }
@@ -2088,3 +2088,4 @@ button.prefs-row { width: 100%; border: 0; border-radius: 0; background: none; c
 .rl-dev-by { font-weight: 400; margin-left: 8px; }
 .rl-dev .af-row { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 12px; }
 .rl-dev .af-name { white-space: normal; }
+.rl-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }

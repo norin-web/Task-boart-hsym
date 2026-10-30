@@ -99,6 +99,17 @@ export function releaseBlock(t, onChange) {
     } catch (e) { showErr(e); draw(); }
   };
 
+  /** Главное действие фазы — в шапке блока справа, на одном месте во всех фазах. */
+  const actions = (phase, rel, ready, hist) => h('div', { class: 'rl-actions' },
+    !phase && h('button', { class: 'btn primary sm', disabled: !ready, title: ready ? '' : 'Сначала поля и чеклист', onclick: async () => { await load(); step(hist.length ? 'resubmit' : 'submit'); } },
+      icon('send', 14), hist.length ? 'Отправить снова' : 'Отправить в Apple'),
+    phase === 'submitted' && [
+      h('button', { class: 'btn ghost danger sm', onclick: () => openRejectForm(t, data.app && data.app.name, data.nextRejectNo, () => { load(); if (onChange) onChange(); }) }, 'Реджект'),
+      h('button', { class: 'btn primary sm', onclick: () => step('live') }, icon('rocket', 14), 'Вышло в стор')],
+    phase === 'rejected' && [
+      h('button', { class: 'btn ghost sm', onclick: () => step('resubmit') }, 'Отправить сейчас'),
+      h('button', { class: 'btn primary sm', onclick: () => closeReject(rel) }, icon('check', 14), 'Закрыть реджект')]);
+
   // раскрыт ли список релизных полей (по умолчанию — пока есть незаполненные обязательные или релиз в очереди)
   let fieldsOpen = null;
   const draw = () => {
@@ -137,33 +148,26 @@ export function releaseBlock(t, onChange) {
         values.version && h('span', { class: 'rl-ver' }, 'v' + values.version + (values.build ? ' (' + values.build + ')' : '')),
         hist.length > 1 && h('span', { class: 'muted rl-try' }, `попытка ${hist.length}`),
         h('span', { class: 'spacer' }),
+        editable && actions(phase, rel, ready, hist),
         h('button', { class: 'icon-btn sm', title: 'Настроить карточку релиза', onclick: () => openReleaseCardSettings(() => { load(); if (onChange) onChange(); }) }, icon('settings', 15))),
       h('ol', { class: 'rl-track' }, steps.map(x => h('li', { class: 'rl-pt ' + x.state },
         h('span', { class: 'rl-dot' }, x.state === 'done' ? icon('check', 10) : x.state === 'bad' ? icon('x', 10) : null),
         h('span', { class: 'rl-pt-label' }, x.label),
         x.at && h('span', { class: 'rl-pt-at', title: fmtDateTime(x.at) }, fmtD(x.at))))),
       // сейчас: одна строка состояния и одно главное действие
-      !phase && h('div', { class: 'rl-now' },
+      !phase && (rel.fixedAt || !ready) && h('div', { class: 'rl-now' },
         rel.fixedAt && h('p', { class: 'rl-line ok-text' }, icon('check', 14), `Реджект №${rel.rejectNo || ''} исправили — можно отправлять`),
         !ready && h('p', { class: 'rl-line muted' }, icon('circle', 14),
-          [missing.length && 'заполните ' + missing.map(f => f.name.toLowerCase()).join(', '), clOpen && `закройте чеклист (${clOpen})`].filter(Boolean).join(' · ')),
-        editable && h('button', { class: 'btn primary', disabled: !ready, onclick: async () => { await load(); step(hist.length ? 'resubmit' : 'submit'); } },
-          icon('send', 14), hist.length ? 'Отправить в Apple снова' : 'Отправить в Apple')),
+          [missing.length && 'заполните ' + missing.map(f => f.name.toLowerCase()).join(', '), clOpen && `закройте чеклист (${clOpen})`].filter(Boolean).join(' · '))),
       phase === 'submitted' && h('div', { class: 'rl-now' },
         h('p', { class: 'rl-line' }, icon('eye', 14), h('b', null, 'На ревью Apple'),
-          h('span', { class: 'muted' }, daysSince(rel.submittedAt) ? `· ${daysSince(rel.submittedAt)} ${plural(daysSince(rel.submittedAt), ['день', 'дня', 'дней'])}` : '· с сегодня')),
-        editable && h('div', { class: 'rl-btns' },
-          h('button', { class: 'btn primary', onclick: () => step('live') }, icon('rocket', 14), 'Вышло в стор'),
-          h('button', { class: 'btn ghost danger', onclick: () => openRejectForm(t, data.app && data.app.name, data.nextRejectNo, () => { load(); if (onChange) onChange(); }) }, 'Реджект'))),
+          h('span', { class: 'muted' }, daysSince(rel.submittedAt) ? `· ${daysSince(rel.submittedAt)} ${plural(daysSince(rel.submittedAt), ['день', 'дня', 'дней'])}` : '· с сегодня'))),
       phase === 'rejected' && h('div', { class: 'rl-now bad' },
         h('p', { class: 'rl-line danger-text' }, icon('alert', 14), h('b', null, `Реджект №${rel.rejectNo || ''}`),
           h('span', { class: 'muted' }, '· ' + relTime(rel.rejectedAt)),
           rel.shot && h('a', { class: 'rl-shot', href: rel.shot, target: '_blank', rel: 'noopener' }, 'скрин', icon('arrowUpRight', 12))),
         h('p', { class: 'rl-reason' }, rel.reason),
-        h('p', { class: 'rl-line muted rl-small' }, `Исправляет ${pm ? pm.name : 'PM юнита'}; закроет задачу — релиз вернётся в очередь.`),
-        editable && h('div', { class: 'rl-btns' },
-          h('button', { class: 'btn sm', onclick: () => closeReject(rel) }, icon('check', 14), 'Закрыть реджект'),
-          h('button', { class: 'btn ghost sm', onclick: () => step('resubmit') }, 'Отправить сейчас'))),
+        h('p', { class: 'rl-line muted rl-small' }, `Исправляет ${pm ? pm.name : 'PM юнита'}; закроет задачу — релиз вернётся в очередь.`)),
       phase === 'live' && h('div', { class: 'rl-now' }, h('p', { class: 'rl-line ok-text' }, icon('check', 14), h('b', null, 'В App Store'),
         h('span', { class: 'muted' }, '· ' + fmtD(rel.liveAt) + (hist.length > 1 ? ` · с ${hist.length}-й попытки` : ' · с первой попытки')))),
       // релизные поля — раскрываются по клику (заполненные — коротко)
