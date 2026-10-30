@@ -1414,6 +1414,12 @@ begin
     update tasks set release = rel, updated_at = at_, status = coalesce(col, status), done_at = '',
       started_at = case when started_at = '' then at_ else started_at end
      where id = t.id;
+    -- отправили снова, не дожидаясь PM: его задача «Реджект №N» больше не нужна — закрываем (после смены фазы, иначе release_fixed сработает ещё раз)
+    if coalesce(t.release ->> 'phase', '') = 'rejected' and coalesce(t.release ->> 'rejectRequestId', '') <> '' then
+      select c ->> 'id' into col from jsonb_array_elements(u.settings -> 'columns') c where c ->> 'kind' = 'done' limit 1;
+      update tasks set status = coalesce(col, status), done_at = at_, updated_at = at_
+       where id = t.release ->> 'rejectRequestId' and done_at = '';
+    end if;
     select x ->> 'id' into v_status from jsonb_array_elements(st) x where x ->> 'kind' = 'review' limit 1;
   elsif p_action = 'reject' then
     if coalesce(rel ->> 'phase', '') <> 'submitted' then raise exception 'Реджект — после отправки в Apple' using errcode = 'P0001'; end if;
@@ -1661,10 +1667,11 @@ create policy notifications_read on notifications for update to authenticated
 -- Приложения: CEO — все; остальные — приложения своих юнитов. Создаёт и удаляет CEO, правит — CEO и PM юнита.
 alter table app_notes enable row level security;
 drop policy if exists app_notes_read on app_notes;
-create policy app_notes_read on app_notes for select to authenticated using (exists (select 1 from apps a where a.id = app_id));
+-- заметки к приложению — рабочие, для CEO, PM, RM и лидов; сотрудники их не видят (как и раздел «Приложения»)
+create policy app_notes_read on app_notes for select to authenticated using (app_system() or (my_access() <> 'member' and exists (select 1 from apps a where a.id = app_id)));
 drop policy if exists app_notes_insert on app_notes;
 create policy app_notes_insert on app_notes for insert to authenticated
-  with check (author_id = my_person_id() and exists (select 1 from apps a where a.id = app_id));
+  with check (author_id = my_person_id() and my_access() <> 'member' and exists (select 1 from apps a where a.id = app_id));
 drop policy if exists app_notes_delete on app_notes;
 create policy app_notes_delete on app_notes for delete to authenticated using (author_id = my_person_id() or is_superadmin());
 -- История статусов приложения (блок «Недавнее» на дашборде CEO): пишет только триггер — при любой смене статуса,
