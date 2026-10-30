@@ -1202,6 +1202,26 @@ export function createBackend(db, opts = {}) {
     },
 
     /** Забрать задачу из ревью (тот, кто отправил): обратно в колонку перед ревью, исполнитель — снова он. */
+    /**
+     * Решение по ревью (ревьюер — исполнитель задачи в колонке ревью, или CEO / PM юнита):
+     * approve — в «готово»; иначе «Правки» — обратно автору в колонку перед ревью, комментарий (если есть) — в обсуждение задачи.
+     */
+    async reviewDecision(p, ctx) {
+      const t = await findTask(p.taskId);
+      const st = unitSettings((await findUnit(t.unit_id)).settings);
+      const col = (st.review || {}).column || '';
+      if (!col || t.status !== col) fail('Задача уже не на ревью');
+      const cols = st.columns;
+      const i = cols.findIndex(c => c.id === t.status);
+      const target = p.approve
+        ? (cols.find(c => c.kind === 'done') || fail('В юните нет колонки «готово»')).id
+        : ([...cols.slice(0, i)].reverse().find(c => c.kind !== 'done') || cols[0]).id;
+      const text = str(p.comment, 5000);
+      if (text) await methods.addComment({ taskId: t.id, text: (p.approve ? 'Аппрув: ' : 'Правки: ') + text }, ctx);
+      const fresh = await findTask(t.id);
+      return methods.updateTask({ id: t.id, expectedUpdatedAt: fresh.updated_at, patch: { status: target } }, ctx);
+    },
+
     async recallReview(p) {
       const t = await findTask(p.id);
       await rpc('recall_review', { p_task: t.id });
@@ -1343,7 +1363,12 @@ export function createBackend(db, opts = {}) {
      */
     async getMyBoard(p) {
       const me = str(p.personId, 40);
-      const rows = await all(() => T('tasks').select('*').eq('assignee_id', me).eq('archived', false).order('id'));
+      // свои задачи + отправленные мной на ревью (они у ревьюера, но видны мне в Review — можно забрать обратно)
+      const [mine, sent] = await Promise.all([
+        all(() => T('tasks').select('*').eq('assignee_id', me).eq('archived', false).order('id')),
+        all(() => T('tasks').select('*').eq('review_from', me).eq('archived', false).order('id')),
+      ]);
+      const rows = [...mine, ...sent.filter(t => !mine.some(x => x.id === t.id))];
       const unitIds = [...new Set(rows.map(t => t.unit_id))];
       const [units, places] = await Promise.all([
         unitIds.length ? run(T('units').select('id,name,key,color,settings,archived').in('id', unitIds)) : [],

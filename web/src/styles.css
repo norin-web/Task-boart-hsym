@@ -1778,3 +1778,9 @@ a.rc-more { text-decoration: none; }
 .prio-select:disabled { cursor: default; opacity: .7; }
 .prio-select-chev { margin-left: auto; display: inline-flex; color: var(--muted); }
 .menu-item .prio-mark { width: 16px; justify-content: center; }
+
+/* Ревью: явное решение — «Аппрув» / «Правки» */
+.review-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; margin-bottom: 14px; border-radius: var(--r); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border)); background: var(--accent-soft); font-size: 13.5px; }
+.review-bar > .i { color: var(--accent-text); }
+.my-review { display: inline-flex; gap: 6px; }
+.my-review .btn.sm, .my-recall { padding: 2px 8px; font-size: 12px; min-height: 0; }

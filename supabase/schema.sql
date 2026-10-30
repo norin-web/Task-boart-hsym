@@ -687,6 +687,27 @@ end $$;
 drop trigger if exists review_assign on tasks;
 create trigger review_assign before update on tasks for each row execute function review_assign();
 
+-- В «готово» — только через ревью (решение заказчика): исполнитель (не CEO и не PM юнита) не может перенести задачу
+-- в колонку типа done мимо колонки ревью; из ревью в «готово» переносит ревьюер («Аппрув»). Без колонки ревью — без ограничения.
+create or replace function guard_done_review() returns trigger language plpgsql set search_path = public as $$
+declare
+  st jsonb;
+  col text;
+  k text;
+begin
+  if app_system() or new.status is not distinct from old.status or can_manage(new.unit_id) then return new; end if;
+  select settings into st from units where id = new.unit_id;
+  col := coalesce(st -> 'review' ->> 'column', '');
+  if col = '' then return new; end if;
+  select x ->> 'kind' into k from jsonb_array_elements(st -> 'columns') x where x ->> 'id' = new.status limit 1;
+  if coalesce(k, '') = 'done' and old.status <> col then
+    raise exception 'Готово — только через ревью: отправьте задачу на ревью' using errcode = 'P0001';
+  end if;
+  return new;
+end $$;
+drop trigger if exists guard_done_review on tasks;
+create trigger guard_done_review before update on tasks for each row execute function guard_done_review();
+
 -- Прежняя передача вниз (юнит приложений → Managers) — убрана вместе с иерархией юнитов.
 drop trigger if exists handoff_task on tasks;
 drop function if exists handoff_task();

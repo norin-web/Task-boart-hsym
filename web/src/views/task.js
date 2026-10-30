@@ -13,6 +13,7 @@ import { readNote } from './home.js';
 import { releaseBlock } from './release.js';
 import { brandIcon, brandOf } from './brand.js';
 import { isWatched, toggleWatch } from './watch.js';
+import { reviewButtons } from './review.js';
 
 /* ================= Панель задачи ================= */
 
@@ -92,7 +93,13 @@ function buildPanel(t) {
 
   const main = h('div', { class: 'panel-main' },
     title,
-    canRecall(t)
+    // я — ревьюер этой задачи: решение явными кнопками
+    t.reviewFrom && t.reviewFrom !== S.meId && t.assigneeId === S.meId && t.status === ((unitById(t.unitId) || u).settings.review || {}).column
+      ? h('div', { class: 'review-bar' }, icon('eye', 15),
+        h('span', null, 'На ревью от ', h('b', null, (personById(t.reviewFrom) || {}).name || 'автора')),
+        h('span', { class: 'spacer' }),
+        reviewButtons(t, res => { Object.assign(t, res); if (S.board && S.board.unit.id === t.unitId) renderTasks(); refreshPanel(t); }))
+      : canRecall(t)
       ? h('div', { class: 'readonly-note recall' }, icon('eye', 14),
         h('span', null, 'На ревью у ' + ((personById(t.assigneeId) || {}).name || 'ревьюера') + '. Что-то забыли?'),
         h('button', { class: 'btn sm', onclick: () => recallReview(t) }, icon('back', 13), 'Забрать из ревью'))

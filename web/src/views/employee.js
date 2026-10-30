@@ -3,10 +3,10 @@
  * и загрузка людей позиции лида. Данные — getMyDashboard.
  */
 import { personById, deptById, prioById, fmtDate, plural } from '../state.js';
-import { h, icon, avatar, toast, showErr } from '../ui.js';
-import { send } from '../api.js';
+import { h, icon, avatar } from '../ui.js';
 import { peekTask } from './task.js';
 import { appIcon, prioTag, isHighPrio } from './apps.js';
+import { reviewButtons } from './review.js';
 
 // Красным — только просрочка; остальное — серым
 const REASON = {
@@ -31,12 +31,9 @@ export function focusBlock(d) {
     })) : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Горящего нет')));
 }
 
-/** Очередь ревью лида: чья задача, «Принять» (в готово) и «Вернуть» (автору, в колонку перед ревью). */
+/** Очередь ревью лида: чья задача и решение — «Аппрув» (в готово) или «Правки» (автору, с комментарием). */
 export function reviewsBlock(d, reload) {
   const rows = d.lead.reviews;
-  const act = async (t, status, done) => {
-    try { await send('updateTask', { id: t.id, patch: { status } }); toast(done); reload(); } catch (e) { showErr(e); }
-  };
   return h('section', null,
     h('div', { class: 'section-head' }, h('h2', null, 'Ждут вашего ревью', rows.length > 0 && h('span', { class: 'muted sec-n' }, rows.length))),
     rows.length ? h('div', { class: 'card-box att-list' }, rows.map(t => {
@@ -45,9 +42,7 @@ export function reviewsBlock(d, reload) {
         author ? avatar(author, 'sm') : h('span'),
         h('button', { class: 'link-btn fc-main', onclick: () => peekTask(t.unitId, t.id) },
           h('span', { class: 'fc-title' }, t.title), h('span', { class: 'muted fc-sub' }, (author ? author.name : '') + (t.app ? ' · ' + t.app.name : ''))),
-        h('div', { class: 'rv-actions' },
-          t.acceptStatus && h('button', { class: 'btn primary sm', onclick: () => act(t, t.acceptStatus, 'Принято — задача закрыта') }, icon('check', 13), 'Принять'),
-          h('button', { class: 'btn sm', onclick: () => act(t, t.returnStatus, 'Вернули автору') }, icon('back', 13), 'Вернуть')));
+        h('div', { class: 'rv-actions' }, reviewButtons({ ...t, reviewFrom: t.authorId }, () => reload())));
     })) : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Ревью никто не ждёт')));
 }
 

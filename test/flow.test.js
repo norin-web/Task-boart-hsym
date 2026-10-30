@@ -53,6 +53,11 @@ async function studio(api) {
 }
 
 const forbidden = e => e.code === 'FORBIDDEN';
+/** Закрыть задачу как положено: исполнитель — на ревью, PM юнита — «Аппрув». */
+const finish = async (api, who, pm, id) => {
+  await api.as(who, () => api('updateTask', { id, patch: { status: 'review' } }));
+  return api.as(pm, () => api('reviewDecision', { taskId: id, approve: true }));
+};
 
 test('New App: CEO → PM юнита → этапы по флоу → блокировки → релиз у RM', async () => {
   const api = await setup();
@@ -101,13 +106,13 @@ test('New App: CEO → PM юнита → этапы по флоу → блоки
   await api.as(ios, () => assert.rejects(() => api('updateTask', { id: by.ios.id, patch: { status: 'in_progress' } }), /заблокирован.*Дизайн/));
   await api.as(ceo, () => assert.rejects(() => api('updateTask', { id: by.ios.id, patch: { status: 'in_progress' } }), /заблокирован/));
   await api.as(aso, () => api('updateTask', { id: by.meta.id, patch: { status: 'in_progress' } })); // мета — параллельно
-  await api.as(lead, () => api('updateTask', { id: by.design.id, patch: { status: 'done' } }));
-  await api.as(ios, () => api('updateTask', { id: by.ios.id, patch: { status: 'done' } }));
+  await finish(api, lead, pm, by.design.id);
+  await finish(api, ios, pm, by.ios.id);
 
   // в релиз — только когда всё закрыто
   await api.as(pm, () => assert.rejects(() => api('sendToRelease', { taskId: by.release.id }), /Сначала закройте.*Тестирование/));
-  await api.as(qa, () => api('updateTask', { id: by.qa.id, patch: { status: 'done' } }));
-  await api.as(aso, () => api('updateTask', { id: by.meta.id, patch: { status: 'done' } }));
+  await finish(api, qa, pm, by.qa.id);
+  await finish(api, aso, pm, by.meta.id);
   await api.as(ios, () => assert.rejects(() => api('sendToRelease', { taskId: by.release.id }), e => e.code === 'NOT_FOUND' || forbidden(e))); // чужой этап ему не виден
   const rel = await api.as(pm, () => api('sendToRelease', { taskId: by.release.id }));
   assert.equal(rel.assigneeId, rm.id);
@@ -301,10 +306,10 @@ test('дашборд PM: входящие, этапы, проблемы, KPI к�
   // дизайн — в срок; iOS — после срока; ещё одна задача iOS просрочена и висит
   await api.as(pm, () => api('updateTask', { id: st.design.id, patch: { dueDate: '2099-01-01' } }));
   await api.as(lead, () => api('updateTask', { id: st.design.id, patch: { status: 'in_progress' } }));
-  await api.as(lead, () => api('updateTask', { id: st.design.id, patch: { status: 'done' } }));
+  await finish(api, lead, pm, st.design.id);
   await api.as(pm, () => api('updateTask', { id: st.ios.id, patch: { dueDate: '2020-01-01' } }));
   await api.as(ios, () => api('updateTask', { id: st.ios.id, patch: { status: 'in_progress' } }));
-  await api.as(ios, () => api('updateTask', { id: st.ios.id, patch: { status: 'done' } }));
+  await finish(api, ios, pm, st.ios.id);
   const late = await api.as(pm, () => api('createTask', { unitId: gold.id, title: 'Краш', assigneeId: ios.id, dueDate: '2020-01-01' }));
   await api.as(pm, () => api('createTask', { unitId: gold.id, title: 'Ничья' }));
   const d = await api.as(pm, () => api('getPmDashboard', { today: day, period: 'week' }));
@@ -333,7 +338,7 @@ test('RM: релиз — поля и чеклист, отправка в Apple, 
   const { app, request } = await api.as(ceo, () => api('createApp', { name: 'Sleep', unitId: gold.id, priority: 'o_high' }));
   const st = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: request.id }))).map(t => [t.step, t]));
   await api.as(lead, () => api('setTaskLink', { taskId: st.design.id, fieldId: 'lf_figma', url: 'https://figma.com/x' }));
-  for (const [who, k] of [[lead, 'design'], [ios, 'ios'], [qa, 'qa'], [aso, 'meta']]) await api.as(who, () => api('updateTask', { id: st[k].id, patch: { status: 'done' } }));
+  for (const [who, k] of [[lead, 'design'], [ios, 'ios'], [qa, 'qa'], [aso, 'meta']]) await finish(api, who, pm, st[k].id);
   const rel = await api.as(pm, () => api('sendToRelease', { taskId: st.release.id }));
   assert.equal(rel.checklist.length, 4); // чеклист релиза студии подставился
 
@@ -414,6 +419,14 @@ test('сотрудник и лид: «Можно начинать», фокус,
 
   // ревью дизайна — у лида: в очереди, «Принять» → готово
   await api('updateUnit', { id: gold.id, settings: { ...(await api('getBoard', { unitId: gold.id })).unit.settings, review: { column: 'review', byPosition: { d_design: lead.id }, default: pm.id } } });
+  // в «готово» мимо ревью исполнителю нельзя
+  await api.as(designer, () => assert.rejects(() => api('updateTask', { id: st.design.id, patch: { status: 'done' } }), /ревью/));
+  await api.as(designer, () => api('updateTask', { id: st.design.id, patch: { status: 'review' } }));
+  // «Правки» с комментарием — обратно дизайнеру; комментарий — в обсуждении
+  const back = await api.as(lead, () => api('reviewDecision', { taskId: st.design.id, approve: false, comment: 'Поправь отступы' }));
+  assert.equal(back.status, 'in_progress');
+  assert.equal(back.assigneeId, designer.id);
+  assert.ok((await api.as(designer, () => api('getTaskExtras', { taskId: st.design.id }))).comments.some(c => c.text === 'Правки: Поправь отступы'));
   await api.as(designer, () => api('updateTask', { id: st.design.id, patch: { status: 'review' } }));
   const ld = await api.as(lead, () => api('getMyDashboard', { personId: lead.id, today: day }));
   const rv = ld.lead.reviews.find(x => x.id === st.design.id);
@@ -422,7 +435,9 @@ test('сотрудник и лид: «Можно начинать», фокус,
   assert.equal(rv.acceptStatus, 'done');
   assert.equal(rv.returnStatus, 'in_progress');
   assert.deepEqual(ld.lead.team.map(x => x.personId).sort(), [lead.id, designer.id].sort());
-  await api.as(lead, () => api('updateTask', { id: st.design.id, patch: { status: rv.acceptStatus } }));
+  // посторонний не решает; ревьюер — «Аппрув» → готово
+  await api.as(ios, () => assert.rejects(() => api('reviewDecision', { taskId: st.design.id, approve: true })));
+  assert.equal((await api.as(lead, () => api('reviewDecision', { taskId: st.design.id, approve: true }))).status, 'done');
 
   // дизайн закрыт → iOS «Можно начинать», QA ещё ждёт
   await api.as(ios, async () => assert.ok((await api('getNotifications', {})).some(n => n.taskId === st.ios.id && n.kind === 'unblocked')));

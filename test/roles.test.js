@@ -101,6 +101,7 @@ test('обязательное поле с колонки: нужно тольк
   await api.as(designer, async () => {
     const moved = await api('updateTask', { id: t1.id, patch: { status: 'in_progress' } });
     assert.equal(moved.status, 'in_progress');
+    await api('updateTask', { id: t1.id, patch: { status: 'review' } }); // в «готово» — только из ревью
     await assert.rejects(() => api('updateTask', { id: t1.id, patch: { status: 'done' } }), e => e.code === 'RULE' && /Макет/.test(e.message));
     assert.equal((await api('updateTask', { id: t1.id, patch: { status: 'todo' } })).status, 'todo'); // назад — можно
   });
@@ -218,6 +219,7 @@ test('несколько позиций, приоритет — только а�
   await api.as(designer, async () => {
     await api('updateTask', { id: t1.id, patch: { fields: { [link.id]: 'https://figma.com/x' } } });
     await api('updateTask', { id: t1.id, patch: { status: 'in_progress' } });
+    await api('updateTask', { id: t1.id, patch: { status: 'review' } }); // в «готово» — только из ревью
     await assert.rejects(() => api('updateTask', { id: t1.id, patch: { status: 'done' } }), /Канал/);
     await api('updateTask', { id: t1.id, patch: { fields: { [ch.id]: 'tg' } } });
     await api('updateTask', { id: t1.id, patch: { status: 'done' } });
@@ -328,6 +330,7 @@ test('чеклист перед «готово» и поля, обязатель
   await api('updateUnit', { id: A.id, settings: { ...st, checklistBeforeDone: true } });
   await api.as(designer, async () => {
     await api('updateTask', { id: t1.id, patch: { checklist: [{ text: 'a' }, { text: 'b', done: true }] } });
+    await api('updateTask', { id: t1.id, patch: { status: 'review' } }); // в «готово» — только из ревью
     await assert.rejects(() => api('updateTask', { id: t1.id, patch: { status: 'done' } }), e => e.code === 'RULE' && /чеклист/.test(e.message));
     const cl = (await api('getBoard', { unitId: A.id })).tasks.find(t => t.id === t1.id).checklist.map(i => ({ ...i, done: true }));
     await api('updateTask', { id: t1.id, patch: { checklist: cl } });

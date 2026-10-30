@@ -7,10 +7,11 @@
  */
 import Sortable from 'sortablejs';
 import { S, me, activeTeams, between, dueInfo, todayStr, PALETTE } from '../state.js';
-import { $, h, icon, topbar, fill, modal, showErr, statusDot, confirmDlg, menu, closeMenu } from '../ui.js';
+import { $, h, icon, topbar, fill, modal, showErr, statusDot, confirmDlg, menu, closeMenu, toast } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
+import { reviewButtons } from './review.js';
 
 /** Обязательные колонки: одинаковы у всех, их не убрать и не переставить. */
 export const FIXED = [
@@ -108,7 +109,14 @@ function draw(page, data) {
       h('div', { class: 'card-foot' },
         u && h('span', { class: 'my-unit', title: 'Юнит' }, h('span', { class: 'dot', style: { background: u.color } }), u.name),
         h('span', { class: 'spacer' }),
-        due && h('span', { class: 'due ' + due.cls, title: due.hint }, icon('calendar', 12), due.text)));
+        due && h('span', { class: 'due ' + due.cls, title: due.hint }, icon('calendar', 12), due.text),
+        // я ревьюер — решение прямо на карточке
+        t.assigneeId === S.meId && t.reviewFrom && t.reviewFrom !== S.meId && groupOf(data, t) === 'review' && h('span', { class: 'my-review' }, reviewButtons(t, () => renderMyBoard())),
+        // отправил на ревью сам — можно забрать обратно (что-то забыл)
+        t.reviewFrom === S.meId && groupOf(data, t) === 'review' && h('button', {
+          class: 'btn ghost sm my-recall', title: 'Забрать из ревью — вернуть себе в работу',
+          onclick: e => { e.stopPropagation(); send('recallReview', { id: t.id }).then(() => { toast('Задача снова у вас'); renderMyBoard(); }).catch(showErr); },
+        }, icon('back', 13), 'Забрать')));
   };
 
   const columnEls = cols.map(c => {
