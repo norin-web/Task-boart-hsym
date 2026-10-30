@@ -1,5 +1,6 @@
 // Tasks 2.0: роли CEO / PM / RM / Lead / сотрудник, приложения, запросы CEO, декомпозиция по флоу,
 // блокировка этапов, передача в релиз, режим разработчика (тестовые данные). Логика и права — на настоящей схеме.
+import { DEV_QUESTIONS } from '../web/src/devform.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -54,7 +55,10 @@ async function studio(api) {
 
 const forbidden = e => e.code === 'FORBIDDEN';
 /** Закрыть задачу как положено: исполнитель — на ревью, PM юнита — «Аппрув». */
+const DEV_ANSWERS = Object.fromEntries(DEV_QUESTIONS.filter(q => !q.optional).map(q => [q.id, q.kind === 'yn' ? { v: 'Нет' } : { v: 'Ответ' }]));
 const finish = async (api, who, pm, id) => {
+  // этап iOS без опросника на ревью не уходит
+  await api.as(who, () => api('saveDevForm', { taskId: id, answers: DEV_ANSWERS })).catch(() => null);
   await api.as(who, () => api('updateTask', { id, patch: { status: 'review' } }));
   return api.as(pm, () => api('reviewDecision', { taskId: id, approve: true }));
 };
@@ -708,4 +712,38 @@ test('шаблон апдейта: пункты и нужные этапы; за
   assert.deepEqual(stages.map(t => t.step), ['design', 'ios', 'release']);
   const rel = stages.find(t => t.step === 'release');
   assert.equal(rel.dependsOn.length, 2); // без убранного QA
+});
+
+test('опросник разработчика: без него этап iOS не уходит на ревью, ответы видит RM; RM сам закрывает реджект', async () => {
+  const api = await setup();
+  const { ceo, pm, rm, ios, gold } = await studio(api);
+  const { request } = await api.as(ceo, () => api('createApp', { name: 'AI', unitId: gold.id, storeUrl: '' }));
+  await api.as(ceo, () => api('updateRequest', { id: request.id, pmId: pm.id })).catch(() => null);
+  const stages = await api.as(pm, () => api('decomposeRequest', { taskId: request.id }));
+  const by = Object.fromEntries(stages.map(t => [t.step, t]));
+  for (const k of ['design', 'meta']) await finish(api, ceo, pm, by[k].id).catch(() => api.as(pm, () => api('updateTask', { id: by[k].id, patch: { status: 'done' } })));
+  await api.as(ios, async () => {
+    await assert.rejects(() => api('updateTask', { id: by.ios.id, patch: { status: 'review' } }), /^Error: DEV_FORM:|DEV_FORM:/);
+    await assert.rejects(() => api('saveDevForm', { taskId: by.ios.id, answers: {} }), /Ответьте на вопрос/);
+    await assert.rejects(() => api('saveDevForm', { taskId: by.ios.id, answers: { ...DEV_ANSWERS, analytics: { v: 'Да' } } }), /Какая/);
+    await api('saveDevForm', { taskId: by.ios.id, answers: { ...DEV_ANSWERS, analytics: { v: 'Да', note: 'Amplitude' } } });
+    await api('updateTask', { id: by.ios.id, patch: { status: 'review' } });
+  });
+  await api.as(pm, () => api('reviewDecision', { taskId: by.ios.id, approve: true }));
+  await finish(api, ceo, pm, by.qa.id).catch(() => api.as(pm, () => api('updateTask', { id: by.qa.id, patch: { status: 'done' } })));
+  await api.as(pm, () => api('sendToRelease', { taskId: by.release.id }));
+  const r = await api.as(rm, () => api('getRelease', { taskId: by.release.id }));
+  assert.equal(r.devForm.answers.analytics.note, 'Amplitude');
+  // реджект: RM закрывает сам, задача реджекта готова, релиз в очереди
+  await api.as(rm, async () => {
+    await api('saveReleaseValues', { taskId: by.release.id, values: { version: '1.0', build: '1', whatsnew: 'x' } });
+    await api('releaseStep', { taskId: by.release.id, action: 'submit' });
+    await api('releaseStep', { taskId: by.release.id, action: 'reject', reason: 'Guideline 3.1' });
+    const closed = await api('releaseStep', { taskId: by.release.id, action: 'close_reject' });
+    assert.equal(closed.task.release.phase, '');
+    assert.ok(closed.task.release.fixedAt);
+    await assert.rejects(() => api('releaseStep', { taskId: by.release.id, action: 'close_reject' }), /только реджект/);
+  });
+  const rej = (await api.as(pm, () => api('getBoard', { unitId: gold.id }))).tasks.find(t => /^Реджект №/.test(t.title));
+  assert.ok(rej.doneAt);
 });

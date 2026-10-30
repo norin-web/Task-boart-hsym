@@ -5,6 +5,8 @@
  */
 
 /** Тип колонки: не начато / в работе / готово. Свои колонки встают между ними. */
+import { DEV_QUESTIONS } from './devform.js';
+
 export const KINDS = ['todo', 'progress', 'done'];
 const KIND_COUNT_KEY = { todo: 'todo', progress: 'in_progress', done: 'done' };
 export const FIELD_TYPES = ['text', 'longtext', 'number', 'date', 'select', 'multiselect', 'person', 'checkbox', 'url'];
@@ -230,7 +232,7 @@ const taskOut = r => ({
   reviewFrom: r.review_from || '', reviewerId: r.reviewer_id || '', teamId: r.team_id || '', specUrl: r.spec_url || '',
   parentId: r.parent_id || '', kind: r.kind || '', startedAt: r.started_at || '',
   release: json(r.release, {}) || {}, flowSteps: json(r.flow_steps, []) || [],
-  appId: r.app_id || '', requestType: r.request_type || '', step: r.step || '', dependsOn: json(r.depends_on, []) || [], isTest: !!r.is_test,
+  appId: r.app_id || '', requestType: r.request_type || '', step: r.step || '', devForm: json(r.dev_form, {}) || {}, dependsOn: json(r.depends_on, []) || [], isTest: !!r.is_test,
   createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at,
 });
 
@@ -2092,15 +2094,15 @@ export function createBackend(db, opts = {}) {
     async getRelease(p) {
       const t = await findTask(p.taskId);
       if (t.step !== 'release') fail('Это не этап «Релиз»');
-      const [app, links, lf, settings] = await Promise.all([
-        t.app_id ? one('apps', t.app_id) : null, rpc('release_links', { p_task: t.id }), linkFields(), methods.getReleaseSettings(),
+      const [app, links, lf, settings, devForm] = await Promise.all([
+        t.app_id ? one('apps', t.app_id) : null, rpc('release_links', { p_task: t.id }), linkFields(), methods.getReleaseSettings(), rpc('release_dev_form', { p_task: t.id }),
       ]);
       const LF = Object.fromEntries(lf.map(f => [f.id, f]));
       // номер следующего реджекта — по приложению (все его релизы)
       const sib = t.app_id ? await run(T('tasks').select('release').eq('app_id', t.app_id).eq('step', 'release')) : [];
       const rejects = sib.reduce((n, r) => n + ((json(r.release, {}) || {}).history || []).filter(x => x.result === 'reject').length, 0);
       return {
-        task: taskOut(t), app: app ? appOut(app) : null, fields: settings.fields, nextRejectNo: rejects + 1,
+        task: taskOut(t), app: app ? appOut(app) : null, fields: settings.fields, nextRejectNo: rejects + 1, devForm: json(devForm, {}) || {},
         links: (links || []).map(l => ({ taskId: l.task_id, step: l.step, stage: String(l.title).split(' · ')[0], fieldId: l.field_id, name: (LF[l.field_id] || {}).name || 'Ссылка', kind: (LF[l.field_id] || {}).kind || 'link', url: l.url })),
       };
     },
@@ -2133,10 +2135,29 @@ export function createBackend(db, opts = {}) {
 
     /** Шаг релиза: submit (отправил в Apple) / live (вышло в стор) / reject (реджект, reason) / resubmit (отправил снова). */
     async releaseStep(p) {
-      if (!['submit', 'live', 'reject', 'resubmit'].includes(p.action)) fail('Неизвестный шаг релиза');
+      if (!['submit', 'live', 'reject', 'resubmit', 'close_reject'].includes(p.action)) fail('Неизвестный шаг релиза');
       const t = await findTask(p.taskId);
       const id = await rpc('release_step', { p_task: t.id, p_action: p.action, p_reason: str(p.reason, 2000), p_shot: linkUrl(p.shot) });
       return { task: taskOut(await findTask(t.id)), rejectRequestId: p.action === 'reject' ? id : '' };
+    },
+
+    /** Опросник разработчика перед релизом: только этап iOS, все обязательные ответы; при «Нет» уточнение не хранится. */
+    async saveDevForm(p) {
+      const t = await findTask(p.taskId);
+      if (t.step !== 'ios') fail('Опросник — у этапа «Разработка iOS»');
+      const src = p.answers && typeof p.answers === 'object' ? p.answers : {};
+      const answers = {};
+      for (const q of DEV_QUESTIONS) {
+        const a = src[q.id] || {};
+        const v = q.kind === 'yn' ? (['Да', 'Нет'].includes(a.v) ? a.v : '') : str(a.v, 1000);
+        if (!v) { if (q.optional) continue; fail('Ответьте на вопрос: ' + q.q); }
+        const note = q.kind === 'yn' && v === 'Да' ? str(a.note, 500) : '';
+        if (q.kind === 'yn' && v === 'Да' && q.note && !note) fail(q.q + ' ' + q.note);
+        answers[q.id] = note ? { v, note } : { v };
+      }
+      const form = { answers, by: (await rpc('my_person_id', {})) || '', at: now() };
+      await updateOne('tasks', t.id, { dev_form: form });
+      return taskOut({ ...t, dev_form: form });
     },
 
     /**

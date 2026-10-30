@@ -11,6 +11,7 @@ import { openCreateUnit } from './units.js';
 import { activityText } from './feed.js';
 import { readNote } from './home.js';
 import { releaseBlock, releaseHidden } from './release.js';
+import { devFormBlock } from './devquiz.js';
 import { brandIcon, brandOf } from './brand.js';
 import { isWatched, toggleWatch, canWatch } from './watch.js';
 import { reviewButtons } from './review.js';
@@ -112,6 +113,7 @@ function buildPanel(t) {
     t.step === 'qa' && !taskDone(t) && (t.assigneeId === S.meId || isStaff()) && h('div', { class: 'qa-bar' }, icon('alert', 15),
       h('span', null, 'Нашли баги?'), h('span', { class: 'spacer' }),
       h('button', { class: 'btn sm', onclick: () => openQaReturn(t) }, icon('back', 13), 'Вернуть в разработку')),
+    t.step === 'ios' && devFormBlock(t, t.assigneeId === S.meId || isStaff()),
     t.step === 'release' && t.assigneeId && releaseBlock(t, () => reloadBoard().catch(() => {})),
     t.kind === 'request' || t.kind === 'stage' ? [flowBlock(t), t.kind === 'stage' && treeBlock(t)] : treeBlock(t),
     !B.description.hidden && !relHide('description') && descriptionBlock(t, B.description.label, editable),

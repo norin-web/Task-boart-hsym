@@ -501,6 +501,8 @@ alter table tasks add column if not exists started_at text not null default '';
 -- Релиз (этап step = release): phase '' (к отправке) / submitted (ревью Apple) / rejected / live, values — релизные поля,
 -- submittedAt, rejectedAt, reason, liveAt, rejectRequestId, pmId. Меняет функция release_step (кнопки RM).
 alter table tasks add column if not exists release jsonb not null default '{}';
+-- опросник разработчика перед релизом (этап step = 'ios'): { answers: { <вопрос>: { v, note } }, by, at }
+alter table tasks add column if not exists dev_form jsonb not null default '{}';
 create index if not exists tasks_app on tasks(app_id);
 
 -- Статусы приложения по умолчанию; kind связывает статус с ходом работ (dev / release / review / live / reject, '' — свой).
@@ -733,6 +735,25 @@ begin
 end $$;
 drop trigger if exists guard_done_review on tasks;
 create trigger guard_done_review before update on tasks for each row execute function guard_done_review();
+
+-- Разработчик не отдаёт этап iOS на ревью и не закрывает его без опросника (CEO и PM — без ограничения).
+-- Текст с префиксом DEV_FORM: — интерфейс по нему открывает опросник этого этапа.
+create or replace function guard_dev_form() returns trigger language plpgsql set search_path = public as $$
+declare
+  st jsonb;
+  k text;
+begin
+  if app_system() or new.step <> 'ios' or new.status is not distinct from old.status or can_manage(new.unit_id) then return new; end if;
+  if coalesce(new.dev_form ->> 'at', '') <> '' then return new; end if;
+  select settings into st from units where id = new.unit_id;
+  select x ->> 'kind' into k from jsonb_array_elements(st -> 'columns') x where x ->> 'id' = new.status limit 1;
+  if coalesce(k, '') = 'done' or new.status = coalesce(st -> 'review' ->> 'column', '') then
+    raise exception 'DEV_FORM:%', new.id using errcode = 'P0001';
+  end if;
+  return new;
+end $$;
+drop trigger if exists guard_dev_form on tasks;
+create trigger guard_dev_form before update on tasks for each row execute function guard_dev_form();
 
 -- Прежняя передача вниз (юнит приложений → Managers) — убрана вместе с иерархией юнитов.
 drop trigger if exists handoff_task on tasks;
@@ -1420,6 +1441,14 @@ begin
       update tasks set status = coalesce(col, status), done_at = at_, updated_at = at_ where id = t.parent_id;
     end if;
     select x ->> 'id' into v_status from jsonb_array_elements(st) x where x ->> 'kind' = 'live' limit 1;
+  elsif p_action = 'close_reject' then
+    -- RM закрывает реджект сам: задача «Реджект №N» — готово, релиз в очереди. Сначала фаза, иначе release_fixed сработает ещё раз.
+    if coalesce(rel ->> 'phase', '') <> 'rejected' then raise exception 'Закрыть можно только реджект' using errcode = 'P0001'; end if;
+    select c ->> 'id' into col from jsonb_array_elements(u.settings -> 'columns') c where c ->> 'kind' = 'done' limit 1;
+    v_id := rel ->> 'rejectRequestId';
+    rel := rel || jsonb_build_object('phase', '', 'fixedAt', at_, 'closedBy', v_actor);
+    update tasks set release = rel, updated_at = at_ where id = t.id;
+    update tasks set status = coalesce(col, status), done_at = at_, updated_at = at_ where id = v_id and done_at = '';
   else
     raise exception 'Неизвестный шаг релиза' using errcode = 'P0001';
   end if;
@@ -1457,6 +1486,16 @@ drop trigger if exists release_fixed on tasks;
 create trigger release_fixed after update on tasks for each row execute function release_fixed();
 
 -- Ссылки этапов запроса для карточки релиза: RM видит только свой этап, а ему нужны макеты, сборка, метаданные.
+-- Опросник разработчика для карточки релиза: RM не видит этап iOS, ответы отдаёт база (последний заполненный этап запроса).
+create or replace function release_dev_form(p_task text) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select s.dev_form
+    from tasks r join tasks s on s.parent_id = r.parent_id and s.step = 'ios' and r.parent_id <> ''
+   where r.id = p_task and r.step = 'release'
+     and (r.assignee_id = my_person_id() or can_manage(r.unit_id))
+   order by s.dev_form ->> 'at' desc nulls last limit 1;
+$$;
+
 create or replace function release_links(p_task text) returns table (task_id text, step text, title text, field_id text, url text)
 language sql stable security definer set search_path = public as $$
   select s.id, s.step, s.title, l.field_id, l.url

@@ -5,7 +5,8 @@
  */
 import Sortable from 'sortablejs';
 import { S, me, canEditTask, fmtDateTime, relTime, personById, plural } from '../state.js';
-import { h, icon, fill, modal, toast, showErr, field } from '../ui.js';
+import { h, icon, fill, modal, toast, showErr, field, confirmDlg } from '../ui.js';
+import { DEV_QUESTIONS, answerText } from '../devform.js';
 import { brandIcon, brandOf } from './brand.js';
 import { call, send } from '../api.js';
 
@@ -80,11 +81,14 @@ export function releaseBlock(t, onChange) {
   const step = async action => {
     try {
       const r = await send('releaseStep', { taskId: t.id, action });
-      toast({ submit: 'Отправлено в Apple — приложение на ревью', resubmit: 'Отправлено снова', live: 'В сторе! Релиз и задача CEO закрыты' }[action]);
+      toast({ close_reject: 'Реджект закрыт — релиз в очереди', submit: 'Отправлено в Apple — приложение на ревью', resubmit: 'Отправлено снова', live: 'В сторе! Релиз и задача CEO закрыты' }[action]);
       Object.assign(t, r.task);
       if (onChange) onChange();
       load();
     } catch (e) { showErr(e); }
+  };
+  const closeReject = async rel => {
+    if (await confirmDlg(`Закрыть реджект №${rel.rejectNo || ''}? Задача по нему закроется, релиз вернётся в очередь на отправку.`, { ok: 'Закрыть реджект', title: 'Реджект' })) step('close_reject');
   };
   const saveValue = async (f, v) => {
     try {
@@ -156,8 +160,10 @@ export function releaseBlock(t, onChange) {
           h('span', { class: 'muted' }, '· ' + relTime(rel.rejectedAt)),
           rel.shot && h('a', { class: 'rl-shot', href: rel.shot, target: '_blank', rel: 'noopener' }, 'скрин', icon('arrowUpRight', 12))),
         h('p', { class: 'rl-reason' }, rel.reason),
-        h('p', { class: 'rl-line muted rl-small' }, `Исправляет ${pm ? pm.name : 'PM юнита'}; закроет задачу — релиз вернётся в очередь.`,
-          editable && h('button', { class: 'link-btn', onclick: () => step('resubmit') }, 'Отправить сейчас'))),
+        h('p', { class: 'rl-line muted rl-small' }, `Исправляет ${pm ? pm.name : 'PM юнита'}; закроет задачу — релиз вернётся в очередь.`),
+        editable && h('div', { class: 'rl-btns' },
+          h('button', { class: 'btn sm', onclick: () => closeReject(rel) }, icon('check', 14), 'Закрыть реджект'),
+          h('button', { class: 'btn ghost sm', onclick: () => step('resubmit') }, 'Отправить сейчас'))),
       phase === 'live' && h('div', { class: 'rl-now' }, h('p', { class: 'rl-line ok-text' }, icon('check', 14), h('b', null, 'В App Store'),
         h('span', { class: 'muted' }, '· ' + fmtD(rel.liveAt) + (hist.length > 1 ? ` · с ${hist.length}-й попытки` : ' · с первой попытки')))),
       // релизные поля — раскрываются по клику (заполненные — коротко)
@@ -165,10 +171,12 @@ export function releaseBlock(t, onChange) {
         h('button', { class: 'rl-toggle', 'aria-expanded': String(fieldsOpen), onclick: () => { fieldsOpen = !fieldsOpen; draw(); } },
           h('span', { class: 'ap-chev' + (fieldsOpen ? ' open' : '') }, icon('chevron', 13)), 'Релизные поля',
           h('span', { class: missing.length ? 'danger-text' : 'muted' }, `${filled} из ${data.fields.length}`)),
-        fieldsOpen && h('div', { class: 'af-list rl-fields' }, data.fields.map(f => valueRow(f, values[f.id] || '', editable && phase !== 'live', v => saveValue(f, v))))),
-      // ссылки приложения и команды — одной строкой чипов
+        fieldsOpen && h('div', { class: 'af-list rl-fields' }, data.fields.map(f => valueRow(f, values[f.id] || '', editable && phase !== 'live', v => saveValue(f, v)))),
+        fieldsOpen && devAnswers(data.devForm)),
+      // ссылки приложения и команды — списком
       !hide.includes('links') && links.length > 0 && h('div', { class: 'rl-sec' }, h('div', { class: 'rl-sec-title' }, 'Ссылки'),
-        h('div', { class: 'rl-links' }, links.map(l => h('a', { class: 'rl-link', href: l.url, target: '_blank', rel: 'noopener', title: l.sub ? l.name + ' · ' + l.sub : l.name }, l.icon, l.name)))),
+        h('div', { class: 'rl-links' }, links.map(l => h('a', { class: 'rl-link', href: l.url, target: '_blank', rel: 'noopener', title: l.url }, l.icon,
+          h('span', { class: 'rl-link-name' }, l.name), h('span', { class: 'muted rl-link-url' }, l.url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/+$/, '')))))),
       // попытки — только если их несколько
       !hide.includes('attempts') && hist.length > 1 && h('details', { class: 'rl-sec rl-hist-d' }, h('summary', null, `Попытки · ${hist.length}`),
         h('div', { class: 'rl-hist' }, hist.map(x => h('div', { class: 'rl-hist-row' },
@@ -183,6 +191,19 @@ export function releaseBlock(t, onChange) {
   };
   load();
   return box;
+}
+
+/** Ответы разработчика на опросник — в релизных полях, только чтение. */
+function devAnswers(form) {
+  const a = (form && form.answers) || {};
+  const who = form && personById(form.by);
+  return h('div', { class: 'rl-dev' },
+    h('div', { class: 'rl-sec-title' }, 'Опросник разработчика',
+      form && form.at && h('span', { class: 'muted rl-dev-by' }, [who && who.name, fmtD(form.at)].filter(Boolean).join(' · '))),
+    form && form.at
+      ? h('div', { class: 'af-list rl-fields' }, DEV_QUESTIONS.filter(q => a[q.id]).map(q => h('div', { class: 'af-row rl-row long' },
+        h('span', { class: 'af-name' }, q.q), h('span', { class: 'af-val pre' }, answerText(a[q.id])))))
+      : h('p', { class: 'muted rl-small', style: { margin: 0 } }, 'Разработчик ещё не заполнил'));
 }
 
 /** Релизное поле: значение и правка на месте (длинный текст — многострочное поле). */

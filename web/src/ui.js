@@ -201,6 +201,9 @@ export function toast(msg, opts = {}) {
 }
 
 export function showErr(e) {
+  const form = /^DEV_FORM:(.+)$/.exec((e && e.message) || '');
+  // без опросника этап iOS не закрыть — вместо ошибки открываем его (views/devquiz.js)
+  if (form) return document.dispatchEvent(new CustomEvent('tasks:devform', { detail: form[1] }));
   console.error(e);
   toast((e && e.message) || String(e), { type: 'error' });
 }

@@ -69,6 +69,13 @@ export async function seedDemo() {
  * Режим разработчика: демо-процесс поверх текущей базы — тестовые приложения и задачи (удаляются кнопкой
  * «Удалить тестовые данные»). Недостающих людей и юниты Gold / RF / MVP добавляет. Возвращает число приложений.
  */
+/** Ответы демо-разработчика на опросник перед релизом. */
+const DEV_ANSWERS = {
+  backend: { v: 'Да' }, firebase: { v: 'Да' }, analytics: { v: 'Да', note: 'Amplitude' }, permissions: { v: 'Photos, Camera' },
+  ai_providers: { v: 'OpenAI, gpt-image-2' }, ai_data: { v: 'Текстовые prompts и изображения' }, ai_storage: { v: 'Только локально' },
+  ugc: { v: 'Нет' }, identifiers: { v: 'Да', note: 'device ID, IP' }, push: { v: 'Да' }, sharing: { v: 'Да' }, diagnostics: { v: 'Да', note: 'Crashlytics' },
+};
+
 export async function seedProcess() {
   return asSystem(async () => {
     const api = makeApi();
@@ -124,6 +131,7 @@ async function runProcess(api, P, U, test) {
   const set = (id, patch, who) => act(who, 'updateTask', { id, patch });
   /** Закрыть задачу как положено: исполнитель — на ревью, PM юнита — «Аппрув» (в «готово» мимо ревью исполнителю нельзя). */
   const close = async (id, who, pm) => {
+    await act(who, 'saveDevForm', { taskId: id, answers: DEV_ANSWERS }).catch(() => null); // только у этапа iOS
     await move(id, 'review', who).catch(() => null);
     await act(pm, 'reviewDecision', { taskId: id, approve: true });
   };

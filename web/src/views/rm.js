@@ -3,7 +3,7 @@
  * «Вышло в стор» / «Реджект» прямо здесь), реджекты (причина, кто исправляет; «Отправить снова»). Клик — карточка релиза.
  */
 import { me, personById, greeting, plural, relTime } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill, toast } from '../ui.js';
+import { $, h, icon, avatar, topbar, showErr, fill, toast, confirmDlg } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
@@ -47,15 +47,18 @@ export async function renderRmHome() {
         const pm = personById(x.pmId);
         return [h('span', { class: 'rq-line' }, h('span', { class: 'att-what danger' }, `№${x.rejectNo || ''} · ${x.reason}`),
           h('span', { class: 'muted' }, ' · ' + (pm ? pm.name : 'PM') + ' · ' + relTime(x.rejectedAt)))];
-      }, x => h('button', { class: 'btn sm', title: 'Когда PM закроет задачу по реджекту, релиз сам вернётся в очередь; если исправили иначе — отправьте сразу', onclick: () => step(x, 'resubmit') }, icon('send', 13), 'Отправить снова')),
+      }, x => [h('button', { class: 'btn sm', title: 'Задача по реджекту закроется, релиз вернётся в очередь', onclick: () => closeReject(x) }, icon('check', 13), 'Закрыть'), h('button', { class: 'btn sm', title: 'Когда PM закроет задачу по реджекту, релиз сам вернётся в очередь; если исправили иначе — отправьте сразу', onclick: () => step(x, 'resubmit') }, icon('send', 13), 'Отправить снова')]),
       storeBlock(live.rows));
   }
   async function step(x, action, reason) {
     try {
       await send('releaseStep', { taskId: x.id, action, reason });
-      toast({ live: `«${x.app ? x.app.name : x.title}» в сторе`, resubmit: 'Отправлено снова', reject: 'Реджект: задача ушла PM' }[action]);
+      toast({ close_reject: 'Реджект закрыт — релиз в очереди', live: `«${x.app ? x.app.name : x.title}» в сторе`, resubmit: 'Отправлено снова', reject: 'Реджект: задача ушла PM' }[action]);
       load();
     } catch (e) { showErr(e); }
+  }
+  async function closeReject(x) {
+    if (await confirmDlg(`Закрыть реджект №${x.rejectNo || ''}? Задача по нему закроется, релиз вернётся в очередь на отправку.`, { ok: 'Закрыть реджект', title: 'Реджект' })) step(x, 'close_reject');
   }
   async function reject(x) {
     let no = 0;
