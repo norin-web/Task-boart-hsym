@@ -117,6 +117,11 @@ async function runProcess(api, P, U, test) {
   const act = (who, method, payload) => api(method, payload, P[who].id);
   const move = (id, status, who) => act(who, 'updateTask', { id, patch: { status } });
   const set = (id, patch, who) => act(who, 'updateTask', { id, patch });
+  /** Закрыть задачу как положено: исполнитель — на ревью, PM юнита — «Аппрув» (в «готово» мимо ревью исполнителю нельзя). */
+  const close = async (id, who, pm) => {
+    await move(id, 'review', who).catch(() => null);
+    await act(pm, 'reviewDecision', { taskId: id, approve: true });
+  };
   // демо-приложения — настоящие из App Store: ссылка на стор и иконка (как при вставке ссылки в «Новое приложение»)
   const app = (name, unit, color, extra = {}) => act('anna', 'createApp', { name, unitId: U[unit].id, color, test, ...(STORE[name] || {}), ...extra });
   const steps = async (requestId, pm) => Object.fromEntries((await act(pm, 'decomposeRequest', { taskId: requestId })).map(t => [t.step, t]));
@@ -128,12 +133,13 @@ async function runProcess(api, P, U, test) {
     // что команда прикладывает к этапам — RM видит это в карточке релиза («От команды»)
     const links = { design: ['lf_figma', 'https://figma.com/design/demo-app'], ios: ['lf_github', 'https://github.com/studio/demo-app'], meta: ['lf_meta', 'https://docs.google.com/document/d/demo-meta'] };
     for (const [k, [fieldId, url]] of Object.entries(links)) if (s[k]) await act('anna', 'setTaskLink', { taskId: s[k].id, fieldId, url });
-    for (const k of ['design', 'ios', 'qa', 'meta']) if (s[k]) await set(s[k].id, { status: 'done' }, s[k].assigneeId ? keyOf(P, s[k].assigneeId) : pm);
-    const rel = await act(pm, 'sendToRelease', { taskId: s.release.id });
+    for (const k of ['design', 'ios', 'qa', 'meta']) if (s[k]) await close(s[k].id, s[k].assigneeId ? keyOf(P, s[k].assigneeId) : pm, pm);
+    await act(pm, 'sendToRelease', { taskId: s.release.id });
     if (!version) return null;
     await act('sergey', 'saveReleaseValues', { taskId: s.release.id, values: { version, build: String(100 + Number(version.replace(/\D/g, '').slice(0, 3))), whatsnew: 'Новые функции и исправления' } });
     if (!phase) return null;
-    await set(s.release.id, { checklist: rel.checklist.map(i => ({ ...i, done: true })) }, 'sergey');
+    // чеклист — из шаблона RM (авточеклиста больше нет)
+    await set(s.release.id, { checklist: ['Скриншоты и метаданные', 'Покупки в песочнице', 'Политика и условия'].map(text => ({ text, done: true })) }, 'sergey');
     await act('sergey', 'releaseStep', { taskId: s.release.id, action: 'submit' });
     if (phase === 'live') await act('sergey', 'releaseStep', { taskId: s.release.id, action: 'live' });
     if (phase === 'rejected') return (await act('sergey', 'releaseStep', { taskId: s.release.id, action: 'reject', reason })).rejectRequestId;
@@ -165,7 +171,7 @@ async function runProcess(api, P, U, test) {
     description: 'Персональный план тренировок на онбординге, новые достижения.' });
   const s2 = await steps(upd.id, 'oleg');
   await move(s2.design.id, 'in_progress', 'masha');
-  await move(s2.design.id, 'done', 'masha');
+  await close(s2.design.id, 'masha', 'oleg');
   await set(s2.ios.id, { assigneeId: P.alex.id, fields: opt('High'), checklist: cl(['Экран плана', 1], ['Достижения'], ['Аналитика']) }, 'oleg');
   await move(s2.ios.id, 'in_progress', 'alex');
 
@@ -222,7 +228,8 @@ async function runProcess(api, P, U, test) {
     const t = await act('kate', 'createTask', { unitId: U[u].id, title, assigneeId: P[who].id, departmentId: dept, dueDate: due === null ? '' : day(due), fields: opt(p), test });
     if (status !== 'todo') {
       if (status !== 'in_progress') await move(t.id, 'in_progress', who);
-      await move(t.id, status, who);
+      if (status === 'done') await close(t.id, who, u === 'GLD' ? 'oleg' : 'kate');
+      else await move(t.id, status, who);
     }
   }
   return apps;

@@ -1814,3 +1814,49 @@ a.rc-more { text-decoration: none; }
 .tpl-steps { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 13px; }
 .tpl-steps .menu-item { width: auto; padding: 4px 8px; }
 .tpl-info { display: grid; gap: 2px; }
+
+/* Карточка релиза: прогресс с датами, готовность, решение Apple */
+.rl-ver { font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+.rl-progress { height: 6px; border-radius: 99px; background: var(--surface-2); overflow: hidden; margin: 10px 0 6px; }
+.rl-progress > div { height: 100%; background: var(--accent); border-radius: 99px; transition: width .3s ease-out; }
+.rl-progress.ok > div { background: var(--ok); }
+.rl-progress.bad > div { background: var(--danger); }
+.rl-stepper { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 12px; }
+.rl-st { display: grid; gap: 1px; font-size: 12px; color: var(--muted); }
+.rl-st.done { color: var(--text); }
+.rl-st.bad { color: var(--danger); }
+.rl-st-label { font-weight: 600; }
+.rl-st-at { font-size: 11.5px; }
+.rl-panel { display: grid; gap: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface); margin-bottom: 14px; }
+.rl-panel.bad { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); background: var(--danger-soft); }
+.rl-panel.ok { border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); background: var(--ok-soft); }
+.rl-checks { display: grid; gap: 6px; }
+.rl-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.rl-check.ok { color: var(--text); }
+.rl-check.ok > .i { color: var(--ok); }
+.rl-check .muted { font-size: 12px; }
+.rl-go { justify-self: start; min-height: 40px; padding: 8px 18px; font-size: 14px; }
+.rl-wait { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.rl-decide { display: flex; gap: 8px; flex-wrap: wrap; }
+.rl-reason { margin: 0; font-size: 13.5px; white-space: pre-wrap; }
+.rl-note.ok { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ok); }
+.rl-hist { display: grid; gap: 2px; }
+.rl-hist-row { display: grid; grid-template-columns: 32px 70px 110px minmax(0, 1fr); gap: 8px; font-size: 12.5px; }
+.rl-hist-why { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* История релизов */
+.rh-bar, .rh-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.rh-dates { display: inline-flex; gap: 6px; align-items: center; }
+.rh-dates[hidden] { display: none; }
+.rh-filters .inp { width: auto; flex: 1; min-width: 140px; }
+.rh-stats { margin-bottom: 12px; }
+.rh-list { padding: 4px; display: grid; max-height: 46vh; overflow-y: auto; }
+.rh-row { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, .8fr) 90px minmax(0, 1fr) 70px; gap: 10px; align-items: center; padding: 8px 10px; border: 0; background: none; font: inherit; font-size: 13px; color: var(--text); text-align: left; border-radius: 7px; }
+button.rh-row:hover { background: var(--surface-2); }
+.rh-head { font-size: 12px; }
+.rh-app { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 640px) { .rh-row { grid-template-columns: minmax(0, 1fr) auto; } .rh-row > :nth-child(2), .rh-row > :nth-child(3), .rh-row > :nth-child(5) { display: none; } .rl-stepper { grid-template-columns: repeat(2, 1fr); } }
+/* дашборд RM: строки без подчёркивания при наведении */
+.rm-main:hover, .rm-main:hover * { text-decoration: none; }
+.rm-row:hover { background: var(--surface-2); }
+/* дашборд RM: строки без подчёркивания при наведении */
+.rm-main:hover, .rm-main:hover * { text-decoration: none; }

@@ -1957,11 +1957,8 @@ export function createBackend(db, opts = {}) {
       if (open) fail(`Сначала закройте: ${open}`, 'RULE');
       const rms = await unitPeople(t.unit_id, 'rm');
       const rmId = p.rmId && rms.some(x => x.id === p.rmId) ? p.rmId : rms.length ? rms[0].id : fail('В юните нет релиз-менеджера — добавьте RM в состав');
-      // чеклист релиза студии — в этап (если своего ещё нет)
-      const tpl = cleanReleaseChecklist(await setting('releaseChecklist'));
-      const patch = { assigneeId: rmId };
-      if (tpl.length && !(json(t.checklist, []) || []).length) patch.checklist = tpl.map(text => ({ text, done: false }));
-      const saved = await methods.updateTask({ id: t.id, patch }, ctx);
+      // чеклист — не подставляем сам: у RM свои шаблоны («Из шаблона» в карточке релиза)
+      const saved = await methods.updateTask({ id: t.id, patch: { assigneeId: rmId } }, ctx);
       if (t.app_id) {
         const rel = (await appStatuses()).find(x => x.kind === 'release');
         if (rel) await methods.updateApp({ id: t.app_id, status: rel.id }).catch(() => null);
@@ -2085,8 +2082,11 @@ export function createBackend(db, opts = {}) {
         t.app_id ? one('apps', t.app_id) : null, rpc('release_links', { p_task: t.id }), linkFields(), methods.getReleaseSettings(),
       ]);
       const LF = Object.fromEntries(lf.map(f => [f.id, f]));
+      // номер следующего реджекта — по приложению (все его релизы)
+      const sib = t.app_id ? await run(T('tasks').select('release').eq('app_id', t.app_id).eq('step', 'release')) : [];
+      const rejects = sib.reduce((n, r) => n + ((json(r.release, {}) || {}).history || []).filter(x => x.result === 'reject').length, 0);
       return {
-        task: taskOut(t), app: app ? appOut(app) : null, fields: settings.fields,
+        task: taskOut(t), app: app ? appOut(app) : null, fields: settings.fields, nextRejectNo: rejects + 1,
         links: (links || []).map(l => ({ taskId: l.task_id, step: l.step, stage: String(l.title).split(' · ')[0], fieldId: l.field_id, name: (LF[l.field_id] || {}).name || 'Ссылка', kind: (LF[l.field_id] || {}).kind || 'link', url: l.url })),
       };
     },
@@ -2112,7 +2112,7 @@ export function createBackend(db, opts = {}) {
     async releaseStep(p) {
       if (!['submit', 'live', 'reject', 'resubmit'].includes(p.action)) fail('Неизвестный шаг релиза');
       const t = await findTask(p.taskId);
-      const id = await rpc('release_step', { p_task: t.id, p_action: p.action, p_reason: str(p.reason, 300) });
+      const id = await rpc('release_step', { p_task: t.id, p_action: p.action, p_reason: str(p.reason, 2000), p_shot: linkUrl(p.shot) });
       return { task: taskOut(await findTask(t.id)), rejectRequestId: p.action === 'reject' ? id : '' };
     },
 
@@ -2120,6 +2120,53 @@ export function createBackend(db, opts = {}) {
      * Дашборд RM: релизы, которые ему видны (свои и своей позиции), кроме вышедших: очередь (к отправке — чего не хватает),
      * на ревью Apple (сколько дней ждут), реджекты (причина, кто исправляет).
      */
+    /**
+     * История релизов (RM, CEO, PM): каждая попытка отправки в Apple — приложение, версия, когда отправили, итог и когда решили.
+     * Фильтры: from / to (YYYY-MM-DD, по дате решения, без решения — по отправке), unitId, appId, result (live | reject | pending).
+     * Сводка за период: вышло в стор, из них с 1-го раза (%), реджектов, отправок, среднее время ревью Apple (дней).
+     */
+    async getReleaseHistory(p) {
+      const [rows, units, apps] = await Promise.all([
+        all(() => T('tasks').select('id,unit_id,num,title,app_id,release,assignee_id').eq('step', 'release').order('created_at').order('id')),
+        all(() => T('units').select('id,key,name,color').order('id')),
+        all(() => T('apps').select('id,name,color,icon_url,unit_id').order('id')),
+      ]);
+      const U = Object.fromEntries(units.map(u => [u.id, u]));
+      const A = Object.fromEntries(apps.map(a => [a.id, { id: a.id, name: a.name, color: a.color, iconUrl: a.icon_url || '', unitId: a.unit_id }]));
+      const day = iso => String(iso || '').slice(0, 10);
+      const list = [];
+      for (const t of rows) {
+        if (!U[t.unit_id]) continue;
+        const rel = json(t.release, {}) || {};
+        let hist = Array.isArray(rel.history) ? rel.history : [];
+        // старые релизы без истории — одна попытка из полей фазы
+        if (!hist.length && rel.submittedAt) hist = [{ n: 1, submittedAt: rel.submittedAt, result: rel.phase === 'live' ? 'live' : rel.phase === 'rejected' ? 'reject' : '', at: rel.liveAt || rel.rejectedAt || '', reason: rel.reason || '' }];
+        for (const x of hist) {
+          list.push({
+            taskId: t.id, unitId: t.unit_id, key: `${U[t.unit_id].key}-${t.num}`, app: A[t.app_id] || null, rmId: t.assignee_id,
+            version: [(rel.values || {}).version, (rel.values || {}).build].filter(Boolean).join(' · '),
+            n: x.n || 1, submittedAt: x.submittedAt || '', result: x.result || 'pending', at: x.at || '', reason: x.reason || '', rejectNo: x.rejectNo || 0, shot: x.shot || '',
+            reviewDays: x.at && x.submittedAt ? Math.max(0, (Date.parse(x.at) - Date.parse(x.submittedAt)) / 864e5) : null,
+          });
+        }
+      }
+      const from = date(p.from), to = date(p.to);
+      const inPeriod = x => { const d = day(x.at || x.submittedAt); return (!from || d >= from) && (!to || d <= to); };
+      const scoped = list.filter(x => (!p.unitId || x.unitId === p.unitId) && (!p.appId || (x.app && x.app.id === p.appId)) && inPeriod(x));
+      const live = scoped.filter(x => x.result === 'live');
+      const decided = scoped.filter(x => x.reviewDays != null);
+      const stats = {
+        live: live.length, firstTry: live.filter(x => x.n === 1).length,
+        firstTryPct: live.length ? Math.round(live.filter(x => x.n === 1).length / live.length * 100) : null,
+        rejects: scoped.filter(x => x.result === 'reject').length,
+        submitted: scoped.length, pending: scoped.filter(x => x.result === 'pending').length,
+        avgReviewDays: decided.length ? Math.round(decided.reduce((s, x) => s + x.reviewDays, 0) / decided.length * 10) / 10 : null,
+      };
+      const out = scoped.filter(x => !p.result || x.result === p.result)
+        .sort((a, b) => String(b.at || b.submittedAt).localeCompare(String(a.at || a.submittedAt)));
+      return { rows: out.slice(0, 500), stats };
+    },
+
     async getRmDashboard(p) {
       const [rows, units, apps, settings] = await Promise.all([
         all(() => T('tasks').select('*').eq('step', 'release').eq('archived', false).neq('assignee_id', '').order('created_at').order('id')),
@@ -2130,13 +2177,15 @@ export function createBackend(db, opts = {}) {
       const U = Object.fromEntries(units.map(u => [u.id, u]));
       const A = Object.fromEntries(apps.map(a => [a.id, { id: a.id, name: a.name, color: a.color, iconUrl: a.icon_url || '', unitId: a.unit_id, status: a.status, priority: a.priority || '', isTest: !!a.is_test }]));
       const required = settings.fields.filter(f => f.required);
-      const items = rows.filter(t => U[t.unit_id] && kindOf(unitSettings(U[t.unit_id].settings), t.status) !== 'done').map(t => {
+      // у RM релиз живёт по своей фазе: статусы задач на досках (Done у PM) на это не влияют; уходит только «В сторе»
+      const items = rows.filter(t => U[t.unit_id]).map(t => {
         const rel = json(t.release, {}) || {};
         const cl = json(t.checklist, []) || [];
         return {
           id: t.id, unitId: t.unit_id, key: `${U[t.unit_id].key}-${t.num}`, title: t.title, assigneeId: t.assignee_id, dueDate: t.due_date,
           app: A[t.app_id] || null, phase: rel.phase || '', reason: rel.reason || '', pmId: rel.pmId || '',
           submittedAt: rel.submittedAt || '', rejectedAt: rel.rejectedAt || '', updatedAt: t.updated_at,
+          rejectNo: rel.rejectNo || 0, shot: rel.shot || '', fixedAt: rel.fixedAt || '', attempts: (rel.history || []).length, version: (rel.values || {}).version || '',
           missing: required.filter(f => !(rel.values || {})[f.id]).map(f => f.name),
           checklist: { done: cl.filter(i => i.done).length, total: cl.length },
         };

@@ -3,20 +3,22 @@
  * «Вышло в стор» / «Реджект» прямо здесь), реджекты (причина, кто исправляет; «Отправить снова»). Клик — карточка релиза.
  */
 import { me, personById, greeting, plural, relTime } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill, toast, promptDlg } from '../ui.js';
+import { $, h, icon, avatar, topbar, showErr, fill, toast } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
 import { appIcon, prioTag, isHighPrio } from './apps.js';
 import { newsBlock, loadNotes } from './home.js';
-import { openReleaseSettings } from './release.js';
+import { openReleaseSettings, openReleaseHistory, openRejectForm } from './release.js';
 
 const days = iso => Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 864e5));
 
 export async function renderRmHome() {
   const page = h('div', { class: 'page ceo-page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
   fill($('#main'),
-    topbar([h('h1', null, 'Релизы')], [h('button', { class: 'btn sm', onclick: openReleaseSettings }, icon('settings', 14), h('span', { class: 'btn-label' }, 'Настроить релиз'))]),
+    topbar([h('h1', null, 'Релизы')], [
+      h('button', { class: 'btn sm', title: 'Все релизы: сводка за период, фильтры', onclick: openReleaseHistory }, icon('clock', 14), h('span', { class: 'btn-label' }, 'История')),
+      h('button', { class: 'btn sm', onclick: openReleaseSettings }, icon('settings', 14), h('span', { class: 'btn-label' }, 'Настроить релиз'))]),
     h('div', { class: 'view-body' }, page));
   async function load() {
     let d;
@@ -27,6 +29,7 @@ export async function renderRmHome() {
       h('div', { class: 'ceo-hello' }, h('h2', null, greeting() + (person ? ', ' + person.name.split(' ')[0] : ''))),
       newsBlock(),
       section('Очередь на релиз', 'Очередь пуста', d.queue, x => [
+        x.fixedAt && h('span', { class: 'ok-text rq-line' }, `реджект №${x.rejectNo || ''} исправлен — отправьте снова`),
         x.missing.length || x.checklist.done < x.checklist.total
           ? h('span', { class: 'warn-text rq-line' }, [x.missing.length && 'не заполнено: ' + x.missing.join(', '), x.checklist.total && `чеклист ${x.checklist.done}/${x.checklist.total}`].filter(Boolean).join(' · '))
           : h('span', { class: 'muted rq-line' }, 'готово к отправке'),
@@ -35,12 +38,12 @@ export async function renderRmHome() {
         h('span', { class: 'muted rq-line' }, days(x.submittedAt) ? 'ждёт ' + days(x.submittedAt) + ' дн.' : 'отправлено ' + relTime(x.submittedAt)),
       ], x => [
         h('button', { class: 'btn primary sm', onclick: () => step(x, 'live') }, icon('rocket', 13), 'Вышло в стор'),
-        h('button', { class: 'btn sm danger', onclick: () => reject(x) }, 'Реджект')]),
+        h('button', { class: 'btn sm danger', onclick: () => reject(x) }, 'Реджект')], 3),
       section('Реджекты', 'Реджектов нет', d.rejected, x => {
         const pm = personById(x.pmId);
-        return [h('span', { class: 'rq-line' }, h('span', { class: 'att-what danger' }, x.reason),
+        return [h('span', { class: 'rq-line' }, h('span', { class: 'att-what danger' }, `№${x.rejectNo || ''} · ${x.reason}`),
           h('span', { class: 'muted' }, ' · ' + (pm ? pm.name : 'PM') + ' · ' + relTime(x.rejectedAt)))];
-      }, x => h('button', { class: 'btn primary sm', onclick: () => step(x, 'resubmit') }, icon('send', 13), 'Отправить снова')));
+      }, x => h('button', { class: 'btn sm', title: 'Когда PM закроет задачу по реджекту, релиз сам вернётся в очередь; если исправили иначе — отправьте сразу', onclick: () => step(x, 'resubmit') }, icon('send', 13), 'Отправить снова')));
   }
   async function step(x, action, reason) {
     try {
@@ -50,23 +53,30 @@ export async function renderRmHome() {
     } catch (e) { showErr(e); }
   }
   async function reject(x) {
-    const reason = await promptDlg('Реджект Apple · ' + (x.app ? x.app.name : x.title), 'Причина (из письма Apple)', '');
-    if (reason && reason.trim()) step(x, 'reject', reason.trim());
+    let no = 0;
+    try { no = (await call('getRelease', { taskId: x.id })).nextRejectNo; } catch { /* номер присвоит база */ }
+    openRejectForm({ id: x.id, title: x.title }, x.app ? x.app.name : x.title, no, load);
   }
   load();
 }
 
 /** Секция релизов: строки — приложение, релиз, состояние, исполнитель и действия. */
-function section(title, hint, rows, line, actions) {
-  return h('section', null,
+/** limit — сколько строк показать сразу; остальные — «Показать ещё». */
+function section(title, hint, rows, line, actions, limit = 0) {
+  const box = h('section');
+  let all = false;
+  const draw = () => fill(box,
     h('div', { class: 'section-head' }, h('h2', null, title, rows.length > 0 && h('span', { class: 'muted sec-n' }, rows.length))),
     rows.length
-      ? h('div', { class: 'card-box att-list' }, rows.map(x => h('div', { class: 'rm-row' },
+      ? h('div', { class: 'card-box att-list' }, (limit && !all ? rows.slice(0, limit) : rows).map(x => h('div', { class: 'rm-row' },
         x.app ? appIcon(x.app, 'sm') : h('span'),
         h('button', { class: 'link-btn rm-main', onclick: () => peekTask(x.unitId, x.id) },
           h('span', { class: 'rm-title' }, h('b', null, x.app ? x.app.name : x.title), x.app && prioTag(x.app.priority), x.app && x.app.isTest && h('span', { class: 'test-tag' }, 'тест')),
           line(x)),
-        h('div', { class: 'rm-actions' }, actions(x), avatar(personById(x.assigneeId), 'sm')))))
+        h('div', { class: 'rm-actions' }, actions(x), avatar(personById(x.assigneeId), 'sm')))),
+        limit > 0 && rows.length > limit && h('button', { class: 'rc-more link-btn', onclick: () => { all = !all; draw(); } }, all ? 'Свернуть' : `Показать ещё ${rows.length - limit}`))
       : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, hint)));
+  draw();
+  return box;
 }
 

@@ -533,9 +533,23 @@ insert into app_settings (key, value, updated_at) values ('appFields', '[
 insert into app_settings (key, value, updated_at) values ('releaseFields', '[
   {"id": "version", "name": "Версия", "kind": "text", "required": true},
   {"id": "build", "name": "Номер сборки", "kind": "text", "required": true},
-  {"id": "whatsnew", "name": "Что нового", "kind": "longtext", "required": true}
+  {"id": "whatsnew", "name": "Что нового", "kind": "longtext", "required": true},
+  {"id": "testflight", "name": "TestFlight / сборка", "kind": "link", "required": false},
+  {"id": "comment", "name": "Комментарий", "kind": "longtext", "required": false}
 ]'::jsonb, '') on conflict (key) do nothing;
--- Чеклист релиза: подставляется в этап «Релиз», когда PM передаёт его RM; закрыть до отправки в Apple
+-- База полей релиза (2026-10-31): TestFlight и комментарий — в уже настроенный список, один раз (метка); удалённые RM не возвращаются
+do $$ begin
+  if not exists (select 1 from app_settings where key = 'migr_release_fields_v2') then
+    update app_settings set value = value || coalesce((
+      select jsonb_agg(f) from jsonb_array_elements('[
+        {"id": "testflight", "name": "TestFlight / сборка", "kind": "link", "required": false},
+        {"id": "comment", "name": "Комментарий", "kind": "longtext", "required": false}]'::jsonb) f
+       where not exists (select 1 from jsonb_array_elements(app_settings.value) x where x ->> 'id' = f ->> 'id')), '[]'::jsonb)
+     where key = 'releaseFields';
+    insert into app_settings (key, value, updated_at) values ('migr_release_fields_v2', 'true'::jsonb, '') on conflict (key) do nothing;
+  end if;
+end $$;
+-- Чеклист релиза студии — больше не подставляется сам (решение заказчика): у RM свои шаблоны чеклистов («Из шаблона»)
 insert into app_settings (key, value, updated_at) values ('releaseChecklist', '[
   "Сборка загружена в TestFlight и проверена",
   "Скриншоты и метаданные в App Store Connect",
@@ -664,6 +678,8 @@ declare
   at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
 begin
   if new.status is not distinct from old.status then return new; end if;
+  -- этап «Релиз» ведёт RM, его статус следует за фазой релиза — ревьюеру не переназначаем
+  if new.step = 'release' then return new; end if;
   select settings -> 'review' into rv from units where id = new.unit_id;
   col := coalesce(rv ->> 'column', '');
   if col = '' then return new; end if;
@@ -1272,19 +1288,26 @@ begin
   return n;
 end $$;
 
-create or replace function release_step(p_task text, p_action text, p_reason text default '') returns text
+-- Шаги релиза (RM). Фаза: '' — очередь, submitted — на ревью Apple, rejected — реджект (исправляет PM), live — в сторе.
+-- Статус этапа «Релиз» на доске следует за фазой (очередь — в работе, ревью Apple — колонка ревью, в сторе — готово).
+-- rel.history — попытки: [{ n, submittedAt, result: live | reject, at, reason, shot, rejectNo }]; номер реджекта — по приложению.
+drop function if exists release_step(text, text, text);
+create or replace function release_step(p_task text, p_action text, p_reason text default '', p_shot text default '') returns text
 language plpgsql security definer set search_path = public as $$
 declare
   t tasks;
   u units;
   a apps;
   rel jsonb;
+  hist jsonb;
+  last jsonb;
   missing text;
   st jsonb;
   v_status text;
   col text;
   pm text;
   v_id text;
+  v_no int;
   v_actor text := coalesce(my_person_id(), '');
   at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
 begin
@@ -1297,11 +1320,11 @@ begin
   select * into u from units where id = t.unit_id;
   select * into a from apps where id = t.app_id;
   rel := coalesce(t.release, '{}'::jsonb);
+  hist := coalesce(rel -> 'history', '[]'::jsonb);
   select value into st from app_settings where key = 'appStatuses';
   perform set_config('app.system', 'on', true);
   if p_action in ('submit', 'resubmit') then
-    if p_action = 'submit' and coalesce(rel ->> 'phase', '') not in ('') then raise exception 'Релиз уже отправлен' using errcode = 'P0001'; end if;
-    if p_action = 'resubmit' and coalesce(rel ->> 'phase', '') <> 'rejected' then raise exception 'Отправить снова можно после реджекта' using errcode = 'P0001'; end if;
+    if coalesce(rel ->> 'phase', '') not in ('', 'rejected') then raise exception 'Релиз уже отправлен' using errcode = 'P0001'; end if;
     select string_agg(f ->> 'name', ', ') into missing from app_settings s, jsonb_array_elements(s.value) f
      where s.key = 'releaseFields' and coalesce((f ->> 'required')::boolean, false)
        and coalesce(rel -> 'values' ->> (f ->> 'id'), '') = '';
@@ -1309,31 +1332,44 @@ begin
     if exists (select 1 from jsonb_array_elements(t.checklist) i where not coalesce((i ->> 'done')::boolean, false)) then
       raise exception 'Сначала закройте чеклист релиза' using errcode = 'P0001';
     end if;
-    rel := rel || jsonb_build_object('phase', 'submitted', 'submittedAt', at_, 'reason', '');
-    select c ->> 'id' into col from jsonb_array_elements(u.settings -> 'columns') c where c ->> 'kind' = 'progress' limit 1;
-    update tasks set release = rel, updated_at = at_,
-      status = case when coalesce((select c ->> 'kind' from jsonb_array_elements(u.settings -> 'columns') c where c ->> 'id' = t.status), 'todo') = 'todo' and col is not null then col else status end,
+    hist := hist || jsonb_build_array(jsonb_build_object('n', jsonb_array_length(hist) + 1, 'submittedAt', at_));
+    rel := (rel || jsonb_build_object('phase', 'submitted', 'submittedAt', at_, 'reason', '', 'history', hist)) - 'fixedAt';
+    -- на доске — колонка ревью юнита (или «в работе»)
+    col := coalesce(nullif(u.settings -> 'review' ->> 'column', ''),
+                    (select c ->> 'id' from jsonb_array_elements(u.settings -> 'columns') c where c ->> 'kind' = 'progress' limit 1));
+    update tasks set release = rel, updated_at = at_, status = coalesce(col, status), done_at = '',
       started_at = case when started_at = '' then at_ else started_at end
      where id = t.id;
     select x ->> 'id' into v_status from jsonb_array_elements(st) x where x ->> 'kind' = 'review' limit 1;
   elsif p_action = 'reject' then
     if coalesce(rel ->> 'phase', '') <> 'submitted' then raise exception 'Реджект — после отправки в Apple' using errcode = 'P0001'; end if;
-    if coalesce(trim(p_reason), '') = '' then raise exception 'Укажите причину реджекта' using errcode = 'P0001'; end if;
+    if coalesce(trim(p_reason), '') = '' then raise exception 'Опишите реджект' using errcode = 'P0001'; end if;
+    -- номер реджекта — по приложению (все релизы)
+    select count(*) + 1 into v_no from tasks r, jsonb_array_elements(coalesce(r.release -> 'history', '[]'::jsonb)) h
+     where r.app_id = t.app_id and r.step = 'release' and h ->> 'result' = 'reject';
     select m.person_id into pm from unit_members m join people p on p.id = m.person_id
      where m.unit_id = t.unit_id and p.access = 'moderator' and p.active order by m.created_at limit 1;
     v_id := 't_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12);
     insert into tasks (id, unit_id, num, title, description, status, assignee_id, department_id, due_date, ord, fields, checklist,
-                       archived, done_at, created_by, created_at, updated_at, parent_id, kind, request_type, app_id, is_test)
-    values (v_id, t.unit_id, next_task_num(t.unit_id), left('Реджект: ' || trim(p_reason), 500), 'Apple отклонил релиз «' || coalesce(a.name, '') || '». Причина: ' || trim(p_reason),
+                       archived, done_at, created_by, created_at, updated_at, parent_id, kind, request_type, app_id, is_test, spec_url)
+    values (v_id, t.unit_id, next_task_num(t.unit_id), left('Реджект №' || v_no || ': ' || trim(p_reason), 500),
+            'Apple отклонил релиз «' || coalesce(a.name, '') || '» (реджект №' || v_no || ').' || chr(10) || trim(p_reason)
+              || case when coalesce(trim(p_shot), '') <> '' then chr(10) || 'Скрин: ' || trim(p_shot) else '' end,
             u.settings -> 'columns' -> 0 ->> 'id', coalesce(pm, ''), '', '', 0,
             case when coalesce(a.priority, '') <> '' then jsonb_build_object('f_priority', a.priority) else '{}'::jsonb end, '[]'::jsonb,
-            false, '', v_actor, at_, at_, '', 'request', 'other', t.app_id, t.is_test);
-    rel := rel || jsonb_build_object('phase', 'rejected', 'rejectedAt', at_, 'reason', trim(p_reason), 'rejectRequestId', v_id, 'pmId', coalesce(pm, ''));
-    update tasks set release = rel, updated_at = at_ where id = t.id;
+            false, '', v_actor, at_, at_, '', 'request', 'other', t.app_id, t.is_test, coalesce(trim(p_shot), ''));
+    last := coalesce(hist -> -1, '{}'::jsonb) || jsonb_build_object('result', 'reject', 'at', at_, 'reason', trim(p_reason), 'shot', coalesce(trim(p_shot), ''), 'rejectNo', v_no, 'requestId', v_id);
+    hist := case when jsonb_array_length(hist) > 0 then jsonb_set(hist, array[(jsonb_array_length(hist) - 1)::text], last) else jsonb_build_array(last) end;
+    rel := rel || jsonb_build_object('phase', 'rejected', 'rejectedAt', at_, 'reason', trim(p_reason), 'shot', coalesce(trim(p_shot), ''),
+                                     'rejectNo', v_no, 'rejectRequestId', v_id, 'pmId', coalesce(pm, ''), 'history', hist);
+    select c ->> 'id' into col from jsonb_array_elements(u.settings -> 'columns') c where c ->> 'kind' = 'progress' limit 1;
+    update tasks set release = rel, updated_at = at_, status = coalesce(col, status), done_at = '' where id = t.id;
     select x ->> 'id' into v_status from jsonb_array_elements(st) x where x ->> 'kind' = 'reject' limit 1;
   elsif p_action = 'live' then
     if coalesce(rel ->> 'phase', '') <> 'submitted' then raise exception 'В стор — после отправки в Apple' using errcode = 'P0001'; end if;
-    rel := rel || jsonb_build_object('phase', 'live', 'liveAt', at_);
+    last := coalesce(hist -> -1, '{}'::jsonb) || jsonb_build_object('result', 'live', 'at', at_);
+    hist := case when jsonb_array_length(hist) > 0 then jsonb_set(hist, array[(jsonb_array_length(hist) - 1)::text], last) else jsonb_build_array(last) end;
+    rel := rel || jsonb_build_object('phase', 'live', 'liveAt', at_, 'history', hist);
     select c ->> 'id' into col from jsonb_array_elements(u.settings -> 'columns') c where c ->> 'kind' = 'done' limit 1;
     update tasks set release = rel, updated_at = at_, status = coalesce(col, status), done_at = at_ where id = t.id;
     if t.parent_id <> '' then
@@ -1354,6 +1390,27 @@ begin
   if p_action in ('live', 'reject') then perform notify_release(t.id, case when p_action = 'live' then 'store_live' else 'store_reject' end); end if;
   return coalesce(v_id, t.id);
 end $$;
+
+-- Реджект исправили (задача «Реджект №N» у PM закрыта) — релиз возвращается RM в очередь на отправку (fixedAt).
+create or replace function release_fixed() returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  r tasks;
+  at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+begin
+  if new.kind <> 'request' or new.status is not distinct from old.status or not task_done(new.id) then return new; end if;
+  select * into r from tasks where step = 'release' and release ->> 'rejectRequestId' = new.id and release ->> 'phase' = 'rejected' limit 1;
+  if r.id is null then return new; end if;
+  perform set_config('app.system', 'on', true);
+  update tasks set release = release || jsonb_build_object('phase', '', 'fixedAt', at_), updated_at = at_ where id = r.id;
+  if r.assignee_id <> '' then
+    insert into notifications (id, person_id, task_id, kind, actor_id, at)
+    values ('n_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), r.assignee_id, r.id, 'unblocked', coalesce(my_person_id(), ''), at_);
+  end if;
+  perform set_config('app.system', 'off', true);
+  return new;
+end $$;
+drop trigger if exists release_fixed on tasks;
+create trigger release_fixed after update on tasks for each row execute function release_fixed();
 
 -- Ссылки этапов запроса для карточки релиза: RM видит только свой этап, а ему нужны макеты, сборка, метаданные.
 create or replace function release_links(p_task text) returns table (task_id text, step text, title text, field_id text, url text)
