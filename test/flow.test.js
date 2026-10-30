@@ -398,6 +398,11 @@ test('RM: релиз — поля и чеклист, отправка в Apple, 
     assert.equal(done.task.status, 'done');
     assert.deepEqual(await api('getRmDashboard', {}), { queue: [], review: [], rejected: [] });
   });
+  // вышло в стор — уведомление PM, лиду юнита и CEO (не RM, который нажал)
+  for (const who of [pm, ceo]) assert.ok((await api.as(who, () => api('getNotifications', {}))).some(n => n.taskId === st.release.id && n.kinds.includes('store_live')), who.name);
+  // лиду — на его этап этого приложения (релиз ему не виден)
+  assert.ok((await api.as(lead, () => api('getNotifications', {}))).some(n => n.taskId === st.design.id && n.kinds.includes('store_live')));
+  assert.ok(!(await api.as(rm, () => api('getNotifications', {}))).some(n => n.kinds.includes('store_live')));
   assert.equal((await appNow(app.id)).status, 'live');
   const reqNow = await api.as(ceo, async () => (await api('getBoard', { unitId: gold.id })).tasks.find(t => t.id === request.id));
   assert.equal(reqNow.status, 'done'); // задача CEO закрыта вместе с релизом
@@ -649,4 +654,20 @@ test('«Раздать»: лид раскладывает свой этап на
   for (const p of parts) await finish(api, designer, pm, p.id);
   const board = await api.as(pm, () => api('getBoard', { unitId: gold.id }));
   assert.equal(board.tasks.find(t => t.id === st.design.id).status, 'done');
+});
+
+test('«@» в комментарии и описании — уведомление отмеченному; уведомления по задаче — одним', async () => {
+  const api = await setup();
+  const { ceo, pm, lead, gold } = await studio(api);
+  const { request } = await api.as(ceo, () => api('createApp', { name: 'Ping', unitId: gold.id }));
+  const st = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: request.id }))).map(t => [t.step, t]));
+  await api.as(pm, () => api('addComment', { taskId: st.design.id, text: `@${lead.name} глянь референсы` }));
+  const n = await api.as(lead, () => api('getNotifications', {}));
+  const mine = n.filter(x => x.taskId === st.design.id);
+  assert.equal(mine.length, 1); // назначение и отметка — одной строкой
+  assert.deepEqual([...mine[0].kinds].sort(), ['assigned', 'mention']);
+  assert.equal(mine[0].kinds[0], 'mention'); // отметка важнее назначения
+  // в описании — тоже; повторная отметка того же человека в той же правке — не дублирует
+  await api.as(pm, () => api('updateTask', { id: st.ios.id, patch: { description: `Для @${ceo.name}` } }));
+  assert.ok((await api.as(ceo, () => api('getNotifications', {}))).some(x => x.taskId === st.ios.id && x.kinds.includes('mention')));
 });

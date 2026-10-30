@@ -1213,6 +1213,60 @@ end $$;
 -- приложение → «Ревью Apple»); live — вышло в стор (этап и запрос CEO — «готово», приложение → «В сторе»);
 -- reject — реджект (приложение → «Реджект», PM юнита получает запрос «Реджект: причина», релиз ждёт у RM);
 -- resubmit — отправил снова после исправления. Делает: исполнитель этапа (RM), CEO и PM юнита.
+-- Итог Apple по релизу (kind store_live / store_reject) — уведомление PM и лидам юнита и всем CEO (кроме того, кто нажал).
+create or replace function notify_release(p_task text, p_kind text) returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  t tasks;
+  v_me text := coalesce(my_person_id(), '');
+  at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+begin
+  select * into t from tasks where id = p_task;
+  if t.id is null or t.is_test then return; end if;
+  -- CEO и PM юнита — на сам релиз
+  insert into notifications (id, person_id, task_id, kind, actor_id, at)
+  select 'n_' || substr(md5(random()::text || clock_timestamp()::text || p.id), 1, 12), p.id, t.id, p_kind, v_me, at_
+    from people p
+   where p.active and p.id <> v_me
+     and (p.access = 'superadmin'
+          or (p.access = 'moderator' and exists (select 1 from unit_members m where m.unit_id = t.unit_id and m.person_id = p.id)));
+  -- лидам — на этап этого приложения их позиции (релиз им не виден)
+  insert into notifications (id, person_id, task_id, kind, actor_id, at)
+  select distinct on (p.id) 'n_' || substr(md5(random()::text || clock_timestamp()::text || p.id), 1, 12), p.id, s.id, p_kind, v_me, at_
+    from people p
+    join unit_members m on m.unit_id = t.unit_id and m.person_id = p.id
+    join tasks s on s.parent_id = t.parent_id and t.parent_id <> '' and s.id <> t.id
+                and (s.department_id = p.position_id or p.extra_positions ? s.department_id)
+   where p.active and p.id <> v_me and p.access = 'lead'
+   order by p.id, s.created_at;
+end $$;
+
+-- Отметки «@» в комментарии или описании: уведомление отмеченным (люди юнита, CEO и RM), кроме себя.
+-- p_people — id людей, p_where — 'comment' или 'description'.
+create or replace function notify_mention(p_task text, p_people jsonb, p_where text) returns integer
+language plpgsql security definer set search_path = public as $$
+declare
+  t tasks;
+  v_me text := coalesce(my_person_id(), '');
+  at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+  n int;
+begin
+  select * into t from tasks where id = p_task;
+  if t.id is null then raise exception 'Задача не найдена' using errcode = 'P0001'; end if;
+  if not (can_manage(t.unit_id) or is_unit_member(t.unit_id)) then
+    raise exception 'Недостаточно прав для этого действия' using errcode = '42501';
+  end if;
+  delete from notifications where task_id = t.id and kind = 'mention' and read_at = ''
+     and person_id in (select jsonb_array_elements_text(coalesce(p_people, '[]'::jsonb)));
+  insert into notifications (id, person_id, task_id, kind, actor_id, at, ref)
+  select 'n_' || substr(md5(random()::text || clock_timestamp()::text || p.id), 1, 12), p.id, t.id, 'mention', v_me, at_, left(coalesce(p_where, ''), 20)
+    from people p
+   where p.id in (select jsonb_array_elements_text(coalesce(p_people, '[]'::jsonb))) and p.active and p.id <> v_me
+     and (p.access in ('superadmin', 'rm') or exists (select 1 from unit_members m where m.unit_id = t.unit_id and m.person_id = p.id));
+  get diagnostics n = row_count;
+  return n;
+end $$;
+
 create or replace function release_step(p_task text, p_action text, p_reason text default '') returns text
 language plpgsql security definer set search_path = public as $$
 declare
@@ -1291,6 +1345,8 @@ begin
   values ('a_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), t.unit_id, t.id, 'update', 'release',
           to_jsonb(coalesce(t.release ->> 'phase', ''))::text, to_jsonb(rel ->> 'phase')::text, v_actor, at_);
   perform set_config('app.system', 'off', true);
+  -- вышло в стор или реджект — сообщить PM и лидам юнита и CEO
+  if p_action in ('live', 'reject') then perform notify_release(t.id, case when p_action = 'live' then 'store_live' else 'store_reject' end); end if;
   return coalesce(v_id, t.id);
 end $$;
 

@@ -618,6 +618,15 @@ export function createBackend(db, opts = {}) {
     return out;
   }
 
+  /** Кого отметили «@Имя Фамилия» в тексте (новые относительно before). Уведомляет база — notify_mention. */
+  async function notifyMentions(taskId, text, before, where) {
+    if (!String(text || '').includes('@')) return 0;
+    const ppl = await people();
+    const has = (s, x) => String(s || '').includes('@' + x.name);
+    const ids = ppl.filter(x => x.active && has(text, x) && !has(before, x)).map(x => x.id);
+    return ids.length ? rpc('notify_mention', { p_task: taskId, p_people: ids, p_where: where }) : 0;
+  }
+
   async function log(entries, ctx) {
     if (!entries.length) return;
     const by = actor(ctx);
@@ -1191,6 +1200,7 @@ export function createBackend(db, opts = {}) {
           fail('Недостаточно прав: менять можно только свои задачи', 'FORBIDDEN');
         }
         await log(logs, ctx);
+        if ('description' in patch && saved[0].description !== r.description) await notifyMentions(t.id, saved[0].description, r.description, 'description');
         return taskOut(saved[0]); // из базы: исполнителя мог сменить триггер ревью
       }
       return taskOut(t);
@@ -1313,6 +1323,7 @@ export function createBackend(db, opts = {}) {
       const c = { id: uid('c'), task_id: t.id, text: req(str(p.text, 5000), 'Комментарий'), author_id: actor(ctx), at: now(), edited_at: '' };
       await run(T('comments').insert(c));
       await log([{ unitId: t.unit_id, taskId: t.id, action: 'comment', to: c.text.slice(0, 200) }], ctx);
+      await notifyMentions(t.id, c.text, '', 'comment');
       return commentOut(c);
     },
 
@@ -1321,7 +1332,10 @@ export function createBackend(db, opts = {}) {
       const upd = { text: req(str(p.text, 5000), 'Комментарий'), edited_at: now() };
       await updateOne('comments', c.id, upd);
       const t = await one('tasks', c.task_id);
-      if (t && upd.text !== c.text) await log([{ unitId: t.unit_id, taskId: t.id, action: 'comment_edit', from: c.text.slice(0, 200), to: upd.text.slice(0, 200) }], ctx);
+      if (t && upd.text !== c.text) {
+        await log([{ unitId: t.unit_id, taskId: t.id, action: 'comment_edit', from: c.text.slice(0, 200), to: upd.text.slice(0, 200) }], ctx);
+        await notifyMentions(t.id, upd.text, c.text, 'comment');
+      }
       return commentOut({ ...c, ...upd });
     },
 
@@ -2210,13 +2224,24 @@ export function createBackend(db, opts = {}) {
       ]);
       const TT = Object.fromEntries(tasks.map(t => [t.id, t])), U = Object.fromEntries(units.map(u => [u.id, u]));
       const A = Object.fromEntries(apps.map(a => [a.id, { id: a.id, name: a.name, color: a.color || '', iconUrl: a.icon_url || '' }]));
-      return rows.filter(r => TT[r.task_id] && !TT[r.task_id].archived && U[TT[r.task_id].unit_id]).map(r => {
-        const t = TT[r.task_id], u = U[t.unit_id];
+      // одно уведомление на задачу: все непрочитанные события по ней — пометками, самое важное первым (решение заказчика)
+      const RANK = ['store_reject', 'overdue', 'returned', 'review', 'mention', 'store_live', 'due_soon', 'unblocked', 'approved', 'assigned', 'handoff'];
+      const rank = k => { const i = RANK.indexOf(k); return i < 0 ? RANK.length : i; };
+      const byTask = new Map();
+      for (const r of rows) {
+        const t = TT[r.task_id];
+        if (!t || t.archived || !U[t.unit_id]) continue;
+        (byTask.get(t.id) || byTask.set(t.id, []).get(t.id)).push(r);
+      }
+      return [...byTask.values()].map(list => {
+        const top = [...list].sort((a, b) => rank(a.kind) - rank(b.kind) || String(b.at).localeCompare(String(a.at)))[0];
+        const t = TT[top.task_id], u = U[t.unit_id];
         return {
-          id: r.id, kind: r.kind, actorId: r.actor_id, at: r.at, ref: r.ref || '', taskId: t.id, title: t.title, dueDate: t.due_date,
+          id: top.id, kind: top.kind, kinds: [...new Set(list.map(r => r.kind))].sort((a, b) => rank(a) - rank(b)), count: list.length,
+          actorId: top.actor_id, at: list.map(r => r.at).sort().pop(), ref: top.ref || '', taskId: t.id, title: t.title, dueDate: t.due_date,
           key: `${u.key}-${t.num}`, unit: { id: u.id, name: u.name, color: u.color }, app: A[t.app_id] || null,
         };
-      });
+      }).sort((a, b) => String(b.at).localeCompare(String(a.at)));
     },
 
     /** Отметить прочитанными: все или по одной задаче (taskId). База даёт менять только свои. */

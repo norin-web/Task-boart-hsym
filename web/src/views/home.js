@@ -48,6 +48,8 @@ function noteText(kind, by) {
   if (kind === 'returned') return who ? 'вернул(а) ' + who : 'вернули';
   if (kind === 'approved') return who ? 'принял(а) ' + who : 'принято';
   if (kind === 'unblocked') return 'предыдущие этапы закрыты';
+  if (kind === 'mention') return who ? 'отметил(а) ' + who : 'вас отметили';
+  if (kind === 'store_live' || kind === 'store_reject') return who ? 'отметил(а) ' + who : '';
   return who ? 'назначил(а) ' + who : 'назначено';
 }
 
@@ -67,7 +69,9 @@ const NEWS_BLOCK = {
   render: () => newsBlock(),
 };
 
-const NEWS_WHAT = { review: 'ревью', returned: 'вернули', approved: 'закрыта по ревью', unblocked: 'можно начинать', overdue: 'просрочено', due_soon: 'срок', handoff: 'новое приложение' };
+const NEWS_WHAT = { assigned: 'новое', review: 'ревью', returned: 'вернули', approved: 'закрыта по ревью', unblocked: 'можно начинать', overdue: 'просрочено', due_soon: 'срок', handoff: 'новое приложение',
+  mention: 'вас отметили', store_live: 'вышло в App Store', store_reject: 'реджект Apple' };
+const NEWS_DANGER = ['overdue', 'returned', 'store_reject'];
 
 export function newsBlock() {
   if (!S.notes.length) return null;
@@ -79,8 +83,9 @@ export function newsBlock() {
     },
     h('span', { class: 'news-dot' + (n.kind !== 'assigned' ? ' ' + n.kind : '') }),
     // что случилось — короткой подписью; красным только «просрочено» и «вернули»; ключ, юнит и кто — в подсказке
-    h('span', { class: 'news-what' + (['overdue', 'returned'].includes(n.kind) ? ' danger' : '') },
-      n.kind === 'due_soon' ? (n.dueDate === todayStr() ? 'срок сегодня' : 'срок завтра') : NEWS_WHAT[n.kind] || ''),
+    // по задаче — одна строка: все события пометками через «·», важное первым (красным — просрочка, возврат, реджект)
+    h('span', { class: 'news-what' + (NEWS_DANGER.includes(n.kind) ? ' danger' : '') },
+      (n.kinds || [n.kind]).map(k => (k === 'due_soon' ? (n.dueDate === todayStr() ? 'срок сегодня' : 'срок завтра') : NEWS_WHAT[k] || '')).filter(Boolean).join(' · ')),
     n.app ? appIcon(n.app, 'xs') : h('span', { class: 'news-noapp' }),
     h('span', { class: 'news-title', title: `${n.key} · ${n.unit.name}` + (n.actorId || !['overdue', 'due_soon'].includes(n.kind) ? ' · ' + noteText(n.kind, by) : '') },
       n.app && h('b', null, n.app.name + ' · '), n.title),

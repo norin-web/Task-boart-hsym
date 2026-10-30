@@ -15,6 +15,7 @@ import { brandIcon, brandOf } from './brand.js';
 import { isWatched, toggleWatch } from './watch.js';
 import { reviewButtons } from './review.js';
 import { clTemplates, templateSelect, openTemplatesEditor } from './cltemplates.js';
+import { attachMentions } from './mention.js';
 
 /* ================= Панель задачи ================= */
 
@@ -409,7 +410,7 @@ function descriptionBlock(t, label, editable) {
       ? h('div', { class: 'desc-view' + (editable ? '' : ' readonly'), title: editable ? 'Нажмите, чтобы изменить' : '', onclick: e => { if (editable && !e.target.closest('a') && !getSelection().toString()) edit(); } }, linkify(t.description))
       : editable ? h('button', { class: 'desc-empty', onclick: edit }, 'Добавьте описание: контекст, ссылки, критерии готовности…') : h('p', { class: 'muted' }, 'Описания нет'));
   const edit = () => {
-    const ta = autosize(h('textarea', { class: 'inp desc-edit', value: t.description, maxlength: 20000 }));
+    const ta = attachMentions(autosize(h('textarea', { class: 'inp desc-edit', value: t.description, maxlength: 20000 })), t.unitId);
     const save = () => { if (ta.value.trim() !== t.description) patchTask(t, { description: ta.value.trim() }); view(); };
     ta.addEventListener('keydown', e => {
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); save(); }
@@ -543,7 +544,7 @@ function discussionBlock(t, editable) {
             h('button', { class: 'link-btn danger', onclick: () => removeComment(c) }, 'Удалить'))),
         isEditing
           ? [
-            ta = autosize(h('textarea', { class: 'inp', value: c.text, style: { marginTop: '6px' } })),
+            ta = attachMentions(autosize(h('textarea', { class: 'inp', value: c.text, style: { marginTop: '6px' } })), t.unitId),
             h('div', { class: 'edit-actions' },
               h('button', {
                 class: 'btn primary sm', onclick: () => {
@@ -567,7 +568,7 @@ function discussionBlock(t, editable) {
   };
 
   const composer = () => {
-    const ta = autosize(h('textarea', { class: 'inp', rows: 2, placeholder: 'Написать комментарий…', maxlength: 5000 }));
+    const ta = attachMentions(autosize(h('textarea', { class: 'inp', rows: 2, placeholder: 'Написать комментарий… (@ — отметить человека)', maxlength: 5000 })), t.unitId);
     const submit = () => {
       const text = ta.value.trim();
       if (!text) return;
