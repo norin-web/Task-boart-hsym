@@ -552,6 +552,15 @@ export function createBackend(db, opts = {}) {
       const fresh = await findTask(t.id);
       if (kindOf(st, fresh.status) !== 'done') await methods.updateTask({ id: t.id, patch: { assigneeId: pms.length ? pms[0].id : '' } }, ctx);
     }
+    // исполнителей, которых нет в новом юните, не оставляем на открытых задачах: этап — человек той же позиции здесь, релиз — RM, иначе без исполнителя
+    const crew = await unitPeople(unitId);
+    for (const t of rows.filter(x => x.kind !== 'request')) {
+      const fresh = await findTask(t.id);
+      if (!fresh.assignee_id || fresh.done_at || crew.some(x => x.id === fresh.assignee_id)) continue;
+      const samePos = crew.filter(x => x.positionIds.includes(fresh.department_id));
+      const pick = fresh.step === 'release' ? crew.find(x => x.access === 'rm') : samePos.find(x => x.access === 'lead') || samePos[0];
+      await run(T('tasks').update({ assignee_id: pick ? pick.id : '', updated_at: now() }).eq('id', fresh.id));
+    }
   }
   /** Флоу по типам запроса: свой у юнита (настройки юнита), иначе студии (app_settings.flows), иначе по умолчанию. */
   const flows = async unitId => {
@@ -601,6 +610,8 @@ export function createBackend(db, opts = {}) {
    */
   async function fitsAssignee(unitId, { kind, step, departmentId }, assigneeId) {
     if (!assigneeId) return;
+    const anyone = (await people()).find(x => x.id === assigneeId);
+    if (anyone && !anyone.active) fail(`${anyone.name} отключён — выберите другого исполнителя`, 'RULE');
     const person = (await unitPeople(unitId)).find(x => x.id === assigneeId);
     if (!person) return;
     if (kind === 'stage' && step === 'release') {
