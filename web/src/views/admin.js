@@ -1,4 +1,4 @@
-/** Панель админа (#/admin): обзор, люди и доступы, юниты, позиции, карточка, журнал. Для модераторов и супер-админов. */
+/** Студия в «Настройках»: обзор, люди и доступы, юниты, автоматизации, журнал. Для CEO и PM. */
 import Sortable from 'sortablejs';
 import { AUTO_ARCHIVE, HIDE_DONE } from '../state.js';
 import { reviewSection, openFieldEditor, requiredLabel } from './settings.js';
@@ -14,33 +14,28 @@ import { openCreateTask } from './task.js';
 import { activityFeed } from './feed.js';
 import { openCreateUnit, archiveUnit, deleteUnit } from './units.js';
 
-const TABS = [
+/** Разделы студии: [id, подпись, иконка]. */
+export const STUDIO_TABS = [
   ['overview', 'Обзор', 'home'],
   ['people', 'Люди и доступы', 'users'],
-  ['units', 'Структура', 'tree'],
+  ['units', 'Юниты', 'tree'],
   ['automations', 'Автоматизации', 'progress'],
   ['journal', 'Журнал', 'clock'],
 ];
-const tabs = () => TABS.filter(t => t[3] !== 'super' || isSuper());
 
 // Старые вкладки: позиции — внутри «Люди и доступы», шаблоны — в «Автоматизациях»
 const MOVED = { positions: ['people', 'positions'], teams: ['people', 'teams'], templates: ['automations'], card: ['automations'] };
 
-export async function renderAdmin(tab) {
+/**
+ * Раздел студии в «Настройках» (#/settings?tab=…): обзор, люди и доступы, структура (юниты и корзина), автоматизации, журнал.
+ * page — куда рисовать, key — currentView(), при котором рисуем (ушли со страницы — не рисуем).
+ */
+export async function renderStudio(page, tab, key) {
   if (MOVED[tab]) {
     if (MOVED[tab][1]) LS.set('peopleSub', MOVED[tab][1]);
     tab = MOVED[tab][0];
   }
-  if (tab !== 'trash' && !tabs().some(t => t[0] === tab)) tab = 'overview';
-  const navTab = tab === 'trash' ? 'units' : tab; // корзина — часть вкладки «Юниты»
-  const page = h('div', { class: 'page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
-  const key = 'admin:' + tab;
-  fill($('#main'),
-    topbar([h('h1', null, 'Панель админа'), roleBadge(me())], []),
-    h('nav', { class: 'admin-tabs' }, tabs().map(([id, label, ic]) =>
-      link({ view: 'admin', tab: id }, { class: 'admin-tab' + (id === navTab ? ' on' : '') }, icon(ic, 15), label))),
-    h('div', { class: 'view-body' }, page));
-
+  fill(page, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
   // Свежие люди, юниты и позиции — общая основа всех вкладок
   let d, ov;
   try {
@@ -124,8 +119,8 @@ const right = (ok, text) => h('div', { class: 'right-row' + (ok ? '' : ' no') },
 function unitsSwitch(trash) {
   const n = S.units.filter(u => u.archived).length;
   return h('div', { class: 'seg' },
-    link({ view: 'admin', tab: 'units' }, { class: trash ? '' : 'on' }, 'Активные'),
-    link({ view: 'admin', tab: 'trash' }, { class: trash ? 'on' : '' }, icon('trash', 13), 'Корзина' + (n ? ' · ' + n : '')));
+    link({ view: 'settings', tab: 'units' }, { class: trash ? '' : 'on' }, 'Активные'),
+    link({ view: 'settings', tab: 'trash' }, { class: trash ? 'on' : '' }, icon('trash', 13), 'Корзина' + (n ? ' · ' + n : '')));
 }
 
 const RETENTION = [[7, '7 дней'], [15, '15 дней'], [30, '30 дней'], [60, '2 месяца'], [90, '3 месяца'], [0, 'Никогда']];
@@ -144,7 +139,7 @@ function trashTable(settings) {
     ? h('select', {
       class: 'inp sm', value: String(days),
       onchange: e => call('updateAppSettings', { unitRetentionDays: Number(e.target.value) })
-        .then(() => { toast('Срок хранения сохранён'); renderAdmin('trash'); }).catch(showErr),
+        .then(() => { toast('Срок хранения сохранён'); rerender(); }).catch(showErr),
     }, RETENTION.map(([v, t]) => h('option', { value: String(v) }, t)))
     : h('b', null, (RETENTION.find(r => r[0] === days) || [0, days + ' дн.'])[1]);
   return h('div', null,

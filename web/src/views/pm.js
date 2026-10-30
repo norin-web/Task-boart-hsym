@@ -11,7 +11,7 @@ import { peekTask, openCreateTask } from './task.js';
 import { appIcon, prioTag, isHighPrio, openDecomposeDialog, sendRelease, openAppById } from './apps.js';
 import { newsBlock, loadNotes } from './home.js';
 
-const PERIODS = [['week', 'Неделя'], ['month', 'Месяц'], ['quarter', 'Квартал']];
+export const PERIODS = [['week', 'Неделя'], ['month', 'Месяц'], ['quarter', 'Квартал']];
 const STATE = {
   done: { icon: 'check', label: 'готово' },
   progress: { icon: 'progress', label: 'в работе' },
@@ -117,7 +117,7 @@ function problems(d) {
 
 /* ---------- команда и KPI ---------- */
 
-function team(d, period, setPeriod) {
+export function team(d, period, setPeriod) {
   const rows = [...d.team].map(k => ({ ...k, p: personById(k.personId) })).filter(k => k.p)
     .sort((a, b) => b.done - a.done || b.inProgress - a.inProgress || a.p.name.localeCompare(b.p.name, 'ru'));
   const pct = v => (v === null ? h('span', { class: 'muted' }, '—') : h('span', { class: v < 50 ? 'warn-text' : '' }, v + '%'));

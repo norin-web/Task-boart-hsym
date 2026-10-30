@@ -180,7 +180,7 @@ function statusFor(u, group) {
  * Колонки доски: обязательные — на месте (не убрать, не переименовать), свои — между ними: название, цвет,
  * перетаскивание за ручку (своя колонка считается той обязательной, под которой стоит). «Как у команды» — шаблон команды.
  */
-function editColumns(onDone) {
+export function editColumns(onDone) {
   let custom = myCustom().map(c => ({ ...c }));
   const tpl = teamTemplate();
   const list = h('div', { class: 'col-edit-list' });

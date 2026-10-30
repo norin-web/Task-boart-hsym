@@ -95,7 +95,7 @@ export function renderSettings() {
         field('Цвет', color.el),
         field('Описание', desc),
         h('p', { class: 'hint rules-link' }, icon('progress', 13), 'Ревью, чеклист перед «готово», скрытие и архив выполненных — в ',
-          link({ view: 'admin', tab: 'automations' }, null, 'Панели админа → Автоматизации'), '.'),
+          link({ view: 'settings', tab: 'automations' }, null, 'Настройках → Автоматизации'), '.'),
 
         h('div', { class: 'sub-title' }, 'Колонки доски'),
         h('p', { class: 'hint', style: { marginTop: '-4px' } }, 'Тип колонки влияет на статистику: «Готово» — задача выполнена (не просрочена, считается в прогрессе).'),
@@ -116,7 +116,7 @@ export function renderSettings() {
           h('button', { class: 'btn primary sm', onclick: () => editField(null) }, icon('plus', 14), 'Поле')),
         globals.length > 0 && h('p', { class: 'hint global-fields-note' }, 'Общие для всех юнитов: ',
           h('span', { class: 'gf-names' }, globals.map(f => f.name).join(', ')), ' — меняются в ',
-          link({ view: 'admin', tab: 'automations' }, null, 'Панели админа → Автоматизации'), '.'),
+          link({ view: 'settings', tab: 'automations' }, null, 'Настройках → Автоматизации'), '.'),
         h('p', { class: 'hint' }, 'Свои поля для задач этого юнита: списки, даты, числа, ссылки. На карточке идут после общих. Порядок меняется перетаскиванием.'),
         active.length ? fieldList : h('p', { class: 'muted' }, 'Своих полей пока нет.'),
         archived.length > 0 && [

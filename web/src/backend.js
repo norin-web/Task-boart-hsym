@@ -586,6 +586,13 @@ export function createBackend(db, opts = {}) {
   }
 
   const actor = ctx => str(ctx && ctx.actorId, 40);
+  /** Какие уведомления вошедший выключил в «Настройки → Уведомления» (prefs.notifyOff — виды событий). */
+  const mutedKinds = async () => {
+    const id = await rpc('my_person_id', {}).catch(() => '');
+    const p = id && (await one('people', String(id)));
+    const off = p && (json(p.prefs, {}) || {}).notifyOff;
+    return Array.isArray(off) ? off.map(String) : [];
+  };
 
   const logVal = v => {
     if (v === undefined || v === null) return '';
@@ -2296,17 +2303,19 @@ export function createBackend(db, opts = {}) {
     async heartbeat(p) {
       await rpc('touch_presence', {});
       if (p.today) await rpc('scan_due', { p_today: today(p.today) });
-      const [seen, unread] = await Promise.all([
+      const [seen, unread, off] = await Promise.all([
         all(() => T('people').select('id,last_seen_at').order('id')),
-        run(T('notifications').select('id').eq('read_at', '').limit(100)),
+        run(T('notifications').select('id,kind').eq('read_at', '').limit(100)),
+        mutedKinds(),
       ]);
-      return { seen: Object.fromEntries(seen.map(r => [r.id, r.last_seen_at || ''])), unread: unread.length };
+      return { seen: Object.fromEntries(seen.map(r => [r.id, r.last_seen_at || ''])), unread: unread.filter(r => !off.includes(r.kind)).length };
     },
 
     /** Непрочитанные уведомления вошедшего — с задачей и юнитом (скрытые от него задачи пропускаются). */
     async getNotifications(p) {
       if (p.today) await rpc('scan_due', { p_today: today(p.today) });
-      const rows = await run(T('notifications').select('*').eq('read_at', '').order('at', { ascending: false }).limit(50));
+      const off = await mutedKinds();
+      const rows = (await run(T('notifications').select('*').eq('read_at', '').order('at', { ascending: false }).limit(50))).filter(r => !off.includes(r.kind));
       if (!rows.length) return [];
       const tasks = await run(T('tasks').select('id,unit_id,num,title,status,due_date,archived,app_id').in('id', [...new Set(rows.map(r => r.task_id))]));
       const appIds = [...new Set(tasks.map(t => t.app_id).filter(Boolean))];

@@ -20,15 +20,17 @@ function tabs(u) {
 }
 
 /** Шапка юнита + полоса вкладок; right — кнопки действий справа. Возвращает два узла для fill(#main, …). */
-export function unitHeader(active, right = []) {
+export function unitHeader(active, right = [], team = null) {
   const u = S.board.unit;
+  const sep = () => h('span', { class: 'crumb-sep', 'aria-hidden': 'true' }, '/');
   return [
     topbar([
       h('nav', { class: 'crumbs unit-crumbs', 'aria-label': 'Навигация' },
         link({ view: 'home' }, { class: 'crumb' }, 'Дашборд'),
-        h('span', { class: 'crumb-sep', 'aria-hidden': 'true' }, '/'),
+        sep(),
         h('span', { class: 'unit-dot', style: { background: u.color, margin: 0 } }),
-        h('h1', null, u.name),
+        team ? link({ unit: u.id, mode: seesApps() ? 'overview' : 'board' }, { class: 'crumb' }, u.name) : h('h1', null, u.name),
+        team && [sep(), h('span', { class: 'unit-dot', style: { background: team.color, margin: 0 } }), h('h1', null, team.name)],
         u.archived && h('span', { class: 'badge' }, 'в архиве')),
     ], right),
     h('nav', { class: 'unit-tabs', role: 'tablist', 'aria-label': 'Разделы юнита' },

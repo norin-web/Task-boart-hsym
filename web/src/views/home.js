@@ -1,5 +1,5 @@
 import { S, greeting, me, personById, plural, emptyCounts, isStaff, deptById, todayStr, fmtDate, activeDepts, ACCESS_LABELS, relTime, dueInfo } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill, toast, menu, closeMenu } from '../ui.js';
+import { $, h, icon, avatar, topbar, showErr, fill, toast, menu, closeMenu, modal } from '../ui.js';
 import { call } from '../api.js';
 import { currentView, link, navigate, taskLink, rerender } from '../router.js';
 import { renderSidebar, renderUnread } from './sidebar.js';
@@ -106,15 +106,27 @@ export function newsBlock() {
       h('h2', null, 'Новое для вас', h('span', { class: 'muted sec-n' }, S.notes.length)),
       h('button', { class: 'btn ghost sm', onclick: readAll }, icon('check', 14), 'Просмотрено всё')),
     list);
-  // длинный список — первые 6, остальное по кнопке
-  const LIMIT = 6;
+  // длинный список: 3 строки, «Ещё N» раскрывает до 15, больше — «Все уведомления» отдельным окном
+  const LIMIT = 3, MAX = 15;
   let all = false;
   function drawList() {
-    fill(list, (all ? S.notes : S.notes.slice(0, LIMIT)).map(row),
-      S.notes.length > LIMIT && h('button', { class: 'link-btn news-more', onclick: () => { all = !all; drawList(); } }, all ? 'Свернуть' : 'Показать все ' + S.notes.length));
+    const n = S.notes.length;
+    fill(list, (all ? S.notes.slice(0, MAX) : S.notes.slice(0, LIMIT)).map(row),
+      n > LIMIT && h('div', { class: 'news-more-row' },
+        h('button', { class: 'link-btn news-more', 'aria-expanded': String(all), onclick: () => { all = !all; drawList(); } },
+          icon('chevron', 13), all ? 'Свернуть' : 'Ещё ' + (Math.min(n, MAX) - LIMIT)),
+        all && n > MAX && h('button', { class: 'link-btn news-more', onclick: () => openAllNews(row) }, 'Все уведомления · ' + n)));
+    list.classList.toggle('expanded', all);
   }
   drawList();
   return sec;
+}
+
+/** Все непрочитанные отдельным окном (когда их больше 15). */
+function openAllNews(row) {
+  const list = h('div', { class: 'news card-box with-what news-all' }, S.notes.map(row));
+  const close = modal({ title: 'Новое для вас · ' + S.notes.length, body: list, actions: [{ label: 'Закрыть' }], wide: true });
+  list.addEventListener('click', e => { if (e.target.closest('.news-row')) close(); });
 }
 
 /** Локальный режим: заполнить пустую базу демо-командами и перезагрузить. */

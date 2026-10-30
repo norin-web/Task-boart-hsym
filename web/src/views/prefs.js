@@ -1,0 +1,174 @@
+/**
+ * Настройки (#/settings?tab=…) — всё в одном месте. Слева разделы:
+ *   Личное (у всех): профиль, внешний вид, уведомления, доски, дашборд;
+ *   Студия: CEO и PM — обзор, люди и доступы, юниты, автоматизации, журнал; CEO — приложения; CEO и RM — релизы.
+ * Раздел студии рисует admin.js (renderStudio), редакторы приложений и релизов открываются своими окнами.
+ */
+import { S, LS, me, isStaff, isSuper, myAccess, ceoMode, ACCESS_LABELS, deptById } from '../state.js';
+import { $, h, icon, avatar, topbar, fill, showErr, toast } from '../ui.js';
+import { send } from '../api.js';
+import { link, navigate, currentView } from '../router.js';
+import { mode, supabase } from '../data.js';
+import { THEME_LIST, setTheme, setCeoMode, resetLocal } from './sidebar.js';
+import { openMyProfile, openActAs } from './people.js';
+import { renderStudio, STUDIO_TABS } from './admin.js';
+
+const PERSONAL = [
+  ['profile', 'Профиль', 'user'],
+  ['look', 'Внешний вид', 'sun'],
+  ['notify', 'Уведомления', 'bell'],
+  ['boards', 'Доски', 'board'],
+  ['dashboard', 'Дашборд', 'home'],
+];
+
+/** Разделы студии, доступные вошедшему. */
+const studio = () => [
+  ...(isStaff() ? STUDIO_TABS : []),
+  isSuper() && ['apps', 'Приложения', 'app'],
+  (isSuper() || myAccess() === 'rm') && ['releases', 'Релизы', 'rocket'],
+].filter(Boolean);
+
+/** События уведомлений: группа → виды (prefs.notifyOff — выключенные виды). */
+const NOTIFY = [
+  ['Назначили на меня', 'Новая задача или этап на вас', ['assigned', 'handoff']],
+  ['Ревью', 'Прислали на ревью, вернули, приняли', ['review', 'returned', 'approved']],
+  ['Упоминания', 'Отметили через @ в комментарии или описании', ['mention']],
+  ['Можно начинать', 'Предыдущие этапы закрыты', ['unblocked']],
+  ['Сроки', 'Срок сегодня или завтра, просрочено', ['due_soon', 'overdue']],
+  ['Релизы', 'Вышло в App Store, реджект Apple', ['store_live', 'store_reject']],
+];
+
+export function renderPrefs(tab) {
+  const all = [...PERSONAL, ...studio()];
+  if (!all.some(t => t[0] === tab) && tab !== 'trash') tab = 'profile';
+  const navTab = tab === 'trash' ? 'units' : tab;
+  const key = currentView();
+  const body = h('div', { class: 'prefs-body' });
+  const item = ([id, label, ic]) => link({ view: 'settings', tab: id }, { class: 'prefs-tab' + (id === navTab ? ' on' : '') }, icon(ic, 15), label);
+  fill($('#main'),
+    topbar([h('h1', null, 'Настройки')], []),
+    h('div', { class: 'view-body prefs-page' },
+      h('nav', { class: 'prefs-nav', 'aria-label': 'Разделы настроек' },
+        h('div', { class: 'prefs-sec' }, 'Личное'), PERSONAL.map(item),
+        studio().length > 0 && [h('div', { class: 'prefs-sec' }, 'Студия'), studio().map(item)]),
+      body));
+
+  const SECTIONS = { profile, look, notify, boards, dashboard, apps: appsSection, releases: releasesSection };
+  if (SECTIONS[tab]) fill(body, SECTIONS[tab]());
+  else renderStudio(body, tab, key);
+}
+
+/* ---------- общее ---------- */
+
+const head = (title, sub) => h('div', { class: 'prefs-head' }, h('h2', null, title), sub && h('p', { class: 'muted' }, sub));
+/** Строка настройки: название, пояснение, справа — действие. */
+const row = (title, sub, action) => h('div', { class: 'prefs-row' },
+  h('div', { class: 'prefs-row-text' }, h('b', null, title), sub && h('small', { class: 'muted' }, sub)), action);
+const btn = (label, onclick, cls = 'btn sm') => h('button', { class: cls, onclick }, label);
+const card = (...rows) => h('div', { class: 'card-box prefs-card' }, rows);
+
+/* ---------- личное ---------- */
+
+function profile() {
+  const p = me();
+  if (!p) return null;
+  const pos = (p.positionIds || []).map(id => (deptById(id) || {}).name).filter(Boolean).join(', ');
+  const email = (S.session && S.session.user.email) || p.email;
+  return [
+    head('Профиль'),
+    card(
+      h('div', { class: 'prefs-me' }, avatar(p, 'lg'),
+        h('div', null, h('b', null, p.name), h('small', { class: 'muted' }, [ACCESS_LABELS[p.access], pos, email].filter(Boolean).join(' · '))),
+        h('span', { class: 'spacer' }), btn('Изменить', openMyProfile))),
+    head('Аккаунт'),
+    card(
+      mode === 'local' && row('Локальный режим', 'Данные хранятся только в этом браузере', null),
+      mode === 'local' && row('Войти как…', 'Посмотреть тулзу глазами другого человека', btn('Выбрать', openActAs)),
+      mode === 'local' && row('Очистить локальную базу', 'Стереть всё и начать с пустой тулзы', btn('Стереть', resetLocal, 'btn sm danger')),
+      mode === 'supabase' && row('Выйти', email, btn('Выйти', () => supabase.auth.signOut()))),
+  ];
+}
+
+function look() {
+  const box = h('div', { class: 'theme-pick', role: 'radiogroup', 'aria-label': 'Тема' });
+  const draw = () => fill(box, Object.entries(THEME_LIST).map(([id, [label, ic]]) => {
+    const on = LS.get('theme', 'auto') === id;
+    return h('button', { class: 'theme-opt' + (on ? ' on' : ''), role: 'radio', 'aria-checked': String(on), onclick: () => { setTheme(id); draw(); } },
+      h('span', { class: 'theme-swatch t-' + id }), icon(ic, 15), label.replace('Тема: ', ''));
+  }));
+  draw();
+  return [head('Внешний вид', 'Тема хранится в этом браузере'), card(box)];
+}
+
+function notify() {
+  const p = me();
+  let off = [...(((p && p.prefs) || {}).notifyOff || [])];
+  const save = () => {
+    if (p) p.prefs = { ...(p.prefs || {}), notifyOff: off };
+    send('setMyPrefs', { personId: S.meId, prefs: { notifyOff: off } }).then(() => toast('Сохранено')).catch(showErr);
+  };
+  const table = h('div', { class: 'card-box nt-table', role: 'table', 'aria-label': 'Уведомления' });
+  const draw = () => fill(table,
+    h('div', { class: 'nt-row nt-head', role: 'row' }, h('span', { role: 'columnheader' }, 'Событие'),
+      h('span', { role: 'columnheader' }, 'В тулзе'), h('span', { role: 'columnheader', class: 'muted', title: 'Скоро' }, 'Почта'), h('span', { role: 'columnheader', class: 'muted', title: 'Скоро' }, 'Telegram')),
+    NOTIFY.map(([title, sub, kinds]) => {
+      const on = !kinds.every(k => off.includes(k));
+      return h('div', { class: 'nt-row', role: 'row' },
+        h('span', { class: 'prefs-row-text', role: 'cell' }, h('b', null, title), h('small', { class: 'muted' }, sub)),
+        h('span', { role: 'cell' }, h('input', { type: 'checkbox', checked: on, 'aria-label': title + ' — в тулзе',
+          onchange: e => { off = e.target.checked ? off.filter(k => !kinds.includes(k)) : [...new Set([...off, ...kinds])]; save(); draw(); } })),
+        h('span', { role: 'cell' }, h('input', { type: 'checkbox', disabled: true, title: 'Скоро', 'aria-label': title + ' — почта' })),
+        h('span', { role: 'cell' }, h('input', { type: 'checkbox', disabled: true, title: 'Скоро', 'aria-label': title + ' — Telegram' })));
+    }));
+  draw();
+  return [head('Уведомления', 'Что приходит в «Новое для вас» и на колокольчик. Почта и Telegram — скоро.'), table];
+}
+
+function boards() {
+  const lead = ['lead', 'moderator', 'superadmin'].includes(myAccess());
+  return [
+    head('Доски'),
+    card(
+      row('Колонки «Моей доски»', 'Свои колонки между обязательными To Do, In Progress, Review и Done',
+        btn('Настроить', () => import('./myboard.js').then(m => m.editColumns(() => toast('Сохранено'))))),
+      lead && row('Шаблоны чеклистов', 'Готовые пункты для подзадач и этапов — «Из шаблона» в чеклисте',
+        btn('Настроить', () => import('./cltemplates.js').then(m => m.openTemplatesEditor()))),
+      myAccess() === 'rm' && row('Карточка релиза', 'Какие блоки показывать в карточке релиза',
+        btn('Настроить', () => import('./release.js').then(m => m.openReleaseCardSettings())))),
+  ];
+}
+
+function dashboard() {
+  return [
+    head('Дашборд'),
+    card(
+      row('Блоки дашборда', 'Порядок, колонки и какие блоки показывать', btn('Открыть дашборд', () => navigate({ view: 'home' }))),
+      isStaff() && row('Аналитика', 'Цифры, статусы, загрузка и KPI команды', btn('Открыть', () => navigate({ view: 'analytics' }))),
+      isSuper() && row('Режим CEO', 'Default — приложения и приоритеты; Admin — ещё доски, задачи и настройки юнитов',
+        h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Режим CEO' }, [['default', 'Default'], ['admin', 'Admin']].map(([m, label]) =>
+          h('button', { class: ceoMode() === m ? 'on' : '', role: 'radio', 'aria-checked': String(ceoMode() === m),
+            onclick: async () => { await setCeoMode(m); if (currentView() && currentView().startsWith('settings')) renderPrefs('dashboard'); } }, label))))),
+  ];
+}
+
+/* ---------- студия: приложения и релизы (редакторы — окнами) ---------- */
+
+function appsSection() {
+  const open = fn => () => import('./apps.js').then(m => m[fn]());
+  return [
+    head('Приложения', 'Общие для всей студии'),
+    card(
+      row('Статусы приложения', 'В разработке, Релиз, Ревью Apple, В сторе, Реджект…', btn('Настроить', open('openStatusesEditor'))),
+      row('Поля приложения', 'Ссылки и тексты: App Store, App Store Connect, Figma…', btn('Настроить', open('openFieldsEditor'))),
+      row('Шаблоны апдейтов', 'Название, описание, пункты и нужные этапы', btn('Настроить', open('openUpdateTemplates')))),
+  ];
+}
+
+function releasesSection() {
+  return [
+    head('Релизы', 'Один набор на студию — настраивают CEO и RM'),
+    card(
+      row('Релизные поля и чеклист', 'Что заполнить перед «Отправить в Apple»', btn('Настроить', () => import('./release.js').then(m => m.openReleaseSettings()))),
+      myAccess() === 'rm' && row('Карточка релиза', 'Какие блоки показывать', btn('Настроить', () => import('./release.js').then(m => m.openReleaseCardSettings())))),
+  ];
+}

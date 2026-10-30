@@ -2,7 +2,7 @@ import Sortable from 'sortablejs';
 import {
   S, taskById, appById, personById, activeFields, missingFor, missingNext, priorityOf, priorityField, byPriority, visibleLinkFields, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder,
   between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, relTime, unitById, emptyCounts, freshFilters, saveBoardView,
-  activeDepts, deptById, KINDS, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS,
+  activeDepts, deptById, teamById, KINDS, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS,
 } from '../state.js';
 import { $, h, icon, avatar, topbar, menu, closeMenu, modal, field, confirmDlg, promptDlg, toast, showErr, statusDot, fill, prioMark } from '../ui.js';
 import { call, send } from '../api.js';
@@ -29,16 +29,41 @@ export async function loadBoard(unitId) {
 /* ================= Каркас экрана ================= */
 
 export function renderBoardView() {
-  const u = S.board.unit;
   const mode = S.route.mode;
+  const team = teamById(S.route.team);
   fill($('#main'),
-    ...unitHeader(mode === 'list' ? 'list' : 'board', [
-      teamStack(),
+    ...unitHeader(team ? '' : mode === 'list' ? 'list' : 'board', [
+      !team && teamStack(),
       isStaff() && h('button', { class: 'btn primary', onclick: () => openCreateTask(), title: 'Новая задача (C)' }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Задача')),
-    ]),
+    ], team),
+    team && whoDoesWhat(team),
     filterBar(),
     h('div', { id: 'tasks', class: mode === 'list' ? 'view-body' : 'board' }));
   renderTasks();
+}
+
+/** Люди команды в этом юните. */
+const teamPeople = team => S.board.members.map(m => personById(m.personId)).filter(p => p && (p.teamIds || []).includes(team.id))
+  .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+
+/** Доска команды: кто чем занят — у каждого его задача в работе (или «свободен»), сколько открытых и просрочено. */
+function whoDoesWhat(team) {
+  const today = todayStr();
+  const people = teamPeople(team);
+  if (!people.length) return h('div', { class: 'who-strip' }, h('p', { class: 'muted', style: { margin: 0 } }, 'В этом юните у команды нет людей'));
+  return h('div', { class: 'who-strip' }, people.map(p => {
+    const open = S.board.tasks.filter(t => !t.archived && !taskDone(t) && t.assigneeId === p.id);
+    const now = open.find(t => colById(t.status).kind === 'progress');
+    const late = open.filter(t => isOverdue(t, today)).length;
+    return h('button', { class: 'who-card', title: 'Показать задачи: ' + p.name, onclick: () => { S.filters.assignees = S.filters.assignees.includes(p.id) ? [] : [p.id]; renderTasks(); drawFilterRest(); markWho(); }, dataset: { person: p.id } },
+      avatar(p, 'sm'),
+      h('span', { class: 'who-main' }, h('b', null, p.name),
+        h('small', { class: now ? '' : 'muted' }, now ? now.title : open.length ? 'ничего в работе' : 'свободен')),
+      h('span', { class: 'who-n' }, open.length || '', late > 0 && h('span', { class: 'danger-text' }, ' · ' + late)));
+  }));
+}
+function markWho() {
+  document.querySelectorAll('.who-card').forEach(el => el.classList.toggle('on', S.filters.assignees.includes(el.dataset.person)));
 }
 
 /** Аватары команды в шапке — клик ведёт на вкладку «Команда». */
@@ -104,11 +129,12 @@ function filterRest() {
   // Исполнители: команда + все, у кого есть задачи в юните
   const ids = [...new Set(S.board.members.map(m => m.personId).concat(S.board.tasks.filter(t => !t.archived && t.assigneeId).map(t => t.assigneeId)))];
   const people = ids.map(personById).filter(Boolean).slice(0, 10);
-  const avatars = !B.assignee.hidden && people.length > 0 && h('div', { class: 'avatars', title: 'Фильтр по исполнителю' },
+  const onTeam = !!S.route.team; // на доске команды людей выбирают карточками «кто чем занят»
+  const avatars = !onTeam && !B.assignee.hidden && people.length > 0 && h('div', { class: 'avatars', title: 'Фильтр по исполнителю' },
     people.map(p => h('button', { class: 'av-btn' + (f.assignees.includes(p.id) ? ' on' : ''), title: p.name, onclick: () => set('assignees', toggleIn(f.assignees, p.id)) }, avatar(p))),
     h('button', { class: 'av-btn' + (f.assignees.includes(NO_DEPT) ? ' on' : ''), title: 'Без исполнителя', onclick: () => set('assignees', toggleIn(f.assignees, NO_DEPT)) }, avatar(null)));
 
-  const depts = isStaff() && !B.department.hidden && activeDepts().length > 0 && h('div', { class: 'row dept-chips', style: { gap: '4px' } },
+  const depts = !onTeam && isStaff() && !B.department.hidden && activeDepts().length > 0 && h('div', { class: 'row dept-chips', style: { gap: '4px' } },
     activeDepts().map(d => h('button', {
       class: 'fchip dept' + (f.depts.includes(d.id) ? ' on' : ''), style: { '--dc': d.color },
       onclick: () => set('depts', toggleIn(f.depts, d.id)),
@@ -208,7 +234,10 @@ export function filterTasks(opts = {}) {
     const fld = activeFields().find(x => (x.options || []).some(o => o.id === id));
     if (fld) (groups[fld.id] = groups[fld.id] || []).push(id);
   }
+  const team = teamById(S.route.team);
+  const inTeam = team && new Set(teamPeople(team).map(p => p.id));
   return S.board.tasks.filter(t => {
+    if (inTeam && !inTeam.has(t.assigneeId)) return false;
     if (t.archived && !f.archived) return false;
     if (!opts.withOld && hidingOld() && staleDone(t)) return false;
     if (f.assignees.length && !f.assignees.includes(t.assigneeId || NO_DEPT)) return false;

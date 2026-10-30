@@ -3,8 +3,11 @@
  *   #/                       главная
  *   #/my                     мои задачи
  *   #/board                  моя доска (личные этапы)
- *   #/admin[?tab=…]          панель админа (модераторы и супер-админы)
+ *   #/admin                  старый адрес — ведёт в «Настройки»
+ *   #/analytics              аналитика (CEO и PM)
+ *   #/settings[?tab=…]       настройки: личные и студия
  *   #/u/:unit[/overview|/apps|/list|/team|/settings][?task=:id] — вкладки юнита; без режима — доска
+ *   #/u/:unit/t/:team[?task=:id] — доска команды в юните и кто чем занят
  */
 import { S, isStaff, isSuper, myAccess, loadBoardView, ceoDefault, seesApps } from './state.js';
 import { $, h, fill, closeMenu, closeNav, showErr } from './ui.js';
@@ -17,7 +20,8 @@ import { renderCeoHome } from './views/ceo.js';
 import { renderPmHome } from './views/pm.js';
 import { renderRmHome } from './views/rm.js';
 import { renderDev } from './views/dev.js';
-import { renderAdmin } from './views/admin.js';
+import { renderPrefs } from './views/prefs.js';
+import { renderAnalytics } from './views/analytics.js';
 import { renderBoardView, loadBoard } from './views/board.js';
 import { renderSettings } from './views/settings.js';
 import { renderUnitPage, renderUnitTeam } from './views/unitpage.js';
@@ -34,16 +38,20 @@ export function parseLocation() {
   if (path === '/board') return { view: 'myboard' };
   if (path === '/apps') return { view: 'apps' };
   if (path === '/dev') return { view: 'dev' };
-  if (path === '/admin') return { view: 'admin', tab: new URLSearchParams(query || '').get('tab') || 'overview' };
+  if (path === '/analytics') return { view: 'analytics' };
+  // панель админа переехала в «Настройки → Студия»
+  if (path === '/settings' || path === '/admin') return { view: 'settings', tab: new URLSearchParams(query || '').get('tab') || '' };
+  const t = /^\/u\/([\w-]+)\/t\/([\w-]+)$/.exec(path);
+  if (t) return { unit: t[1], mode: 'board', team: t[2], task: task || null };
   const m = /^\/u\/([\w-]+)(?:\/(list|settings|overview|apps|team))?$/.exec(path);
   if (m) return { unit: m[1], mode: m[2] || 'board', task: task || null };
   return { view: 'home' };
 }
 
 export function routeUrl(r) {
-  if (r.unit) return '#/u/' + r.unit + (r.mode && r.mode !== 'board' ? '/' + r.mode : '') + (r.task ? '?task=' + encodeURIComponent(r.task) : '');
-  if (r.view === 'admin') return '#/admin' + (r.tab && r.tab !== 'overview' ? '?tab=' + r.tab : '');
-  return r.view === 'my' ? '#/my' : r.view === 'myboard' ? '#/board' : r.view === 'apps' ? '#/apps' : r.view === 'dev' ? '#/dev' : '#/';
+  if (r.unit) return '#/u/' + r.unit + (r.team ? '/t/' + r.team : r.mode && r.mode !== 'board' ? '/' + r.mode : '') + (r.task ? '?task=' + encodeURIComponent(r.task) : '');
+  if (r.view === 'settings' || r.view === 'admin') return '#/settings' + (r.tab ? '?tab=' + r.tab : '');
+  return r.view === 'my' ? '#/my' : r.view === 'myboard' ? '#/board' : r.view === 'apps' ? '#/apps' : r.view === 'dev' ? '#/dev' : r.view === 'analytics' ? '#/analytics' : '#/';
 }
 
 export function navigate(r, { replace = false } = {}) {
@@ -95,8 +103,8 @@ export async function render() {
   closeNav();
   renderSidebar();
 
-  // CEO в режиме Default: дашборд, приложения и страницы юнитов — доски, «мои» и панель админа не показываем; задача — поверх
-  if (ceoDefault() && ((r.unit && r.mode === 'settings') || ['my', 'myboard', 'admin'].includes(r.view))) {
+  // CEO в режиме Default: дашборд, приложения и страницы юнитов — личные доски и «мои задачи» не показываем; задача — поверх
+  if (ceoDefault() && ((r.unit && r.mode === 'settings') || ['my', 'myboard'].includes(r.view))) {
     navigate({ view: 'home' }, { replace: true });
     if (r.unit && r.task) peekTask(r.unit, r.task);
     return;
@@ -104,15 +112,16 @@ export async function render() {
   if (!r.unit) {
     closePanel();
     S.board = null;
-    if (r.view === 'admin' && !isStaff()) return navigate({ view: 'home' }, { replace: true });
+    if (r.view === 'analytics' && !isStaff()) return navigate({ view: 'home' }, { replace: true });
     if (r.view === 'apps' && !seesApps()) return navigate({ view: 'home' }, { replace: true });
     const view = r.view;
-    const key = ['my', 'myboard', 'apps', 'dev'].includes(view) ? view : view === 'admin' ? 'admin:' + (r.tab || 'overview') : 'home';
+    const key = ['my', 'myboard', 'apps', 'dev', 'analytics'].includes(view) ? view : view === 'settings' ? 'settings:' + (r.tab || '') : 'home';
     if (rendered !== key) {
       rendered = key;
-      document.title = ({ my: 'Мои задачи', myboard: 'Моя доска', admin: 'Панель админа', apps: 'Приложения', dev: 'Режим разработчика' }[view] || (isStaff() ? 'Дашборд' : myAccess() === 'rm' ? 'Релизы' : 'Главная')) + ' · Tasks';
+      document.title = ({ my: 'Мои задачи', myboard: 'Моя доска', settings: 'Настройки', analytics: 'Аналитика', apps: 'Приложения', dev: 'Режим разработчика' }[view] || (isStaff() ? 'Дашборд' : myAccess() === 'rm' ? 'Релизы' : 'Главная')) + ' · Tasks';
       if (view === 'my') renderMy(); else if (view === 'myboard') renderMyBoard(); else if (view === 'apps') renderApps(); else if (view === 'dev') renderDev();
-      else if (view === 'admin') renderAdmin(r.tab || 'overview'); else if (isSuper()) renderCeoHome(); else if (myAccess() === 'moderator') renderPmHome(); else if (myAccess() === 'rm') renderRmHome(); else renderHome();
+      else if (view === 'settings') renderPrefs(r.tab || ''); else if (view === 'analytics') renderAnalytics();
+      else if (isSuper()) renderCeoHome(); else if (myAccess() === 'moderator') renderPmHome(); else if (myAccess() === 'rm') renderRmHome(); else renderHome();
     }
     return;
   }
@@ -134,7 +143,7 @@ export async function render() {
 
   if (r.mode === 'settings' && !isStaff()) return navigate({ unit: r.unit, mode: 'board' }, { replace: true });
   if (['overview', 'apps'].includes(r.mode) && !seesApps()) return navigate({ unit: r.unit, mode: 'board' }, { replace: true });
-  const key = r.mode + ':' + r.unit;
+  const key = r.mode + ':' + r.unit + (r.team ? ':' + r.team : '');
   if (rendered !== key) {
     rendered = key;
     document.title = S.board.unit.name + ' · Tasks';

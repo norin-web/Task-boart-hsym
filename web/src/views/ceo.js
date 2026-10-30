@@ -179,24 +179,53 @@ const DAY = 864e5;
 const ago = iso => (iso ? (Date.now() - Date.parse(iso)) / DAY : Infinity);
 
 /**
- * Блоки дашборда CEO для раскладки: основные включены, статистика — off (включают в «Настроить»),
- * свои подборки — c:<id>. Порядок, колонки и видимость — у каждого свои (prefs.ceoHome).
+ * Статистика для «Аналитики»: цифры, по статусам, юниты × статусы, загрузка PM, давно не трогали, выпущено за 30 дней.
+ * d — getCeoDashboard, apps — listApps (уже отфильтрованные по юниту, если выбран).
  */
-function ceoBlocks(d, apps, reload) {
+export function statBlocks(d, apps, reload) {
   const open = apps.flatMap(a => a.requests.filter(r => !r.done).map(r => ({ a, r })));
   const stat = (n, label, sub, tone) => h('div', { class: 'cs' + (tone ? ' ' + tone : '') }, h('div', { class: 'cs-n' }, n), h('div', { class: 'cs-label' }, label), sub && h('div', { class: 'cs-sub muted' }, sub));
   const appRow = (a, right) => h('button', { class: 'rc-row', onclick: () => openAppById(a.id, reload) },
     appIcon(a, 'xs'), h('span', { class: 'rc-main' }, h('b', null, a.name)), right);
   const section = (title, body, n) => h('section', null, h('div', { class: 'section-head' }, h('h2', null, title, n != null && h('span', { class: 'muted sec-n' }, n))), body);
   const list = (items, empty) => (items.length ? h('div', { class: 'card-box rc-list' }, items) : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, empty)));
-  const overdue = d.attention.filter(x => x.type === 'overdue').length;
+  const overdue = d.attention.filter(x => x.type === 'overdue' && (!x.app || apps.some(a => a.id === x.app.id))).length;
   // вышло за 30 дней — по истории статусов (импорт уже вышедших сюда не попадает)
-  const live30 = [...new Map(d.recent.filter(x => x.type === 'status' && (appStatusById(x.to) || {}).kind === 'live')
+  const live30 = [...new Map(d.recent.filter(x => x.type === 'status' && (appStatusById(x.to) || {}).kind === 'live' && apps.some(a => a.id === x.app.id))
     .map(x => [x.app.id, { ...(apps.find(a => a.id === x.app.id) || x.app), statusAt: x.at }])).values()];
   const done30 = apps.flatMap(a => a.requests.filter(r => r.done && ago(r.doneAt) <= 30).map(r => ({ a, r })));
   const stale = apps.filter(a => ago(a.lastActivity) > d.staleDays).sort((x, y) => String(x.lastActivity).localeCompare(String(y.lastActivity)));
   const pms = S.people.filter(p => p.active && p.access === 'moderator');
 
+  return [
+    { id: 'kpi', title: 'Цифры', col: 'full', render: () => h('div', { class: 'cs-row' },
+      stat(apps.length, 'приложений'), stat(open.length, 'задач в работе'),
+      stat(overdue, 'просрочено', null, overdue ? 'danger' : ''), stat(live30.length + done30.length, 'выпущено за 30 дней'),
+      stat(stale.length, 'не трогали', d.staleDays + '+ дн.')) },
+    { id: 'statuses', title: 'Приложения по статусам', col: 'full', render: () => section('По статусам', h('div', { class: 'card-box st-sum' },
+      S.appStatuses.map(st => { const n = apps.filter(a => a.status === st.id).length; return h('div', { class: 'st-sum-row' + (n ? '' : ' zero') }, statusPill(st), h('span', { class: 'st-sum-bar' }, h('span', { style: { width: (apps.length ? n / apps.length * 100 : 0) + '%', background: st.color } })), h('b', null, n)); }))) },
+    { id: 'byunit', title: 'Юниты × статусы', col: 'full', render: () => section('Юниты × статусы', h('div', { class: 'card-box mx', style: { '--n': S.appStatuses.length } },
+      h('div', { class: 'mx-row mx-head' }, h('span'), S.appStatuses.map(st => h('span', { title: st.name }, st.name))),
+      units().map(u => h('div', { class: 'mx-row' }, h('span', { class: 'mx-unit' }, h('span', { class: 'unit-dot', style: { background: u.color, margin: 0 } }), u.name),
+        S.appStatuses.map(st => { const n = apps.filter(a => a.unitId === u.id && a.status === st.id).length; return h('span', { class: n ? 'mx-n' : 'mx-n zero' }, n || '—'); }))))) },
+    { id: 'pmload', title: 'Загрузка PM', col: 'right', render: () => section('Загрузка PM', list(pms.map(p => {
+      const mine = open.filter(x => x.r.assigneeId === p.id);
+      const late = mine.filter(x => x.r.dueDate && x.r.dueDate < todayStr()).length;
+      return h('div', { class: 'rc-row' }, avatar(p, 'sm'), h('span', { class: 'rc-main' }, h('b', null, p.name)),
+        h('span', { class: 'muted rc-at' }, mine.length + ' в работе', late > 0 && h('span', { class: 'warn-text' }, ' · ' + late + ' просроч.')));
+    }), 'PM нет')) },
+    { id: 'stale', title: 'Забытые приложения', col: 'right', render: () => section('Давно не трогали', list(stale.map(a => appRow(a, h('span', { class: 'muted rc-at' }, relTime(a.lastActivity)))), 'Таких нет'), stale.length || null) },
+    { id: 'shipped', title: 'Выпущено за 30 дней', col: 'right', render: () => section('Выпущено за 30 дней', list([
+      ...live30.map(a => appRow(a, h('span', { class: 'muted rc-at' }, 'в сторе · ' + relTime(a.statusAt)))),
+      ...done30.map(({ a, r }) => appRow(a, h('span', { class: 'muted rc-at' }, r.title.slice(0, 40) + ' · ' + relTime(r.doneAt))))], 'Пока ничего')) },
+  ];
+}
+
+/**
+ * Блоки дашборда CEO для раскладки: рабочие блоки + свои подборки (c:<id>). Порядок, колонки и видимость — у каждого свои (prefs.ceoHome).
+ * Статистика переехала в «Аналитику» (statBlocks).
+ */
+function ceoBlocks(d, apps, reload) {
   const blocks = [
     { id: 'news', title: 'Новое для вас', col: 'full', first: true, empty: 'Появится, когда что-то придёт вам', render: () => newsBlock() },
     { id: 'units', title: 'Юниты', col: 'full', render: () => portfolio(d, reload) },
@@ -206,27 +235,6 @@ function ceoBlocks(d, apps, reload) {
     { id: 'attention', title: 'Требует внимания', col: 'left', render: () => attention(d, reload) },
     { id: 'recent', title: 'Недавнее', col: 'right', render: () => recent(d, reload) },
     { id: 'inprogress', title: 'Работы в ходу', col: 'full', render: () => inProgress(d, reload) },
-    // статистика — по умолчанию скрыта
-    { id: 'kpi', title: 'Цифры', col: 'full', off: true, render: () => h('div', { class: 'cs-row' },
-      stat(apps.length, 'приложений'), stat(open.length, 'задач в работе'),
-      stat(overdue, 'просрочено', null, overdue ? 'danger' : ''), stat(live30.length + done30.length, 'выпущено за 30 дней'),
-      stat(stale.length, 'не трогали', d.staleDays + '+ дн.')) },
-    { id: 'statuses', title: 'Приложения по статусам', col: 'full', off: true, render: () => section('По статусам', h('div', { class: 'card-box st-sum' },
-      S.appStatuses.map(st => { const n = apps.filter(a => a.status === st.id).length; return h('div', { class: 'st-sum-row' + (n ? '' : ' zero') }, statusPill(st), h('span', { class: 'st-sum-bar' }, h('span', { style: { width: (apps.length ? n / apps.length * 100 : 0) + '%', background: st.color } })), h('b', null, n)); }))) },
-    { id: 'byunit', title: 'Юниты × статусы', col: 'full', off: true, render: () => section('Юниты × статусы', h('div', { class: 'card-box mx', style: { '--n': S.appStatuses.length } },
-      h('div', { class: 'mx-row mx-head' }, h('span'), S.appStatuses.map(st => h('span', { title: st.name }, st.name))),
-      units().map(u => h('div', { class: 'mx-row' }, h('span', { class: 'mx-unit' }, h('span', { class: 'unit-dot', style: { background: u.color, margin: 0 } }), u.name),
-        S.appStatuses.map(st => { const n = apps.filter(a => a.unitId === u.id && a.status === st.id).length; return h('span', { class: n ? 'mx-n' : 'mx-n zero' }, n || '—'); }))))) },
-    { id: 'pmload', title: 'Загрузка PM', col: 'right', off: true, render: () => section('Загрузка PM', list(pms.map(p => {
-      const mine = open.filter(x => x.r.assigneeId === p.id);
-      const late = mine.filter(x => x.r.dueDate && x.r.dueDate < todayStr()).length;
-      return h('div', { class: 'rc-row' }, avatar(p, 'sm'), h('span', { class: 'rc-main' }, h('b', null, p.name)),
-        h('span', { class: 'muted rc-at' }, mine.length + ' в работе', late > 0 && h('span', { class: 'warn-text' }, ' · ' + late + ' просроч.')));
-    }), 'PM нет')) },
-    { id: 'stale', title: 'Забытые приложения', col: 'right', off: true, render: () => section('Давно не трогали', list(stale.map(a => appRow(a, h('span', { class: 'muted rc-at' }, relTime(a.lastActivity)))), 'Таких нет'), stale.length || null) },
-    { id: 'shipped', title: 'Выпущено за 30 дней', col: 'right', off: true, render: () => section('Выпущено за 30 дней', list([
-      ...live30.map(a => appRow(a, h('span', { class: 'muted rc-at' }, 'в сторе · ' + relTime(a.statusAt)))),
-      ...done30.map(({ a, r }) => appRow(a, h('span', { class: 'muted rc-at' }, r.title.slice(0, 40) + ' · ' + relTime(r.doneAt))))], 'Пока ничего')) },
   ];
   // свои подборки
   for (const b of customBlocks()) blocks.push({ id: 'c:' + b.id, title: b.name, col: b.col || 'right', custom: true, render: () => customBlock(b, apps, reload) });

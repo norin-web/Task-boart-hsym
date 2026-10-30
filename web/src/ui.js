@@ -98,6 +98,8 @@ const ICONS = {
   rocket: 'M5 15c-1.5 1.3-2 5-2 5s3.7-.5 5-2 M9 15l-3-3c1-4 5-9 13-9 0 8-5 12-9 13z M14.5 9.5h.01',
   code: 'M16 18l6-6-6-6 M8 6l-6 6 6 6',
   zap: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
+  bell: 'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9 M10.3 21a1.94 1.94 0 0 0 3.4 0',
+  chart: 'M3 3v18h18 M7 16v-4 M12 16V8 M17 16v-7',
 };
 const DOTS = new Set(['more', 'grip', 'list']);
 
@@ -175,11 +177,15 @@ export function statusDot(color, size = 8) {
 export const toggleNav = () => document.body.classList.toggle('nav-open');
 export const closeNav = () => document.body.classList.remove('nav-open');
 
+/** Колокольчик уведомлений в шапке каждого экрана — ставит sidebar.js (без обратного импорта во views). */
+let bellFactory = null;
+export const setBell = fn => { bellFactory = fn; };
+
 export function topbar(left, right) {
   return h('header', { class: 'topbar' },
     h('button', { class: 'icon-btn hamburger', title: 'Меню', onclick: toggleNav }, icon('menu', 18)),
     h('div', { class: 'tb-left' }, left),
-    h('div', { class: 'tb-right' }, right));
+    h('div', { class: 'tb-right' }, right, bellFactory && bellFactory()));
 }
 
 /* ---------- тосты ---------- */
@@ -215,9 +221,9 @@ export const isMenuOpen = () => !!openMenuEl;
  * menu(anchorEl | {x, y}, items)
  * item: { label, icon, action, danger } | { sep: true } | { title } | Node
  */
-export function menu(anchor, items) {
+export function menu(anchor, items, { cls = '' } = {}) {
   closeMenu();
-  const m = h('div', { class: 'menu', role: 'menu' }, items.filter(Boolean).map(it => {
+  const m = h('div', { class: 'menu' + (cls ? ' ' + cls : ''), role: 'menu' }, items.filter(Boolean).map(it => {
     if (it instanceof Node) return it;
     if (it.sep) return h('div', { class: 'menu-sep' });
     if (it.title) return h('div', { class: 'menu-label' }, it.title);

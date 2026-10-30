@@ -1367,7 +1367,7 @@ function listEditor(items, row, onAdd, addLabel) {
 }
 
 /** Статусы приложения: название, цвет, смысл (связь с ходом работ), порядок. Используемый статус удалить нельзя. */
-function openStatusesEditor(onDone) {
+export function openStatusesEditor(onDone) {
   const items = S.appStatuses.map(x => ({ ...x }));
   const used = id => S.apps.filter(a => a.status === id).length;
   const row = (x, i, redraw) => [
@@ -1401,7 +1401,7 @@ function openStatusesEditor(onDone) {
 }
 
 /** Поля приложения (быстрый доступ): название, тип — ссылка или текст, порядок. */
-function openFieldsEditor(onDone) {
+export function openFieldsEditor(onDone) {
   const items = S.appFields.map(x => ({ ...x }));
   const row = (x, i, redraw) => [
     h('input', { class: 'inp', value: x.name, maxlength: 40, placeholder: 'Например, RevenueCat', 'aria-label': 'Название поля', oninput: e => { x.name = e.target.value; } }),
