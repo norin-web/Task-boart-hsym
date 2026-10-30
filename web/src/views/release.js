@@ -208,7 +208,9 @@ function devAnswers(form) {
 
 /** Релизное поле: значение и правка на месте (длинный текст — многострочное поле). */
 function valueRow(f, v, editable, onSave) {
-  const row = h('div', { class: 'af-row rl-row' + (f.kind === 'longtext' ? ' long' : '') });
+  const row = h('div', { class: 'af-row rl-row' + (f.kind === 'longtext' ? ' long' : '') + (editable ? ' can-edit' : ''),
+    // правка кликом по строке; ссылку открываем, поле ввода не трогаем
+    onclick: e => { if (editable && !e.target.closest('a, button, input, textarea')) edit(); } });
   const show = () => fill(row,
     h('span', { class: 'af-name' }, f.name, f.required && h('span', { class: 'req', title: 'Обязательно для отправки' }, ' *')),
     v ? (f.kind === 'link' ? h('a', { class: 'af-val', href: v, target: '_blank', rel: 'noopener' }, v.replace(/^https?:\/\//, '')) : h('span', { class: 'af-val' + (f.kind === 'longtext' ? ' pre' : '') }, v))
@@ -222,6 +224,7 @@ function valueRow(f, v, editable, onSave) {
     });
     fill(row, h('span', { class: 'af-name' }, f.name), inp);
     inp.focus();
+    inp.setSelectionRange(inp.value.length, inp.value.length);
   };
   show();
   return row;

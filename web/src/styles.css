@@ -1335,7 +1335,9 @@ a.rl-link:hover { background: var(--surface-2); }
 .rl-row { grid-template-columns: 150px minmax(0, 1fr) auto; }
 .rl-row.long { align-items: start; padding-top: 6px; padding-bottom: 6px; }
 .af-val.pre { white-space: pre-wrap; }
-.rl-row textarea { grid-column: 2 / -1; }
+.rl-row .inp { grid-column: 2 / -1; width: 100%; max-width: none; font-size: 13px; line-height: 1.45; padding: 5px 8px; }
+.rl-row textarea.inp { min-height: 64px; max-height: 240px; field-sizing: content; resize: none; }
+.rl-row.can-edit { cursor: text; }
 .req { color: var(--danger); }
 .rs-row { grid-template-columns: auto minmax(0, 1fr) 120px auto auto; }
 .rs-row:not(:has(select)) { grid-template-columns: auto minmax(0, 1fr) auto; }
