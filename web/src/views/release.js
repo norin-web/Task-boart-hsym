@@ -4,12 +4,45 @@
  * Чеклист релиза — обычный чеклист этапа ниже. Настройка релизных полей и чеклиста студии — openReleaseSettings (CEO, RM).
  */
 import Sortable from 'sortablejs';
-import { S, canEditTask, fmtDateTime, relTime, personById, plural } from '../state.js';
+import { S, me, canEditTask, fmtDateTime, relTime, personById, plural } from '../state.js';
 import { h, icon, fill, modal, toast, showErr, field } from '../ui.js';
 import { brandIcon, brandOf } from './brand.js';
 import { call, send } from '../api.js';
 
 const linkIcon = kind => (['figma', 'github', 'drive', 'meta'].includes(kind) ? kind : 'link');
+
+/* ---------- настройка карточки релиза (у каждого своя: prefs.releaseCard.hidden) ---------- */
+
+export const RELEASE_BLOCKS = [['fields', 'Релизные поля'], ['links', 'Ссылки приложения и команды'], ['attempts', 'Попытки'],
+  ['description', 'Описание'], ['spec', 'ТЗ'], ['tasklinks', 'Ссылки этапа'], ['checklist', 'Чеклист']];
+// по умолчанию в релизе скрыты блоки обычной задачи, которые RM не нужны (дублируют «Ссылки» релиза)
+const RELEASE_HIDDEN_DEFAULT = ['tasklinks', 'description', 'spec'];
+export const releaseHidden = () => { const c = ((me() || {}).prefs || {}).releaseCard; return c && Array.isArray(c.hidden) ? c.hidden : RELEASE_HIDDEN_DEFAULT; };
+/** «Настроить карточку релиза»: какие блоки показывать (только у вас) и релизные поля студии (CEO, RM). */
+export function openReleaseCardSettings(onDone) {
+  let hidden = [...releaseHidden()];
+  const list = h('div', { class: 'cl-tpl-list', style: { gap: '2px' } });
+  const draw = () => fill(list, RELEASE_BLOCKS.map(([id, label]) => {
+    const on = !hidden.includes(id);
+    return h('button', { class: 'menu-item aud-item' + (on ? ' on' : ''), role: 'checkbox', 'aria-checked': String(on), onclick: () => {
+      hidden = on ? [...hidden, id] : hidden.filter(x => x !== id);
+      const p = me();
+      if (p) p.prefs = { ...(p.prefs || {}), releaseCard: { hidden } };
+      send('setMyPrefs', { personId: S.meId, prefs: { releaseCard: { hidden } } }).catch(showErr);
+      draw();
+      if (onDone) onDone();
+    } }, h('span', { class: 'aud-check' }, on && icon('check', 13)), label);
+  }));
+  draw();
+  const canFields = ['superadmin', 'rm'].includes((me() || {}).access);
+  const close = modal({
+    title: 'Настроить карточку релиза',
+    body: [h('p', { class: 'hint', style: { margin: '0 0 8px' } }, 'Какие блоки показывать — только у вас, во всех релизах.'), list,
+      canFields && h('div', { style: { marginTop: '14px' } }, h('button', { class: 'btn sm', onclick: () => { close(); openReleaseSettings(onDone); } }, icon('settings', 14), 'Релизные поля…'),
+        h('p', { class: 'hint', style: { margin: '6px 0 0' } }, 'Какие поля заполнять перед отправкой в Apple и какие обязательны — для всей студии.'))],
+    actions: [{ label: 'Готово' }],
+  });
+}
 const fmtD = iso => (iso ? new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : '');
 const daysSince = iso => Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 864e5));
 
@@ -62,73 +95,86 @@ export function releaseBlock(t, onChange) {
     } catch (e) { showErr(e); draw(); }
   };
 
+  // раскрыт ли список релизных полей (по умолчанию — пока есть незаполненные обязательные или релиз в очереди)
+  let fieldsOpen = null;
   const draw = () => {
     const rel = data.task.release || {};
     const phase = rel.phase || '';
     const values = rel.values || {};
     const hist = rel.history || [];
     const missing = data.fields.filter(f => f.required && !values[f.id]);
+    const filled = data.fields.filter(f => values[f.id]).length;
     const cl = data.task.checklist || [];
     const clOpen = cl.filter(i => !i.done).length;
     const ready = !missing.length && !clOpen;
     const pm = personById(rel.pmId);
-    // ход релиза: передано → в Apple → решение → в сторе (с датами)
+    if (fieldsOpen === null) fieldsOpen = !phase || missing.length > 0;
+    const hide = releaseHidden();
+    // ход релиза — одной тонкой линией: точка на шаг, дата под пройденным
     const steps = [
-      { label: 'К отправке', done: true, at: '' },
-      { label: 'В Apple', done: !!rel.submittedAt && phase !== '', at: phase !== '' ? rel.submittedAt : '' },
-      { label: phase === 'rejected' ? 'Реджект №' + (rel.rejectNo || '') : 'Решение Apple', done: phase === 'rejected' || phase === 'live', bad: phase === 'rejected', at: phase === 'rejected' ? rel.rejectedAt : phase === 'live' ? rel.liveAt : '' },
-      { label: 'В сторе', done: phase === 'live', at: phase === 'live' ? rel.liveAt : '' },
+      { label: 'К отправке', state: 'done' },
+      { label: 'В Apple', state: phase ? 'done' : 'next', at: phase ? rel.submittedAt : '' },
+      phase === 'rejected'
+        ? { label: 'Реджект №' + (rel.rejectNo || ''), state: 'bad', at: rel.rejectedAt }
+        : { label: 'Решение Apple', state: phase === 'live' ? 'done' : phase === 'submitted' ? 'now' : 'next', at: phase === 'live' ? rel.liveAt : '' },
+      { label: 'В сторе', state: phase === 'live' ? 'done' : 'next', at: phase === 'live' ? rel.liveAt : '' },
     ];
-    const pct = { '': 8, submitted: 55, rejected: 66, live: 100 }[phase] ?? 8;
-    const checkRow = (ok, label, hint) => h('div', { class: 'rl-check' + (ok ? ' ok' : '') }, icon(ok ? 'check' : 'circle', 14), h('span', null, label), hint && h('span', { class: 'muted' }, hint));
+    // ссылки приложения и этапов команды — без повторов: одинаковый адрес — один раз; одинаковое название — с этапом
+    const raw = [
+      ...(data.app ? S.appFields.filter(f => f.kind === 'link' && data.app.info[f.id]).map(f => ({ name: f.name, url: data.app.info[f.id], icon: brandIcon(brandOf(f.name, data.app.info[f.id]), 13, 'link') })) : []),
+      ...data.links.map(l => ({ name: l.name, url: l.url, sub: l.stage, icon: brandIcon(brandOf(l.name, l.kind, l.url), 13, linkIcon(l.kind)) })),
+    ];
+    const norm = u => String(u || '').replace(/^https?:\/\/(www\.)?/, '').replace(/\/+$/, '').toLowerCase();
+    const links = raw.filter((l, i) => raw.findIndex(x => norm(x.url) === norm(l.url)) === i)
+      .map((l, i, arr) => (l.sub && arr.some((x, j) => j !== i && x.name === l.name) ? { ...l, name: `${l.name} · ${l.sub}` } : l));
     fill(box,
-      h('div', { class: 'tree-head' }, h('span', { class: 'sub-title', style: { margin: 0 } }, 'Релиз'),
+      h('div', { class: 'rl-head' },
+        h('span', { class: 'sub-title', style: { margin: 0 } }, 'Релиз'),
         values.version && h('span', { class: 'rl-ver' }, 'v' + values.version + (values.build ? ' (' + values.build + ')' : '')),
-        hist.length > 1 && h('span', { class: 'muted' }, `попытка ${hist.length}`)),
-      // прогресс
-      h('div', { class: 'rl-progress' + (phase === 'rejected' ? ' bad' : phase === 'live' ? ' ok' : '') }, h('div', { style: { width: pct + '%' } })),
-      h('div', { class: 'rl-stepper' }, steps.map(x => h('div', { class: 'rl-st' + (x.done ? ' done' : '') + (x.bad ? ' bad' : '') },
-        h('span', { class: 'rl-st-label' }, x.label), h('span', { class: 'muted rl-st-at', title: x.at ? fmtDateTime(x.at) : '' }, x.at ? fmtD(x.at) : '')))),
-      // что делать сейчас
-      !phase && h('div', { class: 'rl-panel' },
-        rel.fixedAt && h('div', { class: 'rl-note ok' }, icon('check', 14), `Реджект №${rel.rejectNo || ''} исправили ${relTime(rel.fixedAt)} — можно отправлять снова`),
-        h('div', { class: 'rl-checks' },
-          checkRow(!missing.length, 'Релизные поля', missing.length ? 'не заполнено: ' + missing.map(f => f.name).join(', ') : ''),
-          checkRow(!clOpen, 'Чеклист', cl.length ? `${cl.length - clOpen} из ${cl.length}` : 'пусто — можно добавить «Из шаблона» ниже')),
-        editable && h('button', { class: 'btn primary rl-go', disabled: !ready, title: ready ? '' : 'Сначала поля и чеклист', onclick: async () => { await load(); step(hist.length ? 'resubmit' : 'submit'); } },
-          icon('send', 15), hist.length ? 'Отправить в Apple снова' : 'Отправить в Apple')),
-      phase === 'submitted' && h('div', { class: 'rl-panel' },
-        h('div', { class: 'rl-wait' }, icon('eye', 16), h('b', null, 'На ревью Apple'),
-          h('span', { class: 'muted' }, daysSince(rel.submittedAt) ? ` · ждёт ${daysSince(rel.submittedAt)} ${plural(daysSince(rel.submittedAt), ['день', 'дня', 'дней'])}` : ' · отправлено сегодня')),
-        editable && h('div', { class: 'rl-decide' },
+        hist.length > 1 && h('span', { class: 'muted rl-try' }, `попытка ${hist.length}`),
+        h('span', { class: 'spacer' }),
+        h('button', { class: 'icon-btn sm', title: 'Настроить карточку релиза', onclick: () => openReleaseCardSettings(() => { load(); if (onChange) onChange(); }) }, icon('settings', 15))),
+      h('ol', { class: 'rl-track' }, steps.map(x => h('li', { class: 'rl-pt ' + x.state },
+        h('span', { class: 'rl-dot' }, x.state === 'done' ? icon('check', 10) : x.state === 'bad' ? icon('x', 10) : null),
+        h('span', { class: 'rl-pt-label' }, x.label),
+        x.at && h('span', { class: 'rl-pt-at', title: fmtDateTime(x.at) }, fmtD(x.at))))),
+      // сейчас: одна строка состояния и одно главное действие
+      !phase && h('div', { class: 'rl-now' },
+        rel.fixedAt && h('p', { class: 'rl-line ok-text' }, icon('check', 14), `Реджект №${rel.rejectNo || ''} исправили — можно отправлять`),
+        !ready && h('p', { class: 'rl-line muted' }, icon('circle', 14),
+          [missing.length && 'заполните ' + missing.map(f => f.name.toLowerCase()).join(', '), clOpen && `закройте чеклист (${clOpen})`].filter(Boolean).join(' · ')),
+        editable && h('button', { class: 'btn primary', disabled: !ready, onclick: async () => { await load(); step(hist.length ? 'resubmit' : 'submit'); } },
+          icon('send', 14), hist.length ? 'Отправить в Apple снова' : 'Отправить в Apple')),
+      phase === 'submitted' && h('div', { class: 'rl-now' },
+        h('p', { class: 'rl-line' }, icon('eye', 14), h('b', null, 'На ревью Apple'),
+          h('span', { class: 'muted' }, daysSince(rel.submittedAt) ? `· ${daysSince(rel.submittedAt)} ${plural(daysSince(rel.submittedAt), ['день', 'дня', 'дней'])}` : '· с сегодня')),
+        editable && h('div', { class: 'rl-btns' },
           h('button', { class: 'btn primary', onclick: () => step('live') }, icon('rocket', 14), 'Вышло в стор'),
-          h('button', { class: 'btn danger', onclick: () => openRejectForm(t, data.app && data.app.name, data.nextRejectNo, () => { load(); if (onChange) onChange(); }) }, icon('alert', 14), 'Реджект'))),
-      phase === 'rejected' && h('div', { class: 'rl-panel bad' },
-        h('div', { class: 'rl-wait' }, icon('alert', 16), h('b', null, `Реджект №${rel.rejectNo || ''}`), h('span', { class: 'muted' }, ' · ' + relTime(rel.rejectedAt))),
+          h('button', { class: 'btn ghost danger', onclick: () => openRejectForm(t, data.app && data.app.name, data.nextRejectNo, () => { load(); if (onChange) onChange(); }) }, 'Реджект'))),
+      phase === 'rejected' && h('div', { class: 'rl-now bad' },
+        h('p', { class: 'rl-line danger-text' }, icon('alert', 14), h('b', null, `Реджект №${rel.rejectNo || ''}`),
+          h('span', { class: 'muted' }, '· ' + relTime(rel.rejectedAt)),
+          rel.shot && h('a', { class: 'rl-shot', href: rel.shot, target: '_blank', rel: 'noopener' }, 'скрин', icon('arrowUpRight', 12))),
         h('p', { class: 'rl-reason' }, rel.reason),
-        rel.shot && h('a', { class: 'rl-link', href: rel.shot, target: '_blank', rel: 'noopener' }, icon('link', 13), 'Скрин реджекта'),
-        h('p', { class: 'muted', style: { margin: 0, fontSize: '12.5px' } }, 'Исправляет ', h('b', null, pm ? pm.name : 'PM юнита'), ' — когда закроет задачу «Реджект №' + (rel.rejectNo || '') + '», релиз вернётся в очередь.'),
-        editable && h('button', { class: 'btn', onclick: () => step('resubmit') }, icon('send', 14), 'Уже исправили — отправить снова')),
-      phase === 'live' && h('div', { class: 'rl-panel ok' }, h('div', { class: 'rl-wait' }, icon('check', 16), h('b', null, 'В App Store'), h('span', { class: 'muted' }, ' · ' + fmtD(rel.liveAt) + (hist.length > 1 ? ` · с ${hist.length}-й попытки` : ' · с первой попытки')))),
-      // попытки
-      hist.length > 1 && h('div', { class: 'rl-sec' }, h('div', { class: 'rl-sec-title' }, 'Попытки'),
+        h('p', { class: 'rl-line muted rl-small' }, `Исправляет ${pm ? pm.name : 'PM юнита'}; закроет задачу — релиз вернётся в очередь.`,
+          editable && h('button', { class: 'link-btn', onclick: () => step('resubmit') }, 'Отправить сейчас'))),
+      phase === 'live' && h('div', { class: 'rl-now' }, h('p', { class: 'rl-line ok-text' }, icon('check', 14), h('b', null, 'В App Store'),
+        h('span', { class: 'muted' }, '· ' + fmtD(rel.liveAt) + (hist.length > 1 ? ` · с ${hist.length}-й попытки` : ' · с первой попытки')))),
+      // релизные поля — раскрываются по клику (заполненные — коротко)
+      !hide.includes('fields') && data.fields.length > 0 && h('div', { class: 'rl-sec' },
+        h('button', { class: 'rl-toggle', 'aria-expanded': String(fieldsOpen), onclick: () => { fieldsOpen = !fieldsOpen; draw(); } },
+          h('span', { class: 'ap-chev' + (fieldsOpen ? ' open' : '') }, icon('chevron', 13)), 'Релизные поля',
+          h('span', { class: missing.length ? 'danger-text' : 'muted' }, `${filled} из ${data.fields.length}`)),
+        fieldsOpen && h('div', { class: 'af-list rl-fields' }, data.fields.map(f => valueRow(f, values[f.id] || '', editable && phase !== 'live', v => saveValue(f, v))))),
+      // ссылки приложения и команды — одной строкой чипов
+      !hide.includes('links') && links.length > 0 && h('div', { class: 'rl-sec' }, h('div', { class: 'rl-sec-title' }, 'Ссылки'),
+        h('div', { class: 'rl-links' }, links.map(l => h('a', { class: 'rl-link', href: l.url, target: '_blank', rel: 'noopener', title: l.sub ? l.name + ' · ' + l.sub : l.name }, l.icon, l.name)))),
+      // попытки — только если их несколько
+      !hide.includes('attempts') && hist.length > 1 && h('details', { class: 'rl-sec rl-hist-d' }, h('summary', null, `Попытки · ${hist.length}`),
         h('div', { class: 'rl-hist' }, hist.map(x => h('div', { class: 'rl-hist-row' },
           h('span', null, '№' + x.n), h('span', { class: 'muted' }, fmtD(x.submittedAt)),
           h('span', { class: x.result === 'reject' ? 'danger-text' : x.result === 'live' ? 'ok-text' : 'muted' }, x.result === 'reject' ? `реджект №${x.rejectNo || ''}` : x.result === 'live' ? 'в сторе' : 'ждёт'),
-          h('span', { class: 'muted rl-hist-why', title: x.reason || '' }, x.reason || ''))))),
-      // релизные поля
-      data.fields.length > 0 && h('div', { class: 'rl-sec' }, h('div', { class: 'rl-sec-title' }, 'Релизные поля'),
-        h('div', { class: 'af-list' }, data.fields.map(f => valueRow(f, values[f.id] || '', editable && phase !== 'live', v => saveValue(f, v))))),
-      // поля приложения и ссылки этапов
-      data.app && S.appFields.some(f => data.app.info[f.id]) && h('div', { class: 'rl-sec' }, h('div', { class: 'rl-sec-title' }, 'Приложение'),
-        h('div', { class: 'rl-links' }, S.appFields.filter(f => data.app.info[f.id]).map(f => f.kind === 'link'
-          ? h('a', { class: 'rl-link', href: data.app.info[f.id], target: '_blank', rel: 'noopener' }, brandIcon(brandOf(f.name, data.app.info[f.id]), 13, 'link'), f.name)
-          : h('span', { class: 'rl-link', title: f.name }, h('span', { class: 'muted' }, f.name + ':'), data.app.info[f.id])))),
-      h('div', { class: 'rl-sec' }, h('div', { class: 'rl-sec-title' }, 'От команды'),
-        data.links.length ? h('div', { class: 'rl-links' }, data.links.map(l => h('a', { class: 'rl-link', href: l.url, target: '_blank', rel: 'noopener', title: l.url },
-          brandIcon(brandOf(l.name, l.kind, l.url), 13, linkIcon(l.kind)), h('span', null, l.name), h('span', { class: 'muted' }, '· ' + l.stage))))
-          : h('p', { class: 'muted', style: { margin: 0, fontSize: '12.5px' } }, 'Ссылок в этапах пока нет — дизайн, сборку, метаданные команда прикрепляет к своим этапам.')),
-      h('p', { class: 'hint', style: { margin: 0 } }, icon('checklist', 12), ' Чеклист релиза — ниже: «Из шаблона» подставит ваш шаблон.'));
+          h('span', { class: 'muted rl-hist-why', title: x.reason || '' }, x.reason || ''))))));
   };
   const load = async () => {
     try { data = await call('getRelease', { taskId: t.id }); } catch { fill(box); return; }
@@ -161,7 +207,7 @@ function valueRow(f, v, editable, onSave) {
 }
 
 /** Настройка релиза студии (CEO, RM): релизные поля (название, тип, обязательное). Чеклисты — шаблоны RM. */
-export async function openReleaseSettings() {
+export async function openReleaseSettings(onDone) {
   let cfg;
   try { cfg = await call('getReleaseSettings', {}); } catch (e) { return showErr(e); }
   const fields = cfg.fields.map(x => ({ ...x }));
@@ -198,6 +244,7 @@ export async function openReleaseSettings() {
         await send('saveReleaseSettings', { fields: fields.filter(x => x.name.trim()) });
         close();
         toast('Настройки релиза сохранены');
+        if (typeof onDone === 'function') onDone();
       },
     }],
   });

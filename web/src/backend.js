@@ -2091,6 +2091,15 @@ export function createBackend(db, opts = {}) {
       };
     },
 
+    /** Команда релиза для RM: { pm: [id], design: [id], ios: [id], qa: [id], meta: [id] } — кто делал приложение. */
+    async getReleaseTeam(p) {
+      const t = await findTask(p.taskId);
+      const rows = (await rpc('release_team', { p_task: t.id })) || [];
+      const out = { pm: [], design: [], ios: [], qa: [], meta: [] };
+      for (const r of Array.isArray(rows) ? rows : [rows]) if (r && out[r.step] && r.person_id && !out[r.step].includes(r.person_id)) out[r.step].push(r.person_id);
+      return out;
+    },
+
     /** Релизные поля этапа: значения по id полей студии (ссылки — только http(s)). */
     async saveReleaseValues(p) {
       const t = await findTask(p.taskId);

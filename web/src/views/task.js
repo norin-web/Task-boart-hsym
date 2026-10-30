@@ -10,9 +10,9 @@ import { addMemberDialog } from './people.js';
 import { openCreateUnit } from './units.js';
 import { activityText } from './feed.js';
 import { readNote } from './home.js';
-import { releaseBlock } from './release.js';
+import { releaseBlock, releaseHidden } from './release.js';
 import { brandIcon, brandOf } from './brand.js';
-import { isWatched, toggleWatch } from './watch.js';
+import { isWatched, toggleWatch, canWatch } from './watch.js';
 import { reviewButtons } from './review.js';
 import { clTemplates, templateSelect, openTemplatesEditor } from './cltemplates.js';
 import { attachMentions } from './mention.js';
@@ -93,6 +93,8 @@ function buildPanel(t) {
     },
   }));
 
+  // карточка релиза: блоки по настройке RM («Настроить карточку релиза»)
+  const relHide = id => t.step === 'release' && releaseHidden().includes(id);
   const main = h('div', { class: 'panel-main' },
     title,
     // я — ревьюер этой задачи: решение явными кнопками
@@ -112,10 +114,10 @@ function buildPanel(t) {
       h('button', { class: 'btn sm', onclick: () => openQaReturn(t) }, icon('back', 13), 'Вернуть в разработку')),
     t.step === 'release' && t.assigneeId && releaseBlock(t, () => reloadBoard().catch(() => {})),
     t.kind === 'request' || t.kind === 'stage' ? [flowBlock(t), t.kind === 'stage' && treeBlock(t)] : treeBlock(t),
-    !B.description.hidden && descriptionBlock(t, B.description.label, editable),
-    specBlock(t, editable),
-    linksBlock(t, editable),
-    checklistBlock(t, editable),
+    !B.description.hidden && !relHide('description') && descriptionBlock(t, B.description.label, editable),
+    !relHide('spec') && specBlock(t, editable),
+    !relHide('tasklinks') && linksBlock(t, editable),
+    !relHide('checklist') && checklistBlock(t, editable),
     discussionBlock(t, editable));
 
   const head = h('div', { class: 'panel-head' },
@@ -248,6 +250,19 @@ function openQaReturn(t) {
   setTimeout(() => ta.focus(), 0);
 }
 
+/** Команда релиза (для RM): PM, дизайн, разработка, тестирование, мета — кто делал приложение. */
+function releaseTeamBlock(t) {
+  const box = h('div', { class: 'rel-team' });
+  const ROLES = [['pm', 'PM'], ['design', 'Дизайн'], ['ios', 'Разработка'], ['qa', 'Тестирование'], ['meta', 'Мета (ASO)']];
+  call('getReleaseTeam', { taskId: t.id }).then(team => {
+    if (S.panelTaskId !== t.id) return;
+    fill(box, h('div', { class: 'rel-team-title' }, 'Команда'),
+      ROLES.filter(([k]) => (team[k] || []).length).map(([k, label]) => h('div', { class: 'prop' }, h('label', null, label),
+        h('div', { class: 'rel-team-people' }, team[k].map(id => personById(id)).filter(Boolean).map(p => h('span', { class: 'rel-person' }, avatar(p, 'sm'), p.name))))));
+  }).catch(() => fill(box));
+  return box;
+}
+
 /** Меню «Из шаблона»: свои шаблоны чеклистов; onPick(items). */
 function templateMenu(anchor, onPick) {
   const list = clTemplates();
@@ -333,7 +348,7 @@ function panelMenu(anchor, t, staff) {
     { label: cardCenter() ? 'Открывать справа' : 'Открывать по центру', icon: cardCenter() ? 'panelSide' : 'panelCenter', action: () => { LS.set('cardMode', cardCenter() ? 'side' : 'center'); openTask(t.id); } },
     { label: 'Скопировать ссылку', icon: 'link', action: () => copyLink(t) },
     S.peek && !ceoDefault() && { label: 'Открыть на доске юнита', icon: 'board', action: () => openUnitBoard(t) },
-    isSuper() && { label: isWatched('task', t.id) ? 'Не отслеживать на дашборде' : 'Отслеживать на дашборде', icon: 'eye', action: () => toggleWatch('task', t.id, t.unitId, t.title) },
+    canWatch() && { label: isWatched('task', t.id) ? 'Не отслеживать на дашборде' : 'Отслеживать на дашборде', icon: 'eye', action: () => toggleWatch('task', t.id, t.unitId, t.title) },
     staff && { sep: true },
     staff && { label: 'Дублировать', icon: 'copy', action: () => duplicateTask(t) },
     staff && others.length > 0 && { label: 'Перенести в другой юнит…', icon: 'arrow', action: () => moveTaskDialog(t) },
@@ -691,7 +706,7 @@ function sideBlock(t, { staff, editable }) {
     { required: f.required, empty: editable && blocking.includes(f) });
   });
 
-  return h('div', { class: 'panel-side' }, props, h('div', { class: 'side-meta', id: 'task-meta' }, metaLines(t)));
+  return h('div', { class: 'panel-side' }, props, t.step === 'release' && releaseTeamBlock(t), h('div', { class: 'side-meta', id: 'task-meta' }, metaLines(t)));
 }
 
 function metaLines(t) {

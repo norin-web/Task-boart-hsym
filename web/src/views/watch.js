@@ -9,6 +9,8 @@ import { call, send } from '../api.js';
 
 const REFRESH = 20e3;
 
+/** Отслеживать могут CEO и RM (у них на главной блок «Отслеживаю»). */
+export const canWatch = () => ['superadmin', 'rm'].includes((me() || {}).access);
 export const watchList = () => (((me() || {}).prefs || {}).watch || []);
 export const isWatched = (t, id) => watchList().some(x => x.t === t && x.id === id);
 function setWatch(list) {
@@ -44,7 +46,7 @@ export function watchBlock(apps, { openApp, openTask, appIcon, appStatusCell, st
       const w = watchList();
       const taskIds = w.filter(x => x.t === 'task').map(x => x.id);
       [appsNow, tasks] = await Promise.all([
-        w.some(x => x.t === 'app') ? call('listApps', {}) : Promise.resolve(appsNow),
+        w.some(x => x.t === 'app') || !appsNow.length ? call('listApps', {}) : Promise.resolve(appsNow), // пустой список (дашборд RM) — для поиска при добавлении
         taskIds.length ? call('queryTasks', { ids: taskIds }) : Promise.resolve([]),
       ]);
       at = Date.now();

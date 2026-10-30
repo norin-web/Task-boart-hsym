@@ -7,7 +7,8 @@ import { $, h, icon, avatar, topbar, showErr, fill, toast } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
-import { appIcon, prioTag, isHighPrio } from './apps.js';
+import { appIcon, prioTag, isHighPrio, appStatusCell, stageDots, openAppById } from './apps.js';
+import { watchBlock } from './watch.js';
 import { newsBlock, loadNotes } from './home.js';
 import { openReleaseSettings, openReleaseHistory, openRejectForm } from './release.js';
 
@@ -28,6 +29,8 @@ export async function renderRmHome() {
     fill(page,
       h('div', { class: 'ceo-hello' }, h('h2', null, greeting() + (person ? ', ' + person.name.split(' ')[0] : ''))),
       newsBlock(),
+      // свои приложения и задачи «в фокусе» — статус обновляется сам
+      watchBlock([], { openApp: id => openAppById(id, load), openTask: peekTask, appIcon, appStatusCell, stageDots }),
       section('Очередь на релиз', 'Очередь пуста', d.queue, x => [
         x.fixedAt && h('span', { class: 'ok-text rq-line' }, `реджект №${x.rejectNo || ''} исправлен — отправьте снова`),
         x.missing.length || x.checklist.done < x.checklist.total

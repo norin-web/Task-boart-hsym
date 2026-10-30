@@ -414,6 +414,10 @@ test('RM: релиз — поля, свой чеклист, отправка в 
   for (const who of [pm, ceo]) assert.ok((await api.as(who, () => api('getNotifications', {}))).some(n => n.taskId === st.release.id && n.kinds.includes('store_live')), who.name);
   assert.ok((await api.as(lead, () => api('getNotifications', {}))).some(n => n.taskId === st.design.id && n.kinds.includes('store_live')));
   assert.ok(!(await api.as(rm, () => api('getNotifications', {}))).some(n => n.kinds.includes('store_live')));
+  // команда релиза для RM: PM, дизайн, разработка, тестирование
+  const team = await api.as(rm, () => api('getReleaseTeam', { taskId: st.release.id }));
+  assert.deepEqual([team.pm, team.design, team.ios, team.qa], [[pm.id], [lead.id], [ios.id], [qa.id]]);
+  await api.as(ios, () => assert.rejects(() => api('getReleaseTeam', { taskId: st.release.id })));
   // история и сводка
   const hs = await api.as(rm, () => api('getReleaseHistory', {}));
   assert.deepEqual(hs.rows.map(x => x.result), ['live', 'reject']);
