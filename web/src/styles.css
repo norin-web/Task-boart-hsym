@@ -1765,3 +1765,10 @@ a.rc-more { text-decoration: none; }
 .app-ic-slot { display: inline-flex; width: 18px; justify-content: center; }
 @media (max-width: 760px) { .w-open { grid-template-columns: 28px minmax(0, 1fr) auto; } .w-now, .w-at { display: none; } }
 @media (prefers-reduced-motion: reduce) { .w-dot, .w-row.changed { animation: none; } }
+
+/* Карточка задачи: ТЗ */
+.spec-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 36px; padding: 0 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.spec-row.editable { cursor: pointer; }
+.spec-row:hover { border-color: var(--border-strong); }
+.spec-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; }
+.spec-empty { display: inline-flex; align-items: center; gap: 8px; }

@@ -26,16 +26,26 @@ const bound = (iso, date, later) => {
 const fmtDay = d => d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
 const isoDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
+const cut = (s, n = 90) => { s = String(s ?? ''); return s.length > n ? s.slice(0, n) + '…' : s; };
+
 export function activityText(a) {
   switch (a.action) {
     case 'create': return 'создание задачи';
     case 'comment': return 'комментарий: «' + (a.toText.length > 90 ? a.toText.slice(0, 90) + '…' : a.toText) + '»';
+    case 'comment_edit': return 'комментарий изменён: «' + cut(a.toText) + '»';
+    case 'comment_delete': return 'комментарий удалён: «' + cut(a.fromText) + '»';
     case 'archive': return 'задача в архиве';
     case 'unarchive': return 'задача возвращена из архива';
     case 'move': return 'перенос ' + a.fromText + ' → ' + a.toText;
     case 'delete': return 'удаление задачи «' + a.fromText + '»';
     case 'update':
-      if (a.field === 'description') return a.label.toLowerCase() + ' изменено';
+      if (a.field === 'description') return a.label.toLowerCase() + ' изменено' + (a.toText ? ': «' + cut(a.toText) + '»' : ' (очищено)');
+      if (a.field === 'specUrl') return a.toText ? 'ТЗ: ' + a.toText : 'ТЗ убрано';
+      if (a.field === 'checklist:add') return 'чеклист: добавлен пункт «' + cut(a.toText) + '»';
+      if (a.field === 'checklist:remove') return 'чеклист: удалён пункт «' + cut(a.fromText) + '»';
+      if (a.field === 'checklist:rename') return 'чеклист: «' + cut(a.fromText) + '» → «' + cut(a.toText) + '»';
+      if (a.field === 'checklist:done') return 'чеклист: отмечено «' + cut(a.toText) + '»';
+      if (a.field === 'checklist:undone') return 'чеклист: снята отметка «' + cut(a.toText) + '»';
       if (a.field.startsWith('link:')) return 'ссылка ' + a.label + ' ' + a.toText;
       return a.label + ': ' + a.fromText + ' → ' + a.toText;
     default: return a.action;

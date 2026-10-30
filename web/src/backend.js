@@ -227,7 +227,7 @@ const taskOut = r => ({
   id: r.id, unitId: r.unit_id, num: r.num, title: r.title, description: r.description, status: r.status,
   assigneeId: r.assignee_id, departmentId: r.department_id || '', dueDate: r.due_date, order: r.ord,
   fields: json(r.fields, {}), checklist: json(r.checklist, []), archived: !!r.archived, doneAt: r.done_at,
-  reviewFrom: r.review_from || '', reviewerId: r.reviewer_id || '', teamId: r.team_id || '',
+  reviewFrom: r.review_from || '', reviewerId: r.reviewer_id || '', teamId: r.team_id || '', specUrl: r.spec_url || '',
   parentId: r.parent_id || '', kind: r.kind || '', startedAt: r.started_at || '',
   release: json(r.release, {}) || {},
   appId: r.app_id || '', requestType: r.request_type || '', step: r.step || '', dependsOn: json(r.depends_on, []) || [], isTest: !!r.is_test,
@@ -686,12 +686,14 @@ export function createBackend(db, opts = {}) {
         case 'checklist': label = 'Чеклист'; break;
         case 'unit': label = 'Юнит'; break;
         case 'teamId': label = 'Команда'; fromText = TM[from] || ''; toText = TM[to] || ''; break;
+        case 'specUrl': label = 'ТЗ'; break;
+        case 'checklist:add': case 'checklist:remove': case 'checklist:rename': case 'checklist:done': case 'checklist:undone': label = 'Чеклист'; break;
         default:
           // ссылки: в истории только факт изменения, без адреса — история видна шире, чем само поле
           if (/^link:/.test(a.field)) {
             const lf = LF[a.field.slice(5)];
             label = lf ? lf.name : 'Ссылка';
-            fromText = ''; toText = to ? 'добавлена' : 'удалена';
+            fromText = ''; toText = to ? (from ? 'изменена' : 'добавлена') : 'удалена';
           }
           if (/^f_/.test(a.field)) {
             const f = F[a.field] ? fieldOut(F[a.field]) : null;
@@ -1023,9 +1025,19 @@ export function createBackend(db, opts = {}) {
         parent_id: p.parentId ? (await findTask(p.parentId)).id : '', kind: TASK_KINDS.includes(p.kind) ? p.kind : '',
         app_id: str(p.appId, 40), request_type: p.kind === 'request' && REQUEST_TYPES[p.requestType] ? p.requestType : '',
         step: str(p.step, 30), depends_on: (Array.isArray(p.dependsOn) ? p.dependsOn : []).map(x => str(x, 40)).filter(Boolean).slice(0, 20),
-        is_test: !!p.test, started_at: kindOf(st, status) === 'todo' ? '' : ts,
+        is_test: !!p.test, started_at: kindOf(st, status) === 'todo' ? '' : ts, spec_url: linkUrl(p.specUrl),
       };
+      // наследование от родителя (этап от запроса, подзадача от этапа): ТЗ, описание (если своего нет) и ссылки
+      const parent = task.parent_id && p.inherit !== false ? await one('tasks', task.parent_id) : null;
+      if (parent) {
+        if (!task.spec_url) task.spec_url = parent.spec_url || '';
+        if (!task.description) task.description = parent.description || '';
+      }
       await run(T('tasks').insert(task));
+      if (parent) {
+        const links = await run(T('task_links').select('field_id,url').eq('task_id', parent.id));
+        if (links.length) await run(T('task_links').insert(links.map(l => ({ task_id: task.id, field_id: l.field_id, unit_id: task.unit_id, url: l.url, updated_at: ts }))));
+      }
       await log([{ unitId: unit.id, taskId: task.id, action: 'create', to: task.title }], ctx);
       return { ...taskOut(task), commentCount: 0 };
     },
@@ -1051,7 +1063,13 @@ export function createBackend(db, opts = {}) {
       }
       if ('description' in patch) {
         const v = str(patch.description, 20000);
-        if (v !== t.description) { change('description', null, null); t.description = v; }
+        // в истории — начало текста «было → стало», чтобы видно, что поменялось
+        const cut = s => (s.length > 140 ? s.slice(0, 140) + '…' : s);
+        if (v !== t.description) { change('description', cut(t.description), cut(v)); t.description = v; }
+      }
+      if ('specUrl' in patch) {
+        const v = linkUrl(patch.specUrl);
+        if (v !== (t.spec_url || '')) { change('specUrl', t.spec_url || '', v); t.spec_url = v; }
       }
       if ('status' in patch) {
         const st = unitSettings((await findUnit(t.unit_id)).settings);
@@ -1091,8 +1109,18 @@ export function createBackend(db, opts = {}) {
         const before = cleanChecklist(t.checklist);
         const after = cleanChecklist(patch.checklist);
         if (JSON.stringify(before) !== JSON.stringify(after)) {
-          const progress = l => `${l.filter(i => i.done).length}/${l.length}`;
-          if (progress(before) !== progress(after)) change('checklist', progress(before), progress(after));
+          // каждое изменение пункта — своей записью: добавлен, удалён, переименован, отмечен / снят
+          const byId = l => Object.fromEntries(l.map(i => [i.id, i]));
+          const B0 = byId(before), A0 = byId(after);
+          for (const i of after) {
+            const was = B0[i.id];
+            if (!was) logs.push({ unitId: t.unit_id, taskId: t.id, action: 'update', field: 'checklist:add', to: i.text });
+            else {
+              if (was.text !== i.text) logs.push({ unitId: t.unit_id, taskId: t.id, action: 'update', field: 'checklist:rename', from: was.text, to: i.text });
+              if (!!was.done !== !!i.done) logs.push({ unitId: t.unit_id, taskId: t.id, action: 'update', field: i.done ? 'checklist:done' : 'checklist:undone', to: i.text });
+            }
+          }
+          for (const i of before) if (!A0[i.id]) logs.push({ unitId: t.unit_id, taskId: t.id, action: 'update', field: 'checklist:remove', from: i.text });
           t.checklist = after;
           dirty = true;
         }
@@ -1124,7 +1152,7 @@ export function createBackend(db, opts = {}) {
         // Условие по updated_at: если между чтением и записью задачу успели изменить — конфликт
         const saved = await run(T('tasks').update({
           title: t.title, description: t.description, status: t.status, assignee_id: t.assignee_id, department_id: t.department_id, team_id: t.team_id || '',
-          due_date: t.due_date, ord: t.ord, fields: t.fields, checklist: t.checklist, archived: t.archived,
+          due_date: t.due_date, ord: t.ord, fields: t.fields, checklist: t.checklist, archived: t.archived, spec_url: t.spec_url || '',
           done_at: t.done_at, updated_at: t.updated_at, started_at: t.started_at || '',
         }).eq('id', t.id).eq('updated_at', r.updated_at).select('*'));
         if (!saved.length) {
@@ -1238,16 +1266,20 @@ export function createBackend(db, opts = {}) {
       return commentOut(c);
     },
 
-    async updateComment(p) {
+    async updateComment(p, ctx) {
       const c = (await one('comments', p.id)) || fail('Комментарий не найден', 'NOT_FOUND');
       const upd = { text: req(str(p.text, 5000), 'Комментарий'), edited_at: now() };
       await updateOne('comments', c.id, upd);
+      const t = await one('tasks', c.task_id);
+      if (t && upd.text !== c.text) await log([{ unitId: t.unit_id, taskId: t.id, action: 'comment_edit', from: c.text.slice(0, 200), to: upd.text.slice(0, 200) }], ctx);
       return commentOut({ ...c, ...upd });
     },
 
-    async deleteComment(p) {
-      const gone = await run(T('comments').delete().eq('id', String(p.id ?? '')).select('id'));
+    async deleteComment(p, ctx) {
+      const gone = await run(T('comments').delete().eq('id', String(p.id ?? '')).select('id,task_id,text'));
       if (!gone.length) fail('Удалить можно только свой комментарий', 'FORBIDDEN');
+      const t = gone[0].task_id && (await one('tasks', gone[0].task_id));
+      if (t) await log([{ unitId: t.unit_id, taskId: t.id, action: 'comment_delete', from: String(gone[0].text || '').slice(0, 200) }], ctx);
       return true;
     },
 
@@ -2193,7 +2225,7 @@ export function createBackend(db, opts = {}) {
         const gone = await run(T('task_links').delete().eq('task_id', t.id).eq('field_id', fieldId).select('task_id'));
         if (!gone.length) fail('Недостаточно прав для этого действия', 'FORBIDDEN');
       }
-      if ((had ? had.url : '') !== url) await log([{ unitId: t.unit_id, taskId: t.id, action: 'update', field: 'link:' + fieldId, to: url ? 1 : null }], ctx);
+      if ((had ? had.url : '') !== url) await log([{ unitId: t.unit_id, taskId: t.id, action: 'update', field: 'link:' + fieldId, from: had ? had.url : null, to: url || null }], ctx);
       return url;
     },
 

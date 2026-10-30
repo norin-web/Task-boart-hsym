@@ -562,3 +562,27 @@ test('queryTasks по ids — для «Отслеживаю» на дашбор�
   assert.deepEqual(await api.as(ceo, () => api('queryTasks', { ids: [] })), []);
   assert.ok(b.request.id);
 });
+
+test('ТЗ, наследование от родителя (ТЗ, описание, ссылки) и подробная история', async () => {
+  const api = await setup();
+  const { ceo, pm, gold } = await studio(api);
+  const { request } = await api.as(ceo, () => api('createApp', { name: 'Spec', unitId: gold.id, description: 'Что делаем' }));
+  await api.as(ceo, () => api('updateTask', { id: request.id, patch: { specUrl: 'docs.google.com/spec', description: 'ТЗ коротко' } }));
+  await api.as(ceo, () => api('setTaskLink', { taskId: request.id, fieldId: 'lf_figma', url: 'https://figma.com/file/x' }));
+  const stages = await api.as(pm, () => api('decomposeRequest', { taskId: request.id }));
+  const design = stages.find(t => t.step === 'design');
+  assert.equal(design.specUrl, 'https://docs.google.com/spec');
+  assert.equal(design.description, 'ТЗ коротко');
+  // подзадача этапа наследует ТЗ и ссылки
+  const sub = await api.as(pm, () => api('createTask', { unitId: gold.id, title: 'Иконка', parentId: design.id }));
+  assert.equal(sub.specUrl, 'https://docs.google.com/spec');
+  const ex = await api.as(pm, () => api('getTaskExtras', { taskId: sub.id }));
+  assert.ok(ex.activity.length >= 1);
+  const board = await api.as(pm, () => api('getBoard', { unitId: gold.id }));
+  assert.equal(board.tasks.find(t => t.id === sub.id).links.lf_figma, 'https://figma.com/file/x');
+  // чеклист: каждое действие — своя запись
+  await api.as(pm, () => api('updateTask', { id: sub.id, patch: { checklist: [{ id: 'k_c1', text: 'Нарисовать', done: false }] } }));
+  const t1 = await api.as(pm, () => api('updateTask', { id: sub.id, patch: { checklist: [{ id: 'k_c1', text: 'Нарисовать иконку', done: true }] } }));
+  const fields = (await api.as(pm, () => api('getTaskExtras', { taskId: t1.id }))).activity.map(a => a.field).filter(f => f.startsWith('checklist'));
+  assert.deepEqual(fields.sort(), ['checklist:add', 'checklist:done', 'checklist:rename']);
+});

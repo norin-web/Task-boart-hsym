@@ -474,6 +474,8 @@ alter table apps add column if not exists store_checked_at text not null default
 alter table apps add column if not exists checks jsonb not null default '{}';
 -- Свои поля «Быстрого доступа» у приложения (общие — app_settings.appFields): [{ id, name, kind: link | text, value }]
 alter table apps add column if not exists own_fields jsonb not null default '[]';
+-- ТЗ задачи — ссылка (наследуется этапами и подзадачами от родителя)
+alter table tasks add column if not exists spec_url text not null default '';
 alter table apps add column if not exists status_at text not null default '';
 
 -- Задачи 2.0: приложение; запрос CEO (kind request, request_type new_app / update / other);

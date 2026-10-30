@@ -100,6 +100,7 @@ function buildPanel(t) {
     t.step === 'release' && t.assigneeId && releaseBlock(t, () => reloadBoard().catch(() => {})),
     t.kind === 'request' || t.kind === 'stage' ? flowBlock(t) : treeBlock(t),
     !B.description.hidden && descriptionBlock(t, B.description.label, editable),
+    specBlock(t, editable),
     linksBlock(t, editable),
     checklistBlock(t, editable),
     discussionBlock(t, editable));
@@ -337,6 +338,38 @@ function descriptionBlock(t, label, editable) {
   return box;
 }
 
+/* ---------- ТЗ ---------- */
+
+/** ТЗ задачи — ссылка: открыть, скопировать, правка кликом по строке. Наследуется этапами и подзадачами от родителя. */
+function specBlock(t, editable) {
+  const box = h('div', { class: 'block' });
+  const view = () => {
+    const url = t.specUrl || '';
+    fill(box,
+      h('div', { class: 'block-title' }, 'ТЗ'),
+      url
+        ? h('div', { class: 'spec-row' + (editable ? ' editable' : ''), title: editable ? 'Нажмите, чтобы изменить' : '', onclick: e => { if (editable && !e.target.closest('a, button')) edit(); } },
+          h('span', { class: 'lf-ic' }, brandIcon(brandOf(url), 15, 'link')),
+          h('a', { class: 'spec-url', href: safeUrl(url), target: '_blank', rel: 'noopener noreferrer', title: url }, url.replace(/^https?:\/\/(www\.)?/, '')),
+          h('button', { class: 'icon-btn sm', title: 'Скопировать', onclick: () => (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(() => toast('Ссылка на ТЗ скопирована'), () => toast(url)) }, icon('copy', 13)))
+        : editable ? h('button', { class: 'desc-empty spec-empty', onclick: edit }, icon('link', 14), 'Добавить ссылку на ТЗ')
+          : h('p', { class: 'muted' }, 'ТЗ нет'));
+  };
+  const edit = () => {
+    const inp = h('input', { class: 'inp', type: 'url', value: t.specUrl || '', placeholder: 'https://docs.google.com/…', maxlength: 2000 });
+    const save = () => { const v = inp.value.trim(); if (v !== (t.specUrl || '')) patchTask(t, { specUrl: v }).then(() => refreshPanel(t)); else view(); };
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); save(); }
+      if (e.key === 'Escape') { e.stopPropagation(); view(); }
+    });
+    inp.addEventListener('blur', save);
+    fill(box, h('div', { class: 'block-title' }, 'ТЗ'), inp);
+    inp.focus();
+  };
+  view();
+  return box;
+}
+
 /* ---------- чеклист ---------- */
 
 function checklistBlock(t, editable) {
@@ -509,13 +542,8 @@ function sideBlock(t, { staff, editable }) {
       onchange: e => { dot.style.background = colColor(colById(e.target.value)); patchTask(t, { status: e.target.value }); },
     }, u.settings.columns.map(c => h('option', { value: c.id }, c.name)))));
 
-  // Порядок: Статус → Команда → Исполнитель (только люди выбранной команды) → Срок → Приоритет и поля.
-  // Позиция в карточке не показывается — её ставит исполнитель (основная позиция), видимость считается по ней.
-  {
-    const tm = teamById(t.teamId);
-    if (staff) prop('Команда', teamSelect(t.teamId, v => patchTask(t, { teamId: v }).then(() => refreshPanel(t))));
-    else if (tm) prop('Команда', ro(h('span', { class: 'chip dept-chip', style: { background: `color-mix(in srgb, ${tm.color} 16%, transparent)`, color: tm.color } }, tm.name)));
-  }
+  // Порядок: Статус → Исполнитель → Срок → Приоритет и поля. «Команды» в карточке нет (не нужна — решение заказчика);
+  // позиция не показывается — её ставит исполнитель (основная позиция), видимость считается по ней.
 
   if (!B.assignee.hidden && !staff) {
     const p = personById(t.assigneeId);
@@ -534,7 +562,7 @@ function sideBlock(t, { staff, editable }) {
       const patch = { assigneeId: v };
       if (p && !t.teamId && (p.teamIds || []).length) patch.teamId = p.teamIds[0];
       patchTask(t, patch).then(() => refreshPanel(t));
-    }, { teamId: t.teamId }), {
+    }), {
       after: S.meId && t.assigneeId !== S.meId && h('div', { class: 'quick-chips' }, h('button', {
         class: 'quick-chip', onclick: () => { patchTask(t, { assigneeId: S.meId }); refreshPanel(t); },
       }, icon('user', 12), 'Назначить на меня')),
@@ -722,6 +750,8 @@ export function openCreateTask(opts = {}) {
   const title = autosize(h('textarea', { class: 'inp title-field', rows: 1, placeholder: 'Что нужно сделать?', maxlength: 500, value: opts.title || '' }));
   title.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submitBtn().click(); } });
   const desc = autosize(h('textarea', { class: 'inp', rows: 3, placeholder: 'Описание (необязательно)', maxlength: 20000 }));
+  // ТЗ — ссылкой; у подзадачи пусто = возьмётся ТЗ родителя
+  const spec = h('input', { class: 'inp', type: 'url', maxlength: 2000, placeholder: opts.parent && opts.parent.specUrl ? 'ТЗ — как у родителя' : 'Ссылка на ТЗ (необязательно)' });
   const more = h('label', { class: 'chk hint' }, h('input', { type: 'checkbox' }), 'Создать ещё одну');
   // Шаблон: подставляет название, описание, позицию, срок и чеклист — дальше можно править
   let used = null;
@@ -764,13 +794,6 @@ export function openCreateTask(opts = {}) {
       }, units.map(u => h('option', { value: u.id }, u.name + ' · ' + u.key)))),
       field(B.status.label, h('select', { class: 'inp', value: draft.status || unit.settings.columns[0].id, onchange: e => { draft.status = e.target.value; } },
         unit.settings.columns.map(c => h('option', { value: c.id }, c.name)))),
-      field('Команда', teamSelect(draft.teamId, v => {
-        draft.teamId = v;
-        // команда сменилась — в «Исполнителе» только её люди; чужой исполнитель снимается
-        const p = personById(draft.assigneeId);
-        if (p && v && !(p.teamIds || []).includes(v)) draft.assigneeId = '';
-        drawProps();
-      })),
       !B.assignee.hidden && field(B.assignee.label, assigneeSelect(draft.assigneeId, v => {
         draft.assigneeId = v;
         const p = personById(v);
@@ -778,7 +801,7 @@ export function openCreateTask(opts = {}) {
         if (p && !draft.teamId && (p.teamIds || []).length) draft.teamId = p.teamIds[0];
         if (p && !(p.positionIds || [p.positionId]).includes(draft.departmentId)) draft.departmentId = p.positionId;
         drawProps();
-      }, { ...(inBoard ? {} : { ids: unit.members || [], unitId: unit.id }), teamId: draft.teamId })),
+      }, inBoard ? {} : { ids: unit.members || [], unitId: unit.id })),
       // позицию не спрашиваем — её подставит исполнитель (или шаблон)
       !B.dueDate.hidden && field(B.dueDate.label, h('input', { class: 'inp', type: 'date', value: draft.dueDate, onchange: e => { draft.dueDate = e.target.value; } })),
       inBoard && [...activeFields()].sort((a, b) => (b.role === 'priority') - (a.role === 'priority')).map(f => field(f.name + (f.required || f.requiredOnCreate ? ' *' : ''),
@@ -807,7 +830,7 @@ export function openCreateTask(opts = {}) {
     body: [
       opts.parent && h('div', { class: 'parent-note' }, icon('tree', 13), 'Часть «', h('b', null, opts.parent.title), '»',
         h('span', { class: 'muted' }, ' · ' + opts.parent.key)),
-      tplRow, title, h('div', { style: { height: '10px' } }), desc, h('div', { style: { height: '14px' } }), props, linksBox],
+      tplRow, title, h('div', { style: { height: '10px' } }), desc, h('div', { style: { height: '8px' } }), spec, h('div', { style: { height: '14px' } }), props, linksBox],
     footLeft: more,
     actions: [
       { label: 'Отмена' },
@@ -817,7 +840,7 @@ export function openCreateTask(opts = {}) {
           if (!text) { title.focus(); return; }
           const { links, ...rest } = draft;
           const task = await send('createTask', {
-            unitId: unit.id, title: text, description: desc.value, ...rest,
+            unitId: unit.id, title: text, description: desc.value, specUrl: spec.value.trim(), ...rest,
             parentId: opts.parent ? opts.parent.id : '', appId: opts.parent && opts.parent.appId ? opts.parent.appId : '',
           });
           // ссылки — отдельной таблицей, после создания задачи
