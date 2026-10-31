@@ -1,5 +1,5 @@
 /**
- * Решение по ревью — две явные кнопки: «Аппрув» (в «готово») и «Правки» (обратно автору; можно оставить комментарий —
+ * Решение по ревью — две явные кнопки: «Принять» (в «готово») и «Вернуть» (обратно автору; можно оставить комментарий —
  * по правкам или общую информацию, он уйдёт в обсуждение задачи). Используют очередь ревью лида, карточка задачи и «Моя доска».
  */
 import { personById } from '../state.js';
@@ -11,7 +11,7 @@ export async function decide(t, approve, comment, onDone) {
   try {
     const res = await send('reviewDecision', { taskId: t.id, approve, comment: comment || '' });
     const who = personById(t.reviewFrom || t.authorId);
-    toast(approve ? 'Аппрув — задача закрыта' : 'Правки отправлены' + (who ? ' — ' + who.name : ''));
+    toast(approve ? 'Принято — задача закрыта' : 'Правки отправлены' + (who ? ' — ' + who.name : ''));
     if (onDone) onDone(res);
   } catch (e) { showErr(e); }
 }
@@ -20,7 +20,7 @@ export async function decide(t, approve, comment, onDone) {
 export function changesDialog(t, onDone) {
   const ta = h('textarea', { class: 'inp', rows: 4, maxlength: 5000, placeholder: 'Что поправить — или общая информация (необязательно)' });
   modal({
-    title: 'Правки · ' + t.title,
+    title: 'Вернуть на правки · ' + t.title,
     body: [h('p', { class: 'hint', style: { margin: '0 0 8px' } }, 'Задача вернётся автору в работу. Комментарий появится в обсуждении задачи.'), ta],
     actions: [{ label: 'Отмена' }, { label: 'Отправить на правки', primary: true, action: async close => { await decide(t, false, ta.value.trim(), onDone); close(); } }],
   });
@@ -31,7 +31,7 @@ export function changesDialog(t, onDone) {
 export function reviewButtons(t, onDone, { sm = true } = {}) {
   const cls = sm ? ' sm' : '';
   return [
-    h('button', { class: 'btn success' + cls, onclick: e => { e.stopPropagation(); decide(t, true, '', onDone); } }, icon('check', 13), 'Аппрув'),
-    h('button', { class: 'btn' + cls, onclick: e => { e.stopPropagation(); changesDialog(t, onDone); } }, icon('back', 13), 'Правки'),
+    h('button', { class: 'btn success' + cls, onclick: e => { e.stopPropagation(); decide(t, true, '', onDone); } }, 'Принять'),
+    h('button', { class: 'btn' + cls, onclick: e => { e.stopPropagation(); changesDialog(t, onDone); } }, 'Вернуть'),
   ];
 }

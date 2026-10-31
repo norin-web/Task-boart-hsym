@@ -494,7 +494,9 @@ export function unitCard(u, { apps, to = 'board' } = {}) {
 /** Дашборд участника: его юниты (доска и бэклог своей позиции) и его задачи. */
 async function renderMemberHome() {
   const page = h('div', { class: 'page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
-  fill($('#main'), topbar([h('h1', null, 'Мой дашборд')], []), h('div', { class: 'view-body' }, page));
+  let editHook = null;
+  fill($('#main'), topbar([h('div', { class: 'screen-head' }, h('div', { class: 'screen-date' }, (() => { const t = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }); return t.charAt(0).toUpperCase() + t.slice(1); })()),
+    h('h1', { class: 'screen-title' }, 'Мой дашборд'))], [h('button', { class: 'btn', title: 'Настроить дашборд под себя', onclick: () => editHook && editHook() }, 'Настроить')]), h('div', { class: 'view-body' }, page));
   let d, tasks, md;
   try {
     [d, tasks, , md] = await Promise.all([call('getHome', { today: new Date().toISOString().slice(0, 10) }), loadMyTasks(), loadNotes(),
@@ -516,29 +518,26 @@ async function renderMemberHome() {
   const overdue = open.filter(t => t.dueDate && t.dueDate < new Date().toISOString().slice(0, 10)).length;
 
   const BLOCKS = [
-    NEWS_BLOCK,
-    { id: 'focus', title: 'Фокус', col: 'left', render: () => focusBlock(md) },
-    md.lead && { id: 'reviews', title: 'Ждут вашего ревью', col: 'right', render: () => reviewsBlock(md, () => rerender()) },
-    md.lead && { id: 'split', title: 'Раздано', col: 'left', render: () => splitBlock(md) },
+    { ...NEWS_BLOCK, off: true },
+    { id: 'focus', title: 'Фокус', col: 'full', render: () => focusBlock(md, () => rerender()) },
+    md.lead && { id: 'reviews', title: 'Ждут вашего ревью', col: 'left', render: () => reviewsBlock(md, () => rerender()) },
+    md.lead && { id: 'split', title: 'Раздано', col: 'left', off: true, render: () => splitBlock(md) },
     md.lead && { id: 'teamLoad', title: 'Загрузка позиции', col: 'right', render: () => teamLoadBlock(md) },
-    { id: 'stats', title: 'Статистика', col: 'full', render: () => h('div', { class: 'cs-row' },
+    { id: 'stats', title: 'Статистика', col: 'full', off: true, render: () => h('div', { class: 'cs-row' },
       h('div', { class: 'cs' }, h('div', { class: 'cs-n' }, open.length), h('div', { class: 'cs-label' }, 'открытых задач')),
       h('div', { class: 'cs' + (overdue ? ' danger' : '') }, h('div', { class: 'cs-n' }, overdue), h('div', { class: 'cs-label' }, 'просрочено')),
       h('div', { class: 'cs' }, h('div', { class: 'cs-n' }, tasks.length - open.length), h('div', { class: 'cs-label' }, 'сделано')),
       h('div', { class: 'cs' }, h('div', { class: 'cs-n' }, units.length), h('div', { class: 'cs-label' }, plural(units.length, ['юнит', 'юнита', 'юнитов'])))) },
-    { id: 'tasks', title: 'Мои задачи', col: 'left', render: () => h('section', null,
+    { id: 'tasks', title: 'Мои задачи', col: 'left', off: true, render: () => h('section', null,
       h('div', { class: 'section-head' }, h('h2', null, 'Мои задачи')), unitGroups(tasks)) },
-    { id: 'units', title: 'Мои юниты', col: 'right', render: () => h('section', null,
+    { id: 'units', title: 'Мои юниты', col: 'right', off: true, render: () => h('section', null,
       h('div', { class: 'section-head' }, h('h2', null, 'Мои юниты')),
       units.length
         ? h('div', { class: 'unit-grid', style: { gridTemplateColumns: '1fr' } }, units.map(unitCard))
         : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Юнитов пока нет'))) },
   ].filter(Boolean);
-  const draw = () => fill(page,
-    h('div', { class: 'hero' },
-      h('h1', null, greeting() + (person ? ', ' + person.name.split(' ')[0] : '')),
-      h('button', { class: 'btn ghost sm', title: 'Настроить дашборд под себя', onclick: () => editLayout('memberHome', BLOCKS, page, draw) }, icon('layers', 14), 'Настроить')),
-    renderLayout('memberHome', BLOCKS));
+  editHook = () => editLayout('memberHome', BLOCKS, page, draw);
+  const draw = () => fill(page, renderLayout('memberHome', BLOCKS));
   draw();
 }
 

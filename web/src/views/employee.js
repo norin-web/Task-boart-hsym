@@ -2,8 +2,9 @@
  * Блоки «Моего дашборда» сотрудника и лида: фокус (что делать сейчас), очередь ревью лида («Принять» / «Вернуть»)
  * и загрузка людей позиции лида. Данные — getMyDashboard.
  */
-import { personById, deptById, prioById, fmtDate, plural } from '../state.js';
-import { h, icon, avatar } from '../ui.js';
+import { S, personById, deptById, prioById, fmtDate, plural, dueInfo } from '../state.js';
+import { h, icon, avatar, statusIcon, toast, showErr } from '../ui.js';
+import { send } from '../api.js';
 import { peekTask } from './task.js';
 import { appIcon, prioTag, isHighPrio } from './apps.js';
 import { reviewButtons } from './review.js';
@@ -16,19 +17,39 @@ const REASON = {
   progress: { label: 'в работе', cls: 'muted' },
 };
 
-/** Фокус: просроченное, сроки сегодня и завтра, начатое — по важности; заблокированные этапы сюда не попадают. */
-export function focusBlock(d) {
+/** Фокус: просроченное, сроки сегодня и завтра, начатое — по важности; заблокированные этапы сюда не попадают.
+ *  Первая задача — крупной карточкой с действиями, остальные — строками. */
+export function focusBlock(d, reload) {
   const rows = d.focus;
+  const [first, ...rest] = rows;
+  const toReview = async t => {
+    const u = S.units.find(x => x.id === t.unitId) || {};
+    const col = ((u.settings || {}).review || {}).column || 'review';
+    try { await send('updateTask', { id: t.id, patch: { status: col } }); toast('Отдано на ревью'); if (reload) reload(); } catch (e) { showErr(e); }
+  };
+  const when = t => {
+    const di = dueInfo(t.dueDate, false);
+    return [t.statusName, di && h('span', { class: di.cls === 'overdue' ? 'danger-text' : '' }, di.cls === 'overdue' ? 'срок ' + fmtDate(t.dueDate) : di.text)].filter(Boolean)
+      .flatMap((x, i) => (i ? [' · ', x] : [x]));
+  };
   return h('section', null,
-    h('div', { class: 'section-head' }, h('h2', null, 'Фокус', rows.length > 0 && h('span', { class: 'muted sec-n' }, rows.length))),
-    rows.length ? h('div', { class: 'card-box att-list' }, rows.map(t => {
-      const r = REASON[t.reason];
-      return h('button', { class: 'fc-row', onclick: () => peekTask(t.unitId, t.id) },
-        t.app ? appIcon(t.app, 'xs') : h('span'),
-        h('span', { class: 'fc-main' }, h('span', { class: 'fc-title' }, t.title), h('span', { class: 'muted fc-sub' }, (t.app ? t.app.name + ' · ' : '') + t.statusName)),
-        prioTag(t.priority) || h('span'),
-        h('span', { class: 'fc-when ' + r.cls }, t.reason === 'overdue' ? 'срок ' + fmtDate(t.dueDate) : r.label));
-    })) : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Срочного нет')));
+    h('div', { class: 'section-head' }, h('h2', null, 'Фокус', rows.length > 0 && h('span', { class: 'muted sec-n' }, rows.length)), h('span', { class: 'muted fc-hint' }, 'Что делать сейчас')),
+    rows.length ? h('div', { class: 'card-box fc-list' },
+      h('div', { class: 'fc-hero' },
+        first.app ? appIcon(first.app, 'lg') : statusIcon(first.statusKind || 'progress', 24),
+        h('div', { class: 'fc-hero-main' },
+          h('div', { class: 'fc-hero-key' }, h('span', { class: 'dot', style: { background: (first.unit || {}).color || 'var(--info-fill)' } }), first.key, first.app ? ' · ' + first.title.split(' · ').slice(-1)[0] : ''),
+          h('div', { class: 'fc-hero-title' }, first.title),
+          h('div', { class: 'fc-hero-meta' }, statusIcon(first.statusKind || 'progress', 14), when(first))),
+        h('div', { class: 'fc-hero-actions' },
+          h('button', { class: 'btn xl', onclick: () => peekTask(first.unitId, first.id) }, 'Открыть'),
+          h('button', { class: 'btn primary xl', onclick: () => toReview(first) }, 'Отдать на ревью'))),
+      rest.map(t => h('button', { class: 'fc-row', onclick: () => peekTask(t.unitId, t.id) },
+        statusIcon(t.statusKind || 'todo', 16),
+        h('span', { class: 'fc-key' }, t.key),
+        h('span', { class: 'fc-title' }, t.title),
+        h('span', { class: 'fc-when ' + (REASON[t.reason] || REASON.progress).cls }, when(t)))))
+      : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Срочного нет')));
 }
 
 /** Очередь ревью лида: чья задача и решение — «Аппрув» (в готово) или «Правки» (автору, с комментарием). */
@@ -46,23 +67,24 @@ export function reviewsBlock(d, reload) {
     })) : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Ревью никто не ждёт')));
 }
 
-/** Загрузка людей позиции лида в его юнитах: открыто, в работе, ждут, просрочено. */
+/** Загрузка людей позиции лида в его юнитах: задач на человеке и полоса; перегруз (много открытых или есть просрочка) — оранжевым и красным числом. */
 export function teamLoadBlock(d) {
   const rows = d.lead.team.map(x => ({ ...x, p: personById(x.personId) })).filter(x => x.p);
+  const cap = Math.max(6, ...rows.map(x => x.open));
   return h('section', null,
-    h('div', { class: 'section-head' }, h('h2', null, 'Загрузка позиции')),
-    rows.length ? h('div', { class: 'card-box tl-list' }, rows.map(x => h('div', { class: 'tl-row' },
-      avatar(x.p, 'sm'),
-      h('span', { class: 'tl-name' }, h('b', null, x.p.name), h('small', { class: 'muted' }, (x.p.positionIds || []).map(id => (deptById(id) || {}).name).filter(Boolean).join(', '))),
-      h('span', { class: 'tl-nums' },
-        h('span', { title: 'Открытых задач' }, h('b', null, x.open), ' ' + plural(x.open, ['задача', 'задачи', 'задач'])),
-        x.inProgress > 0 && h('span', { class: 'muted' }, x.inProgress + ' в работе'),
-        x.waiting > 0 && h('span', { class: 'muted' }, x.waiting + ' ждут'),
-        x.overdue > 0 && h('span', { class: 'warn-text' }, x.overdue + ' просроч.')))))
+    h('div', { class: 'section-head' }, h('h2', null, 'Загрузка позиции'),
+      h('span', { class: 'muted fc-hint' }, [...new Set(rows.flatMap(x => (x.p.positionIds || []).map(id => (deptById(id) || {}).name)).filter(Boolean))].slice(0, 1).join(''))),
+    rows.length ? h('div', { class: 'card-box tl-list' }, rows.map(x => {
+      const heavy = x.overdue > 0 || x.open >= 5;
+      return h('div', { class: 'tl-row' },
+        h('div', { class: 'tl-line' }, h('span', { class: 'tl-name' }, x.p.name),
+          h('span', { class: 'tl-n' + (heavy ? ' heavy' : ''), title: [x.inProgress && x.inProgress + ' в работе', x.waiting && x.waiting + ' ждут', x.overdue && x.overdue + ' просрочено'].filter(Boolean).join(' · ') },
+            x.open + ' ' + plural(x.open, ['задача', 'задачи', 'задач']))),
+        h('div', { class: 'tl-bar' }, h('div', { class: heavy ? 'heavy' : '', style: { width: Math.min(100, Math.round(x.open / cap * 100)) + '%' } })));
+    }))
       : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Никого нет')));
 }
 
-/** Розданное лидом: этапы и прогресс их подзадач — кто, где сейчас, срок; клик — карточка. */
 export function splitBlock(d) {
   const rows = (d.lead && d.lead.split) || [];
   return h('section', null,
