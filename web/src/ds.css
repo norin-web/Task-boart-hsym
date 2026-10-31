@@ -733,3 +733,6 @@ body.sb-collapsed .panel, body.sb-collapsed .panel.center { left: 102px; }
 .rl-fields .af-row > .icon-btn { opacity: 0; width: 28px; height: 28px; }
 .rl-fields .af-row:hover > .icon-btn, .rl-fields .af-row > .icon-btn:focus-visible { opacity: 1; }
 @media (hover: none) { .rl-fields .af-row > .icon-btn { opacity: 1; } }
+
+/* Релиз: правая колонка без стрелок у выпадающих списков, как в макете */
+.panel:has(.rl-card) .props select.inp { appearance: none; -webkit-appearance: none; background-image: none; padding-left: 0; padding-right: 0; border-color: transparent; background-color: transparent; font-weight: 600; }
