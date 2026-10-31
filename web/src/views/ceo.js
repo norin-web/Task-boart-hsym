@@ -2,7 +2,7 @@
  * Дашборд CEO (главная CEO в обоих режимах): портфель приложений по статусам и юнитам, что требует внимания,
  * работы в ходу (запросы и текущий этап), что недавно вышло. Клик — карточка приложения или задача поверх.
  */
-import { S, isSuper, personById, unitById, REQUEST_TYPES, todayLabel, me, plural, fmtDate, relTime, todayStr, appStatusById } from '../state.js';
+import { S, isSuper, personById, unitById, REQUEST_TYPES, greeting, me, plural, fmtDate, relTime, todayStr, appStatusById } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, menu, modal, field } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
@@ -21,10 +21,12 @@ const daysSince = iso => Math.max(0, Math.floor((Date.now() - Date.parse(iso)) /
 const isHigh = id => { const i = prioRank(id); return i >= 0 && i >= S.priorityOptions.length - 2; };
 const daysLate = due => Math.max(1, Math.round((Date.parse(todayStr()) - Date.parse(due)) / 864e5));
 
+let editHook = null;
 export async function renderCeoHome() {
   const page = h('div', { class: 'page ceo-page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
   fill($('#main'),
-    topbar([h('h1', null, 'Дашборд')], [
+    topbar([h('h1', { class: 'screen-title' }, greeting() + (me() ? ', ' + me().name.split(' ')[0] : ''))], [
+      h('button', { class: 'btn', title: 'Блоки, статистика и свои подборки', onclick: () => editHook && editHook() }, 'Настроить'),
       isSuper() && S.apps.some(a => !a.archived) && h('button', { class: 'btn', onclick: () => openNewAppTask(load) }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Новая задача')),
       isSuper() && units().length > 0 && h('button', { class: 'btn primary', onclick: () => openCreateApp(load) }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Новое приложение'))]),
     h('div', { class: 'view-body' }, page));
@@ -38,7 +40,6 @@ export async function renderCeoHome() {
     // без юнитов показывать нечего; юниты есть, а приложений нет — дашборд целиком, сверху подсказка
     if (!units().length) {
       return fill(page,
-        h('div', { class: 'ceo-hello' }, h('h2', null, todayLabel())),
         newsBlock(),
         h('div', { class: 'card-box empty-state' },
           h('h2', null, 'Приложений пока нет'),
@@ -56,10 +57,8 @@ export async function renderCeoHome() {
       onEdit: id => openBlockEditor(customBlocks().find(b => 'c:' + b.id === id), edit),
       onDelete: id => { setCustomBlocks(customBlocks().filter(b => 'c:' + b.id !== id)); edit(); },
     });
+    editHook = edit;
     const draw = () => fill(page,
-      h('div', { class: 'ceo-hello row' }, h('h2', null, todayLabel()),
-        h('span', { class: 'spacer' }),
-        h('button', { class: 'btn ghost sm', title: 'Блоки, статистика и свои подборки', onclick: edit }, icon('layers', 14), 'Настроить')),
       !total && h('div', { class: 'card-box empty-state sm' },
         h('p', { style: { margin: 0 } }, 'Приложений пока нет — добавьте новое или уже существующие списком.'),
         isSuper() && h('div', { class: 'row', style: { justifyContent: 'center', gap: '8px' } },

@@ -1,4 +1,4 @@
-import { S, todayLabel, me, personById, plural, emptyCounts, isStaff, deptById, todayStr, fmtDate, activeDepts, ACCESS_LABELS, relTime, dueInfo } from '../state.js';
+import { S, greeting, me, personById, plural, emptyCounts, isStaff, deptById, todayStr, fmtDate, activeDepts, ACCESS_LABELS, relTime, dueInfo } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, toast, menu, closeMenu, modal } from '../ui.js';
 import { call } from '../api.js';
 import { currentView, link, navigate, taskLink, rerender } from '../router.js';
@@ -204,7 +204,7 @@ export async function renderHome() {
   const draw = () => fill(page,
     h('div', { class: 'hero' },
       h('div', null,
-        h('h1', { class: 'row', style: { gap: '10px' } }, todayLabel(), roleBadge(person)),
+        h('h1', { class: 'row', style: { gap: '10px' } }, greeting() + (person ? ', ' + person.name.split(' ')[0] : ''), roleBadge(person)),
         h('p', null, dateStr[0].toUpperCase() + dateStr.slice(1) + ' · ' + summary(st))),
       h('div', { class: 'row' },
         h('button', { class: 'btn ghost', title: 'Настроить главную под себя', onclick: () => editLayout('home', BLOCKS, page, draw) }, icon('layers', 15), 'Настроить'),
@@ -488,9 +488,9 @@ export function unitCard(u, { apps, to = 'board' } = {}) {
         : h('span', { class: 'hint' }, 'Команда не собрана')),
     h('div', { class: 'uc-foot' },
       h('div', { class: 'uc-counts' },
-        h('span', null, h('span', { class: 'dot', style: { background: 'var(--st-todo)' } }), c.todo),
-        h('span', null, h('span', { class: 'dot', style: { background: 'var(--st-progress)' } }), c.in_progress),
-        h('span', null, h('span', { class: 'dot', style: { background: 'var(--st-done)' } }), c.done),
+        h('span', null, 'К выполнению ', c.todo),
+        h('span', null, 'В работе ', c.in_progress),
+        h('span', null, 'Готово ', c.done),
         c.overdue > 0 && h('span', { style: { color: 'var(--danger)' } }, icon('alert', 12), c.overdue + ' просрочено'),
         h('span', { class: 'spacer' }),
         total > 0 && h('span', null, pct + '%')),
@@ -543,7 +543,7 @@ async function renderMemberHome() {
   ].filter(Boolean);
   const draw = () => fill(page,
     h('div', { class: 'hero' },
-      h('h1', null, todayLabel()),
+      h('h1', null, greeting() + (person ? ', ' + person.name.split(' ')[0] : '')),
       h('button', { class: 'btn ghost sm', title: 'Настроить дашборд под себя', onclick: () => editLayout('memberHome', BLOCKS, page, draw) }, icon('layers', 14), 'Настроить')),
     renderLayout('memberHome', BLOCKS));
   draw();

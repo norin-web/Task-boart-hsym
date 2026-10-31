@@ -3,7 +3,7 @@
  * «Передать в релиз»), проблемы (просрочено, долго на ревью, без исполнителя, без движения, готово к релизу)
  * и команда с KPI за неделю / месяц / квартал. Только юниты PM (видимость решает база).
  */
-import { S, me, personById, deptById, REQUEST_TYPES, LS, todayLabel, plural, fmtDate, todayStr } from '../state.js';
+import { S, me, personById, deptById, REQUEST_TYPES, LS, greeting, plural, fmtDate, todayStr } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill } from '../ui.js';
 import { call } from '../api.js';
 import { currentView } from '../router.js';
@@ -23,7 +23,7 @@ const stateOf = s => (s.done ? 'done' : s.blocked ? 'blocked' : s.kind === 'todo
 export async function renderPmHome() {
   const page = h('div', { class: 'page ceo-page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
   fill($('#main'),
-    topbar([h('h1', null, 'Дашборд')], [h('button', { class: 'btn primary', onclick: () => openCreateTask({ onCreated: load }), title: 'Новая задача (C)' }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Задача'))]),
+    topbar([h('h1', { class: 'screen-title' }, greeting() + (me() ? ', ' + me().name.split(' ')[0] : ''))], [h('button', { class: 'btn primary', onclick: () => openCreateTask({ onCreated: load }), title: 'Новая задача (C)' }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Задача'))]),
     h('div', { class: 'view-body' }, page));
   let period = PERIODS.some(([k]) => k === LS.get('kpiPeriod', '')) ? LS.get('kpiPeriod', '') : 'month';
   async function load() {
@@ -32,7 +32,6 @@ export async function renderPmHome() {
     if (currentView() !== 'home') return;
     const person = me();
     fill(page,
-      h('div', { class: 'ceo-hello' }, h('h2', null, todayLabel())),
       newsBlock(),
       inbox(d, load),
       h('div', { class: 'home-grid' },

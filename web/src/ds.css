@@ -78,3 +78,41 @@ html[data-theme="dark"] .toast { background: #fff; color: #111318; }
 .col-add { border: 1px dashed var(--border-strong); border-radius: var(--r-card); }
 .card-title { font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: -.01em; }
 .card { padding: 12px 16px; gap: 8px; }
+
+/* ---------- Шапка экрана: заголовок слева, действия справа — кнопки 44, колокольчик круглый ---------- */
+.screen-title { font-size: 32px; line-height: 40px; font-weight: 600; letter-spacing: -.02em; }
+.topbar .tb-right { gap: 8px; }
+.topbar .tb-right .btn { height: 44px; padding: 0 20px; font-size: 13px; }
+.topbar .tb-right .btn.sm { height: 44px; }
+.topbar .tb-right .icon-btn, .topbar .bell-btn { width: 44px; height: 44px; border-radius: 50%; background: var(--surface); color: var(--text); }
+.topbar .tb-right .icon-btn:hover { background: var(--surface-3); }
+
+/* ---------- Карточка юнита ---------- */
+.unit-grid { gap: 20px; }
+.unit-card { padding: 20px; gap: 12px; }
+.uc-head { gap: 12px; align-items: flex-start; }
+.uc-head > .uc-icon:not(.sm):not(.xs):not(.lg) { width: 48px; height: 48px; border-radius: 50%; font-size: 14px; font-weight: 600; }
+.uc-name { font-size: 16px; line-height: 24px; font-weight: 600; letter-spacing: -.02em; }
+.uc-key { font: 500 13px/20px var(--font); color: var(--muted); }
+.uc-desc { font-size: 13px; line-height: 20px; color: var(--text-2); }
+.uc-counts { font-size: 12px; line-height: 16px; gap: 12px; }
+.uc-counts .spacer { flex: 1; }
+.progress { height: 6px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.progress > div { height: 100%; background: var(--accent); border-radius: 999px; }
+
+/* ---------- Панель задачи: парит как сайдбар (поля 16 и 6), справа — блок полей ---------- */
+.panel { top: 16px; bottom: 16px; right: 6px; width: min(1156px, calc(100vw - 268px)); background: color-mix(in srgb, var(--surface) 94%, transparent); animation: none; }
+.panel.center { width: min(1080px, calc(100vw - 48px)); top: 50%; bottom: auto; right: auto; }
+.panel-head { border-bottom: 0; padding: 20px 24px 0; min-height: 0; }
+.crumbs { font-size: 12px; line-height: 16px; font-weight: 500; }
+.panel-body { grid-template-columns: minmax(0, 1fr) 280px; gap: 0; }
+.panel-main { padding: 8px 28px 40px 24px; }
+.panel-side { background: var(--surface-2); border: 0; border-radius: var(--r-card); margin: 8px 16px 16px 0; padding: 20px; }
+.title-inp { font-size: 28px; line-height: 36px; font-weight: 600; letter-spacing: -.02em; padding: 4px 8px; }
+.title-inp:hover { background: var(--surface-2); }
+.title-inp:focus { border-color: var(--focus); background: var(--surface); box-shadow: 0 0 0 3px var(--accent-soft); }
+.block-title { font-size: 16px; line-height: 24px; font-weight: 600; letter-spacing: -.02em; margin-bottom: 8px; }
+.desc-view { background: var(--surface-2); border-radius: var(--r-lg); padding: 12px 16px; margin: 0; line-height: 20px; }
+.desc-view:hover { background: var(--surface-3); }
+.desc-empty { border-radius: var(--r-lg); border: 1px dashed var(--border-strong); }
+.cl-item { padding: 4px 6px; }

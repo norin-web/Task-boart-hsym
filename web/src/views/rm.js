@@ -2,7 +2,7 @@
  * Дашборд RM (главная RM): очередь на релиз (переданные PM — чего не хватает до отправки), на ревью Apple (сколько ждут;
  * «Вышло в стор» / «Реджект» прямо здесь), реджекты (причина, кто исправляет; «Отправить снова»). Клик — карточка релиза.
  */
-import { me, personById, todayLabel, plural, relTime } from '../state.js';
+import { me, personById, greeting, plural, relTime } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, toast, confirmDlg } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
@@ -17,7 +17,7 @@ const days = iso => Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 864e
 export async function renderRmHome() {
   const page = h('div', { class: 'page ceo-page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
   fill($('#main'),
-    topbar([h('h1', null, 'Релизы')], [
+    topbar([h('h1', { class: 'screen-title' }, greeting() + (me() ? ', ' + me().name.split(' ')[0] : ''))], [
       h('button', { class: 'btn sm', title: 'Все релизы: сводка за период, фильтры', onclick: openReleaseHistory }, icon('clock', 14), h('span', { class: 'btn-label' }, 'История')),
       h('button', { class: 'btn sm', onclick: openReleaseSettings }, icon('settings', 14), h('span', { class: 'btn-label' }, 'Настроить релиз'))]),
     h('div', { class: 'view-body' }, page));
@@ -28,7 +28,6 @@ export async function renderRmHome() {
     if (currentView() !== 'home') return;
     const person = me();
     fill(page,
-      h('div', { class: 'ceo-hello' }, h('h2', null, todayLabel())),
       newsBlock(),
       // свои приложения и задачи «в фокусе» — статус обновляется сам
       watchBlock([], { openApp: id => openAppById(id, load), openTask: peekTask, appIcon, appStatusCell, stageDots, release: true, prioTag }),
