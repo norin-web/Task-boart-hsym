@@ -416,3 +416,20 @@ section:has(> .section-head + .card-box) > .card-box.empty-state { padding: 12px
 .pal-item.sel { background: var(--surface-3); }
 .pal-item .hint { font-family: var(--font); font-size: 12px; font-weight: 500; color: var(--muted); }
 .palette-foot { padding: 10px 20px; }
+
+/* ---------- Релизы (RM): сетка 2×2, пустые состояния по центру ---------- */
+.rm-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .rm-grid { grid-template-columns: minmax(0, 1fr); } }
+.rm-row { display: flex; align-items: center; gap: 12px; min-height: 60px; border-bottom: 1px solid var(--border); padding: 8px 0; }
+.rm-row:last-child { border-bottom: 0; }
+.rm-main { flex: 1; min-width: 0; display: grid; text-align: left; }
+.rm-title { font-size: 13px; line-height: 20px; font-weight: 600; display: flex; gap: 6px; align-items: center; }
+.rm-actions { display: flex; gap: 8px; align-items: center; flex: none; }
+.rq-line { font-size: 12px; line-height: 16px; font-weight: 500; }
+.ok-text { color: var(--accent-text); }
+.warn-text { color: var(--warn); }
+.empty-state.center { display: grid; justify-items: center; text-align: center; gap: 4px; padding: 24px 16px; }
+.empty-state.center b { font-size: 14px; line-height: 20px; font-weight: 600; }
+.empty-state.center .i { color: var(--accent-text); width: 24px; height: 24px; }
+.empty-state.center p { font-size: 12px; line-height: 16px; margin: 0; }
+section:has(> .section-head + .card-box.empty-state.center) > .card-box { padding: 0; }
