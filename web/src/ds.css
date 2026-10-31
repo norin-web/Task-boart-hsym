@@ -558,3 +558,41 @@ section:has(> .section-head + .pl-list) > .section-head { margin-bottom: 12px; }
 .flow-block .progress { height: 6px; }
 .modal-foot .btn:not(.primary):not(.danger):not(.success) { background: transparent; border-color: transparent; }
 .modal-foot .btn:not(.primary):not(.danger):not(.success):hover { background: var(--surface-2); }
+
+/* =====================================================================
+   Исправления по ревью заказчика
+   ===================================================================== */
+/* Переключатель «Обзор / Полный» — пилюля в пилюле, 2 px (макет: A2T) */
+.ceo-mode .seg { border-radius: 999px; padding: 2px; gap: 0; }
+.ceo-mode .seg button { border-radius: 999px; flex: 1; justify-content: center; background: transparent; color: var(--sidebar-text); font-size: 12px; line-height: 16px; font-weight: 600; }
+.ceo-mode .seg button.on { background: var(--sidebar-active); color: #fff; box-shadow: none; }
+/* «Проверка App Store»: капсула 72, внутри только её отступ 14 */
+.store-check.compact { padding: 14px; height: 72px; overflow: visible; display: flex; align-items: center; }
+.store-check.compact .sc-head { padding: 0; width: 100%; border: 0; min-height: 0; background: transparent; }
+.store-check.compact .sc-title { display: flex; flex-direction: column; justify-content: center; flex: 1; min-width: 0; height: auto; }
+.store-check.compact.has-gone { height: auto; }
+.store-check .sc-sub { color: var(--muted); }
+
+/* «Приложения»: заголовок таблицы и группы — одна белая карточка 28 */
+.apps-page { gap: 16px; }
+.apps-page > .ap-head { background: var(--surface); border-radius: var(--r-card) var(--r-card) 0 0; padding: 0 28px; height: 44px; align-items: center; margin: 0 0 -16px; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 500; }
+.apps-page > .ap-group { background: var(--surface); margin: 0 0 -16px; padding: 4px 12px 0; }
+.apps-page > .ap-group.open:last-child, .apps-page > .ap-group:last-child { border-radius: 0 0 var(--r-card) var(--r-card); padding-bottom: 12px; margin-bottom: 0; }
+.apps-page > .ap-group + .ap-group { margin-top: 0; }
+.ap-group-head { margin: 0; padding: 10px 8px; width: 100%; font-size: 14px; font-weight: 600; gap: 8px; border-radius: var(--r-lg); }
+.ap-group .ap-row { background: transparent; border: 0; border-radius: var(--r-lg); box-shadow: none; min-height: 58px; padding: 6px 16px; }
+.ap-group .ap-row:hover { background: var(--surface-2); box-shadow: none; }
+.ap-group .ap-row.picked { background: var(--selected); }
+.ap-group .ap-row.has-prio, .ap-group .ap-row.has-prio:hover { box-shadow: none; }
+.ap-group .ap-row .uc-icon.app-img { width: 36px; height: 36px; border-radius: var(--r); }
+.ap-names b { font-size: 14px; line-height: 20px; font-weight: 600; }
+.ap-names small { font-size: 12px; line-height: 16px; }
+
+/* Сайдбар по числам макета: подпись раздела 24 под разделителем, строка аккаунта 44 с аватаром 32 */
+.nav-section { margin-top: 4px; padding: 4px 12px; border-top: 0; position: relative; height: 24px; align-items: center; }
+.nav-section::before { content: ''; position: absolute; left: 0; right: 0; top: -6px; height: 1px; background: var(--sidebar-border); }
+.nav-item.me { height: 44px; min-height: 44px; margin-top: 12px; padding: 0 8px; border-radius: 999px; border-top: 0; position: relative; }
+.nav-item.me::before { content: ''; position: absolute; left: 0; right: 0; top: -7px; height: 1px; background: var(--sidebar-border); }
+.nav-item.me .avatar { width: 32px; height: 32px; font-size: 12px; }
+.nav-item.me .nav-label b, .nav-item.me b { font-size: 13px; line-height: 20px; font-weight: 600; color: var(--sidebar-on-active); }
+.nav-item.me small { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--sidebar-text); }
