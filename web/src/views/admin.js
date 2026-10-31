@@ -115,23 +115,23 @@ function unitsTable(ov) {
   const units = S.units.filter(u => !u.archived).sort(byOrder);
   const noTeam = new Set(ov ? ov.unitsNoTeam : []);
   const list = h('div', { class: 'un-list' });
-  const draw = () => fill(list, units.length ? units.map(u => {
-    const c = u.counts || emptyCounts();
-    const people = (u.members || []).map(personById).filter(p => p && p.active);
-    const rv = unitReviewers(u);
-    return h('button', { class: 'un-row', onclick: () => openUnitPanel(u, draw) },
-      h('span', { class: 'un-name' }, h('span', { class: 'uc-icon sm', style: { background: u.color } }, u.key.slice(0, 2)),
-        h('b', null, u.name), h('span', { class: 'muted' }, u.key)),
-      h('span', { class: 'un-col' }, h('span', { class: 'un-k' }, 'Люди'),
-        people.length ? h('span', { class: 'avatars-stack' }, people.slice(0, 5).map(p => avatar(p, 'sm')))
-          : h('span', { class: noTeam.has(u.id) ? 'warn-text' : 'muted' }, 'никого')),
-      h('span', { class: 'un-col' }, h('span', { class: 'un-k' }, 'Задачи'),
-        h('span', null, h('b', null, c.todo + c.in_progress), ' открыто · ' + (c.todo + c.in_progress + c.done) + ' всего',
-          c.overdue > 0 && h('span', { class: 'warn-text' }, ' · ' + c.overdue + ' просроч.'))),
-      h('span', { class: 'un-col' }, h('span', { class: 'un-k' }, 'Ревьюер'),
-        rv.length ? h('span', null, rv.map(p => p.name.split(' ')[0]).join(', ')) : h('span', { class: 'muted' }, '—')),
-      icon('chevron', 15));
-  }) : h('div', { class: 'card-box empty-state' },
+  const draw = () => fill(list, units.length ? [
+    h('div', { class: 'un-th' }, ['Юнит', 'Люди', 'Задачи', 'Ревьюер', ''].map(t => h('span', null, t))),
+    ...units.map(u => {
+      const c = u.counts || emptyCounts();
+      const people = (u.members || []).map(personById).filter(p => p && p.active);
+      const rv = unitReviewers(u);
+      return h('div', { class: 'un-row', role: 'row' },
+        h('span', { class: 'un-name' }, h('span', { class: 'uc-icon', style: { background: u.color } }, u.key.slice(0, 2)),
+          h('span', { class: 'un-title' }, h('b', null, u.name), h('small', { class: 'muted' }, u.description || u.key))),
+        h('span', { class: 'un-num', title: noTeam.has(u.id) ? 'В юните никого нет' : '' }, people.length || h('span', { class: 'warn-text' }, '0')),
+        h('span', { class: 'un-num' }, (c.todo + c.in_progress) + ' открыто', c.overdue > 0 && h('small', { class: 'warn-text' }, ' · ' + c.overdue + ' просроч.')),
+        rv.length ? h('span', { class: 'un-rv' }, rv.map(p => p.name.split(' ').slice(0, 2).join(' ')).slice(0, 2).join(', '))
+          : h('span', { class: 'un-rv warn-text' }, icon('alert', 14), 'Нет ревьюеров'),
+        h('span', { class: 'un-actions' },
+          link({ unit: u.id, mode: 'settings' }, { class: 'link-btn muted' }, 'Настройки'),
+          h('button', { class: 'btn', onclick: () => openUnitPanel(u, draw) }, 'Открыть')));
+    })] : h('div', { class: 'card-box empty-state' },
     h('h2', null, 'Юнитов пока нет'),
     h('p', { style: { margin: 0 } }, 'Юниты — направления студии (Gold, RF, MVP…): в них приложения, PM, RM, лиды и сотрудники.'),
     isSuper() && h('button', { class: 'btn primary', onclick: openCreateUnit }, icon('plus', 15), 'Создать юнит')));

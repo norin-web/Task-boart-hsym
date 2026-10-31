@@ -510,3 +510,23 @@ section:has(> .section-head + .pl-list) > .section-head { margin-bottom: 12px; }
 .an-grid table { width: 100%; font-size: 12px; }
 .an-grid th, .an-grid td { padding-inline: 6px; white-space: nowrap; }
 .an-grid .card-box { overflow-x: auto; }
+
+/* ---------- Настройки → Юниты: одна таблица в белой карточке ---------- */
+.un-list { background: var(--surface); border-radius: var(--r-card); padding: 8px 20px; display: grid; }
+.un-th, .un-list .un-row { display: grid; grid-template-columns: minmax(0, 2.4fr) 90px 150px minmax(0, 1.4fr) 190px; align-items: center; gap: 16px; }
+.un-th { height: 40px; font-size: 12px; font-weight: 500; color: var(--muted); border-bottom: 1px solid var(--border); }
+.un-list .un-row { min-height: 64px; padding: 0; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; width: 100%; text-align: left; cursor: default; }
+.un-list .un-row:last-child { border-bottom: 0; }
+.un-list .un-row:hover { background: transparent; }
+.un-name { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.un-name .uc-icon { width: 36px; height: 36px; border-radius: 50%; font-size: 12px; font-weight: 600; }
+.un-title { display: grid; min-width: 0; }
+.un-title b { font-size: 13px; line-height: 20px; font-weight: 600; }
+.un-title small { font-size: 12px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.un-num { font-size: 13px; font-weight: 600; }
+.un-num small { font-weight: 500; }
+.un-rv { font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
+.un-rv.warn-text { font-weight: 600; }
+.un-actions { display: flex; align-items: center; gap: 12px; justify-content: flex-end; }
+.un-actions .link-btn { font-weight: 500; }
+@media (max-width: 900px) { .un-th { display: none; } .un-th, .un-list .un-row { grid-template-columns: minmax(0, 1fr) auto; } .un-list .un-num, .un-list .un-rv { display: none; } }
