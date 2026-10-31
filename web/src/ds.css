@@ -405,3 +405,14 @@ section:has(> .section-head + .card-box) > .card-box.empty-state { padding: 12px
 .modal .grid2 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .modal .grid2 .field > label { font-size: 12px; font-weight: 500; color: var(--muted); }
 .modal .prio-select, .modal .assignee-select { background: var(--bg); border-radius: var(--r-lg); height: 40px; border: 1px solid transparent; }
+
+/* ---------- Поиск ⌘K: 640, радиус 28, строки 44, группы без капса ---------- */
+.palette { width: min(640px, 100%); border-radius: var(--r-card); }
+.palette-top { padding: 0 20px; gap: 12px; border-bottom: 1px solid var(--border); }
+.palette-inp { padding: 18px 0; font-size: 16px; line-height: 24px; font-weight: 500; }
+.palette-list { padding: 8px; }
+.pal-group { text-transform: none; letter-spacing: 0; font-size: 12px; line-height: 16px; font-weight: 600; padding: 12px 12px 4px; color: var(--muted); }
+.pal-item { min-height: 44px; border-radius: var(--r-lg); padding: 0 12px; font-size: 14px; font-weight: 500; }
+.pal-item.sel { background: var(--surface-3); }
+.pal-item .hint { font-family: var(--font); font-size: 12px; font-weight: 500; color: var(--muted); }
+.palette-foot { padding: 10px 20px; }
