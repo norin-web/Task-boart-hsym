@@ -1,8 +1,8 @@
 import {
   S, LS, me, taskById, personById, activeFields, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDateTime, relTime, addDays,
-  unitById, safeUrl, visibleLinkFields, REQUEST_TYPES, appById, isSuper, ceoDefault, KIND_COLORS, whoName, teamById, activeTeams, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, fmtValue,
+  unitById, safeUrl, visibleLinkFields, REQUEST_TYPES, plural, appById, isSuper, ceoDefault, KIND_COLORS, whoName, teamById, activeTeams, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, fmtValue,
 } from '../state.js';
-import { $, h, append, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, fill, prioSelect } from '../ui.js';
+import { $, h, append, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, statusIcon, fill, prioSelect } from '../ui.js';
 import { call, send } from '../api.js';
 import { navigate, rerender } from '../router.js';
 import { renderTasks, patchTask, reloadBoard, loadBoard, canRecall, recallReview } from './board.js';
@@ -184,12 +184,12 @@ function flowBlock(t) {
     return blocked ? 'blocked' : n.statusKind === 'todo' ? 'todo' : 'progress';
   };
   const LABEL = { done: 'готово', progress: 'в работе', blocked: 'ждёт предыдущих', todo: 'не начато' };
-  const ICON = { done: 'check', progress: 'progress', blocked: 'lock', todo: 'circle' };
+  let expanded = false; // как в макете: три этапа вокруг текущего, остальные — «Ещё N этапа · Показать»
   const stageRow = (n, all) => {
     const st = stateOf(n, all);
     const releaseReady = n.step === 'release' && !n.assigneeId && st !== 'blocked' && st !== 'done';
     return h('div', { class: 'rq-stage st-' + st + (n.id === t.id ? ' current' : '') },
-      h('span', { class: 'rq-ic', title: LABEL[st] }, icon(ICON[st], 13)),
+      h('span', { class: 'rq-ic', title: LABEL[st] }, statusIcon(st === 'blocked' ? 'todo' : st, 16)),
       h('button', { class: 'link-btn rq-stitle', onclick: () => peekTask(n.unit.id, n.id) }, n.title.split(' · ')[0]),
       h('span', { class: 'muted rq-state' }, LABEL[st]),
       releaseReady && manage
@@ -215,7 +215,16 @@ function flowBlock(t) {
       waits.length > 0 && h('div', { class: 'readonly-note flow-wait' }, icon('lock', 14),
         h('span', null, 'Этап заблокирован: сначала закройте ', h('b', null, waits.join(', ')), '. До этого его нельзя сдвинуть из «не начато».')),
       stages.length > 0 && h('div', { class: 'progress' }, h('div', { style: { width: Math.round(done / stages.length * 100) + '%' } })),
-      stages.length > 0 && h('div', { class: 'rq-stages' }, stages.map(n => stageRow(n, stages))),
+      stages.length > 0 && h('div', { class: 'rq-stages' }, (() => {
+        const cur = stages.findIndex(n => n.id === t.id);
+        const vis = expanded ? stages.length : Math.min(stages.length, Math.max(3, cur + 3));
+        const hidden = stages.length - vis;
+        return [stages.slice(0, vis).map(n => stageRow(n, stages)),
+          (hidden > 0 || expanded) && stages.length > 3 && h('button', { class: 'rq-more', onclick: () => { expanded = !expanded; load(); } },
+            h('span', { class: 'rq-ic' }, statusIcon('todo', 16)),
+            h('span', { class: 'rq-stitle' }, expanded ? 'Свернуть' : `Ещё ${hidden} ${plural(hidden, ['этап', 'этапа', 'этапов'])}`),
+            h('span', { class: 'muted rq-state' }, expanded ? '' : 'Показать'))];
+      })()),
       t.kind === 'request' && !stages.length && h('div', { class: 'rq-empty' },
         h('span', { class: 'muted' }, manage ? 'Разложите задачу по этапам: дизайн → тексты → iOS и тестирование → релиз.' : 'PM ещё не разложил задачу по этапам.'),
         manage && h('button', { class: 'btn primary sm', onclick: () => import('./apps.js')

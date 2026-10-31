@@ -546,3 +546,13 @@ section:has(> .section-head + .pl-list) > .section-head { margin-bottom: 12px; }
 .pf-val:nth-last-child(-n+2) { border-bottom: 0; }
 .pf-val small { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); }
 .pf-val b { font-size: 14px; line-height: 20px; font-weight: 600; }
+.rq-stages { display: grid; gap: 2px; margin-top: 8px; }
+.rq-stage, .rq-more { display: flex; align-items: center; gap: 12px; min-height: 36px; padding: 0 8px; border-radius: var(--r); border: 0; background: transparent; width: 100%; text-align: left; font: inherit; color: var(--text); }
+.rq-stage.current { background: var(--selected); }
+.rq-stitle { flex: 1; min-width: 0; font-size: 13px; line-height: 20px; font-weight: 500; }
+.rq-stage.current .rq-stitle { font-weight: 600; }
+.rq-state { font-size: 12px; font-weight: 500; }
+.rq-more { cursor: pointer; }
+.rq-more:hover { background: var(--surface-2); }
+.flow-block { background: var(--surface); border-radius: var(--r-xl); padding: 16px; }
+.flow-block .progress { height: 6px; }
