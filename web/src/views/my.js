@@ -8,7 +8,7 @@ let query = '';
 
 export async function renderMy() {
   const page = h('div', { class: 'page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
-  fill($('#main'), topbar([h('h1', { class: 'screen-title' }, 'Мои задачи')],
+  fill($('#main'), topbar([h('h1', null, 'Мои задачи')],
     [isStaff() && h('button', { class: 'btn primary', onclick: () => import('./task.js').then(m => m.openCreateTask()) }, 'Задача')]),
   h('div', { class: 'view-body' }, page));
 

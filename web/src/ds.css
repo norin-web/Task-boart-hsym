@@ -479,3 +479,15 @@ section:has(> .section-head + .pl-list) > .section-head { margin-bottom: 12px; }
 .trow-due.danger-text { color: var(--danger); font-weight: 600; }
 .trow .st-ic { flex: none; }
 @media (max-width: 760px) { .trow-status, .trow-key { display: none; } .trow-due { width: auto; } .my-toggle { margin-left: 0; } }
+
+/* ---------- Моя доска ---------- */
+.mb-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 16px 16px 0 24px; }
+.mb-controls .my-search { height: 32px; width: 200px; padding: 0 12px; font-size: 12px; }
+.mb-controls .fchip .dot { width: 6px; height: 6px; }
+.mb-controls .btn.lg { height: 32px; padding: 0 14px; font-size: 12px; background: var(--surface); border-color: transparent; }
+.my-key { display: flex; align-items: center; gap: 6px; }
+.my-key .dot { width: 6px; height: 6px; }
+.my-card .card-foot { margin-top: 0; }
+.my-card .due { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: var(--muted); }
+.my-card .due.overdue { color: var(--danger); font-weight: 600; }
+.my-nodue { font-size: 12px; }

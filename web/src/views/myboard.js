@@ -6,8 +6,8 @@
  * Свои колонки — people.prefs.myBoard.custom [{ id, name, group, color }]; старт — шаблон моей команды.
  */
 import Sortable from 'sortablejs';
-import { S, me, activeTeams, between, dueInfo, todayStr, PALETTE } from '../state.js';
-import { $, h, icon, topbar, fill, modal, showErr, statusDot, confirmDlg, menu, closeMenu, toast } from '../ui.js';
+import { S, me, activeTeams, between, dueInfo, todayStr, PALETTE, isStaff } from '../state.js';
+import { $, h, icon, topbar, fill, modal, showErr, statusDot, statusIcon, confirmDlg, menu, closeMenu, toast } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
@@ -58,20 +58,33 @@ function myCustom() {
 const allColumns = custom => FIXED.flatMap(f => [{ ...f, fixed: true }, ...custom.filter(c => c.group === f.group).map(c => ({ ...c, fixed: false }))]);
 
 let sortables = [];
+let mbQuery = '';
+let mbUnit = '';
 
 export async function renderMyBoard() {
-  const page = h('div', { class: 'board-wrap myboard' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
-  fill($('#main'),
-    topbar([h('h1', null, 'Моя доска')], [
-      h('button', { class: 'btn ghost', onclick: () => editColumns(() => renderMyBoard()) }, icon('settings', 15), h('span', { class: 'btn-label' }, 'Колонки')),
-    ]),
-    h('div', { class: 'view-body' }, page));
+  const host = h('div', { class: 'board-wrap myboard' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
+  const controls = h('div', { class: 'mb-controls' });
+  const top = () => topbar([h('h1', null, 'Моя доска')], [
+    isStaff() && h('button', { class: 'btn primary', onclick: () => import('./task.js').then(m => m.openCreateTask()) }, 'Задача'),
+  ]);
+  fill($('#main'), top(), h('div', { class: 'view-body' }, controls, host));
   let data;
   try {
     data = await call('getMyBoard', { personId: S.meId, today: todayStr() });
   } catch (e) { showErr(e); return; }
   if (currentView() !== 'myboard') return;
-  draw(page, data);
+  $('#main .topbar').replaceWith(top()); // роль известна только после загрузки людей
+  const drawControls = () => fill(controls,
+    h('label', { class: 'my-search' }, icon('search', 15),
+      h('input', { type: 'search', placeholder: 'Поиск по задачам', value: mbQuery, oninput: e => { mbQuery = e.target.value; draw(host, data); } })),
+    data.units.length > 1 && [
+      h('button', { class: 'fchip' + (mbUnit ? '' : ' on'), onclick: () => { mbUnit = ''; drawControls(); draw(host, data); } }, 'Все юниты'),
+      data.units.map(u => h('button', { class: 'fchip' + (mbUnit === u.id ? ' on' : ''), onclick: () => { mbUnit = mbUnit === u.id ? '' : u.id; drawControls(); draw(host, data); } },
+        h('span', { class: 'dot', style: { background: u.color } }), u.name))],
+    h('span', { class: 'spacer' }),
+    h('button', { class: 'btn lg', onclick: () => editColumns(() => renderMyBoard()) }, icon('plus', 14), 'Своя колонка'));
+  drawControls();
+  draw(host, data);
 }
 
 /** Группа задачи по её статусу в юните: не начато / в работе / на ревью (колонка ревью юнита) / готово. */
@@ -99,17 +112,18 @@ function draw(page, data) {
   sortables = [];
   const cols = allColumns(myCustom());
   const unitById = id => data.units.find(u => u.id === id);
-  const items = data.tasks.map(t => ({ t, ...placeOf(data, cols, t) }));
+  const q = mbQuery.trim().toLowerCase();
+  const items = data.tasks.filter(t => (!mbUnit || t.unitId === mbUnit) && (!q || t.title.toLowerCase().includes(q))).map(t => ({ t, ...placeOf(data, cols, t) }));
 
   const card = ({ t }) => {
     const u = unitById(t.unitId);
     const due = dueInfo(t.dueDate, groupOf(data, t) === 'done');
     return h('article', { class: 'card my-card', dataset: { id: t.id }, tabindex: '0', onclick: () => peekTask(t.unitId, t.id) },
+      u && h('div', { class: 'card-sub my-key', title: u.name }, h('span', { class: 'dot', style: { background: u.color } }), u.key + '-' + t.num),
       h('div', { class: 'card-title' }, t.title),
       h('div', { class: 'card-foot' },
-        u && h('span', { class: 'my-unit', title: 'Юнит' }, h('span', { class: 'dot', style: { background: u.color } }), u.name),
+        due ? h('span', { class: 'due ' + due.cls, title: due.hint }, icon('calendar', 14), due.text) : h('span', { class: 'muted my-nodue' }, 'Без срока'),
         h('span', { class: 'spacer' }),
-        due && h('span', { class: 'due ' + due.cls, title: due.hint }, icon('calendar', 12), due.text),
         // я ревьюер — решение прямо на карточке
         t.assigneeId === S.meId && t.reviewFrom && t.reviewFrom !== S.meId && groupOf(data, t) === 'review' && h('span', { class: 'my-review' }, reviewButtons(t, () => renderMyBoard())),
         // отправил на ревью сам — можно забрать обратно (что-то забыл)
@@ -129,7 +143,7 @@ function draw(page, data) {
     }));
     const color = c.color || FIXED.find(f => f.group === c.group).color;
     return h('section', { class: 'col' + (c.fixed ? ' fixed' : ' own'), style: { '--cc': color } },
-      h('div', { class: 'col-head' }, statusDot(color, 9),
+      h('div', { class: 'col-head' }, c.fixed ? statusIcon(c.group, 16) : statusDot(color, 9),
         h('span', { class: 'col-name', title: c.fixed ? 'Обязательная колонка — по ней меняется статус в юните' : 'Ваша колонка · считается как «' + FIXED.find(f => f.group === c.group).name + '»' }, c.name),
         h('span', { class: 'col-count' }, mine.length)),
       list);
