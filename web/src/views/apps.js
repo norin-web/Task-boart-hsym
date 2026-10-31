@@ -1097,7 +1097,7 @@ export function storeCheckBlock(apps, reload, { compact = false } = {}) {
       toast(r.gone ? `Нет в App Store: ${r.gone}` : 'Все приложения открываются в App Store' + (r.failed ? ` · не удалось проверить ${r.failed}` : ''), r.gone ? { type: 'error' } : {});
       reload();
     } catch (e) { showErr(e); btn.disabled = false; }
-  } }, icon('refresh', 14), 'Обновить');
+  } }, 'Обновить');
   // дашборд: заголовок секции как у соседних блоков (с «Обновить»), в карточке — итог; пропавшие — выпадающим списком по красной кнопке
   if (compact) {
     const box = h('div', { class: 'store-check compact' + (gone.length ? ' has-gone' : '') });
