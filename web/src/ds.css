@@ -596,3 +596,4 @@ section:has(> .section-head + .pl-list) > .section-head { margin-bottom: 12px; }
 .nav-item.me .avatar { width: 32px; height: 32px; font-size: 12px; }
 .nav-item.me .nav-label b, .nav-item.me b { font-size: 13px; line-height: 20px; font-weight: 600; color: var(--sidebar-on-active); }
 .nav-item.me small { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--sidebar-text); }
+.nav-sep { height: 1px; background: var(--sidebar-border); margin: 4px 0; flex: none; }

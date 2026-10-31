@@ -145,7 +145,6 @@ function drawSidebar() {
       [['default', 'Обзор', 'Приложения и приоритеты — без деталей разработки'], ['admin', 'Полный', 'Всё: доски, задачи, настройки юнитов']].map(([m, label, hint]) =>
         h('button', { class: ceoMode() === m ? 'on' : '', role: 'radio', 'aria-checked': String(ceoMode() === m), title: hint, onclick: () => setCeoMode(m) }, label)))),
     h('button', { class: 'search-btn', onclick: openPalette }, icon('search', 15), h('span', null, 'Поиск'), h('kbd', null, isMac ? '⌘K' : 'Ctrl K')),
-    sec('Главное'),
     navLink({ view: 'home' }, person && person.access === 'rm' ? 'rocket' : 'home', staff ? 'Дашборд' : person && person.access === 'rm' ? 'Релизы' : 'Мой дашборд'),
     seesApps() && navLink({ view: 'apps' }, 'app', 'Приложения'),
     staff && navLink({ view: 'analytics' }, 'chart', 'Аналитика'),
@@ -156,14 +155,13 @@ function drawSidebar() {
     !units.length && ceo && h('button', { class: 'nav-item', onclick: openCreateUnit }, icon('plus'), h('span', { class: 'nav-label muted' }, 'Новый юнит')),
     !units.length && !ceo && h('div', { class: 'nav-empty' }, 'Пока нет юнитов'),
     h('div', { class: 'nav-spacer' }),
-    sec('Другое'),
+    h('div', { class: 'nav-sep', role: 'separator' }),
     isDev() && h('button', {
       class: 'nav-item dev-item' + (isHere(r, { view: 'dev' }) ? ' active' : ''), title: 'Смотреть как, быстрые сценарии, тестовые данные',
       onclick: () => import('./dev.js').then(m => m.openDevPanel()),
     }, icon('code'), h('span', { class: 'nav-label' }, 'Режим разработчика'), h('kbd', null, isMac ? '⌥D' : 'Alt D')),
-    h('button', { class: 'nav-item', onclick: cycleTheme, title: 'Переключить тему' }, icon(themeIcon), h('span', { class: 'nav-label' }, themeLabel)),
     h('button', { class: 'nav-item me', onclick: e => meMenu(e.currentTarget), title: 'Аккаунт', 'aria-haspopup': 'menu' },
-      avatar(person, 'sm'),
+      avatar(person, 'lg'),
       h('span', { class: 'nav-label me-label' }, h('span', null, person ? person.name : '—'),
         person && h('small', null, (S.session && S.session.user.email) || personCaption(person) || ACCESS_LABELS[person.access])),
       icon('chevron', 14)));
@@ -205,6 +203,7 @@ function meMenu(anchor) {
       avatar(p), h('span', { class: 'me-card-text' }, h('b', null, email || p.name), h('small', { class: 'muted' }, ACCESS_LABELS[p.access]))),
     { sep: true },
     { label: 'Настройки', icon: 'settings', action: () => navigate({ view: 'settings' }) },
+    { label: (THEMES[LS.get('theme', 'auto')] || THEMES.auto)[0], icon: (THEMES[LS.get('theme', 'auto')] || THEMES.auto)[1], action: cycleTheme },
     mode === 'local' && { title: 'Локальный режим: данные только в этом браузере' },
     mode === 'local' && { label: 'Войти как…', icon: 'users', action: openActAs },
     mode === 'local' && { sep: true },
