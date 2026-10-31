@@ -467,11 +467,15 @@ export function unitCard(u, { apps, to = 'board' } = {}) {
   const c = u.counts || emptyCounts();
   const total = c.todo + c.in_progress + c.done;
   const pct = total ? Math.round((c.done / total) * 100) : 0;
-  return link({ unit: u.id, mode: to }, { class: 'unit-card', dataset: { id: u.id } },
+  const people = (u.members || []).length;
+  const sub = [apps != null ? apps + ' ' + plural(apps, ['приложение', 'приложения', 'приложений']) : u.key,
+    people ? people + ' ' + plural(people, ['участник', 'участника', 'участников']) : 'команда не собрана'].join(' · ');
+  return link({ unit: u.id, mode: to }, { class: 'unit-card', dataset: { id: u.id },
+    title: `К выполнению ${c.todo} · В работе ${c.in_progress} · Готово ${c.done}` },
     h('div', { class: 'uc-head' },
       h('div', { class: 'uc-icon', style: { background: u.color } }, u.key.slice(0, 2)),
       h('div', { class: 'uc-title' }, h('div', { class: 'uc-name' }, u.name),
-        h('div', { class: 'uc-key' }, apps != null ? apps + ' ' + plural(apps, ['приложение', 'приложения', 'приложений']) : u.key)),
+        h('div', { class: 'uc-key' }, sub, c.overdue > 0 && h('span', { class: 'uc-late' }, ' · ' + c.overdue + ' просрочено'))),
       isStaff() && h('button', {
         class: 'icon-btn sm uc-add', title: 'Новая задача в ' + u.name,
         onclick: e => { e.preventDefault(); e.stopPropagation(); openCreateTask({ unitId: u.id, onCreated: () => rerender() }); },
@@ -481,20 +485,9 @@ export function unitCard(u, { apps, to = 'board' } = {}) {
         onclick: e => { e.preventDefault(); e.stopPropagation(); unitMenu(e.currentTarget, u); },
       }, icon('more'))),
     u.description && h('div', { class: 'uc-desc' }, u.description),
-    h('div', { class: 'uc-team' },
-      (u.members || []).length
-        ? [h('span', { class: 'avatars-stack' }, u.members.slice(0, 6).map(id => avatar(personById(id), 'sm')), u.members.length > 6 && h('span', { class: 'avatar sm more' }, '+' + (u.members.length - 6))),
-          h('span', { class: 'hint' }, u.members.length + ' ' + plural(u.members.length, ['участник', 'участника', 'участников']))]
-        : h('span', { class: 'hint' }, 'Команда не собрана')),
     h('div', { class: 'uc-foot' },
-      h('div', { class: 'uc-counts' },
-        h('span', null, 'К выполнению ', c.todo),
-        h('span', null, 'В работе ', c.in_progress),
-        h('span', null, 'Готово ', c.done),
-        c.overdue > 0 && h('span', { style: { color: 'var(--danger)' } }, icon('alert', 12), c.overdue + ' просрочено'),
-        h('span', { class: 'spacer' }),
-        total > 0 && h('span', null, pct + '%')),
-      h('div', { class: 'progress', title: 'Выполнено ' + pct + '%' }, h('div', { style: { width: pct + '%' } }))));
+      h('div', { class: 'progress', title: 'Выполнено ' + pct + '%' }, h('div', { style: { width: pct + '%' } })),
+      h('span', { class: 'uc-pct' }, pct + '%')));
 }
 
 

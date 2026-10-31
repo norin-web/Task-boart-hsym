@@ -104,7 +104,7 @@ export function releaseBlock(t, onChange) {
     !phase && h('button', { class: 'btn primary sm', disabled: !ready, title: ready ? '' : 'Сначала поля и чеклист', onclick: async () => { await load(); step(hist.length ? 'resubmit' : 'submit'); } },
       icon('send', 14), hist.length ? 'Отправить снова' : 'Отправить в Apple'),
     phase === 'submitted' && [
-      h('button', { class: 'btn ghost danger sm', onclick: () => openRejectForm(t, data.app && data.app.name, data.nextRejectNo, () => { load(); if (onChange) onChange(); }) }, 'Реджект'),
+      h('button', { class: 'btn danger solid sm', onclick: () => openRejectForm(t, data.app && data.app.name, data.nextRejectNo, () => { load(); if (onChange) onChange(); }) }, 'Реджект'),
       h('button', { class: 'btn success sm', onclick: () => step('live') }, icon('rocket', 14), 'Вышло в стор')],
     phase === 'rejected' && [
       h('button', { class: 'btn ghost sm', onclick: () => step('resubmit') }, 'Отправить сейчас'),
@@ -160,7 +160,7 @@ export function releaseBlock(t, onChange) {
         !ready && h('p', { class: 'rl-line muted' }, icon('circle', 14),
           [missing.length && 'заполните ' + missing.map(f => f.name.toLowerCase()).join(', '), clOpen && `закройте чеклист (${clOpen})`].filter(Boolean).join(' · '))),
       phase === 'submitted' && h('div', { class: 'rl-now' },
-        h('p', { class: 'rl-line' }, icon('eye', 14), h('b', null, 'На ревью Apple'),
+        h('p', { class: 'rl-line' }, h('span', { class: 'phase-pill' }, icon('eye', 14), 'На ревью Apple'),
           h('span', { class: 'muted' }, daysSince(rel.submittedAt) ? `· ${daysSince(rel.submittedAt)} ${plural(daysSince(rel.submittedAt), ['день', 'дня', 'дней'])}` : '· с сегодня'))),
       phase === 'rejected' && h('div', { class: 'rl-now bad' },
         h('p', { class: 'rl-line danger-text' }, icon('alert', 14), h('b', null, `Реджект №${rel.rejectNo || ''}`),

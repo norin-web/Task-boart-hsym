@@ -134,11 +134,13 @@ function filterRest() {
     people.map(p => h('button', { class: 'av-btn' + (f.assignees.includes(p.id) ? ' on' : ''), title: p.name, onclick: () => set('assignees', toggleIn(f.assignees, p.id)) }, avatar(p))),
     h('button', { class: 'av-btn' + (f.assignees.includes(NO_DEPT) ? ' on' : ''), title: 'Без исполнителя', onclick: () => set('assignees', toggleIn(f.assignees, NO_DEPT)) }, avatar(null)));
 
-  const depts = !onTeam && isStaff() && !B.department.hidden && activeDepts().length > 0 && h('div', { class: 'row dept-chips', style: { gap: '4px' } },
+  const hasDepts = !onTeam && isStaff() && !B.department.hidden && activeDepts().length > 0;
+  const depts = hasDepts && h('div', { class: 'row dept-chips' },
+    h('button', { class: 'fchip' + (f.depts.length ? '' : ' on'), onclick: () => set('depts', []) }, 'Все'),
     activeDepts().map(d => h('button', {
       class: 'fchip dept' + (f.depts.includes(d.id) ? ' on' : ''), style: { '--dc': d.color },
       onclick: () => set('depts', toggleIn(f.depts, d.id)),
-    }, h('span', { class: 'dot', style: { background: d.color } }), d.name)));
+    }, d.name)));
 
   const optFields = activeFields().filter(x => (x.type === 'select' || x.type === 'multiselect') && x.options.length);
   const optCount = f.opts.length;
@@ -148,9 +150,15 @@ function filterRest() {
     .sort((a, b) => a.name.localeCompare(b.name));
   const appNow = appById(f.app);
 
+  const extraN = f.assignees.length + (f.overdue ? 1 : 0) + (f.archived ? 1 : 0) + optCount + (f.app ? 1 : 0) + (S.lanes ? 1 : 0);
+  const moreOpen = !!S.fbMore;
   return [
-    avatars,
     depts,
+    h('span', { class: 'spacer' }),
+    h('button', { class: 'fchip more-filters' + (moreOpen ? ' open' : ''), 'aria-expanded': String(moreOpen), onclick: () => { S.fbMore = !S.fbMore; drawFilterRest(); } },
+      icon('filter', 14), 'Ещё фильтры', extraN > 0 && h('span', { class: 'n' }, extraN)),
+    moreOpen && h('div', { class: 'row fb-more' },
+      avatars,
     optFields.length > 0 && h('button', {
       class: 'fchip' + (optCount ? ' on' : ''),
       onclick: e => { e.stopPropagation(); fieldFilterMenu(e.currentTarget, optFields); },
@@ -175,6 +183,7 @@ function filterRest() {
       class: 'fchip' + (S.lanes === 'app' ? ' on' : ''), title: 'Каждое приложение — своя дорожка с его задачами по колонкам',
       onclick: () => { S.lanes = S.lanes === 'app' ? false : 'app'; renderTasks(); drawFilterRest(); },
     }, icon('rows', 13), 'По приложениям'),
+    ),
     active && h('button', {
       class: 'link-btn', onclick: () => {
         S.filters = freshFilters();
@@ -423,17 +432,6 @@ function taskCard(t, inLane) {
   const due = !B.dueDate.hidden && dueInfo(t.dueDate, taskDone(t));
   // этап, который ждёт незакрытые предыдущие (зависимости — задачи этого же юнита)
   const waits = taskDone(t) ? [] : (t.dependsOn || []).map(taskById).filter(d => d && !taskDone(d)).map(d => d.title.split(' · ')[0]);
-  const foot = [
-    due && h('span', { class: 'due ' + due.cls, title: due.hint }, icon('calendar', 12), due.text),
-    t.tree && h('span', { class: 'meta-ic tree-ic' + (t.tree.done === t.tree.total ? ' done' : t.tree.overdue ? ' late' : ''),
-      title: `Подзадачи ниже: готово ${t.tree.done} из ${t.tree.total}` + (t.tree.overdue ? `, просрочено ${t.tree.overdue}` : '') }, icon('tree', 13), t.tree.done + '/' + t.tree.total),
-    cl.length > 0 && h('span', { class: 'meta-ic' + (clDone === cl.length ? ' done' : ''), title: 'Чеклист' }, icon('checklist', 13), clDone + '/' + cl.length),
-    t.commentCount > 0 && h('span', { class: 'meta-ic', title: 'Комментарии' }, icon('message', 13), t.commentCount),
-    ...visibleLinkFields().filter(f => t.links && t.links[f.id]).map(f => h('a', {
-      class: 'meta-ic card-link', href: safeUrl(t.links[f.id]), target: '_blank', rel: 'noopener noreferrer', title: f.name,
-      onclick: e => e.stopPropagation(), onpointerdown: e => e.stopPropagation(),
-    }, icon(f.kind === 'link' ? 'link' : f.kind, 13))),
-  ].filter(Boolean);
 
   return h('article', {
     class: 'card' + (t.archived ? ' archived' : '') + (taskDone(t) ? ' done' : '') + (t._temp ? ' temp' : '') + (canEditTask(t) ? '' : ' locked')
@@ -452,16 +450,24 @@ function taskCard(t, inLane) {
       class: 'icon-btn sm card-more', title: 'Действия',
       onclick: e => { e.stopPropagation(); cardMenu(e.currentTarget, t); },
     }, icon('more'))),
-  // «↑ откуда»: родитель — запрос CEO у этапа, задача у подзадачи
-  t.parent && h('div', { class: 'card-parent', title: t.parent.unit.name + ' · ' + t.parent.key }, icon('tree', 11), t.parent.title),
-  // тип, «ждёт» (этап заблокирован), позиция, поля и аватар — одной строкой; срок, чеклист, подзадачи, ссылки — строкой ниже
-  (TASK_KINDS[t.kind] || waits.length > 0 || chips.length > 0 || ((person || prioEl) && !foot.length)) && h('div', { class: 'chips card-row' },
-    TASK_KINDS[t.kind] && h('span', { class: 'kind-tag', style: { '--kc': TASK_KINDS[t.kind].color } }, TASK_KINDS[t.kind].short),
-    waits.length > 0 && h('span', { class: 'wait-tag', title: 'Этап ждёт: ' + waits.join(', ') }, icon('lock', 11), 'ждёт'),
-    chips, !foot.length && [h('span', { class: 'spacer' }), prioEl, person && avatar(person, 'sm')]),
-  foot.length > 0 && h('div', { class: 'card-foot' }, foot, h('span', { class: 'spacer' }), prioEl, person && avatar(person, 'sm')),
-  // нет ни строки чипов, ни низа — шеврон отдельной строкой
-  !foot.length && !(TASK_KINDS[t.kind] || waits.length > 0 || chips.length > 0 || person) && prioEl && h('div', { class: 'card-foot' }, h('span', { class: 'spacer' }), prioEl));
+  // вторая строка, как в макете: «откуда · состояние» — запрос CEO у этапа, «Запрос · 0 из 7» у самого запроса
+  (t.parent || TASK_KINDS[t.kind] || waits.length > 0) && h('div', { class: 'card-sub', title: t.parent ? t.parent.unit.name + ' · ' + t.parent.key : '' },
+    [t.parent && t.parent.title, !t.parent && TASK_KINDS[t.kind] && TASK_KINDS[t.kind].short + (t.tree ? ` · ${t.tree.done} из ${t.tree.total}` : ''),
+      waits.length > 0 && h('span', { title: 'Этап ждёт: ' + waits.join(', ') }, 'ждёт')].filter(Boolean)
+      .flatMap((x, i) => (i ? [' · ', x] : [x]))),
+  // низ: позиция, чеклист, остальное — тихим текстом; срок только когда горит; справа приоритет и исполнитель
+  h('div', { class: 'card-foot' },
+    chips,
+    cl.length > 0 && h('span', { class: 'meta-ic' + (clDone === cl.length ? ' done' : ''), title: 'Чеклист' }, clDone + '/' + cl.length),
+    t.tree && !TASK_KINDS[t.kind] && h('span', { class: 'meta-ic tree-ic' + (t.tree.done === t.tree.total ? ' done' : t.tree.overdue ? ' late' : ''),
+      title: `Подзадачи ниже: готово ${t.tree.done} из ${t.tree.total}` + (t.tree.overdue ? `, просрочено ${t.tree.overdue}` : '') }, icon('tree', 13), t.tree.done + '/' + t.tree.total),
+    t.commentCount > 0 && h('span', { class: 'meta-ic', title: 'Комментарии' }, icon('message', 13), t.commentCount),
+    due && due.cls && h('span', { class: 'due ' + due.cls, title: due.hint }, due.text),
+    ...visibleLinkFields().filter(f => t.links && t.links[f.id]).map(f => h('a', {
+      class: 'meta-ic card-link', href: safeUrl(t.links[f.id]), target: '_blank', rel: 'noopener noreferrer', title: f.name,
+      onclick: e => e.stopPropagation(), onpointerdown: e => e.stopPropagation(),
+    }, icon(f.kind === 'link' ? 'link' : f.kind, 13))),
+    h('span', { class: 'spacer' }), prioEl, person && avatar(person, 'sm')));
 }
 
 export function fieldChip(f, t) {

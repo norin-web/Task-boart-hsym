@@ -20,27 +20,29 @@ function tabs(u) {
 }
 
 /** Шапка юнита + полоса вкладок; right — кнопки действий справа. Возвращает два узла для fill(#main, …). */
+const TITLES = { overview: 'Обзор юнита', apps: 'Приложения юнита', list: 'Задачи юнита', board: 'Доска юнита', team: 'Команда юнита', settings: 'Настройки юнита' };
+
 export function unitHeader(active, right = [], team = null) {
   const u = S.board.unit;
   const sep = () => h('span', { class: 'crumb-sep', 'aria-hidden': 'true' }, '/');
   return [
     topbar([
-      h('nav', { class: 'crumbs unit-crumbs', 'aria-label': 'Навигация' },
-        link({ view: 'home' }, { class: 'crumb' }, 'Дашборд'),
-        sep(),
-        h('span', { class: 'unit-dot', style: { background: u.color, margin: 0 } }),
-        team ? link({ unit: u.id, mode: seesApps() ? 'overview' : 'board' }, { class: 'crumb' }, u.name) : h('h1', null, u.name),
-        team && [sep(), h('span', { class: 'unit-dot', style: { background: team.color, margin: 0 } }), h('h1', null, team.name)],
-        u.archived && h('span', { class: 'badge' }, 'в архиве')),
+      h('div', { class: 'unit-head' },
+        h('nav', { class: 'crumbs unit-crumbs', 'aria-label': 'Навигация' },
+          link({ view: 'home' }, { class: 'crumb' }, 'Дашборд'),
+          sep(),
+          team ? link({ unit: u.id, mode: seesApps() ? 'overview' : 'board' }, { class: 'crumb' }, u.name) : h('span', { class: 'crumb' }, u.name),
+          u.archived && h('span', { class: 'badge' }, 'в архиве')),
+        h('h1', null, team ? team.name : TITLES[active] || u.name)),
     ], right),
     h('nav', { class: 'unit-tabs', role: 'tablist', 'aria-label': 'Разделы юнита' },
       tabs(u).map(([mode, label, ic, n]) => link({ unit: u.id, mode }, {
         class: 'unit-tab' + (active === mode ? ' on' : ''), role: 'tab', 'aria-selected': String(active === mode),
-      }, icon(ic, 15), label, n > 0 && h('span', { class: 'unit-tab-n' }, n))),
+      }, label, n > 0 && h('span', { class: 'unit-tab-n' }, n))),
       h('span', { class: 'spacer' }),
-      // настройки — режим Admin у CEO
+      // настройки — режим «Полный» у CEO
       isStaff() && !ceoDefault() && link({ unit: u.id, mode: 'settings' }, {
         class: 'unit-tab' + (active === 'settings' ? ' on' : ''), role: 'tab', 'aria-selected': String(active === 'settings'), title: 'Настройки юнита',
-      }, icon('settings', 15), h('span', { class: 'btn-label' }, 'Настройки'))),
+      }, 'Настройки')),
   ];
 }

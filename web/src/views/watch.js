@@ -123,6 +123,9 @@ export function watchBlock(apps, { openApp, openTask, appIcon, appStatusCell, st
       return t && { x, key: 't:' + t.id, snap: snapTask(t), cells: rowTask(t), open: () => openTask(t.unitId, t.id), name: t.title };
     }).filter(Boolean);
     const gone = w.length - items.length;
+    // в макете пустого «Отслеживаю» на дашборде нет; добавить — «Отслеживать на дашборде» в меню приложения и задачи
+    box.hidden = !items.length && !gone;
+    if (box.hidden) return;
     fill(box,
       h('div', { class: 'section-head' },
         h('h2', null, 'Отслеживаю', items.length > 0 && h('span', { class: 'muted sec-n' }, items.length)),

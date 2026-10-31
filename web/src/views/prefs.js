@@ -45,7 +45,7 @@ export function renderPrefs(tab) {
   const body = h('div', { class: 'prefs-body' });
   const item = ([id, label, ic]) => link({ view: 'settings', tab: id }, { class: 'prefs-tab' + (id === navTab ? ' on' : '') }, icon(ic, 15), label);
   fill($('#main'),
-    topbar([h('h1', null, 'Настройки')], []),
+    topbar([h('h1', { class: 'screen-title' }, 'Настройки')], []),
     h('div', { class: 'view-body prefs-page' },
       h('nav', { class: 'prefs-nav', 'aria-label': 'Разделы настроек' },
         h('div', { class: 'prefs-sec' }, 'Личное'), PERSONAL.map(item),
