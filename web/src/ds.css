@@ -556,3 +556,5 @@ section:has(> .section-head + .pl-list) > .section-head { margin-bottom: 12px; }
 .rq-more:hover { background: var(--surface-2); }
 .flow-block { background: var(--surface); border-radius: var(--r-xl); padding: 16px; }
 .flow-block .progress { height: 6px; }
+.modal-foot .btn:not(.primary):not(.danger):not(.success) { background: transparent; border-color: transparent; }
+.modal-foot .btn:not(.primary):not(.danger):not(.success):hover { background: var(--surface-2); }
