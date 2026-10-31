@@ -659,3 +659,4 @@ section:has(> .card-box.empty-state.center:first-child) > .card-box { background
 .card.prio::before, .card.prio-top::before { display: none; }
 .card.prio-top { border-color: transparent; background: var(--surface); }
 .ap-row.has-prio, .ap-row.has-prio:hover { box-shadow: none; }
+* { scrollbar-gutter: auto !important; }
