@@ -60,7 +60,11 @@ export const storeBadge = () => h('span', { class: 'store-badge', title: 'В App
 export const storeGoneBadge = () => h('span', { class: 'store-badge gone', title: 'Страница в App Store не открывается' }, icon('alert', 15), 'Нет в App Store');
 /** Статус в списке: пропало из стора — красная пометка; «в сторе» — App Store; остальное — цветная плашка. */
 export const appStatusCell = (st, a) => (a && a.storeOk === false ? storeGoneBadge() : st && st.kind === 'live' ? storeBadge() : statusPill(st));
-export const statusPill = st => (st ? h('span', { class: 'st-pill', style: { '--sc': st.color } }, h('span', { class: 'dot' }), st.name) : h('span', { class: 'muted' }, '—'));
+/** Статус приложения: значок формы + слово (цвет только помогает); «ревью Apple» — заливкой. */
+const PILL_ICON = { dev: 'progress', release: 'rocket', review: 'eye', live: 'done', reject: 'rejected' };
+export const statusPill = st => (st
+  ? h('span', { class: 'st-pill k-' + (st.kind || 'x'), style: { '--sc': st.color } }, PILL_ICON[st.kind] ? icon(PILL_ICON[st.kind], 14) : h('span', { class: 'dot' }), st.name)
+  : h('span', { class: 'muted' }, '—'));
 /** Приоритет: цветная метка с названием (не только цветом). */
 /** Высокий приоритет — два верхних варианта (High, Critical); плашку показываем только им. */
 export const isHighPrio = id => { const i = S.priorityOptions.findIndex(o => o.id === id); return i >= 0 && i >= S.priorityOptions.length - 2; };

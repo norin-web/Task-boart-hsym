@@ -104,7 +104,24 @@ function unitItem(u, r) {
       teams.map(t => sub({ unit: u.id, mode: 'board', team: t.id }, t.name, null, r.unit === u.id && r.team === t.id, t.color))));
 }
 
+
+/** Свёрнутый сайдбар (80 px): выбор запоминаем; подпись и счётчик — в подсказке. */
+const collapsed = () => LS.get('sbCollapsed', false) === true;
+export const applyCollapse = () => document.body.classList.toggle('sb-collapsed', collapsed());
+function toggleCollapse() { LS.set('sbCollapsed', !collapsed()); applyCollapse(); renderSidebar(); }
+
 export function renderSidebar() {
+  drawSidebar();
+  // свёрнутый сайдбар: подпись и счётчик — в подсказке
+  document.querySelectorAll('#sidebar .nav-item, #sidebar .nav-sub').forEach(el => {
+    if (el.title) return;
+    const label = el.querySelector('.nav-label');
+    const count = el.querySelector('.nav-count');
+    if (label) el.title = label.textContent + (count && count.textContent ? ' · ' + count.textContent : '');
+  });
+}
+
+function drawSidebar() {
   const r = S.route;
   const units = S.units.filter(u => !u.archived).sort(byOrder);
   const person = me();
@@ -119,7 +136,8 @@ export function renderSidebar() {
   const sec = (label, extra) => h('div', { class: 'nav-section' }, h('span', null, label), extra);
 
   fill($('#sidebar'),
-    h('div', { class: 'brand' }, h('div', { class: 'brand-logo' }, icon('check', 16)), h('span', null, 'Tasks')),
+    h('div', { class: 'brand' }, h('div', { class: 'brand-logo' }, icon('check', 16)), h('span', { class: 'brand-name' }, 'Tasks'),
+      h('button', { class: 'icon-btn sm sb-toggle', title: collapsed() ? 'Развернуть меню' : 'Свернуть меню', 'aria-label': collapsed() ? 'Развернуть меню' : 'Свернуть меню', onclick: toggleCollapse }, icon(collapsed() ? 'expand' : 'collapse', 16))),
     lens && h('div', { class: 'lens-bar', role: 'status' }, icon('eye', 14),
       h('span', null, 'Как ', h('b', null, lens.name)),
       h('button', { class: 'link-btn', onclick: () => import('./dev.js').then(m => m.viewAs('')) }, 'Вернуться')),
@@ -216,3 +234,5 @@ export async function resetLocal() {
   location.hash = '#/';
   location.reload();
 }
+
+applyCollapse();

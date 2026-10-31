@@ -31,7 +31,7 @@ export function changesDialog(t, onDone) {
 export function reviewButtons(t, onDone, { sm = true } = {}) {
   const cls = sm ? ' sm' : '';
   return [
-    h('button', { class: 'btn primary' + cls, onclick: e => { e.stopPropagation(); decide(t, true, '', onDone); } }, icon('check', 13), 'Аппрув'),
+    h('button', { class: 'btn success' + cls, onclick: e => { e.stopPropagation(); decide(t, true, '', onDone); } }, icon('check', 13), 'Аппрув'),
     h('button', { class: 'btn' + cls, onclick: e => { e.stopPropagation(); changesDialog(t, onDone); } }, icon('back', 13), 'Правки'),
   ];
 }

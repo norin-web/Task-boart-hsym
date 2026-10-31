@@ -116,3 +116,43 @@ html[data-theme="dark"] .toast { background: #fff; color: #111318; }
 .desc-view:hover { background: var(--surface-3); }
 .desc-empty { border-radius: var(--r-lg); border: 1px dashed var(--border-strong); }
 .cl-item { padding: 4px 6px; }
+
+/* ---------- Статусы-пилюли: значок + слово; «В ревью» — заливкой ---------- */
+.st-pill { height: 24px; padding: 0 10px 0 8px; gap: 6px; background: var(--surface); border: 1px solid var(--border); color: var(--text); font-size: 12px; line-height: 16px; font-weight: 600; }
+.st-pill .i { color: var(--muted); }
+.st-pill.k-dev .i { color: var(--info-fill); }
+.st-pill.k-live .i { color: var(--accent-text); }
+.st-pill.k-reject .i { color: var(--danger); }
+.st-pill.k-reject { color: var(--danger); }
+.st-pill.k-review { background: var(--review); border-color: var(--review); color: #fff; }
+.st-pill.k-review .i { color: #fff; }
+.st-chip { background: var(--surface); border: 1px solid var(--border); font-weight: 600; }
+.news-kind.review { background: var(--review); color: #fff; }
+
+/* ---------- Свёрнутый сайдбар: 80 px, только значки; подпись — в подсказке ---------- */
+body.sb-collapsed #shell { grid-template-columns: 80px minmax(0, 1fr); }
+body.sb-collapsed #sidebar { padding: 16px 8px; align-items: stretch; }
+body.sb-collapsed .brand { flex-direction: column; padding: 4px 0 12px; gap: 8px; }
+body.sb-collapsed .brand-name, body.sb-collapsed .ceo-mode, body.sb-collapsed .lens-bar, body.sb-collapsed .nav-label, body.sb-collapsed .nav-count,
+body.sb-collapsed .nav-subs, body.sb-collapsed .nav-section > span, body.sb-collapsed .search-btn span, body.sb-collapsed .search-btn kbd, body.sb-collapsed .nav-item .kbd, body.sb-collapsed .nav-item kbd,
+body.sb-collapsed .nav-item.me > .i, body.sb-collapsed .nav-item.me .me-text, body.sb-collapsed .nav-unit-row .nav-chev { display: none; }
+body.sb-collapsed .nav-item, body.sb-collapsed .search-btn { justify-content: center; padding: 0; gap: 0; }
+body.sb-collapsed .nav-section { justify-content: center; padding: 12px 0 0; }
+body.sb-collapsed .nav-item.me { justify-content: center; border-radius: 999px; }
+@media (max-width: 900px) { body.sb-collapsed #shell { grid-template-columns: minmax(0, 1fr); } .sb-toggle { display: none; } }
+.sb-toggle { margin-left: auto; color: var(--sidebar-text); }
+.sb-toggle:hover { background: var(--sidebar-border); color: var(--sidebar-on-active); }
+
+/* ---------- Узкие экраны (900 и 640 — как в коде): сайдбар выезжает, панель на весь экран ---------- */
+@media (max-width: 900px) {
+  #shell { padding: 0; gap: 0; }
+  #main { height: 100vh; }
+  #sidebar { border-radius: 0 var(--r-shell) var(--r-shell) 0; }
+  .panel, .panel.center { top: 0; bottom: 0; right: 0; left: auto; transform: none; width: 100vw; border-radius: 0; }
+  .panel-side { margin: 0; border-radius: 0; }
+  .topbar { padding: 12px 16px 8px; }
+  .page { padding: 8px 16px 48px; }
+  .screen-title { font-size: 24px; line-height: 32px; }
+  .topbar .tb-right .btn { height: 40px; padding: 0 14px; }
+  .topbar .tb-right .icon-btn { width: 40px; height: 40px; }
+}

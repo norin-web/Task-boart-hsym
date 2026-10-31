@@ -40,7 +40,7 @@ export async function renderRmHome() {
       section('На ревью Apple', 'На ревью ничего', d.review, x => [
         h('span', { class: 'muted rq-line' }, days(x.submittedAt) ? 'ждёт ' + days(x.submittedAt) + ' дн.' : 'отправлено ' + relTime(x.submittedAt)),
       ], x => [
-        h('button', { class: 'btn primary sm', onclick: () => step(x, 'live') }, icon('rocket', 13), 'Вышло в стор'),
+        h('button', { class: 'btn success sm', onclick: () => step(x, 'live') }, icon('rocket', 13), 'Вышло в стор'),
         h('button', { class: 'btn sm danger', onclick: () => reject(x) }, 'Реджект')], 3),
       section('Реджекты', 'Реджектов нет', d.rejected, x => {
         const pm = personById(x.pmId);

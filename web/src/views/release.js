@@ -105,10 +105,10 @@ export function releaseBlock(t, onChange) {
       icon('send', 14), hist.length ? 'Отправить снова' : 'Отправить в Apple'),
     phase === 'submitted' && [
       h('button', { class: 'btn ghost danger sm', onclick: () => openRejectForm(t, data.app && data.app.name, data.nextRejectNo, () => { load(); if (onChange) onChange(); }) }, 'Реджект'),
-      h('button', { class: 'btn primary sm', onclick: () => step('live') }, icon('rocket', 14), 'Вышло в стор')],
+      h('button', { class: 'btn success sm', onclick: () => step('live') }, icon('rocket', 14), 'Вышло в стор')],
     phase === 'rejected' && [
       h('button', { class: 'btn ghost sm', onclick: () => step('resubmit') }, 'Отправить сейчас'),
-      h('button', { class: 'btn primary sm', onclick: () => closeReject(rel) }, icon('check', 14), 'Закрыть реджект')]);
+      h('button', { class: 'btn success sm', onclick: () => closeReject(rel) }, icon('check', 14), 'Закрыть реджект')]);
 
   // раскрыт ли список релизных полей (по умолчанию — пока есть незаполненные обязательные или релиз в очереди)
   let fieldsOpen = null;
