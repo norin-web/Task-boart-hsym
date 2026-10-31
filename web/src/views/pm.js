@@ -23,7 +23,8 @@ const stateOf = s => (s.done ? 'done' : s.blocked ? 'blocked' : s.kind === 'todo
 export async function renderPmHome() {
   const page = h('div', { class: 'page ceo-page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
   fill($('#main'),
-    topbar([h('h1', { class: 'screen-title' }, greeting() + (me() ? ', ' + me().name.split(' ')[0] : ''))], [h('button', { class: 'btn primary', onclick: () => openCreateTask({ onCreated: load }), title: 'Новая задача (C)' }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Задача'))]),
+    topbar([h('div', { class: 'screen-head' }, h('div', { class: 'screen-date' }, (() => { const t = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }); return t.charAt(0).toUpperCase() + t.slice(1); })()),
+      h('h1', { class: 'screen-title' }, 'Дашборд'))], [h('button', { class: 'btn primary', onclick: () => openCreateTask({ onCreated: load }), title: 'Новая задача (C)' }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Новая задача'))]),
     h('div', { class: 'view-body' }, page));
   let period = PERIODS.some(([k]) => k === LS.get('kpiPeriod', '')) ? LS.get('kpiPeriod', '') : 'month';
   async function load() {
@@ -32,7 +33,6 @@ export async function renderPmHome() {
     if (currentView() !== 'home') return;
     const person = me();
     fill(page,
-      newsBlock(),
       inbox(d, load),
       h('div', { class: 'home-grid' },
         h('div', { class: 'home-col' }, pipeline(d, load)),

@@ -40,7 +40,6 @@ export async function renderCeoHome() {
     // без юнитов показывать нечего; юниты есть, а приложений нет — дашборд целиком, сверху подсказка
     if (!units().length) {
       return fill(page,
-        newsBlock(),
         h('div', { class: 'card-box empty-state' },
           h('h2', null, 'Приложений пока нет'),
           !units().length && h('p', null, 'Сначала создайте юнит.'),
@@ -226,7 +225,7 @@ export function statBlocks(d, apps, reload) {
  */
 function ceoBlocks(d, apps, reload) {
   const blocks = [
-    { id: 'news', title: 'Новое для вас', col: 'full', first: true, empty: 'Появится, когда что-то придёт вам', render: () => newsBlock() },
+    { id: 'news', title: 'Новое для вас', col: 'full', off: true, empty: 'Появится, когда что-то придёт вам', render: () => newsBlock() },
     { id: 'units', title: 'Юниты', col: 'full', render: () => portfolio(d, reload) },
     { id: 'storeCheck', title: 'Проверка App Store', col: 'full', render: () => storeCheckBlock(apps, reload, { compact: true }) },
     { id: 'watch', title: 'Отслеживаю', col: 'full', render: () => watchBlock(apps, { openApp: id => openAppById(id, reload), openTask: peekTask, appIcon, appStatusCell, stageDots }) },

@@ -433,3 +433,16 @@ section:has(> .section-head + .card-box) > .card-box.empty-state { padding: 12px
 .empty-state.center .i { color: var(--accent-text); width: 24px; height: 24px; }
 .empty-state.center p { font-size: 12px; line-height: 16px; margin: 0; }
 section:has(> .section-head + .card-box.empty-state.center) > .card-box { padding: 0; }
+
+/* ---------- Дашборд PM: этапы приложения и «Все этапы закрыты» ---------- */
+.pl-list { gap: 12px; }
+.pl-card { padding: 16px; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-xl); }
+.pl-step { height: 32px; padding: 0 10px 0 8px; border-radius: 999px; border: 0; background: var(--surface-2); font-size: 12px; font-weight: 600; }
+.pl-step:hover { background: var(--surface-3); }
+.pl-step.st-done { background: var(--surface-2); }
+.pl-step.st-done .pl-ic { color: var(--accent-text); }
+.pl-step.st-progress { background: var(--info-soft); border: 0; color: var(--text); }
+.pl-step.st-progress .pl-ic { color: var(--info-fill); }
+.pl-step.st-blocked { border: 0; background: transparent; box-shadow: inset 0 0 0 1px var(--border); }
+.pl-release { background: var(--primary); color: var(--on-primary); border-radius: 999px; padding: 6px 6px 6px 16px; font-weight: 600; }
+.pl-release .btn { background: var(--on-primary); color: var(--primary); border: 0; }
