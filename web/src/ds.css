@@ -660,3 +660,7 @@ section:has(> .card-box.empty-state.center:first-child) > .card-box { background
 .card.prio-top { border-color: transparent; background: var(--surface); }
 .ap-row.has-prio, .ap-row.has-prio:hover { box-shadow: none; }
 * { scrollbar-gutter: auto !important; }
+
+/* Сайдбар в низком окне прокручивается, а не сжимает пункты (в макете у всех flex-shrink: 0) */
+#sidebar > *, #sidebar .nav-units, #sidebar .nav-item, #sidebar .nav-sub, #sidebar .nav-subs { flex-shrink: 0; }
+#sidebar .nav-spacer { flex: 1 0 8px; min-height: 8px; }
