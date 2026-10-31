@@ -515,12 +515,12 @@ function peopleTab() {
 
 /** Карточка и автоматика: ссылки в карточке (супер-админ), шаблоны, правила юнитов, уведомления. */
 function automationsTab() {
+  // как в макете: правила юнитов, ниже шаблоны и «Уведомления работают сами»; поля и ссылки карточки — после них
   return h('div', { class: 'auto-page' },
-    h('div', { class: 'card-box' }, globalFieldsManager()),
-    isSuper() && h('div', { class: 'card-box' }, linkFieldsManager()),
-    h('div', { class: 'card-box' }, templatesManager()),
     h('div', { class: 'card-box' }, unitRules()),
-    h('div', { class: 'card-box' }, autoNotes()));
+    h('div', { class: 'an-grid an-grid-32' }, h('div', { class: 'card-box' }, templatesManager()), h('div', { class: 'card-box' }, autoNotes())),
+    h('div', { class: 'card-box' }, globalFieldsManager()),
+    isSuper() && h('div', { class: 'card-box' }, linkFieldsManager()));
 }
 
 /** Настройка ревью юнита окном (колонка, ревьюеры по позиции, по умолчанию). */
