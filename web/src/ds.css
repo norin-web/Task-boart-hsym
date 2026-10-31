@@ -1,0 +1,80 @@
+/* Tasks DS: слой оформления поверх styles.css. Источник — Paper, страница «Tasks DS».
+   Блоки — без рамок, радиус 28; карточка задачи в колонке — радиус 16; меню и окна — «стекло» только на оверлеях. */
+
+/* ---------- Блоки ---------- */
+.card-box, .stat, .unit-card, .feed, .rows, .table-wrap, .att-item, .kpi, .qa, .ap-row, .un-row, .dev-sc, .rl-block, .ap-now, .cs, .info-list, .rl-panel, .login-card, .store-check, .watch .w-list {
+  border: 0; border-radius: var(--r-card); box-shadow: none; background: var(--surface);
+}
+.card-box { padding: 20px 24px; }
+.unit-card { padding: 20px; }
+.unit-card:hover { box-shadow: var(--shadow-soft); }
+.section-head h2, .card-box > h2 { font-size: 16px; line-height: 24px; letter-spacing: -.02em; }
+.section-head .link-btn, .section-head .btn { font-size: 12px; font-weight: 600; }
+.rows .row-item, .rows > * + * { border-top: 1px solid var(--border); }
+
+/* ---------- Таблицы и списки ---------- */
+table.tasks { border-collapse: collapse; }
+table.tasks thead th { background: var(--surface-2); height: 40px; font-size: 12px; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--border); }
+table.tasks td { height: 48px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.table-wrap { overflow: hidden; }
+
+/* ---------- Чипы, фильтры, вкладки ---------- */
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px; background: var(--surface-2); color: var(--text-2); font-size: 12px; line-height: 16px; font-weight: 600; max-width: 100%; }
+.fchip, .quick-chip, .opt-toggle, .cb-chip { border: 0; border-radius: 999px; background: var(--surface); color: var(--text); font-size: 12px; font-weight: 600; height: 32px; padding: 0 14px; }
+.fchip:hover, .quick-chip:hover { background: var(--surface-3); }
+.fchip.on, .quick-chip.on, .opt-toggle.on { background: var(--primary); color: var(--on-primary); }
+.filterbar { background: transparent; border: 0; padding: 0; }
+.tabs, .unit-tabs { border-bottom: 1px solid var(--border); gap: 24px; }
+
+/* ---------- Доска ---------- */
+.card, .kb-card { border: 0; border-radius: var(--r-lg); background: var(--surface); box-shadow: none; padding: 12px 14px; }
+.card:hover, .kb-card:hover { box-shadow: var(--shadow-soft); }
+.col-head { font-size: 13px; font-weight: 600; }
+
+/* ---------- Меню, окна, всплывающие ---------- */
+.menu, .mention-pop { border: 0; border-radius: var(--r-xl); background: var(--glass); backdrop-filter: blur(24px) saturate(1.2); -webkit-backdrop-filter: blur(24px) saturate(1.2); box-shadow: var(--shadow-soft); padding: 6px; }
+.menu-item { border-radius: var(--r); height: 36px; padding: 0 12px; font-size: 13px; font-weight: 500; }
+.menu-item:hover, .menu-item.on { background: var(--selected); }
+.modal, .palette, .panel { background: var(--glass); backdrop-filter: blur(32px) saturate(1.2); -webkit-backdrop-filter: blur(32px) saturate(1.2); border: 0; border-radius: var(--r-shell); box-shadow: var(--shadow-lg); }
+.panel { border-radius: var(--r-shell) 0 0 var(--r-shell); }
+.panel.center { border-radius: var(--r-shell); }
+.modal-wrap, .panel-backdrop, .palette-wrap { background: rgba(17,19,24,.32); }
+.toast { background: var(--primary); color: var(--on-primary); border-radius: 999px; padding: 12px 20px; font-size: 13px; font-weight: 500; box-shadow: var(--shadow-soft); }
+html[data-theme="dark"] .toast { background: #fff; color: #111318; }
+
+/* ---------- Сайдбар ---------- */
+.lens-bar { margin: 0 0 8px; border-radius: 999px; background: var(--sidebar-border); color: var(--sidebar-text); padding: 6px 12px; font-size: 12px; }
+.lens-bar b { color: var(--sidebar-on-active); }
+.lens-bar .link-btn { color: var(--sidebar-on-active); }
+.ceo-mode { margin: 0 0 4px; }
+.ceo-mode .seg { background: var(--sidebar-border); }
+.ceo-mode .seg button { color: var(--sidebar-text); height: 28px; }
+.ceo-mode .seg button.on { background: var(--sidebar-active); color: var(--sidebar-on-active); }
+.nav-subs { margin: 2px 0 6px 19px; padding-left: 12px; border-left: 1px solid var(--sidebar-active); gap: 2px; }
+.nav-sub { color: var(--sidebar-text); border-radius: 999px; padding: 0 12px; height: 32px; font-size: 13px; }
+.nav-sub:hover { background: var(--sidebar-border); color: var(--sidebar-on-active); }
+.nav-sub.active { background: var(--sidebar-active); color: var(--sidebar-on-active); font-weight: 500; }
+.nav-sub .i { color: inherit; }
+.nav-item.me { margin-top: 4px; border-top: 1px solid var(--sidebar-border); border-radius: 0 0 999px 999px; padding-top: 12px; height: auto; min-height: 52px; background: transparent; }
+.nav-item.me:hover { background: var(--sidebar-border); }
+.nav-item.me .person-name, .nav-item.me b { color: var(--sidebar-on-active); font-weight: 600; }
+.nav-item.me small, .nav-item.me .person-sub { color: var(--sidebar-text); }
+.nav-item.me > .i { color: var(--sidebar-text); }
+.nav-item.dev-item { color: var(--warn-fill); }
+.bell-dot { background: var(--danger-fill); }
+
+/* ---------- Аватары: мягкая заливка цвета человека, инициалы — его тёмным оттенком ---------- */
+.avatar:not(.pic):not(.empty) { background: color-mix(in srgb, var(--av, var(--muted)) 18%, var(--surface)); color: color-mix(in srgb, var(--av, var(--muted)) 78%, var(--text)); }
+.avatar.empty { border: 1px dashed var(--border-strong); background: transparent !important; color: var(--muted); }
+.st-ic { display: inline-flex; flex: none; }
+
+/* ---------- Колонки доски: мягкая подложка вместо цветной полосы ---------- */
+.col { border-top: 0; background: color-mix(in srgb, var(--surface-3) 55%, transparent); border-radius: var(--r-card); padding: 4px 4px 8px; }
+.col-head { padding: 12px 12px 8px 16px; gap: 8px; }
+.col-name { font-size: 13px; line-height: 20px; font-weight: 600; }
+.col-count { background: transparent; padding: 0; margin-left: auto; font-size: 12px; font-weight: 500; }
+.col-head .spacer { flex: 0; }
+.col-empty { border: 1px dashed var(--border-strong); border-radius: var(--r-lg); color: var(--muted); }
+.col-add { border: 1px dashed var(--border-strong); border-radius: var(--r-card); }
+.card-title { font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: -.01em; }
+.card { padding: 12px 16px; gap: 8px; }

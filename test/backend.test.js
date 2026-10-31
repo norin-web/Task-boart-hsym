@@ -27,7 +27,7 @@ test('юниты: ключи, настройки, дублирование, уд
   const api = await setup();
   const u1 = await api('createUnit', { name: 'Маркетинг', key: 'mkt' });
   assert.equal(u1.key, 'MKT');
-  assert.deepEqual(u1.settings.columns.map(c => c.name), ['To Do', 'In Progress', 'Review', 'Done']); // константы досок
+  assert.deepEqual(u1.settings.columns.map(c => c.name), ['К выполнению', 'В работе', 'В ревью', 'Готово']); // константы досок
   assert.equal(u1.settings.review.column, 'review');
   assert.ok(u1.settings.builtins.dueDate);
   assert.equal(u1.settings.hideDoneDays, 0);
@@ -85,7 +85,7 @@ test('задачи: номера, правки, конфликт, журнал',
 
   const ex = await api('getTaskExtras', { taskId: t1.id });
   const lines = ex.activity.map(x => `${x.action}:${x.label}:${x.fromText}>${x.toText}`);
-  assert.ok(lines.includes('update:Статус:To Do>In Progress'), lines.join(' | '));
+  assert.ok(lines.includes('update:Статус:К выполнению>В работе'), lines.join(' | '));
   assert.ok(lines.includes('update:Исполнитель:—>Аня'));
   assert.ok(lines.includes('update:Приоритет:High>—'));
   assert.equal(ex.activity.at(-1).actorId, me.id);
@@ -116,7 +116,7 @@ test('чеклист, срок, комментарии, главная, поис
   const found = await api('queryTasks', { q: 'бэкап' });
   assert.equal(found.length, 1);
   assert.equal(found[0].key, 'OPS-1');
-  assert.equal(found[0].statusName, 'To Do');
+  assert.equal(found[0].statusName, 'К выполнению');
 
   // лента с фильтрами и сводка
   const feed = await api('getActivity', { kind: 'comment' });

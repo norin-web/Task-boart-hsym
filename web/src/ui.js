@@ -141,7 +141,7 @@ export function avatar(p, size) {
   const src = avatarSrc(p);
   return h('span', {
     class: 'avatar' + (size ? ' ' + size : '') + (isOnline(p) ? ' online' : '') + (src ? ' pic' : ''), title: p.name + ' · ' + presenceText(p),
-    dataset: { pid: p.id }, style: { background: p.color || colorFor(p.id) },
+    dataset: { pid: p.id }, style: { '--av': p.color || colorFor(p.id) },
   }, src ? h('img', { src, alt: '', loading: 'lazy', decoding: 'async' }) : initials(p.name));
 }
 
@@ -170,6 +170,12 @@ export function linkify(text) {
   return out;
 }
 
+/** Значок статуса: форма + цвет, подпись рядом всегда словом (цвет только помогает). */
+const ST_ICON = { todo: ['circle', 'var(--muted)'], progress: ['progress', 'var(--info-fill)'], review: ['eye', 'var(--review)'], done: ['done', 'var(--accent-text)'] };
+export function statusIcon(kind, size = 16) {
+  const [name, color] = ST_ICON[kind] || ST_ICON.todo;
+  return h('span', { class: 'st-ic', style: { color } }, icon(name, size));
+}
 export function statusDot(color, size = 8) {
   return h('span', { class: 'dot', style: { background: color, width: size + 'px', height: size + 'px' } });
 }

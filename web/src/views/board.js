@@ -4,7 +4,7 @@ import {
   between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, relTime, unitById, emptyCounts, freshFilters, saveBoardView,
   activeDepts, deptById, teamById, KINDS, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS,
 } from '../state.js';
-import { $, h, icon, avatar, topbar, menu, closeMenu, modal, field, confirmDlg, promptDlg, toast, showErr, statusDot, fill, prioMark } from '../ui.js';
+import { $, h, icon, avatar, topbar, menu, closeMenu, modal, field, confirmDlg, promptDlg, toast, showErr, statusDot, statusIcon, fill, prioMark } from '../ui.js';
 import { call, send } from '../api.js';
 import { navigate, link } from '../router.js';
 import { updateSidebarCounts, renderUnread } from './sidebar.js';
@@ -283,9 +283,12 @@ function makeList(items, status, dept, emptyText) {
   return list;
 }
 
+/** Значок колонки: ревью — отдельная форма, остальное — по типу колонки. */
+const colIconKind = col => (col.id === 'review' || /^(review|ревью|в ревью)$/i.test(col.name) ? 'review' : col.kind);
+
 function colHead(col, count) {
   return h('div', { class: 'col-head' },
-    statusDot(colColor(col), 9),
+    statusIcon(colIconKind(col), 16),
     h('span', { class: 'col-name', title: KIND_LABELS[col.kind] }, col.name),
     h('span', { class: 'col-count' }, count),
     h('span', { class: 'spacer' }),

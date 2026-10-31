@@ -15,10 +15,10 @@ import { reviewButtons } from './review.js';
 
 /** Обязательные колонки: одинаковы у всех, их не убрать и не переставить. */
 export const FIXED = [
-  { id: 'c_todo', name: 'To Do', group: 'todo', color: 'var(--st-todo)' },
-  { id: 'c_progress', name: 'In Progress', group: 'progress', color: 'var(--st-progress)' },
-  { id: 'c_review', name: 'Review', group: 'review', color: '#8b5cf6' },
-  { id: 'c_done', name: 'Done', group: 'done', color: 'var(--st-done)' },
+  { id: 'c_todo', name: 'К выполнению', group: 'todo', color: 'var(--st-todo)' },
+  { id: 'c_progress', name: 'В работе', group: 'progress', color: 'var(--st-progress)' },
+  { id: 'c_review', name: 'В ревью', group: 'review', color: 'var(--review)' },
+  { id: 'c_done', name: 'Готово', group: 'done', color: 'var(--st-done)' },
 ];
 const GROUPS = FIXED.map(c => c.group);
 const KIND_GROUP = { todo: 0, progress: 1, done: 3 };
@@ -232,7 +232,7 @@ export function editColumns(onDone) {
   modal({
     title: 'Колонки моей доски', wide: true,
     body: [
-      h('p', { class: 'hint', style: { marginTop: 0 } }, 'To Do, In Progress, Review и Done — у всех одни: по ним меняется статус задачи в юните (Review — отдаёт на ревью). Свои колонки ставьте между ними — их видите только вы, а считаются они как обязательная колонка над ними.'),
+      h('p', { class: 'hint', style: { marginTop: 0 } }, '«К выполнению», «В работе», «В ревью» и «Готово» — у всех одни: по ним меняется статус задачи в юните (Review — отдаёт на ревью). Свои колонки ставьте между ними — их видите только вы, а считаются они как обязательная колонка над ними.'),
       list,
       h('button', { class: 'btn sm', onclick: add }, icon('plus', 13), 'Своя колонка'),
     ],

@@ -49,10 +49,10 @@ export const PALETTE = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '
 export function defaultSettings() {
   return {
     columns: [
-      { id: 'todo', name: 'To Do', kind: 'todo', color: '' },
-      { id: 'in_progress', name: 'In Progress', kind: 'progress', color: '' },
-      { id: 'review', name: 'Review', kind: 'progress', color: '' },
-      { id: 'done', name: 'Done', kind: 'done', color: '' },
+      { id: 'todo', name: 'К выполнению', kind: 'todo', color: '' },
+      { id: 'in_progress', name: 'В работе', kind: 'progress', color: '' },
+      { id: 'review', name: 'В ревью', kind: 'progress', color: '' },
+      { id: 'done', name: 'Готово', kind: 'done', color: '' },
     ],
     builtins: {
       title:       { label: 'Название',    hideable: false, hidden: false },

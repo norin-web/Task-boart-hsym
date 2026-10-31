@@ -133,7 +133,7 @@ function boards() {
   return [
     head('Доски'),
     card(
-      row('Колонки «Моей доски»', 'Свои колонки между обязательными To Do, In Progress, Review и Done',
+      row('Колонки «Моей доски»', 'Свои колонки между обязательными «К выполнению», «В работе», «В ревью» и «Готово»',
         act('Настроить', () => import('./myboard.js').then(m => m.editColumns(() => toast('Сохранено'))))),
       lead && row('Шаблоны чеклистов', 'Готовые пункты для подзадач и этапов — «Из шаблона» в чеклисте',
         act('Настроить', () => import('./cltemplates.js').then(m => m.openTemplatesEditor()))),
