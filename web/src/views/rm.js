@@ -79,7 +79,7 @@ function section(title, hint, sub, rows, line, actions, limit = 0) {
   const box = h('section');
   let all = false;
   const draw = () => fill(box,
-    h('div', { class: 'section-head' }, h('h2', null, title, rows.length > 0 && h('span', { class: 'muted sec-n' }, rows.length))),
+    rows.length > 0 && h('div', { class: 'section-head' }, h('h2', null, title, h('span', { class: 'muted sec-n' }, rows.length))),
     rows.length
       ? h('div', { class: 'card-box att-list' }, (limit && !all ? rows.slice(0, limit) : rows).map(x => h('div', { class: 'rm-row' },
         x.app ? appIcon(x.app, 'sm') : h('span'),

@@ -161,8 +161,9 @@ body.sb-collapsed .nav-item.me { justify-content: center; border-radius: 999px; 
 .panel-side .prop { margin-bottom: 16px; }
 .panel-side .prop > label { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); margin-bottom: 4px; }
 .panel-side .prop .inp, .panel-side .prop .prio-select { border: 0; background: transparent; padding: 0; height: 28px; font-weight: 600; box-shadow: none; appearance: none; -webkit-appearance: none; cursor: pointer; }
-.panel-side .prop .inp:hover, .panel-side .prop .prio-select:hover { background: var(--surface-3); border-radius: var(--r); padding: 0 8px; margin-left: -8px; width: calc(100% + 8px); }
-.panel-side .prop .inp:focus { background: var(--surface); border-radius: var(--r); box-shadow: 0 0 0 2px var(--focus); padding: 0 8px; }
+.panel-side .prop .inp, .panel-side .prop .prio-select { border-radius: var(--r); padding: 0 8px; margin-left: -8px; width: calc(100% + 16px); }
+.panel-side .prop .inp:hover, .panel-side .prop .prio-select:hover { background: var(--surface-3); }
+.panel-side .prop .inp:focus { background: var(--surface); box-shadow: 0 0 0 2px var(--focus); }
 .panel-side .prop:first-child { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .panel-side .prop:first-child > label { margin: 0; }
 .panel-side .status-wrap { position: relative; display: inline-flex; align-items: center; }
@@ -632,3 +633,29 @@ section:has(> .section-head + .pl-list) > .section-head { margin-bottom: 12px; }
 .ur-cell { min-width: 0; }
 .ur-cell .inp, .ur-cell select { width: 100%; max-width: 100%; }
 @media (max-width: 640px) { .un-rule, .ur-row { grid-template-columns: minmax(0, 1fr); } }
+
+/* Пустые состояния по центру (макет «Реджектов нет»), без заголовка над ними */
+section > .card-box.empty-state.center, section:has(> .section-head + .card-box) > .card-box.empty-state.center { text-align: center; justify-items: center; justify-content: center; padding: 24px 16px; }
+section:has(> .card-box.empty-state.center:first-child) { background: var(--surface); border-radius: var(--r-card); padding: 0; }
+section:has(> .card-box.empty-state.center:first-child) > .card-box { background: transparent; }
+
+/* Метрика: подпись сверху 13/600, число 36, пояснение справа внизу */
+.cs-row { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.cs { border: 0; border-radius: var(--r-card); padding: 20px; display: grid; grid-template-columns: 1fr auto; grid-template-areas: 'label label' 'n sub'; align-items: end; row-gap: 4px; min-height: 100px; }
+.cs-label { grid-area: label; font-size: 13px; line-height: 20px; font-weight: 600; color: var(--text); order: -1; }
+.cs-n { grid-area: n; font-size: 36px; line-height: 40px; font-weight: 600; letter-spacing: -.02em; }
+.cs-sub { grid-area: sub; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); padding-bottom: 6px; }
+.an-grid table { table-layout: auto; border-collapse: collapse; }
+.an-grid th { text-transform: none; letter-spacing: 0; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); text-align: right; padding: 0 6px 10px; white-space: nowrap; }
+.an-grid th:first-child, .an-grid td:first-child { text-align: left; padding-left: 0; width: 100%; }
+.an-grid td { padding: 8px 6px; text-align: right; font-size: 13px; font-weight: 600; border-top: 1px solid var(--border); }
+.an-grid td:last-child, .an-grid th:last-child { padding-right: 0; }
+.an-grid .card-box { overflow-x: visible; }
+
+/* Полосы прокрутки не показываем нигде (прокрутка работает) */
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; width: 0; height: 0; }
+/* Приоритет на карточке — значком (шеврон), без цветной полосы и подкраски: так в макете */
+.card.prio::before, .card.prio-top::before { display: none; }
+.card.prio-top { border-color: transparent; background: var(--surface); }
+.ap-row.has-prio, .ap-row.has-prio:hover { box-shadow: none; }
