@@ -1,14 +1,16 @@
-import { S, todayStr, dueInfo, KIND_COLORS, deptById, ACCESS_LABELS, LS, plural } from '../state.js';
-import { $, h, icon, topbar, showErr, fill } from '../ui.js';
+import { S, todayStr, dueInfo, KIND_COLORS, deptById, ACCESS_LABELS, LS, plural, isStaff } from '../state.js';
+import { $, h, icon, topbar, showErr, fill, statusIcon } from '../ui.js';
 import { call } from '../api.js';
 import { currentView, taskLink, link } from '../router.js';
 
 let showDone = false;
+let query = '';
 
 export async function renderMy() {
   const page = h('div', { class: 'page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
-  const tools = h('div', { class: 'row', style: { gap: '8px' } });
-  fill($('#main'), topbar([h('h1', null, 'Мои задачи')], [tools]), h('div', { class: 'view-body' }, page));
+  fill($('#main'), topbar([h('h1', { class: 'screen-title' }, 'Мои задачи')],
+    [isStaff() && h('button', { class: 'btn primary', onclick: () => import('./task.js').then(m => m.openCreateTask()) }, 'Задача')]),
+  h('div', { class: 'view-body' }, page));
 
   let tasks;
   try {
@@ -21,13 +23,26 @@ export async function renderMy() {
 
   // Вид (по юнитам / по статусу) и «показывать готовые» запоминаем
   let view = LS.get('myView', 'units');
-  const draw = () => {
-    fill(tools,
-      h('div', { class: 'seg' }, [['units', 'По юнитам'], ['status', 'По статусу']].map(([v, t]) =>
-        h('button', { class: view === v ? 'on' : '', onclick: () => { view = v; LS.set('myView', v); draw(); } }, t))));
-    fill(page, tasks.length > 0 && mySummary(tasks), view === 'units' ? unitGroups(tasks) : taskGroups(tasks));
+  showDone = LS.get('myShowDone', false) === true;
+  const list = h('div');
+  const drawList = () => {
+    const q = query.trim().toLowerCase();
+    const shown = q ? tasks.filter(t => (t.title + ' ' + t.key).toLowerCase().includes(q)) : tasks;
+    fill(list, view === 'units' ? unitGroups(shown) : taskGroups(shown));
   };
-  draw();
+  const controls = h('div', { class: 'my-controls' },
+    h('label', { class: 'my-search' }, icon('search', 15),
+      h('input', { type: 'search', placeholder: 'Поиск по задачам', value: query, oninput: e => { query = e.target.value; drawList(); } })),
+    h('div', { class: 'seg' }),
+    h('button', { class: 'my-toggle', role: 'switch', 'aria-checked': String(showDone), onclick: e => {
+      showDone = !showDone; LS.set('myShowDone', showDone); e.currentTarget.setAttribute('aria-checked', String(showDone)); drawList();
+    } }, h('span', { class: 'sw' }), 'Показывать готовые'));
+  const drawSeg = () => fill(controls.querySelector('.seg'),
+    [['units', 'По юнитам', 'layers'], ['status', 'По статусу', 'progress']].map(([v, t, ic]) =>
+      h('button', { class: view === v ? 'on' : '', onclick: () => { view = v; LS.set('myView', v); drawSeg(); drawList(); } }, icon(ic, 14), t)));
+  drawSeg();
+  fill(page, controls, list);
+  drawList();
 }
 
 /** Сводка над списком: открыто / в работе / просрочено. */
@@ -56,24 +71,16 @@ export function unitGroups(tasks) {
   }
   const groups = [...units.values()].map(g => ({ ...g, open: g.items.filter(t => t.statusKind !== 'done'), done: g.items.filter(t => t.statusKind === 'done') }))
     .sort((a, b) => b.open.filter(late).length - a.open.filter(late).length || b.open.length - a.open.length || a.unit.name.localeCompare(b.unit.name));
-  const openDone = new Set();
-
   const draw = () => fill(box, groups.length ? groups.map(g => {
-    const lateN = g.open.filter(late).length;
-    const showDone = openDone.has(g.unit.id);
+    const items = [...g.open.sort(byDue), ...(showDone ? g.done : [])];
+    if (!items.length) return null;
     return h('section', { class: 'ugroup' },
       h('div', { class: 'ugroup-head' },
-        h('span', { class: 'uc-icon sm', style: { background: g.unit.color } }, (g.unit.key || g.unit.name).slice(0, 2)),
-        h('b', null, g.unit.name),
-        h('span', { class: 'count' }, g.open.length ? g.open.length + ' ' + plural(g.open.length, ['открытая', 'открытые', 'открытых']) : 'открытых нет'),
-        lateN > 0 && h('span', { class: 'warn-text', style: { fontSize: '12px' } }, lateN + ' просроч.'),
+        h('span', { class: 'dot', style: { background: g.unit.color } }),
+        link({ unit: g.unit.id, mode: 'board' }, { class: 'ug-name' }, g.unit.name),
         h('span', { class: 'spacer' }),
-        g.done.length > 0 && h('button', { class: 'link-btn', onclick: () => { if (showDone) openDone.delete(g.unit.id); else openDone.add(g.unit.id); draw(); } },
-          (showDone ? 'Скрыть' : 'Показать') + ' готовые · ' + g.done.length),
-        link({ unit: g.unit.id, mode: 'board' }, { class: 'btn ghost sm' }, 'Доска', icon('arrow', 12))),
-      (g.open.length > 0 || showDone) && h('div', { class: 'rows' },
-        g.open.sort(byDue).map(t => row(t, { unit: false })),
-        showDone && g.done.map(t => row(t, { unit: false, done: true }))));
+        h('span', { class: 'count' }, items.length + ' ' + plural(items.length, ['задача', 'задачи', 'задач']))),
+      h('div', { class: 'rows' }, items.map(t => row(t, { unit: false, done: t.statusKind === 'done' }))));
   }) : h('div', { class: 'card-box empty-state' }, h('h2', null, 'На вас нет задач'), h('p', null, 'Когда вас назначат исполнителем, задачи появятся здесь.')));
   draw();
   return box;
@@ -108,13 +115,15 @@ export function taskGroups(tasks) {
 
 function row(t, { unit = true, done = false } = {}) {
   const due = dueInfo(t.dueDate, t.statusKind === 'done');
-  // тихая строка: статус точкой и серым текстом, срок датой (красным — просрочка); ключ и позиция — в подсказке
   const d = deptById(t.departmentId);
+  const late = due && due.cls.includes('overdue');
   return taskLink(t.unit.id, t.id, { class: 'trow' + (done ? ' done' : ''), title: [t.key, d && d.name].filter(Boolean).join(' · ') },
-    h('span', { class: 'dot', style: { background: t.statusColor || KIND_COLORS[t.statusKind] } }),
+    statusIcon(t.statusKind === 'progress' && /ревью/i.test(t.statusName) ? 'review' : t.statusKind, 16),
+    h('span', { class: 'trow-key' }, t.key),
     h('span', { class: 't-title' }, t.title),
-    h('span', { class: 'muted trow-status' }, t.statusName),
-    due && h('span', { class: 'trow-due' + (due.cls.includes('overdue') ? ' danger-text' : ' muted'), title: due.hint }, due.text),
+    h('span', { class: 'trow-status' }, t.statusName),
+    h('span', { class: 'trow-due' + (late ? ' danger-text' : due ? '' : ' muted'), title: due ? due.hint : '' },
+      due ? [icon('calendar', 14), late ? 'Просрочено · ' + due.text : due.text] : 'Без срока'),
     unit && h('span', { class: 'muted trow-unit' }, t.unit.name));
 }
 

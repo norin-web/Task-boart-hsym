@@ -449,3 +449,33 @@ section:has(> .section-head + .card-box.empty-state.center) > .card-box { paddin
 section:has(> .section-head + .pl-list) { background: var(--surface); border-radius: var(--r-card); padding: 18px 20px; }
 section:has(> .section-head + .pl-list) > .section-head { margin-bottom: 12px; }
 .pl-card { background: var(--surface); }
+
+/* ---------- Мои задачи: поиск, сегмент, переключатель; группы — белыми карточками ---------- */
+.my-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.my-search { display: flex; align-items: center; gap: 8px; height: 40px; width: 240px; padding: 0 16px; border-radius: 999px; background: var(--surface); color: var(--muted); }
+.my-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 13px; color: var(--text); }
+.my-controls .seg { background: var(--surface); padding: 4px; }
+.my-controls .seg button { height: 32px; padding: 0 14px; }
+.my-controls .seg button.on { background: var(--surface-3); }
+.my-toggle { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--surface); font-size: 12px; font-weight: 600; }
+.my-toggle .sw { width: 28px; height: 16px; border-radius: 999px; background: var(--border-strong); position: relative; transition: background .15s; }
+.my-toggle .sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.my-toggle[aria-checked="true"] .sw { background: var(--accent); }
+.my-toggle[aria-checked="true"] .sw::after { transform: translateX(12px); }
+.unit-groups { display: grid; gap: 12px; }
+.ugroup { background: var(--surface); border-radius: var(--r-card); padding: 18px 20px 8px; }
+.ugroup-head { display: flex; align-items: center; gap: 8px; min-height: 32px; margin-bottom: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--border); font-size: 16px; line-height: 24px; font-weight: 600; letter-spacing: -.02em; }
+.ugroup-head .dot { width: 8px; height: 8px; }
+.ugroup-head .ug-name { color: var(--text); text-decoration: none; }
+.ugroup-head .count { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+.ugroup .rows { display: grid; }
+.trow { display: flex; align-items: center; gap: 12px; min-height: 52px; border-bottom: 1px solid var(--border); padding: 0 4px; color: var(--text); text-decoration: none; background: transparent; border-radius: 0; }
+.trow:last-child { border-bottom: 0; }
+.trow:hover { background: var(--surface-2); }
+.trow-key { width: 64px; flex: none; font-size: 13px; color: var(--muted); font-weight: 500; }
+.trow .t-title { flex: 1; min-width: 0; font-size: 13px; line-height: 20px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trow-status { width: 180px; flex: none; font-size: 13px; font-weight: 500; color: var(--muted); }
+.trow-due { width: 150px; flex: none; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; }
+.trow-due.danger-text { color: var(--danger); font-weight: 600; }
+.trow .st-ic { flex: none; }
+@media (max-width: 760px) { .trow-status, .trow-key { display: none; } .trow-due { width: auto; } .my-toggle { margin-left: 0; } }
