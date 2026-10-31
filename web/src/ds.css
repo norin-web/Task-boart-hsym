@@ -664,3 +664,6 @@ section:has(> .card-box.empty-state.center:first-child) > .card-box { background
 /* Сайдбар в низком окне прокручивается, а не сжимает пункты (в макете у всех flex-shrink: 0) */
 #sidebar > *, #sidebar .nav-units, #sidebar .nav-item, #sidebar .nav-sub, #sidebar .nav-subs { flex-shrink: 0; }
 #sidebar .nav-spacer { flex: 1 0 8px; min-height: 8px; }
+.rm-grid .section-head h2 { display: flex; width: 100%; justify-content: space-between; align-items: baseline; }
+.rm-grid .section-head .sec-n { font-size: 13px; font-weight: 500; }
+.rm-row .uc-icon.sm, .rm-row .app-img { width: 36px; height: 36px; border-radius: var(--r); }

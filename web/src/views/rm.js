@@ -86,7 +86,7 @@ function section(title, hint, sub, rows, line, actions, limit = 0) {
         h('button', { class: 'link-btn rm-main', onclick: () => peekTask(x.unitId, x.id) },
           h('span', { class: 'rm-title' }, h('b', null, x.app ? x.app.name : x.title), x.app && prioTag(x.app.priority), x.app && x.app.isTest && h('span', { class: 'test-tag' }, 'тест')),
           line(x)),
-        h('div', { class: 'rm-actions' }, actions(x), avatar(personById(x.assigneeId), 'sm')))),
+        h('div', { class: 'rm-actions' }, actions(x)))),
         limit > 0 && rows.length > limit && h('button', { class: 'rc-more link-btn', onclick: () => { all = !all; draw(); } }, all ? 'Свернуть' : `Показать ещё ${rows.length - limit}`))
       : h('div', { class: 'card-box empty-state sm center' }, icon('done', 20), h('b', null, hint), h('p', { class: 'muted' }, sub)));
   draw();
