@@ -1,5 +1,6 @@
 /** UI-примитивы: DOM-хелпер, иконки, модалки, меню, тосты. */
 import { avatarSrc } from './avatars.js';
+import { PACK } from './icons.js';
 import { PALETTE, colorFor, initials, safeUrl, isOnline, presenceText, personById } from './state.js';
 
 export const $ = (sel, root) => (root || document).querySelector(sel);
@@ -110,13 +111,21 @@ export function icon(name, size = 16) {
   svg.setAttribute('viewBox', '0 0 24 24');
   svg.setAttribute('width', size);
   svg.setAttribute('height', size);
+  svg.setAttribute('class', 'i');
+  svg.setAttribute('aria-hidden', 'true');
+  const drawn = PACK[name];
+  if (drawn) {
+    // пак Unicons: заливка currentColor
+    svg.setAttribute('fill', 'currentColor');
+    for (const d of drawn) { const p = document.createElementNS(NS, 'path'); p.setAttribute('d', d); svg.append(p); }
+    return svg;
+  }
+  // знаки без пары в паке (логотипы сервисов и т. п.) — прежние линии
   svg.setAttribute('fill', 'none');
   svg.setAttribute('stroke', 'currentColor');
   svg.setAttribute('stroke-width', DOTS.has(name) ? '2.6' : '2');
   svg.setAttribute('stroke-linecap', 'round');
   svg.setAttribute('stroke-linejoin', 'round');
-  svg.setAttribute('class', 'i');
-  svg.setAttribute('aria-hidden', 'true');
   const path = document.createElementNS(NS, 'path');
   path.setAttribute('d', ICONS[name] || ICONS.circle);
   svg.append(path);
