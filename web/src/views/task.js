@@ -899,15 +899,16 @@ export function openCreateTask(opts = {}) {
     tplNote);
   const props = h('div', { class: 'grid2' });
 
+  const statusBox = h('div');
   const drawProps = () => {
     const B = unit.settings.builtins;
+    fill(statusBox, field(B.status.label, h('select', { class: 'inp', value: draft.status || unit.settings.columns[0].id, onchange: e => { draft.status = e.target.value; } },
+      unit.settings.columns.map(c => h('option', { value: c.id }, c.name)))));
     fill(props, 
       !inBoard && field('Юнит', h('select', {
         class: 'inp', value: unit.id,
         onchange: e => { unit = unitById(e.target.value); drawProps(); },
       }, units.map(u => h('option', { value: u.id }, u.name + ' · ' + u.key)))),
-      field(B.status.label, h('select', { class: 'inp', value: draft.status || unit.settings.columns[0].id, onchange: e => { draft.status = e.target.value; } },
-        unit.settings.columns.map(c => h('option', { value: c.id }, c.name)))),
       !B.assignee.hidden && field(B.assignee.label, assigneeSelect(draft.assigneeId, v => {
         draft.assigneeId = v;
         const p = personById(v);
@@ -940,11 +941,11 @@ export function openCreateTask(opts = {}) {
 
   const close = modal({
     title: opts.parent ? 'Подзадача' : 'Новая задача',
-    wide: true,
     body: [
       opts.parent && h('div', { class: 'parent-note' }, icon('tree', 13), 'Часть «', h('b', null, opts.parent.title), '»',
         h('span', { class: 'muted' }, ' · ' + opts.parent.key)),
-      tplRow, title, h('div', { style: { height: '10px' } }), desc, h('div', { style: { height: '8px' } }), spec, h('div', { style: { height: '14px' } }), props, linksBox],
+      tplRow, title, desc, props,
+      h('details', { class: 'mdl-more' }, h('summary', null, 'Дополнительно'), statusBox, spec, linksBox)],
     footLeft: more,
     actions: [
       { label: 'Отмена' },

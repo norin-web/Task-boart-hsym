@@ -59,7 +59,7 @@ async function openBell(anchor) {
   const { loadNotes, newsBlock } = await import('./home.js');
   await loadNotes();
   const block = newsBlock();
-  const m = menu(anchor, [block || h('p', { class: 'muted bell-empty' }, 'Новых уведомлений нет')], { cls: 'bell-menu' });
+  const m = menu(anchor, [block || h('div', { class: 'bell-empty' }, icon('done', 20), h('b', null, 'Новых уведомлений нет'), h('span', { class: 'muted' }, 'Здесь появятся назначения, ревью и упоминания'))], { cls: 'bell-menu' });
   // открыли задачу — список закрываем
   m.addEventListener('click', e => { if (e.target.closest('.news-row')) closeMenu(); }, true);
 }

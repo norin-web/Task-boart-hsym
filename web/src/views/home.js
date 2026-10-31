@@ -77,20 +77,32 @@ export function newsBlock() {
   if (!S.notes.length) return null;
   const row = n => {
     const by = personById(n.actorId);
-    const due = dueInfo(n.dueDate, n.kind === 'approved'); // закрытая — срок без тревоги
+    const who = by && by.id !== S.meId ? h('b', null, by.name.split(' ')[0]) : null;
+    const q = '«' + n.title + '»';
+    const di = dueInfo(n.dueDate, n.kind === 'approved');
+    // предложение, как в макете: «<b>Екатерина</b> назначила вас на «…»»; без автора — безлично
+    const text = {
+      assigned: who ? [who, ' назначил(а) вас на ', q] : ['Вас назначили на ', q],
+      handoff: who ? [who, ' передал(а) вам ', q] : ['Вам передали ', q],
+      review: who ? [who, ' отдал(а) на ревью ', q] : ['На ревью: ', q],
+      returned: who ? [who, ' вернул(а) на доработку ', q] : ['Вернули на доработку ', q],
+      approved: who ? [who, ' принял(а) ', q] : ['Принято: ', q],
+      mention: who ? [who, ' упомянул(а) вас в ', q] : ['Вас упомянули в ', q],
+      unblocked: ['Можно начинать ', q],
+      due_soon: ['Срок ' + (n.dueDate === todayStr() ? 'сегодня' : 'завтра') + ': ', q],
+      overdue: ['Просрочено: ', q],
+      store_live: ['Вышло в App Store: ', q],
+      store_reject: ['Реджект Apple: ', q],
+    }[n.kind] || [q];
     return h('button', {
       class: 'news-row', dataset: { noteTask: n.taskId }, onclick: () => peekTask(n.unit.id, n.taskId),
+      title: `${n.key} · ${n.unit.name}`,
     },
-    h('span', { class: 'news-dot' + (n.kind !== 'assigned' ? ' ' + n.kind : '') }),
-    // что случилось — короткой подписью; красным только «просрочено» и «вернули»; ключ, юнит и кто — в подсказке
-    // по задаче — одна строка: все события пометками через «·», важное первым (красным — просрочка, возврат, реджект)
-    h('span', { class: 'news-what' + (NEWS_DANGER.includes(n.kind) ? ' danger' : '') },
-      (n.kinds || [n.kind]).map(k => (k === 'due_soon' ? (n.dueDate === todayStr() ? 'срок сегодня' : 'срок завтра') : NEWS_WHAT[k] || '')).filter(Boolean).join(' · ')),
-    n.app ? appIcon(n.app, 'xs') : h('span', { class: 'news-noapp' }),
-    h('span', { class: 'news-title', title: `${n.key} · ${n.unit.name}` + (n.actorId || !['overdue', 'due_soon'].includes(n.kind) ? ' · ' + noteText(n.kind, by) : '') },
-      n.app && h('b', null, n.app.name + ' · '), n.title),
-    due && n.kind !== 'due_soon' && h('span', { class: 'news-due' + (due.cls.includes('overdue') ? ' danger' : ''), title: due.hint }, fmtDate(n.dueDate)),
-    h('span', { class: 'news-meta' }, relTime(n.at)));
+    by ? avatar(by, 'lg') : n.app ? appIcon(n.app, 'sm') : h('span', { class: 'news-noapp' }),
+    h('span', { class: 'news-body' },
+      h('span', { class: 'news-sentence' }, text),
+      h('span', { class: 'news-sub' }, [n.unit.name, relTime(n.at), di && di.cls === 'overdue' && 'срок ' + fmtDate(n.dueDate)].filter(Boolean).join(' · '))),
+    h('span', { class: 'news-dot' + (NEWS_DANGER.includes(n.kind) ? ' danger' : '') }));
   };
   const readAll = () => {
     S.notes = [];
@@ -100,11 +112,11 @@ export function newsBlock() {
     sec.querySelectorAll('.news-row').forEach(fadeOut);
   };
   // колонка «что случилось» — только если хоть у одной строки есть подпись (иначе не занимает место)
-  const list = h('div', { class: 'news card-box' + (S.notes.some(n => NEWS_WHAT[n.kind]) ? ' with-what' : '') });
+  const list = h('div', { class: 'news card-box' });
   const sec = h('section', { class: 'news-sec' },
     h('div', { class: 'section-head' },
-      h('h2', null, 'Новое для вас', h('span', { class: 'muted sec-n' }, S.notes.length)),
-      h('button', { class: 'btn ghost sm', onclick: readAll }, icon('check', 14), 'Просмотрено всё')),
+      h('h2', null, 'Новое для вас · ' + S.notes.length),
+      h('button', { class: 'link-btn', onclick: readAll }, 'Прочитать все')),
     list);
   // длинный список: 3 строки, «Ещё N» раскрывает до 15, больше — «Все уведомления» отдельным окном
   const LIMIT = 3, MAX = 15;
@@ -124,7 +136,7 @@ export function newsBlock() {
 
 /** Все непрочитанные отдельным окном (когда их больше 15). */
 function openAllNews(row) {
-  const list = h('div', { class: 'news card-box with-what news-all' }, S.notes.map(row));
+  const list = h('div', { class: 'news card-box news-all' }, S.notes.map(row));
   const close = modal({ title: 'Новое для вас · ' + S.notes.length, body: list, actions: [{ label: 'Закрыть' }], wide: true });
   list.addEventListener('click', e => { if (e.target.closest('.news-row')) close(); });
 }
