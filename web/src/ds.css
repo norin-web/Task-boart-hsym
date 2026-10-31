@@ -530,3 +530,19 @@ section:has(> .section-head + .pl-list) > .section-head { margin-bottom: 12px; }
 .un-actions { display: flex; align-items: center; gap: 12px; justify-content: flex-end; }
 .un-actions .link-btn { font-weight: 500; }
 @media (max-width: 900px) { .un-th { display: none; } .un-th, .un-list .un-row { grid-template-columns: minmax(0, 1fr) auto; } .un-list .un-num, .un-list .un-rv { display: none; } }
+
+/* ---------- Настройки → Профиль ---------- */
+.prefs-body.narrow { max-width: 760px; }
+.pf-card { padding: 24px; display: grid; gap: 16px; }
+.pf-head { display: flex; align-items: center; gap: 16px; }
+.pf-av { position: relative; border: 0; background: none; padding: 0; border-radius: 50%; }
+.pf-av .avatar.xl, .pf-av .avatar { width: 64px; height: 64px; font-size: 22px; }
+.pf-edit { position: absolute; right: -2px; bottom: -2px; width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: var(--on-primary); display: inline-flex; align-items: center; justify-content: center; border: 2px solid var(--surface); }
+.pf-who { display: grid; flex: 1; min-width: 0; }
+.pf-who b { font-size: 20px; line-height: 28px; font-weight: 600; letter-spacing: -.02em; }
+.pf-who span { font-size: 13px; }
+.pf-grid { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--border); }
+.pf-val { display: grid; gap: 2px; padding: 16px 0; border-bottom: 1px solid var(--border); }
+.pf-val:nth-last-child(-n+2) { border-bottom: 0; }
+.pf-val small { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); }
+.pf-val b { font-size: 14px; line-height: 20px; font-weight: 600; }

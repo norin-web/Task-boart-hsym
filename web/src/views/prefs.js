@@ -42,7 +42,7 @@ export function renderPrefs(tab) {
   if (!all.some(t => t[0] === tab) && tab !== 'trash') tab = 'profile';
   const navTab = tab === 'trash' ? 'units' : tab;
   const key = currentView();
-  const body = h('div', { class: 'prefs-body' });
+  const body = h('div', { class: 'prefs-body' + (PERSONAL.some(t => t[0] === tab) ? ' narrow' : '') });
   const item = ([id, label, ic]) => link({ view: 'settings', tab: id }, { class: 'prefs-tab' + (id === navTab ? ' on' : '') }, icon(ic, 15), label);
   fill($('#main'),
     topbar([h('h1', { class: 'screen-title' }, 'Настройки')], []),
@@ -78,18 +78,24 @@ function profile() {
   if (!p) return null;
   const pos = (p.positionIds || []).map(id => (deptById(id) || {}).name).filter(Boolean).join(', ');
   const email = (S.session && S.session.user.email) || p.email;
+  const city = p.timezone ? p.timezone.split('/').pop().replace(/_/g, ' ') : '';
+  const time = p.timezone ? (() => { try { return new Intl.DateTimeFormat('ru-RU', { timeZone: p.timezone, hour: '2-digit', minute: '2-digit' }).format(new Date()); } catch { return ''; } })() : '';
+  const val = (label, v) => h('div', { class: 'pf-val' }, h('small', null, label), h('b', null, v || '—'));
   return [
-    head('Профиль'),
-    card(
-      h('button', { class: 'prefs-me prefs-row click', type: 'button', 'aria-label': 'Изменить профиль', 'data-no-card': '', onclick: openMyProfile }, avatar(p, 'lg'),
-        h('span', { class: 'prefs-row-text' }, h('b', null, p.name), h('small', { class: 'muted' }, [ACCESS_LABELS[p.access], pos, email].filter(Boolean).join(' · '))),
-        h('span', { class: 'prefs-go' }, icon('chevron', 15)))),
-    head('Аккаунт'),
+    h('div', { class: 'prefs-head' }, h('h2', null, 'Профиль'), h('p', { class: 'muted' }, 'Видят все в студии: в карточке человека и в упоминаниях')),
+    h('div', { class: 'card-box pf-card' },
+      h('div', { class: 'pf-head', 'data-no-card': '' }, h('button', { class: 'pf-av', type: 'button', 'aria-label': 'Изменить фото', onclick: openMyProfile }, avatar(p, 'xl'), h('span', { class: 'pf-edit' }, icon('edit', 12))),
+        h('div', { class: 'pf-who' }, h('b', null, p.name), h('span', { class: 'muted' }, [ACCESS_LABELS[p.access], pos].filter(Boolean).join(' · '))),
+        h('button', { class: 'btn lg', onclick: openMyProfile }, 'Изменить профиль')),
+      h('div', { class: 'pf-grid' },
+        val('Почта', email), val('Telegram', p.telegram ? '@' + p.telegram : ''),
+        val('Город и время', [city, time].filter(Boolean).join(' · ')), val('Должность', p.role))),
+    h('div', { class: 'prefs-head' }, h('h2', null, 'Аккаунт')),
     card(
       mode === 'local' && row('Локальный режим', 'Данные хранятся только в этом браузере', null),
       mode === 'local' && row('Войти как…', 'Посмотреть Tasks глазами другого человека', act('Выбрать', openActAs)),
       mode === 'local' && row('Очистить локальную базу', 'Стереть всё и начать с чистой базы', act('Стереть', resetLocal, { danger: true })),
-      mode === 'supabase' && row('Выйти', email, act('Выйти', () => supabase.auth.signOut()))),
+      mode === 'supabase' && row('Выйти', email, act('Выйти', () => supabase.auth.signOut(), { danger: true }))),
   ];
 }
 
