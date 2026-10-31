@@ -11,18 +11,20 @@ import { statBlocks } from './ceo.js';
 import { team, PERIODS } from './pm.js';
 import { workloadBlock } from './home.js';
 import { renderLayout, editLayout } from './layout.js';
+import { statusLines, unitCurves } from './charts.js';
 
 export async function renderAnalytics() {
-  const page = h('div', { class: 'page ceo-page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
+  const page = h('div', { class: 'page ceo-page analytics-page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
   const tools = h('div', { class: 'row', style: { gap: '8px' } });
   fill($('#main'), topbar([h('h1', null, 'Аналитика')], [tools]), h('div', { class: 'view-body' }, page));
   let unit = LS.get('anUnit', '');
   let period = PERIODS.some(([k]) => k === LS.get('kpiPeriod', '')) ? LS.get('kpiPeriod', '') : 'month';
-  let d, apps, kpi, ov;
+  let d, apps, kpi, ov, ser;
+  let days = Number(LS.get('anDays', 30)) || 30;
 
   async function load() {
     try {
-      [d, apps, kpi, ov] = await Promise.all([call('getCeoDashboard', { today: todayStr() }), call('listApps', {}), call('getPmDashboard', { today: todayStr(), period }), call('getOverview', { today: todayStr() })]);
+      [d, apps, kpi, ov, ser] = await Promise.all([call('getCeoDashboard', { today: todayStr() }), call('listApps', {}), call('getPmDashboard', { today: todayStr(), period }), call('getOverview', { today: todayStr() }), call('getStatusSeries', { today: todayStr(), days, unitId: unit })]);
     } catch (e) { return showErr(e); }
     if (currentView() !== 'analytics') return;
     S.apps = apps.map(({ requests, active, ...a }) => a);
@@ -33,9 +35,33 @@ export async function renderAnalytics() {
   const blocks = () => {
     const list = unit ? apps.filter(a => a.unitId === unit) : apps;
     const defs = statBlocks(d, list, load).filter(b => isSuper() || b.id !== 'pmload');
-    defs.push({ id: 'kpi-team', title: 'Команда и KPI', col: 'full',
-      render: () => team(kpi, period, p => { period = p; LS.set('kpiPeriod', p); load(); }) });
-    defs.push({ id: 'workload', title: 'Загрузка команды', col: 'full', render: () => workloadBlock(ov, { all: true }) });
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+    const grays = ['#787c87', '#9aa0ad', '#b6bbc6', '#5d6270'];
+    const cardOf = (title, control, body) => h('section', null,
+      h('div', { class: 'section-head' }, h('h2', null, title), control), h('div', { class: 'card-box' }, body));
+    const daysSel = h('select', { class: 'mini-select', 'aria-label': 'Период', onchange: e => { days = Number(e.target.value); LS.set('anDays', days); load(); } },
+      [[7, '7 дней'], [30, '30 дней'], [90, '90 дней']].map(([v, t]) => h('option', { value: v, selected: v === days }, t)));
+    const byId = Object.fromEntries(defs.map(b => [b.id, b]));
+    const chartStatuses = () => cardOf('По статусам', daysSel,
+      statusLines({ days: ser.days, aria: 'Приложения по статусам за период',
+        series: ser.statuses.map((st, i) => ({ id: st.id, label: st.name, values: ser.counts[st.id], strong: st.kind === 'live', color: st.kind === 'live' ? accent : grays[i % grays.length] })) }));
+    const chartUnits = () => cardOf('Юниты × статусы', null,
+      unitCurves({ categories: S.appStatuses.map(st => st.name), aria: 'Приложения юнитов по статусам',
+        units: S.units.filter(u => !u.archived && (!unit || u.id === unit)).map(u => ({ name: u.name, color: u.color, values: S.appStatuses.map(st => list.filter(a => a.unitId === u.id && a.status === st.id).length) })) }));
+    const shipped = byId.shipped;
+    // как в макете: два графика рядом, ниже — «Команда и KPI» и «Выпущено за 30 дней»
+    const idx = defs.findIndex(b => b.id === 'statuses');
+    const rest = defs.filter(b => !['statuses', 'byunit', 'shipped'].includes(b.id));
+    const out = [];
+    for (const b of rest) {
+      out.push(b);
+      if (b.id === 'kpi') out.push({ id: 'charts', title: 'Графики', col: 'full', render: () => h('div', { class: 'an-grid' }, chartStatuses(), chartUnits()) });
+    }
+    for (const b of out) if (['pmload', 'stale'].includes(b.id)) b.off = true;
+    defs.length = 0; defs.push(...out);
+    defs.push({ id: 'kpi-ship', title: 'Команда и «Выпущено»', col: 'full', render: () => h('div', { class: 'an-grid an-grid-32' },
+      team(kpi, period, p => { period = p; LS.set('kpiPeriod', p); load(); }), shipped ? shipped.render() : null) });
+    defs.push({ id: 'workload', title: 'Загрузка команды', col: 'full', off: true, render: () => workloadBlock(ov, { all: true }) });
     return defs;
   };
 

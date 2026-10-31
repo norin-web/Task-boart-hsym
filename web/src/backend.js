@@ -1890,6 +1890,38 @@ export function createBackend(db, opts = {}) {
      * Дашборд CEO: портфель по статусам (и по юнитам), что требует внимания (реджекты, просрочки, без движения
      * staleDays дней, запрос без разбивки или без PM), работы в ходу (открытые запросы с текущим этапом), недавно вышло (14 дней).
      */
+    /**
+     * Приложения по статусам во времени: на конец каждого из последних days дней — сколько приложений в каждом статусе.
+     * Восстанавливается из журнала смены статусов (app_status_log); unitId — только этот юнит. Видно то, что видит человек (правила базы).
+     */
+    async getStatusSeries(p) {
+      const n = Math.min(90, Math.max(7, Number(p.days) || 30));
+      const end = new Date(today(p.today) + 'T00:00:00Z');
+      const days = Array.from({ length: n }, (_, i) => new Date(end.getTime() - (n - 1 - i) * 864e5).toISOString().slice(0, 10));
+      let q = T('apps').select('id,unit_id,status,created_at').eq('archived', false);
+      if (p.unitId) q = q.eq('unit_id', String(p.unitId));
+      const apps = await run(q);
+      const statuses = await appStatuses();
+      const counts = Object.fromEntries(statuses.map(x => [x.id, days.map(() => 0)]));
+      if (apps.length) {
+        const log = await all(() => T('app_status_log').select('app_id,from_status,to_status,at').in('app_id', apps.map(a => a.id)).order('at').order('id'));
+        const by = {};
+        for (const r of log) (by[r.app_id] || (by[r.app_id] = [])).push(r);
+        for (const a of apps) {
+          const ev = by[a.id] || [];
+          days.forEach((d, i) => {
+            const t = d + 'T23:59:59.999Z';
+            if (a.created_at && a.created_at > t) return; // приложения ещё не было
+            let st = ev.length ? ev[0].from_status || (ev[0].at <= t ? '' : a.status) : a.status;
+            for (const e of ev) { if (e.at <= t) st = e.to_status; else break; }
+            if (!st && ev.length) st = ev[0].to_status;
+            if (counts[st]) counts[st][i]++;
+          });
+        }
+      }
+      return { days, statuses: statuses.map(x => ({ id: x.id, name: x.name, kind: x.kind, color: x.color })), counts };
+    },
+
     async getCeoDashboard(p) {
       const day = today(p.today);
       const [apps, statuses, staleRow] = await Promise.all([methods.listApps({}), appStatuses(), setting('staleDays')]);

@@ -150,3 +150,19 @@ test('крайние случаи: реджекты, перенос, уход л
 
   assert.deepEqual(failed, [], '\n' + failed.join('\n'));
 });
+
+test('статусы приложений во времени: ряд по дням из журнала смены статусов', async () => {
+  const api = await setup();
+  const ceo = await person(api, 'CEO', 'superadmin', 'd_po');
+  const gold = await api('createUnit', { name: 'Gold', key: 'GLD' });
+  await api.as(ceo, () => api('createApp', { name: 'Live', unitId: gold.id, status: 'live', noRequest: true }));
+  const { app } = await api.as(ceo, () => api('createApp', { name: 'Dev', unitId: gold.id }));
+  const s = await api.as(ceo, () => api('getStatusSeries', { days: 7 }));
+  assert.equal(s.days.length, 7);
+  const last = i => Object.fromEntries(Object.entries(s.counts).map(([k, v]) => [k, v[i]]));
+  const end = last(6);
+  assert.equal(end.live, 1);
+  assert.equal(end.dev, 1);
+  assert.equal(Object.values(end).reduce((a, b) => a + b, 0), 2); // каждое приложение — ровно в одном статусе
+  assert.ok(app.id);
+});
