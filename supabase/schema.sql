@@ -399,7 +399,7 @@ end $$;
 do $$
 declare
   g text := 'f_priority';
-  opts jsonb := '[{"id":"o_low","name":"Low","color":"#64748b"},{"id":"o_medium","name":"Medium","color":"#f59e0b"},{"id":"o_high","name":"High","color":"#ef4444"},{"id":"o_critical","name":"Critical","color":"#b91c1c"}]';
+  opts jsonb := '[{"id":"o_low","name":"Низкий","color":"#64748b"},{"id":"o_medium","name":"Средний","color":"#f59e0b"},{"id":"o_high","name":"Высокий","color":"#ef4444"},{"id":"o_critical","name":"Критический","color":"#b91c1c"}]';
 begin
   if not exists (select 1 from fields where unit_id is null and role = 'priority') then
     perform set_config('app.system', 'on', true);
@@ -409,13 +409,24 @@ begin
     -- значения старых приоритетов юнитов → общий: по названию варианта, иначе по тому же id
     update tasks t set fields = (t.fields - f.id) || jsonb_strip_nulls(jsonb_build_object(g, coalesce(
         (select n ->> 'id' from jsonb_array_elements(opts) n
-          where lower(n ->> 'name') = lower((select o ->> 'name' from jsonb_array_elements(f.options) o where o ->> 'id' = t.fields ->> f.id))),
+          where lower(n ->> 'name') = (select case lower(o ->> 'name') when 'low' then 'низкий' when 'medium' then 'средний' when 'high' then 'высокий' when 'critical' then 'критический' else lower(o ->> 'name') end from jsonb_array_elements(f.options) o where o ->> 'id' = t.fields ->> f.id)),
         (select n ->> 'id' from jsonb_array_elements(opts) n where n ->> 'id' = t.fields ->> f.id))))
       from fields f
      where f.unit_id = t.unit_id and f.role = 'priority' and t.fields ? f.id;
     delete from fields where unit_id is not null and role = 'priority';
     perform set_config('app.system', 'off', true);
   end if;
+end $$;
+-- Названия приоритета — по-русски (по макету); у уже созданного поля — однократно
+do $$
+begin
+  perform set_config('app.system', 'on', true);
+  update fields set options = (select jsonb_agg(case o ->> 'id'
+      when 'o_low' then jsonb_set(o, '{name}', '"Низкий"') when 'o_medium' then jsonb_set(o, '{name}', '"Средний"')
+      when 'o_high' then jsonb_set(o, '{name}', '"Высокий"') when 'o_critical' then jsonb_set(o, '{name}', '"Критический"') else o end order by n)
+    from jsonb_array_elements(options) with ordinality t(o, n))
+   where id = 'f_priority' and options::text like '%"name": "Low"%' or id = 'f_priority' and options::text like '%"name":"Low"%';
+  perform set_config('app.system', 'off', true);
 end $$;
 
 -- ---------- Tasks 2.0: роли, приложения, этапы ----------

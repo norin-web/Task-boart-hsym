@@ -667,3 +667,65 @@ section:has(> .card-box.empty-state.center:first-child) > .card-box { background
 .rm-grid .section-head h2 { display: flex; width: 100%; justify-content: space-between; align-items: baseline; }
 .rm-grid .section-head .sec-n { font-size: 13px; font-weight: 500; }
 .rm-row .uc-icon.sm, .rm-row .app-img { width: 36px; height: 36px; border-radius: var(--r); }
+
+/* =====================================================================
+   Карточка релиза и панель — строго по артборду «16 · Карточка релиза»
+   ===================================================================== */
+/* Панель занимает область страницы (слева 16 от сайдбара, справа 6), в обоих режимах */
+.panel, .panel.center { top: 16px; bottom: 16px; left: 278px; right: 6px; width: auto; transform: none; animation: none; }
+body.sb-collapsed .panel, body.sb-collapsed .panel.center { left: 102px; }
+@media (max-width: 900px) { .panel, .panel.center, body.sb-collapsed .panel { top: 0; bottom: 0; left: 0; right: 0; } }
+.panel:has(.rl-card) .props > .prop:nth-child(1), .panel:has(.rl-card) .props > .prop:nth-child(3) { display: none; }
+.panel:has(.rl-card) .panel-head .icon-btn:not(:last-child) { display: none; }
+.panel:has(.rl-card) .side-meta { display: none; }
+
+.rl-card { background: var(--surface); border-radius: var(--r-xl); padding: 20px; box-shadow: 0 0 0 1px color-mix(in srgb, var(--border) 60%, transparent); display: grid; gap: 12px; margin-bottom: 16px; }
+.rl-head { display: flex; align-items: center; gap: 12px; }
+.rl-app { font-size: 16px; line-height: 24px; font-weight: 600; letter-spacing: -.02em; }
+.rl-actions { display: flex; gap: 8px; }
+.rl-actions .btn { height: 32px; padding: 0 14px; font-size: 12px; }
+.rl-track { list-style: none; margin: 4px 0 0; padding: 0; display: flex; align-items: center; gap: 12px; }
+.rl-pt { display: flex; align-items: center; gap: 12px; flex: none; }
+.rl-line-seg { flex: 1; height: 2px; border-radius: 2px; background: var(--surface-3); min-width: 24px; }
+.rl-line-seg.passed { background: var(--accent); }
+.rl-dot { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; background: var(--surface-3); color: var(--muted); border: 0; flex: none; }
+.rl-pt.done .rl-dot { background: var(--accent); color: var(--on-accent); }
+.rl-pt.now .rl-dot { background: var(--primary); color: var(--on-primary); }
+.rl-pt.bad .rl-dot { background: var(--danger-fill); color: #fff; }
+.rl-pt-label { font-size: 13px; line-height: 20px; font-weight: 500; color: var(--muted); }
+.rl-pt.now .rl-pt-label, .rl-pt.done .rl-pt-label { color: var(--text); font-weight: 600; }
+.rl-pt.done .rl-pt-label { font-weight: 500; }
+.rl-now { margin: 0; }
+.rl-line { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12px; line-height: 16px; font-weight: 500; }
+.phase-pill { height: 24px; font-size: 12px; }
+.rl-fields-card { gap: 0; }
+.rl-card-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.rl-card-head h3, .rl-sec-h { margin: 0; font-size: 16px; line-height: 24px; font-weight: 600; letter-spacing: -.02em; }
+.rl-card-head span { font-size: 12px; font-weight: 500; }
+.rl-fields { display: grid; }
+.rl-fields .af-row, .rl-fields .rl-row { display: grid; grid-template-columns: 150px minmax(0, 1fr); align-items: center; gap: 16px; min-height: 42px; padding: 0; border: 0; border-bottom: 1px solid var(--border); background: transparent; }
+.rl-fields .af-row:last-child { border-bottom: 0; }
+.rl-fields .af-name { font-size: 13px; font-weight: 500; color: var(--muted); }
+.rl-fields .af-val { font-size: 13px; font-weight: 500; color: var(--text); }
+.rl-fields .af-val.empty, .rl-fields .af-val .muted, .rl-fields .af-val.missing { color: var(--warn); }
+.rl-sec { margin: 0 0 16px; }
+.rl-sec-h { margin-bottom: 8px; }
+.rl-links { display: grid; }
+.rl-link { display: flex; align-items: center; gap: 12px; min-height: 42px; border-bottom: 1px solid var(--border); text-decoration: none; padding: 0; }
+.rl-link:last-child { border-bottom: 0; }
+.rl-link-name { width: 150px; flex: none; font-size: 13px; font-weight: 500; color: var(--text); }
+.rl-link-url { flex: 1; min-width: 0; font-size: 13px; font-weight: 500; color: var(--accent-text) !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-compact { display: flex; align-items: center; gap: 12px; background: var(--surface); border-radius: var(--r-lg); padding: 12px; box-shadow: 0 0 0 1px color-mix(in srgb, var(--border) 60%, transparent); }
+.flow-compact .uc-icon { width: 36px; height: 36px; border-radius: var(--r); font-size: 14px; font-weight: 600; flex: none; }
+.fc-names { display: grid; flex: 1; min-width: 0; }
+.fc-names b { font-size: 13px; line-height: 20px; font-weight: 600; }
+.fc-names small { font-size: 12px; line-height: 16px; }
+.flow-compact .progress { width: 130px; flex: none; }
+.fc-count { font-size: 13px; font-weight: 500; flex: none; }
+.rel-team-title { text-transform: none; font-size: 16px; }
+.panel-side .prop > label { text-transform: none; }
+.rl-fields .af-row, .rl-fields .rl-row { padding: 0 !important; min-height: 42px !important; height: auto; }
+.rl-fields .af-name, .rl-fields .af-val { padding: 0; margin: 0; line-height: 20px; }
+.rl-fields .af-val { min-height: 0; }
+.panel:has(.rl-card) .quick-chips { display: none; }
+.panel:has(.rl-card) .panel-main { padding-top: 8px; }

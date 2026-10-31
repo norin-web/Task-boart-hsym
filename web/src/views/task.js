@@ -206,6 +206,14 @@ function flowBlock(t) {
     const me = stages.find(n => n.id === t.id);
     const waits = me && stateOf(me, stages) === 'blocked'
       ? stages.filter(n => (me.dependsOn || []).includes(n.id) && stateOf(n, stages) !== 'done').map(n => n.title.split(' · ')[0]) : [];
+    if (t.step === 'release' && app) {
+      // карточка релиза: запрос — одной строкой (приложение, запрос, прогресс), как в макете
+      return fill(box, h('div', { class: 'flow-compact' },
+        h('span', { class: 'uc-icon', style: { background: app.color } }, app.name.slice(0, 1).toUpperCase()),
+        h('span', { class: 'fc-names' }, h('b', null, app.name), h('small', { class: 'muted' }, req.title.replace(/^New App:\s*/, ''))),
+        h('span', { class: 'progress' }, h('div', { style: { width: Math.round(done / Math.max(1, stages.length) * 100) + '%' } })),
+        h('span', { class: 'fc-count' }, `${done} из ${stages.length}`)));
+    }
     fill(box,
       h('div', { class: 'tree-head' },
         h('span', { class: 'sub-title', style: { margin: 0 } }, t.kind === 'request' ? (REQUEST_TYPES[t.requestType] || 'Запрос') + ' · этапы' : 'Этап запроса'),

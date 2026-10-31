@@ -87,7 +87,7 @@ test('задачи: номера, правки, конфликт, журнал',
   const lines = ex.activity.map(x => `${x.action}:${x.label}:${x.fromText}>${x.toText}`);
   assert.ok(lines.includes('update:Статус:К выполнению>В работе'), lines.join(' | '));
   assert.ok(lines.includes('update:Исполнитель:—>Аня'));
-  assert.ok(lines.includes('update:Приоритет:High>—'));
+  assert.ok(lines.includes('update:Приоритет:Высокий>—'));
   assert.equal(ex.activity.at(-1).actorId, me.id);
 });
 
