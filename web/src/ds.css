@@ -729,3 +729,7 @@ body.sb-collapsed .panel, body.sb-collapsed .panel.center { left: 102px; }
 .rl-fields .af-val { min-height: 0; }
 .panel:has(.rl-card) .quick-chips { display: none; }
 .panel:has(.rl-card) .panel-main { padding-top: 8px; }
+.rl-fields .af-row, .rl-fields .rl-row { grid-template-columns: 150px minmax(0, 1fr) 28px !important; }
+.rl-fields .af-row > .icon-btn { opacity: 0; width: 28px; height: 28px; }
+.rl-fields .af-row:hover > .icon-btn, .rl-fields .af-row > .icon-btn:focus-visible { opacity: 1; }
+@media (hover: none) { .rl-fields .af-row > .icon-btn { opacity: 1; } }
