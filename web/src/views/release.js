@@ -105,7 +105,7 @@ export function releaseBlock(t, onChange) {
       icon('send', 14), hist.length ? 'Отправить снова' : 'Отправить в Apple'),
     phase === 'submitted' && [
       h('button', { class: 'btn danger solid sm', onclick: () => openRejectForm(t, data.app && data.app.name, data.nextRejectNo, () => { load(); if (onChange) onChange(); }) }, 'Реджект'),
-      h('button', { class: 'btn success sm', onclick: () => step('live') }, icon('rocket', 14), 'Вышло в стор')],
+      h('button', { class: 'btn primary sm', onclick: () => step('live') }, 'Вышло в стор')],
     phase === 'rejected' && [
       h('button', { class: 'btn ghost sm', onclick: () => step('resubmit') }, 'Отправить сейчас'),
       h('button', { class: 'btn success sm', onclick: () => closeReject(rel) }, icon('check', 14), 'Закрыть реджект')]);
@@ -217,7 +217,7 @@ function valueRow(f, v, editable, onSave) {
   const show = () => fill(row,
     h('span', { class: 'af-name' }, f.name, f.required && h('span', { class: 'req', title: 'Обязательно для отправки' }, ' *')),
     v ? (f.kind === 'link' ? h('a', { class: 'af-val', href: v, target: '_blank', rel: 'noopener' }, v.replace(/^https?:\/\//, '')) : h('span', { class: 'af-val' + (f.kind === 'longtext' ? ' pre' : '') }, v))
-      : h('span', { class: 'af-val muted' }, editable ? 'не заполнено' : '—'),
+      : h('span', { class: 'af-val ' + (editable ? 'af-empty' : 'muted') }, editable ? 'Не заполнено' : '—'),
     editable && h('button', { class: 'icon-btn sm', title: 'Изменить', 'aria-label': 'Изменить ' + f.name, onclick: edit }, icon('edit', 13)));
   const edit = () => {
     let finished = false; // Enter и потеря фокуса не должны сохранить дважды

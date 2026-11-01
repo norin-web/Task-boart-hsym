@@ -867,3 +867,37 @@ button.fb-title:hover { color: var(--text); text-decoration: none; opacity: .8; 
 .composer.pill .btn { height: 28px; padding: 0 12px; flex: none; align-self: center; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .composer.pill { background: var(--surface-2); } }
 :root[data-theme="dark"] .composer.pill { background: var(--surface-2); }
+
+/* ---------- панель приложения (макеты 13, 58): справа, ширина 512, радиус 34 ---------- */
+.panel.unit-panel, .panel.unit-panel.center { left: auto; right: 6px; width: 512px; border-radius: var(--r-shell); }
+@media (max-width: 900px) { .panel.unit-panel, .panel.unit-panel.center { left: 0; right: 0; width: auto; border-radius: 0; } }
+.unit-panel .app-panel-head { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 12px; padding: 24px 24px 0; }
+.unit-panel .app-panel-head .uc-icon.lg { width: 56px; height: 56px; border-radius: 14px; box-shadow: none; flex: none; }
+.unit-panel .aph-names { flex: 1; min-width: 0; gap: 2px; padding: 0; }
+.unit-panel .aph-title h2 { font-size: 20px; line-height: 28px; font-weight: 600; letter-spacing: -.02em; }
+.unit-panel .aph-store { font-size: 12px; line-height: 16px; font-weight: 500; }
+.unit-panel .aph-link { margin: 0; padding: 0; border: 0; gap: 4px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--info); }
+.unit-panel .app-panel-head > .spacer { display: none; }
+.unit-panel .app-panel-head > .icon-btn { flex: none; width: 32px; height: 32px; }
+.unit-panel .app-panel-head > .icon-btn[aria-haspopup] { background: var(--surface-3); border-radius: 999px; }
+/* свойства: подпись 12 muted, значение — плашка 40 радиус 12 */
+.unit-panel .ap-props { gap: 0 10px; }
+.unit-panel .ap-props .field > label { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); margin-bottom: 4px; }
+.unit-panel .ap-props .inp, .unit-panel .ap-props .prio-select { height: 40px; border-radius: 12px; border: 0; background-color: var(--surface); font-size: 13px; font-weight: 600; padding: 0 12px; box-shadow: none; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .unit-panel .ap-props .inp, :root:not([data-theme="light"]) .unit-panel .ap-props .prio-select { background-color: var(--surface-2); } }
+:root[data-theme="dark"] .unit-panel .ap-props .inp, :root[data-theme="dark"] .unit-panel .ap-props .prio-select { background-color: var(--surface-2); }
+/* «Сейчас» — вложенная карточка 18 */
+.unit-panel .ap-now { border: 0; border-radius: 18px; padding: 14px 16px; gap: 10px; background: var(--surface); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .unit-panel .ap-now { background: var(--surface-2); } }
+:root[data-theme="dark"] .unit-panel .ap-now { background: var(--surface-2); }
+.unit-panel .ap-now-row { min-height: 40px; border-top: 1px solid var(--border); border-radius: 0; padding: 0; }
+.unit-panel .ap-now-row:hover { background: transparent; }
+.unit-panel .card-empty { border: 0; background: var(--surface-2); border-radius: 16px; }
+
+/* ---------- карточка релиза (макет 16) ---------- */
+/* блок релиза — одна карточка без внешней подложки */
+.panel-main > .rl-block { background: transparent; padding: 0; }
+.rl-card { box-shadow: none; border-radius: 16px; padding: 16px 20px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .rl-card { background: var(--surface-2); } }
+:root[data-theme="dark"] .rl-card { background: var(--surface-2); }
+.rl-card .af-val.af-empty, .af-val.af-empty { color: var(--warn); font-weight: 600; }
