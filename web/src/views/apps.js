@@ -578,7 +578,7 @@ export function openAppPanel(a, onChange, page = null) {
     if (page) {
       // на странице «Статус / Юнит / Приоритет» уходят в правую колонку, остальные блоки — по раскладке человека
       fill(body, L.order.filter(id => id !== 'props' && !L.hidden.includes(id)).map(id => parts[id]));
-      fill(side, parts.props, appTeam(a, u), appDates(a));
+      fill(side, parts.props, appTeam(a), appDates(a));
     } else fill(body, L.order.filter(id => !L.hidden.includes(id)).map(id => parts[id]));
   };
   // «Настроить карточку» — сразу на нужной вкладке (пустые Info и Быстрый доступ открывают свою)
@@ -631,18 +631,21 @@ export function openAppPanel(a, onChange, page = null) {
   }
 }
 
-/** «Команда» справа на странице: PM юнита и те, кто назначен на этапы открытых работ (по названию этапа). */
-function appTeam(a, u) {
-  const rows = [['PM', personById(appPm(a)) || null]];
-  const seen = new Set();
-  (a.requests || []).filter(r => !r.done).forEach(r => (r.stages || []).forEach(s => {
-    const label = String(s.title || '').split(' · ')[0];
-    if (!label || seen.has(label) || !s.assigneeId) return;
-    seen.add(label);
-    rows.push([label, personById(s.assigneeId) || null]);
-  }));
-  return h('section', { class: 'app-team' }, h('h3', null, 'Команда'),
-    rows.slice(0, 7).map(([role, p]) => h('div', { class: 'app-team-row' }, h('span', { class: 'muted' }, role), p ? h('b', null, p.name) : h('span', { class: 'muted' }, 'Не назначен'))));
+/** «Команда» справа на странице — та же, что в карточке релиза: PM, дизайн, разработка, тестирование, тексты (getReleaseTeam). */
+function appTeam(a) {
+  const box = h('section', { class: 'app-team' });
+  const req = (a.requests || []).find(r => !r.done) || (a.requests || [])[0];
+  const stage = req && ((req.stages || []).find(s => /релиз/i.test(s.title)) || null);
+  const ROLES = [['pm', 'PM'], ['design', 'Дизайн'], ['ios', 'Разработка'], ['qa', 'Тестирование'], ['meta', 'Тексты ASO']];
+  const draw = team => fill(box, h('h3', null, 'Команда'),
+    ROLES.map(([k, label]) => {
+      const people = ((team && team[k]) || []).map(id => personById(id)).filter(Boolean);
+      return h('div', { class: 'app-team-row' }, h('span', { class: 'muted' }, label),
+        people.length ? h('b', null, people.map(p => p.name).join(', ')) : h('span', { class: 'muted' }, 'Не назначен'));
+    }));
+  draw(null);
+  if (req) call('getReleaseTeam', { taskId: stage ? stage.id : req.id }).then(draw).catch(() => {});
+  return box;
 }
 /** Создана / обновлена — внизу правой колонки. */
 function appDates(a) {
@@ -1042,11 +1045,11 @@ const prioPicker = value => prioSelect(S.priorityOptions, value);
 /** unitId — сразу в этот юнит (со страницы юнита). */
 export function openCreateApp(onDone, unitId) {
   const list = unitId ? units().filter(u => u.id === unitId) : units();
-  const name = h('input', { class: 'inp', maxlength: 120, placeholder: 'Например, Sleep Sounds' });
+  const name = h('input', { class: 'inp title-field', maxlength: 120, placeholder: 'Например, Sleep Sounds' });
   // ссылка на App Store (если приложение уже в сторе) — подтягивает название и иконку
   let iconUrl = '', storeName = '';
   const preview = h('span', { class: 'store-preview' });
-  const store = h('input', { class: 'inp', type: 'url', placeholder: 'https://apps.apple.com/…/id123456789' });
+  const store = h('input', { class: 'inp', type: 'url', placeholder: 'Если приложение уже в сторе' });
   const pull = async () => {
     const info = await storeLookup(store.value);
     if (!info) { fill(preview); iconUrl = ''; return; }
@@ -1066,10 +1069,11 @@ export function openCreateApp(onDone, unitId) {
   modal({
     title: 'Новое приложение',
     body: [
-      field('Ссылка в App Store', store, preview),
+      // порядок как в макете 35: название, юнит и PM, срок и приоритет, ссылка в стор, описание
       field('Название', name),
       h('div', { class: 'grid2' }, field('Юнит', unit), field('PM', pm.el, 'Получит задачу «New App»')),
       h('div', { class: 'grid2' }, field('Срок', due), field('Приоритет', prio)),
+      field('Ссылка в App Store', store, preview),
       field('Описание', desc),
     ],
     actions: [{ label: 'Отмена' }, {

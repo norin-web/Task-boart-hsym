@@ -1270,3 +1270,17 @@ section:has(> .section-head + .card-box) > .section-head h2 { font-size: 18px; l
 .nav-abbr { display: none; }
 body.sb-collapsed .nav-unit-row { gap: 6px; height: 36px; }
 body.sb-collapsed .nav-unit-row .nav-abbr { display: inline; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--sb-text, inherit); }
+
+/* фильтр приложений — поповер 560 (макет 60) */
+.flt { grid-template-columns: 190px 370px; width: 560px; }
+.flt-pane { min-height: 300px; }
+.flt-tab { padding: 9px 12px; border-radius: 12px; }
+.flt-search { height: 40px; border-radius: 12px; border: 0; background: var(--surface-2); }
+.flt-list .menu-item { height: 38px; }
+.flt-save { color: var(--info); }
+
+/* форма «Новое приложение» (макет 35): две равные колонки, поля 40px */
+.modal .grid2 { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; align-items: start; }
+.modal .grid2 > * { min-width: 0; }
+.modal .grid2 .inp, .modal .grid2 select, .modal .grid2 .prio-select { width: 100%; height: 40px; border-radius: 12px; }
+.modal .grid2 .field > .hint, .modal .grid2 .field small { font-size: 12px; }
