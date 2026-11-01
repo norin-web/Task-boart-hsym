@@ -131,10 +131,20 @@ export function attention(d, reload, { two = false } = {}) {
 
 /* ---------- работы в ходу ---------- */
 
-export function inProgress(d, reload) {
+export function inProgress(d, reload, { brief = false } = {}) {
   const rows = [...d.inProgress].sort((a, b) => prioRank(b.request.priority) - prioRank(a.request.priority)
     || (a.request.dueDate || '9999').localeCompare(b.request.dueDate || '9999'));
   const today = todayStr();
+  // обзор юнита (C02): короткий список — приложение, работа и этап, полоса прогресса, срок
+  if (brief) return h('section', null,
+    h('div', { class: 'section-head' }, h('h2', null, 'Работы в ходу')),
+    rows.length
+      ? h('div', { class: 'card-box' }, rows.map(({ app, request: r, current }) => h('button', { class: 'wip-brief', onclick: () => openAppById(app.id, reload) },
+        appIcon(app, 'sm'),
+        h('span', { class: 'wip-brief-main' }, app.name, h('small', null, [REQUEST_TYPES[r.type], current && current.title.split(' · ')[0]].filter(Boolean).join(' · '))),
+        h('span', { class: 'wip-brief-bar', 'aria-hidden': 'true' }, h('i', { style: { width: (r.progress || 0) + '%' } })),
+        h('span', { class: 'wip-brief-due' + (r.dueDate && r.dueDate < today ? ' danger-text' : '') }, r.dueDate ? fmtDate(r.dueDate) : '—'))))
+      : emptyBlock('Нет работ', { ic: 'progress' }));
   return h('section', null,
     h('div', { class: 'section-head' }, h('h2', null, 'Работы в процессе')),
     rows.length

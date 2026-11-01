@@ -7,7 +7,7 @@ import { S, isSuper, isStaff, todayStr, ACCESS_LABELS, personById, deptById, tas
 import { $, h, icon, avatar, showErr, fill, menu, toast, emptyBlock, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView, link } from '../router.js';
-import { openCreateApp, openNewAppTask, pmsOf, appIcon, appStatusCell, openAppCard } from './apps.js';
+import { openCreateApp, openNewAppTask, pmsOf, openAppCard } from './apps.js';
 import { attention, inProgress, recent } from './ceo.js';
 import { unitHeader } from './unitnav.js';
 import { addMemberDialog } from './people.js';
@@ -45,14 +45,13 @@ export async function renderUnitPage() {
       isSuper() && h('button', { class: 'btn primary', onclick: () => openCreateApp(load, u.id) }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Новое приложение')));
 
     fill(page,
-      u.description && h('p', { class: 'muted unit-desc' }, u.description),
       h('div', { class: 'cs-row unit-stats' },
-        stat(apps.length, plural(apps.length, ['приложение', 'приложения', 'приложений']), 'apps', '', sparkline(openSeries(apps.map(a => ({ createdAt: a.createdAt }))))),
-        stat(apps.filter(a => a.active > 0).length, 'в работе', 'apps', '', sparkline(openSeries(apps.flatMap(a => a.requests)))),
-        stat(open.length, 'открытых задач', 'list'),
-        stat(late, 'просрочено', 'list', late ? 'danger' : '')),
+        stat(apps.length, 'Приложения', 'apps', '', sparkline(openSeries(apps.map(a => ({ createdAt: a.createdAt }))))),
+        stat(apps.filter(a => a.active > 0).length, 'В работе', 'apps', '', sparkline(openSeries(apps.flatMap(a => a.requests)))),
+        stat(open.length, 'Открытых задач', 'list', '', sparkline(openSeries(S.board.tasks.filter(t => !t.archived).map(t => ({ createdAt: t.createdAt, doneAt: t.doneAt }))))),
+        stat(late, 'Просрочено', 'list', late ? 'danger' : '', sparkline(Array(14).fill(late)))),
       h('div', { class: 'home-grid' },
-        h('div', { class: 'home-col' }, inProgress(ud, load), appsBrief(u, apps, load), attention(ud, load, { two: true })),
+        h('div', { class: 'home-col' }, inProgress(ud, load, { brief: true }), appsBrief(u, apps, load), attention(ud, load, { two: true })),
         h('div', { class: 'home-col' }, tasksByColumn(u, open), teamBrief(u), owner(u, load), recent(ud, load, { empty: 'За 30 дней статусы приложений юнита не менялись' }))));
   }
 
@@ -68,14 +67,12 @@ function teamBrief(u) {
     return p && { p, pos: (deptById(m.departmentId) || deptById(p.positionId) || {}).name || '', n: t.length, late: t.filter(x => x.dueDate && x.dueDate < today).length };
   }).filter(Boolean).sort((a, b) => b.n - a.n || a.p.name.localeCompare(b.p.name, 'ru'));
   return h('section', null,
-    h('div', { class: 'section-head' }, h('h2', null, 'Команда', rows.length > 0 && h('span', { class: 'muted sec-n' }, rows.length)),
-      link({ unit: u.id, mode: 'team' }, { class: 'btn ghost sm' }, 'Вся команда')),
+    h('div', { class: 'section-head' }, h('h2', null, 'Команда' + (rows.length ? ' · ' + rows.length : ''))),
     rows.length
-      ? h('div', { class: 'card-box team-list' }, rows.slice(0, 6).map(x => h('div', { class: 'team-row compact' },
+      ? h('div', { class: 'card-box team-list' }, rows.slice(0, 3).map(x => h('div', { class: 'team-row compact' },
         avatar(x.p, 'sm'),
-        h('span', { class: 'team-who' }, h('b', null, x.p.name), h('small', { class: 'muted' }, x.pos || ACCESS_LABELS[x.p.access] || '')),
-        h('span', { class: 'team-load' + (x.late ? ' warn-text' : x.n ? '' : ' muted') }, x.n ? x.n + (x.late ? ` · ${x.late} просроч.` : '') : '—'))),
-        rows.length > 6 && link({ unit: u.id, mode: 'team' }, { class: 'rc-more link-btn' }, `Ещё ${rows.length - 6}`))
+        h('b', { class: 'team-who' }, x.p.name),
+        h('span', { class: 'team-load' + (x.late ? ' warn-text' : x.n ? '' : ' muted') }, x.n || '—'))))
       : emptyBlock('Команда не собрана', { ic: 'users' }));
 }
 
@@ -85,28 +82,24 @@ function tasksByColumn(u, open) {
   const cols = columns().map(c => ({ c, n: all.filter(t => t.status === c.id).length }));
   const total = all.length;
   return h('section', null,
-    h('div', { class: 'section-head' }, h('h2', null, 'Задачи', h('span', { class: 'muted sec-n' }, `${open.length} открыто`)),
-      link({ unit: u.id, mode: 'list' }, { class: 'btn ghost sm' }, 'Все задачи')),
+    h('div', { class: 'section-head' }, h('h2', null, `Задачи · ${open.length} открыто`)),
     total
       ? h('div', { class: 'card-box col-sum' },
         h('div', { class: 'col-sum-bar', 'aria-hidden': 'true' }, cols.filter(x => x.n).map(x => h('span', { style: { flex: x.n, background: colColor(x.c) } }))),
-        h('div', { class: 'col-sum-list' }, cols.map(x => h('span', { class: 'col-sum-item' + (x.n ? '' : ' zero') },
-          h('span', { class: 'dot', style: { background: colColor(x.c) } }), x.c.name, h('b', null, x.n)))))
+        h('div', { class: 'col-sum-list' }, cols.filter(x => x.c.kind !== 'done').map(x => h('span', { class: 'col-sum-item' }, `${x.c.name} ${x.n}`))))
       : emptyBlock('Задач пока нет', { ic: 'list' }));
 }
 
 /** Приложения юнита коротко: иконка, название, статус; клик — карточка. Все — на вкладке «Приложения». */
 function appsBrief(u, apps, reload) {
-  const LIMIT = 8;
+  const LIMIT = 3;
   return h('section', null,
-    h('div', { class: 'section-head' }, h('h2', null, 'Приложения', apps.length > 0 && h('span', { class: 'muted sec-n' }, apps.length)),
-      link({ unit: u.id, mode: 'apps' }, { class: 'btn ghost sm' }, 'Все приложения')),
+    h('div', { class: 'section-head' }, h('h2', null, 'Приложения'),
+      link({ unit: u.id, mode: 'apps' }, { class: 'btn ghost sm' }, 'Все')),
     apps.length
       ? h('div', { class: 'card-box app-brief' }, apps.slice(0, LIMIT).map(a => h('button', { class: 'app-brief-row', onclick: () => openAppCard(a, reload) },
-        appIcon(a, 'sm'),
-        h('span', { class: 'app-brief-name' }, h('b', null, a.name), a.storeName && h('small', { class: 'muted' }, a.storeName)),
-        appStatusCell(appStatusById(a.status), a))),
-        apps.length > LIMIT && link({ unit: u.id, mode: 'apps' }, { class: 'rc-more link-btn' }, `Ещё ${apps.length - LIMIT}`))
+        h('span', { class: 'app-brief-name' }, a.name),
+        h('span', { class: 'muted app-brief-st' }, (appStatusById(a.status) || {}).name || ''))))
       : emptyBlock('Приложений пока нет', { ic: 'app' }));
 }
 
