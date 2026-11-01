@@ -7,16 +7,18 @@ import { S, LS, isSuper, todayStr } from '../state.js';
 import { $, h, icon, topbar, showErr, fill, skeleton } from '../ui.js';
 import { call } from '../api.js';
 import { currentView } from '../router.js';
-import { statBlocks } from './ceo.js';
+import { statBlocks, tileTable } from './ceo.js';
 import { team, PERIODS } from './pm.js';
 import { workloadBlock } from './home.js';
 import { renderLayout, editLayout } from './layout.js';
 import { statusLines, unitCurves } from './charts.js';
 
-export async function renderAnalytics() {
+const TILE_TITLES = { apps: 'Приложения', work: 'Задачи в работе', late: 'Просрочено', shipped: 'Выпущено', stale: 'Давно не трогали' };
+
+export async function renderAnalytics(tile) {
   const page = h('div', { class: 'page ceo-page analytics-page' }, skeleton());
   const tools = h('div', { class: 'row an-tools', style: { gap: '8px' } });
-  fill($('#main'), topbar([h('h1', null, 'Аналитика')], [tools]), h('div', { class: 'view-body' }, page));
+  fill($('#main'), topbar([h('h1', null, TILE_TITLES[tile] || 'Аналитика')], [tools]), h('div', { class: 'view-body' }, page));
   let unit = LS.get('anUnit', '');
   let period = PERIODS.some(([k]) => k === LS.get('kpiPeriod', '')) ? LS.get('kpiPeriod', '') : 'month';
   let d, apps, kpi, ov, ser;
@@ -26,7 +28,7 @@ export async function renderAnalytics() {
     try {
       [d, apps, kpi, ov, ser] = await Promise.all([call('getCeoDashboard', { today: todayStr() }), call('listApps', {}), call('getPmDashboard', { today: todayStr(), period }), call('getOverview', { today: todayStr() }), call('getStatusSeries', { today: todayStr(), days, unitId: unit })]);
     } catch (e) { return showErr(e); }
-    if (currentView() !== 'analytics') return;
+    if (currentView() !== 'analytics:' + (tile || '')) return;
     S.apps = apps.map(({ requests, active, ...a }) => a);
     if (unit && !S.units.some(u => u.id === unit && !u.archived)) unit = '';
     draw();
@@ -34,7 +36,7 @@ export async function renderAnalytics() {
 
   const blocks = () => {
     const list = unit ? apps.filter(a => a.unitId === unit) : apps;
-    const defs = statBlocks(d, list, load).filter(b => isSuper() || b.id !== 'pmload');
+    const defs = statBlocks(d, list, load, tile).filter(b => isSuper() || b.id !== 'pmload');
     const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
     const grays = ['#787c87', '#9aa0ad', '#b6bbc6', '#5d6270'];
     const cardOf = (title, control, body) => h('section', null,
@@ -69,6 +71,11 @@ export async function renderAnalytics() {
 
   function draw() {
     const units = S.units.filter(u => !u.archived).sort((a, b) => (a.order || 0) - (b.order || 0));
+    if (tile) {
+      const list = unit ? apps.filter(a => a.unitId === unit) : apps;
+      fill(page, statBlocks(d, list, load, tile).find(b => b.id === 'kpi').render(), tileTable(tile, d, list, load));
+      return;
+    }
     fill(tools,
       units.length > 1 && h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Юнит' },
         [['', 'Все юниты'], ...units.map(u => [u.id, u.name])].map(([id, name]) => h('button', {

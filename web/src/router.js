@@ -4,7 +4,7 @@
  *   #/my                     мои задачи
  *   #/board                  моя доска (личные этапы)
  *   #/admin                  старый адрес — ведёт в «Настройки»
- *   #/analytics              аналитика (CEO и PM)
+ *   #/analytics[/:tile]      аналитика (CEO и PM); плитка — список за цифрой
  *   #/app/:id                карточка приложения на весь экран
  *   #/settings[?tab=…]       настройки: личные и студия
  *   #/u/:unit[/overview|/apps|/list|/team|/settings][?task=:id] — вкладки юнита; без режима — доска
@@ -43,6 +43,8 @@ export function parseLocation() {
   if (ap) return { view: 'app', id: ap[1] };
   if (path === '/dev') return { view: 'dev' };
   if (path === '/analytics') return { view: 'analytics' };
+  const an = /^\/analytics\/(apps|work|late|shipped|stale)$/.exec(path);
+  if (an) return { view: 'analytics', tile: an[1] };
   // панель админа переехала в «Настройки → Студия»
   if (path === '/settings' || path === '/admin') return { view: 'settings', tab: new URLSearchParams(query || '').get('tab') || '' };
   const t = /^\/u\/([\w-]+)\/t\/([\w-]+)$/.exec(path);
@@ -56,7 +58,7 @@ export function routeUrl(r) {
   if (r.unit) return '#/u/' + r.unit + (r.team ? '/t/' + r.team : r.mode && r.mode !== 'board' ? '/' + r.mode : '') + (r.task ? '?task=' + encodeURIComponent(r.task) : '');
   if (r.view === 'settings' || r.view === 'admin') return '#/settings' + (r.tab ? '?tab=' + r.tab : '');
   if (r.view === 'app') return '#/app/' + r.id;
-  return r.view === 'my' ? '#/my' : r.view === 'myboard' ? '#/board' : r.view === 'apps' ? '#/apps' : r.view === 'dev' ? '#/dev' : r.view === 'analytics' ? '#/analytics' : '#/';
+  return r.view === 'my' ? '#/my' : r.view === 'myboard' ? '#/board' : r.view === 'apps' ? '#/apps' : r.view === 'dev' ? '#/dev' : r.view === 'analytics' ? '#/analytics' + (r.tile ? '/' + r.tile : '') : '#/';
 }
 
 export function navigate(r, { replace = false } = {}) {
@@ -78,6 +80,7 @@ export function navParent(r = S.route) {
     return { route: { view: 'home' }, label: 'Дашборд' };
   }
   if (r.view === 'app') return { route: { view: 'apps' }, label: 'Приложения' };
+  if (r.view === 'analytics' && r.tile) return { route: { view: 'analytics' }, label: 'Аналитика' };
   if (r.view && r.view !== 'home') return { route: { view: 'home' }, label: 'Дашборд' };
   return null;
 }
@@ -141,12 +144,12 @@ export async function render() {
     if (r.view === 'analytics' && !isStaff()) return navigate({ view: 'home' }, { replace: true });
     if ((r.view === 'apps' || r.view === 'app') && !seesApps()) return navigate({ view: 'home' }, { replace: true });
     const view = r.view;
-    const key = view === 'app' ? 'app:' + r.id : ['my', 'myboard', 'apps', 'dev', 'analytics'].includes(view) ? view : view === 'settings' ? 'settings:' + (r.tab || '') : 'home';
+    const key = view === 'app' ? 'app:' + r.id : view === 'analytics' ? 'analytics:' + (r.tile || '') : ['my', 'myboard', 'apps', 'dev'].includes(view) ? view : view === 'settings' ? 'settings:' + (r.tab || '') : 'home';
     if (rendered !== key) {
       rendered = key;
       document.title = ({ my: 'Мои задачи', myboard: 'Моя доска', settings: 'Настройки', analytics: 'Аналитика', apps: 'Приложения', dev: 'Режим разработчика' }[view] || (isStaff() ? 'Дашборд' : myAccess() === 'rm' ? 'Релизы' : 'Главная')) + ' · Tasks';
       if (view === 'my') renderMy(); else if (view === 'myboard') renderMyBoard(); else if (view === 'apps') renderApps(); else if (view === 'app') renderAppPage(r.id); else if (view === 'dev') renderDev();
-      else if (view === 'settings') renderPrefs(r.tab || ''); else if (view === 'analytics') renderAnalytics();
+      else if (view === 'settings') renderPrefs(r.tab || ''); else if (view === 'analytics') renderAnalytics(r.tile);
       else if (isSuper()) renderCeoHome(); else if (myAccess() === 'moderator') renderPmHome(); else if (myAccess() === 'rm') renderRmHome(); else renderHome();
     }
     return;
