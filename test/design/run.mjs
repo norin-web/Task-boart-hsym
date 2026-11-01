@@ -95,7 +95,7 @@ const loginAs = async as => {
   await hideDev();
 };
 
-const results = [];
+const results = [], checks = [];
 const snap = async s => {
   if (only.length && !only.includes(s.code)) return;
   await loginAs(s.as || 'ceo');
@@ -116,12 +116,18 @@ const snap = async s => {
     fs.writeFileSync(path.join(OUT, 'diff', s.code + '.png'), PNG.sync.write(D));
     r.diff = +(n / (w * h) * 100).toFixed(1);
   }
+  // на листах линии между строками прямые: линия со скруглением — лишнее из старых стилей
+  const bent = await page.evaluate(() => [...document.querySelectorAll('body *')].filter(e => {
+    const c = getComputedStyle(e), line = k => parseFloat(c['border' + k + 'Width']) > 0 && c['border' + k + 'Style'] !== 'none';
+    if (line('Left') || line('Right') || !e.getBoundingClientRect().width) return false;
+    return (line('Top') && parseFloat(c.borderTopLeftRadius) > 0) || (line('Bottom') && parseFloat(c.borderBottomLeftRadius) > 0);
+  }).map(e => e.tagName.toLowerCase() + '.' + [...e.classList].join('.')));
+  bent.forEach(sel => checks.push({ screen: s.code, sel, prop: 'линия со скруглением', want: 'нет', got: 'есть', ok: false }));
   results.push(r);
   console.log(s.code.padEnd(4), r.diff == null ? 'нет листа' : r.diff + '%');
 };
 
 // размеры из макетов
-const checks = [];
 const measure = async m => {
   if (only.length && !only.includes(m.screen)) return;
   const s = SCREENS.find(x => x.code === m.screen);

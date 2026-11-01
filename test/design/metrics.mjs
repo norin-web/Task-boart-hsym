@@ -43,5 +43,6 @@ export const METRICS = [
   { screen: 'A09', checks: [{ sel: '.topbar .back-btn', prop: 'display', want: null, absent: true }] },
   { screen: 'C02', checks: [{ sel: '.topbar .back-btn', prop: 'display', want: null, absent: true }] },
   { screen: 'E02', checks: [{ sel: '.topbar .back-btn', prop: 'display', want: null, absent: true }, { sel: '.my-whose button.on', prop: 'height', want: 32 }] },
+  { screen: 'P07', checks: [{ sel: '.app-brief-row', prop: 'height', want: 44 }, { sel: '.app-brief-row + .app-brief-row', prop: 'borderTopWidth', want: '0px' }, { sel: '.team-row.compact + .team-row.compact', prop: 'borderTopWidth', want: '0px' }, { sel: '.team-row.compact', prop: 'height', want: 44 }, { sel: '.att-row.att-two + .att-row.att-two', prop: 'borderTopWidth', want: '0px' }] },
   { screen: 'B05', checks: [{ sel: '.topbar .back-btn', prop: 'width', want: 44 }] },
 ];
