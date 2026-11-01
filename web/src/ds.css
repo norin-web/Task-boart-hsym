@@ -1194,3 +1194,10 @@ input.switch:disabled { opacity: .5; cursor: default; }
 /* продолжение подложки шапки: контент заезжает под неё, снизу лёгкая тень 5% */
 .view-body::before { content: ''; display: block; position: sticky; top: 0; height: 24px; margin-bottom: -24px; z-index: 4; pointer-events: none; background: var(--bg); box-shadow: 0 6px 16px rgba(0, 0, 0, .05); }
 @media (max-width: 900px) { #main { height: 100vh; margin-bottom: 0; } }
+
+/* ---------- макеты 12 / 33: блоки дашборда CEO ---------- */
+section:has(> .section-head + .card-box) > .section-head h2 { font-size: 18px; line-height: 24px; font-weight: 700; }
+.att-row { border-radius: 14px; padding: 0 12px; border-bottom: 0; }
+.att-row:hover { background: var(--surface-2); }
+.att-row .att-main b, .rc-row .rc-two b { font-weight: 700; }
+.rc-row .rc-at { opacity: .4; }

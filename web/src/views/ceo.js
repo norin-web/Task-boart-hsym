@@ -114,7 +114,7 @@ export function attention(d, reload) {
         const p = who(x);
         // как в макете 12: «Приложение · что случилось», справа — статус приложения пилюлей
         return h('button', { class: 'att-row', onclick: () => open(x), title: p ? p.name : '' },
-          h('span', { class: 'att-main' }, x.app.name, ' · ', h('span', { class: a.cls === 'danger' ? 'danger-text' : '' }, [what(x), a.text(x)].filter(Boolean).join(', '))),
+          h('span', { class: 'att-main' }, h('b', null, x.app.name), ' · ', h('span', { class: a.cls === 'danger' ? 'danger-text' : '' }, [what(x), a.text(x)].filter(Boolean).join(', '))),
           appStatusCell(appStatusById(x.app.status), x.app));
       }), rows.length > 12 && h('p', { class: 'muted att-more' }, `и ещё ${rows.length - 12}`))
       : emptyBlock('Всё по плану', { ok: true }));
@@ -151,11 +151,11 @@ export function inProgress(d, reload) {
 
 /** Что произошло: смена статуса «было → стало», начало разработки, задача по приложению готова. */
 function recentWhat(x) {
-  if (x.type === 'start') return h('span', { class: 'muted' }, 'начало разработки');
+  if (x.type === 'start') return h('span', { class: 'muted' }, 'Начало разработки');
   if (x.type === 'done') return h('span', { class: 'muted' }, x.request.title + ' — готово');
   const from = appStatusById(x.from), to = appStatusById(x.to);
-  return h('span', { class: 'rc-move' }, from && h('span', { class: 'muted' }, from.name + ' → '),
-    h('span', { class: 'rc-to', style: { '--sc': to ? to.color : 'var(--muted)' } }, to ? to.name : x.to));
+  // макет 12: «Релиз → Ревью Apple» одним приглушённым текстом, без цветной точки
+  return h('span', { class: 'muted' }, (from ? from.name + ' → ' : '') + (to ? to.name : x.to));
 }
 
 /** «Недавнее» — движение приложений за 30 дней: 5 последних, остальное — «Показать все». */

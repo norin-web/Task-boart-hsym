@@ -91,7 +91,8 @@ function unitItem(u, r) {
     h('span', { class: 'unit-dot', style: { background: u.color } }),
     h('span', { class: 'nav-label' }, u.name),
     h('span', { class: 'nav-count' + (overdue ? ' warn' : ''), title: overdue ? 'Просрочено: ' + overdue : 'Открытых задач' }, n || ''),
-    canExpand && h('span', { class: 'nav-chev', 'aria-hidden': 'true' }, icon('chevron', 14))),
+    // стрелка есть у каждого юнита (макет 12): у текущего — разворачивает команды, у остальных — только указывает на вложенность
+    h('span', { class: 'nav-chev', 'aria-hidden': 'true' }, icon('chevron', 14))),
     open && h('div', { class: 'nav-subs' },
       teams.map(t => sub({ unit: u.id, mode: 'board', team: t.id }, t.name, r.unit === u.id && r.team === t.id)),
       isSuper() && h('button', { class: 'nav-sub add', onclick: () => { LS.set('peopleSub', 'teams'); navigate({ view: 'settings', tab: 'people' }); } }, icon('plus', 14), h('span', { class: 'nav-label' }, 'Новая команда'))));
