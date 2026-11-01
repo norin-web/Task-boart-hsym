@@ -69,15 +69,46 @@ export function feedItem(a) {
  * Лента с фильтрами в одной кнопке-меню (тип, человек, юнит, позиция) и чипами активных фильтров.
  * «Скрыть текущие» прячет прошлые события только у вас. Возвращает элемент.
  */
-/** Строка журнала (макет 23): аватар, «Имя действие — задача», бейдж нового статуса, время справа. */
+const RELEASE_PHASES = { submitted: ['отправил(а) в Apple', 'Ревью Apple'], live: ['выпустил(а) в стор', 'В App Store'], rejected: ['отметил(а) реджект', 'Реджект'], fixed: ['закрыл(а) реджект', ''] };
+
+/** Журнал (F10): что сделал человек, одной фразой; значок статуса — только там, где статус сменился. */
+function journalPhrase(a) {
+  const q = t => '«' + cut(t) + '»';
+  switch (a.action) {
+    case 'create': return { text: 'создал(а)' };
+    case 'comment': return { text: 'оставил(а) комментарий в' };
+    case 'comment_edit': return { text: 'изменил(а) комментарий в' };
+    case 'comment_delete': return { text: 'удалил(а) комментарий в' };
+    case 'archive': return { text: 'убрал(а) в архив' };
+    case 'unarchive': return { text: 'вернул(а) из архива' };
+    case 'move': return { text: 'перенёс(ла) ' + a.fromText + ' → ' + a.toText + ':' };
+    case 'delete': return { text: 'удалил(а) задачу ' + q(a.fromText) };
+    case 'update': break;
+    default: return { text: activityText(a) };
+  }
+  if (RELEASE_PHASES[a.toText] && !a.label) { const [text, badge] = RELEASE_PHASES[a.toText]; return { text, badge }; }
+  if (a.field === 'status') return { text: 'сменил(а) статус', badge: a.toText };
+  if (a.field === 'assigneeId' || a.label === 'Исполнитель') return { text: a.toText ? 'назначил(а) ' + a.toText + ' на' : 'снял(а) исполнителя с' };
+  if (a.field === 'checklist:add') return { text: 'добавил(а) пункт ' + q(a.toText) + ' в' };
+  if (a.field === 'checklist:remove') return { text: 'удалил(а) пункт ' + q(a.fromText) + ' из' };
+  if (a.field === 'checklist:rename') return { text: 'переименовал(а) пункт ' + q(a.toText) + ' в' };
+  if (a.field === 'checklist:done') return { text: 'отметил(а) пункт ' + q(a.toText) + ' в' };
+  if (a.field === 'checklist:undone') return { text: 'снял(а) отметку с ' + q(a.toText) + ' в' };
+  if (a.field === 'description') return { text: 'изменил(а) описание в' };
+  if (a.field === 'specUrl') return { text: a.toText ? 'добавил(а) ТЗ в' : 'убрал(а) ТЗ из' };
+  if (String(a.field).startsWith('link:')) return { text: (a.toText ? 'добавил(а) ссылку ' : 'убрал(а) ссылку ') + a.label + ' в' };
+  return { text: 'изменил(а) ' + String(a.label || 'поле').toLowerCase() + ' в' };
+}
+
+/** Строка журнала (F10): аватар, «Имя что сделал — задача», значок нового статуса, время справа. */
 function journalRow(a) {
-  const status = a.action === 'update' && a.field === 'status';
+  const { text, badge } = journalPhrase(a);
+  const done = badge && /готов/i.test(badge), review = badge && /ревью/i.test(badge);
   return h('div', { class: 'jr-row' },
     avatar(personById(a.actorId), 'md'),
-    h('div', { class: 'jr-text' }, h('b', null, whoName(a.actorId)), ' ',
-      status ? 'сменил(а) статус' : activityText(a),
-      a.task && a.unit && [' · ', taskLink(a.unit.id, a.task.id, { class: 'jr-task' }, a.task.title)]),
-    status && h('span', { class: 'jr-badge' }, a.toText),
+    h('div', { class: 'jr-text' }, h('b', null, whoName(a.actorId).trim()), ' ', text,
+      a.task && a.unit && [' ', taskLink(a.unit.id, a.task.id, { class: 'jr-task' }, '«' + a.task.title + '»')]),
+    badge && h('span', { class: 'jr-badge' + (review ? ' review' : '') }, done && icon('check', 12), badge),
     h('span', { class: 'jr-time', title: fmtDateTime(a.at) }, new Date(a.at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })));
 }
 

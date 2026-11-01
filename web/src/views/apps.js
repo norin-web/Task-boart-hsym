@@ -486,6 +486,17 @@ export function openAppPanel(a, onChange, page = null) {
     return save({ ...patch, iconUrl: info.iconUrl, ...(info.name ? { name: info.name } : {}) });
   };
 
+  /** Строка блока «Задачи» (B05): заголовок, под ним этап, исполнитель и срок; клик — задача поверх. */
+  const taskLine = r => {
+    const cur = r.stages.find(s => !s.done && !s.blocked) || null;
+    const who = personById((cur || r).assigneeId);
+    return h('button', { class: 'ap-task-row', onclick: () => peekTask(r.unitId, r.id) },
+      h('span', { class: 'ap-task-ic', 'aria-hidden': 'true' }),
+      h('span', { class: 'ap-task-main' }, h('b', null, r.title),
+        h('small', { class: 'muted' }, [cur && cur.title.split(' · ')[0], who && who.name, r.dueDate && 'до ' + fmtDate(r.dueDate)].filter(Boolean).join(' · '))),
+      who && avatar(who, 'sm'));
+  };
+
   /** Пронумерованный список (апдейты / реджекты): «#2 Название», этап сейчас, срок; клик — запрос поверх. */
   const numbered = (list, label) => list.map((r, i) => {
     const cur = r.stages.find(s => !s.done && !s.blocked) || null;
@@ -550,7 +561,7 @@ export function openAppPanel(a, onChange, page = null) {
       tasks: h('section', null,
         h('div', { class: 'up-head' }, h('h3', null, 'Задачи'),
           ceo && h('button', { class: 'btn ghost sm', onclick: () => openTaskPool(a, refresh) }, icon('plus', 14), 'Поставить задачи')),
-        open.length ? open.map(r => requestCard(r, refresh)) : h('p', { class: 'muted' }, 'Открытых задач нет'),
+        open.length ? open.map(taskLine) : h('p', { class: 'muted' }, 'Задач по приложению нет'),
         closed.length > 0 && h('div', { class: 'ap-closed' }, closed.map(r => h('button', { class: 'ap-done-row', onclick: () => peekTask(r.unitId, r.id) },
           icon('check', 14), h('span', { class: 'ap-done-title' }, r.title))))),
       updates: h('section', null,
@@ -789,7 +800,7 @@ function infoBlock(a, manage, ceo, save, redraw, configure) {
   const done = rows.filter(r => r.done).length;
   return h('section', null,
     h('div', { class: 'up-head' }, h('h3', null, 'Info', rows.length > 0 && h('span', { class: 'muted sec-n' }, `${done} из ${rows.length}`)),
-      manage && rows.length > 0 && h('button', { class: 'btn ghost sm', onclick: configure }, icon('plus', 14), 'Пункт')),
+      manage && h('button', { class: 'btn ghost sm', onclick: configure }, icon('plus', 14), 'Пункт')),
     rows.length
       ? h('div', { class: 'info-list' }, rows.map(r => h('div', { class: 'info-row' + (r.done ? ' on' : '') },
         h('button', { class: 'info-check', role: 'checkbox', 'aria-checked': String(r.done), disabled: !manage, onclick: () => toggle(r), title: r.common ? 'Пункт для всех приложений' : 'Пункт только этого приложения' },
@@ -798,9 +809,7 @@ function infoBlock(a, manage, ceo, save, redraw, configure) {
           h('button', { class: 'icon-btn sm', title: 'Переименовать' + (r.common ? ' (для всех)' : ''), onclick: () => rename(r) }, icon('edit', 13)),
           h('button', { class: 'icon-btn sm danger-ic', title: r.common ? 'Убрать из всех приложений' : 'Удалить пункт', onclick: () => remove(r) }, icon('trash', 13)))
           : h('span'))))
-      : h('div', { class: 'card-empty' },
-        h('span', { class: 'muted' }, 'Отмечайте, что у приложения уже есть: продуктовый апдейт, пейволл, локализации…'),
-        manage && h('button', { class: 'btn sm', onclick: configure }, icon('plus', 14), 'Добавить пункты')));
+      : h('p', { class: 'muted', style: { margin: 0 } }, 'Пунктов пока нет — добавьте чек-лист: что нужно сделать в этом приложении.'));
 }
 
 /** «Поставить задачи» пачкой: несколько строк — каждая уходит PM юнита отдельной задачей. */
@@ -894,38 +903,6 @@ function infoRow(a, f, editable, onSave, { value } = {}) {
   };
   show();
   return row;
-}
-
-/** Запрос CEO: тип, название, PM; этапы с состоянием; действия PM — «Разложить по флоу», «Передать в релиз». */
-function requestCard(r, refresh) {
-  const pm = personById(r.assigneeId);
-  const manage = canManage(r.unitId);
-  return h('div', { class: 'rq' },
-    h('div', { class: 'rq-head' },
-      h('span', { class: 'ap-type' }, REQUEST_TYPES[r.type] || 'Задача'),
-      h('button', { class: 'link-btn rq-title', onclick: () => peekTask(r.unitId, r.id) }, r.title),
-      h('span', { class: 'spacer' }),
-      r.dueDate && h('span', { class: 'muted rq-due' }, icon('calendar', 12), fmtDate(r.dueDate)),
-      pm ? avatar(pm, 'sm') : h('span', { class: 'warn-text rq-nopm' }, 'нет PM')),
-    r.stages.length
-      ? [h('div', { class: 'progress' }, h('div', { style: { width: r.progress + '%' } })),
-        h('div', { class: 'rq-stages' }, r.stages.map(s => stageRow(r, s, manage, refresh)))]
-      : h('div', { class: 'rq-empty' },
-        h('span', { class: 'muted' }, 'PM ещё не разложил задачу по этапам.'),
-        manage && h('button', { class: 'btn primary sm', onclick: () => openDecomposeDialog(r).then(ok => ok && refresh()) }, icon('tree', 13), 'Разложить по флоу')));
-}
-
-function stageRow(r, s, manage, refresh) {
-  const state = stageState(s);
-  const p = personById(s.assigneeId);
-  const releaseReady = s.step === 'release' && !s.assigneeId && !s.blocked && !s.done;
-  return h('div', { class: 'rq-stage st-' + state },
-    h('span', { class: 'rq-ic', title: STAGE_STATE[state].label }, icon(STAGE_STATE[state].icon, 13)),
-    h('button', { class: 'link-btn rq-stitle', onclick: () => peekTask(r.unitId, s.id) }, s.title.split(' · ')[0]),
-    h('span', { class: 'muted rq-state' }, STAGE_STATE[state].label),
-    releaseReady && manage
-      ? h('button', { class: 'btn primary sm', onclick: () => sendRelease(s.id).then(refresh) }, icon('rocket', 13), 'Передать в релиз')
-      : p ? avatar(p, 'sm') : h('span', { class: 'muted rq-who' }, s.step === 'release' ? 'RM' : '—'));
 }
 
 /**
@@ -1071,7 +1048,7 @@ export function openCreateApp(onDone, unitId) {
     body: [
       // порядок как в макете 35: название, юнит и PM, срок и приоритет, ссылка в стор, описание
       field('Название', name),
-      h('div', { class: 'grid2' }, field('Юнит', unit), field('PM', pm.el, 'Получит задачу «New App»')),
+      h('div', { class: 'grid2' }, field('Юнит', unit), field('PM', pm.el)),
       h('div', { class: 'grid2' }, field('Срок', due), field('Приоритет', prio)),
       field('Ссылка в App Store', store, preview),
       field('Описание', desc),

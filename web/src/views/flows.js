@@ -3,7 +3,7 @@
  * по порядку, позиция, после каких этапов (зависимости), какой этап — релиз. По нему PM раскладывает запросы.
  */
 import Sortable from 'sortablejs';
-import { REQUEST_TYPES, activeDepts } from '../state.js';
+import { REQUEST_TYPES, activeDepts, plural } from '../state.js';
 import { h, icon, fill, menu, toast, showErr, confirmDlg } from '../ui.js';
 import { call, send } from '../api.js';
 
@@ -24,9 +24,11 @@ export function flowSection(unit) {
     type = t;
     steps = (flows[t] || []).map(x => ({ ...x, dependsOn: [...x.dependsOn] }));
     dirty = false;
+    dirtyNote.hidden = true;
     draw();
   };
-  const touch = () => { dirty = true; drawHead(); };
+  const dirtyNote = h('span', { class: 'muted fl-dirty', hidden: true }, 'Есть несохранённые изменения');
+  const touch = () => { dirty = true; dirtyNote.hidden = false; drawHead(); };
   const head = h('div');
   const drawHead = () => fill(head,
     h('div', { class: 'section-head', style: { marginBottom: '4px' } }, h('h2', null, 'Флоу задач CEO'),
@@ -40,13 +42,18 @@ export function flowSection(unit) {
     drawHead();
     fill(list, steps.length ? steps.map((st, i) => h('div', { class: 'col-edit-row fl-row', dataset: { i } },
       h('span', { class: 'drag', title: 'Перетащите, чтобы изменить порядок' }, icon('grip', 16)),
+      h('span', { class: 'fl-n' }, i + 1),
       h('input', { class: 'inp', value: st.title, maxlength: 120, placeholder: 'Название этапа', 'aria-label': 'Название этапа', oninput: e => { st.title = e.target.value; touch(); } }),
       h('select', { class: 'inp', 'aria-label': 'Позиция', onchange: e => { st.positionId = e.target.value; touch(); } },
         activeDepts().map(d => h('option', { value: d.id, selected: d.id === st.positionId }, d.name))),
-      h('button', {
-        class: 'btn sm fl-deps', title: 'После каких этапов начинается', disabled: i === 0,
-        onclick: e => { e.stopPropagation(); depsMenu(e.currentTarget, st, i); },
-      }, st.dependsOn.length ? 'после: ' + st.dependsOn.map(titleOf).join(', ') : 'сразу'),
+      i === 0
+        ? h('span', { class: 'fl-first' }, icon('lock', 14), 'Сразу · первый этап')
+        : h('button', {
+          class: 'fl-deps', title: st.dependsOn.map(titleOf).join(', ') || 'После каких этапов начинается',
+          onclick: e => { e.stopPropagation(); depsMenu(e.currentTarget, st, i); },
+        }, h('span', { class: 'muted' }, st.dependsOn.length ? 'после:' : 'сразу'),
+        st.dependsOn.length > 0 && h('b', null, st.dependsOn.length === i && i > 1 ? `все ${i} ${plural(i, ['этап', 'этапа', 'этапов'])}` : st.dependsOn.map(titleOf).join(', ')), icon('chevron', 13)),
+      h('span', { class: 'fl-cl' }, (st.checklist || []).length ? `${st.checklist.length} ${plural(st.checklist.length, ['пункт', 'пункта', 'пунктов'])}` : '—'),
       h('label', { class: 'chk fl-rel', title: 'Релиз: исполнителя нет, пока PM не передаст RM' },
         h('input', { type: 'radio', name: 'fl-release', checked: !!st.release, onchange: () => { steps.forEach(x => { x.release = x === st; }); touch(); draw(); } }), 'релиз'),
       h('button', { class: 'icon-btn sm', title: 'Удалить этап', onclick: () => { steps.splice(i, 1); steps.forEach(x => { x.dependsOn = x.dependsOn.filter(k => k !== st.key); }); touch(); draw(); } }, icon('x', 14)),
@@ -97,11 +104,13 @@ export function flowSection(unit) {
   const resetToDefault = async () => {
     try { steps = ((await call('getFlows', {}))[type] || []).map(x => ({ ...x, dependsOn: [...x.dependsOn] })); touch(); draw(); } catch (e) { showErr(e); }
   };
-  fill(box, head, list,
+  const heads = h('div', { class: 'fl-heads' }, h('span'), h('span'), ['Этап', 'Позиция', 'Начинается', 'Чеклист', 'Релиз'].map(x => h('span', null, x)), h('span'));
+  fill(box, head, heads, list,
     h('div', { class: 'row', style: { gap: '8px', marginTop: '8px' } },
       h('button', { class: 'btn sm', onclick: add }, icon('plus', 13), 'Этап'),
       h('button', { class: 'btn ghost sm', title: 'Подставить флоу студии по умолчанию (сохранится после «Сохранить флоу»)', onclick: resetToDefault }, icon('refresh', 13), 'Как по умолчанию'),
       h('span', { class: 'spacer' }),
+      dirtyNote,
       h('button', { class: 'btn primary sm', onclick: e => save(e.currentTarget) }, 'Сохранить флоу')));
   load();
   return box;
