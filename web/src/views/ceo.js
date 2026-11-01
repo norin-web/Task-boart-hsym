@@ -296,8 +296,8 @@ export function statBlocks(d, apps, reload, tile = '') {
     { id: 'pmload', title: 'Загрузка PM', col: 'right', render: () => section('Загрузка PM', list(pms.map(p => {
       const mine = open.filter(x => x.r.assigneeId === p.id);
       const late = mine.filter(x => x.r.dueDate && x.r.dueDate < todayStr()).length;
-      return h('div', { class: 'rc-row' }, avatar(p, 'sm'), h('span', { class: 'rc-main', 'data-pcard': p.id }, h('b', null, p.name)),
-        h('span', { class: 'muted rc-at' }, mine.length + ' в работе', late > 0 && h('span', { class: 'warn-text' }, ' · ' + late + ' просроч.')));
+      return h('div', { class: 'pm-load-row' }, avatar(p, 'sm'), h('b', { 'data-pcard': p.id }, p.name),
+        h('span', { class: 'muted' }, mine.length + ' в работе', late > 0 && h('span', { class: 'warn-text' }, ' · ' + late + ' просроч.')));
     }), 'PM нет')) },
     { id: 'stale', title: 'Без движения', col: 'right', render: () => section('Давно не трогали', list(stale.map(a => appRow(a, h('span', { class: 'muted rc-at' }, relTime(a.lastActivity)))), 'Таких нет'), stale.length || null) },
     { id: 'shipped', title: 'Выпущено за 30 дней', col: 'right', render: () => section('Выпущено за 30 дней', list([

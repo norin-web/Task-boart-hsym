@@ -1858,3 +1858,14 @@ body { letter-spacing: -.01em; }
 /* без «Назад» шапка раздела той же высоты */
 #main:has(.apps-page):not(:has(.unit-tabs)) .topbar { min-height: 64px; }
 
+/* Info: пункты без линий, как на B05 и B04 */
+.info-list { border: 0; padding: 0; background: transparent; margin: 0; }
+.info-row + .info-row { border-top: 0; }
+.info-check { padding: 8px 0; }
+
+/* A10: загрузка PM */
+.pm-load-row { display: flex; align-items: center; gap: 10px; min-height: 48px; font-size: 13px; line-height: 20px; }
+.pm-load-row + .pm-load-row { border-top: 1px solid var(--border); }
+.pm-load-row b { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-load-row > .muted { flex: none; font-size: 12px; line-height: 16px; font-weight: 500; }
+

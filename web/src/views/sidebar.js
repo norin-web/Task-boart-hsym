@@ -77,7 +77,7 @@ function unitItem(u, r) {
   const teams = unitTeams(u);
   const canExpand = here && (teams.length > 0 || isSuper());
   const open = canExpand && !closedUnits().includes(u.id);
-  // подпункты — только текст: «Доска юнита», команды юнита, «+ Новая команда» на странице юнита
+  // подпункты — только текст: команды юнита, «+ Новая команда» на странице юнита
   const sub = (route, label, on) => link(route, { class: 'nav-sub' + (on ? ' active' : '') }, h('span', { class: 'nav-label' }, label));
   return h('div', { class: 'nav-unit' + (open ? ' open' : ''), dataset: { id: u.id } },
     link({ unit: u.id, mode: seesApps() ? 'overview' : 'board' }, {
@@ -95,7 +95,6 @@ function unitItem(u, r) {
     // стрелка есть у каждого юнита (макет 12): у текущего — разворачивает команды, у остальных — только указывает на вложенность
     h('span', { class: 'nav-chev', 'aria-hidden': 'true' }, icon('chevron', 14))),
     open && h('div', { class: 'nav-subs' },
-      sub({ unit: u.id, mode: 'board' }, 'Доска юнита', here && ['board', 'list', 'timeline'].includes(r.mode) && !r.team),
       teams.map(t => sub({ unit: u.id, mode: 'board', team: t.id }, t.name, r.unit === u.id && r.team === t.id)),
       isSuper() && h('button', { class: 'nav-sub add', onclick: () => { LS.set('peopleSub', 'teams'); navigate({ view: 'settings', tab: 'people' }); } }, icon('plus', 14), h('span', { class: 'nav-label' }, 'Новая команда'))));
 }
