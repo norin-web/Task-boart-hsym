@@ -1,8 +1,8 @@
 import {
-  S, LS, todayStr, me, taskById, personById, activeFields, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDate, fmtDateTime, relTime, addDays,
+  S, LS, todayStr, me, priorityOf, taskById, personById, activeFields, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDate, fmtDateTime, relTime, addDays,
   unitById, safeUrl, visibleLinkFields, REQUEST_TYPES, plural, appById, isSuper, ceoDefault, KIND_COLORS, whoName, teamById, activeTeams, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, fmtValue,
 } from '../state.js';
-import { $, h, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, statusIcon, fill, prioSelect } from '../ui.js';
+import { $, h, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, statusIcon, fill, prioMark, prioSelect } from '../ui.js';
 import { call, send } from '../api.js';
 import { navigate, rerender } from '../router.js';
 import { renderTasks, patchTask, reloadBoard, loadBoard, canRecall, recallReview } from './board.js';
@@ -655,6 +655,12 @@ function discussionBlock(t, editable) {
 /** Значение только для чтения в правой колонке. */
 const ro = node => h('div', { class: 'ro-value' }, node || h('span', { class: 'muted' }, '—'));
 
+/** Приоритет в карточке релиза: значок и название (R04). */
+function prioRo(t, f) {
+  const p = priorityOf(t, f);
+  return p ? [prioMark(p.opt, f.options.indexOf(p.opt), f.options.length, 16), p.opt.name] : fmtValue(f, t.fields[f.id]);
+}
+
 function sideBlock(t, { staff, editable }) {
   const u = S.board.unit;
   const B = u.settings.builtins;
@@ -729,7 +735,7 @@ function sideBlock(t, { staff, editable }) {
     const v = t.fields[f.id];
     prop(f.name, editable && (staff || !f.staffOnly)
       ? fieldInput(f, v, val => patchTask(t, { fields: { [f.id]: isEmpty(val) ? null : val } }))
-      : ro(isEmpty(v) ? null : f.type === 'url' && safeUrl(v) ? h('a', { href: safeUrl(v), target: '_blank', rel: 'noopener noreferrer' }, v) : fmtValue(f, v)),
+      : ro(isEmpty(v) ? null : t.step === 'release' && f.role === 'priority' ? prioRo(t, f) : f.type === 'url' && safeUrl(v) ? h('a', { href: safeUrl(v), target: '_blank', rel: 'noopener noreferrer' }, v) : fmtValue(f, v)),
     { required: f.required, empty: editable && blocking.includes(f) });
   });
 

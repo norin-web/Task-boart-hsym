@@ -152,8 +152,7 @@ export function releaseBlock(t, onChange) {
       h('div', { class: 'rl-card' },
         h('div', { class: 'rl-head' },
           h('b', { class: 'rl-app' }, appName),
-          version && h('span', { class: 'muted rl-try' }, 'v' + String(version).replace(/^v/i, '') + (build ? ` (${build})` : '')),
-          hist.length > 1 && h('span', { class: 'muted rl-try' }, `попытка ${hist.length}`),
+          h('span', { class: 'muted rl-try' }, [version && 'v' + String(version).replace(/^v/i, '') + (build ? ` (${build})` : ''), hist.length > 1 && `попытка ${hist.length}`].filter(Boolean).join(' · ')),
           h('span', { class: 'spacer' }),
           editable && actions(phase, rel, ready, hist)),
         h('ol', { class: 'rl-track' }, steps.map((x, i) => [
@@ -170,7 +169,7 @@ export function releaseBlock(t, onChange) {
         h('p', { class: 'rl-line' }, h('span', { class: 'phase-pill' }, icon('eye', 14), 'На ревью Apple'),
           h('span', { class: 'muted' }, 'отправлено ' + fmtD(rel.submittedAt) + ', ждём решения'))),
       phase === 'rejected' && h('div', { class: 'rl-now bad' },
-        h('p', { class: 'rl-line danger-text' }, icon('alert', 14), h('b', null, `Реджект №${rel.rejectNo || ''}`),
+        h('p', { class: 'rl-line danger-text' }, icon('warnSign', 14), h('b', null, `Реджект №${rel.rejectNo || ''}`),
           h('span', { class: 'muted' }, '· ' + relTime(rel.rejectedAt)),
           rel.shot && h('a', { class: 'rl-shot', href: rel.shot, target: '_blank', rel: 'noopener' }, 'скрин', icon('arrowUpRight', 12))),
         h('p', { class: 'rl-reason' }, rel.reason),
@@ -180,14 +179,15 @@ export function releaseBlock(t, onChange) {
       // релизные поля — карточкой, всегда открытой
       !hide.includes('fields') && data.fields.length > 0 && h('div', { class: 'rl-card rl-fields-card' },
         h('div', { class: 'rl-card-head' }, h('h3', null, 'Релизные поля'), h('span', { class: missing.length ? 'danger-text' : 'muted' }, `${filled} из ${data.fields.length}`)),
-        h('div', { class: 'af-list rl-fields' }, data.fields.map(f => valueRow(f, values[f.id] || '', editable && phase !== 'live', v => saveValue(f, v)))),
-        devAnswers(data.devForm)),
-      // ссылки приложения и команды — списком
-      !hide.includes('links') && links.length > 0 && h('div', { class: 'rl-sec' }, h('h3', { class: 'rl-sec-h' }, 'Ссылки'),
+        h('div', { class: 'af-list rl-fields' }, data.fields.map(f => valueRow(f, values[f.id] || '', editable && phase !== 'live', v => saveValue(f, v))))),
+      // опросник разработчика — своей карточкой (R04)
+      !hide.includes('fields') && data.fields.length > 0 && devAnswers(data.devForm),
+      // ссылки приложения и команды — карточкой
+      !hide.includes('links') && links.length > 0 && h('div', { class: 'rl-card rl-list-card' }, h('div', { class: 'rl-card-head' }, h('h3', null, 'Ссылки')),
         h('div', { class: 'rl-links' }, links.map(l => h('a', { class: 'rl-link', href: l.url, target: '_blank', rel: 'noopener', title: l.url }, l.icon,
           h('span', { class: 'rl-link-name' }, l.name), h('span', { class: 'muted rl-link-url' }, l.url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/+$/, '')))))),
       // попытки — только если их несколько
-      !hide.includes('attempts') && hist.length > 1 && h('details', { class: 'rl-sec rl-hist-d' }, h('summary', null, `Попытки · ${hist.length}`),
+      !hide.includes('attempts') && hist.length > 1 && h('div', { class: 'rl-card rl-list-card' }, h('div', { class: 'rl-card-head' }, h('h3', null, `Попытки · ${hist.length}`)),
         h('div', { class: 'rl-hist' }, hist.map(x => h('div', { class: 'rl-hist-row' },
           h('span', null, '№' + x.n), h('span', { class: 'muted' }, fmtD(x.submittedAt)),
           h('span', { class: x.result === 'reject' ? 'danger-text' : x.result === 'live' ? 'ok-text' : 'muted' }, x.result === 'reject' ? `реджект №${x.rejectNo || ''}` : x.result === 'live' ? 'App Store' : 'ждёт'),
@@ -202,17 +202,15 @@ export function releaseBlock(t, onChange) {
   return box;
 }
 
-/** Ответы разработчика на опросник — в релизных полях, только чтение. */
+/** Ответы разработчика на опросник — отдельная карточка, только чтение. */
 function devAnswers(form) {
   const a = (form && form.answers) || {};
   const who = form && personById(form.by);
-  return h('div', { class: 'rl-dev' },
-    h('div', { class: 'rl-sec-title' }, 'Опросник разработчика',
-      form && form.at && h('span', { class: 'muted rl-dev-by' }, [who && who.name, fmtD(form.at)].filter(Boolean).join(' · '))),
-    form && form.at
-      ? h('div', { class: 'af-list rl-fields' }, DEV_QUESTIONS.filter(q => a[q.id]).map(q => h('div', { class: 'af-row rl-row long' },
-        h('span', { class: 'af-name' }, q.q), h('span', { class: 'af-val pre' }, answerText(a[q.id])))))
-      : h('p', { class: 'muted rl-small', style: { margin: 0 } }, 'Разработчик ещё не заполнил'));
+  if (!form || !form.at) return h('div', { class: 'rl-card rl-dev-empty' }, h('h3', null, 'Опросник разработчика'), h('p', { class: 'muted rl-small' }, 'Разработчик ещё не заполнил'));
+  return h('div', { class: 'rl-card rl-list-card' },
+    h('div', { class: 'rl-card-head' }, h('h3', null, 'Опросник разработчика'), h('span', { class: 'muted' }, [who && who.name, fmtD(form.at)].filter(Boolean).join(' · '))),
+    h('div', { class: 'rl-dev' }, DEV_QUESTIONS.filter(q => a[q.id]).map(q => h('div', { class: 'rl-dev-row' },
+      h('span', { class: 'rl-dev-q' }, q.q), h('span', { class: 'rl-dev-a pre' }, answerText(a[q.id]))))));
 }
 
 /** Релизное поле: значение и правка на месте (длинный текст — многострочное поле). */
