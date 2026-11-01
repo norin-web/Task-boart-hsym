@@ -166,10 +166,12 @@ body.sb-collapsed .nav-item.me { justify-content: center; border-radius: 999px; 
 .panel-side .prop .inp:focus { background: var(--surface); box-shadow: 0 0 0 2px var(--focus); }
 .panel-side .prop:first-child { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .panel-side .prop:first-child > label { margin: 0; }
-.panel-side .status-wrap { position: relative; display: inline-flex; align-items: center; }
-.panel-side .status-wrap select.inp { height: 24px; padding: 0 12px 0 26px; border: 1px solid var(--border); background: var(--surface); border-radius: 999px; font-size: 12px; width: auto; }
-.panel-side .status-wrap select.inp:hover { padding: 0 12px 0 26px; margin: 0; width: auto; background: var(--surface-3); }
+.panel-side .status-wrap { position: relative; display: inline-flex; align-items: center; margin-left: -8px; }
+.panel-side .status-wrap select.inp { height: 24px; padding: 0 22px 0 26px; margin-left: 0; border: 1px solid var(--border); background: var(--surface); border-radius: 999px; font-size: 12px; width: auto; }
+.panel-side .status-wrap select.inp:hover { background: var(--surface-3); }
 .panel-side .status-wrap .dot { position: absolute; left: 10px; width: 8px; height: 8px; }
+/* Стрелка — чтобы статус читался как переключаемый список, а не текст */
+.panel-side .status-wrap::after { content: ''; position: absolute; right: 10px; top: 50%; width: 6px; height: 6px; margin-top: -4px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg); pointer-events: none; }
 .quick-chips { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
 .quick-chip { height: 24px; padding: 0 10px; border: 0; background: var(--surface); color: var(--muted); font-size: 12px; }
 .quick-chip:hover { background: var(--surface-3); color: var(--text); }
@@ -297,7 +299,8 @@ section:has(> .section-head + .card-box) > .card-box.empty-state { padding: 12px
 .fb-more .fchip, .fb-more .av-btn { flex: none; }
 #fb-rest .spacer { flex: 1; }
 .board { gap: 12px; padding: 16px 16px 16px 24px; }
-.col { padding: 12px; gap: 8px; border-radius: var(--r-card); background: linear-gradient(180deg, var(--surface-3) 0%, transparent 100%); min-width: 224px; }
+/* Фикс. длина растяжки (не доля высоты колонки) — иначе на короткой/пустой колонке градиент скомкан у шапки */
+.col { padding: 12px; gap: 8px; border-radius: var(--r-card); background: linear-gradient(180deg, var(--surface-3) 0, transparent 320px); min-width: 224px; }
 .col-head { height: 32px; padding: 0 8px; gap: 8px; }
 .col-name { font-size: 13px; line-height: 20px; font-weight: 600; }
 .col-count { font-size: 13px; line-height: 20px; font-weight: 500; color: var(--muted); }
@@ -661,9 +664,9 @@ section:has(> .card-box.empty-state.center:first-child) > .card-box { background
 .ap-row.has-prio, .ap-row.has-prio:hover { box-shadow: none; }
 * { scrollbar-gutter: auto !important; }
 
-/* Сайдбар в низком окне прокручивается, а не сжимает пункты (в макете у всех flex-shrink: 0) */
-#sidebar > *, #sidebar .nav-units, #sidebar .nav-item, #sidebar .nav-sub, #sidebar .nav-subs { flex-shrink: 0; }
-#sidebar .nav-spacer { flex: 1 0 8px; min-height: 8px; }
+/* Сайдбар сам не сжимается и не скроллится целиком — скроллится только список юнитов (.nav-scroll), если не помещается */
+#sidebar .nav-units, #sidebar .nav-item, #sidebar .nav-sub, #sidebar .nav-subs { flex-shrink: 0; }
+#sidebar > .nav-top, #sidebar > .nav-bottom { flex-shrink: 0; }
 .rm-grid .section-head h2 { display: flex; width: 100%; justify-content: space-between; align-items: baseline; }
 .rm-grid .section-head .sec-n { font-size: 13px; font-weight: 500; }
 .rm-row .uc-icon.sm, .rm-row .app-img { width: 36px; height: 36px; border-radius: var(--r); }
@@ -765,9 +768,12 @@ body.sb-collapsed .panel, body.sb-collapsed .panel.center { left: 102px; }
 .unit-card { transition: background .15s, color .15s; }
 .unit-card:hover { box-shadow: none; border-color: transparent; background: var(--sidebar); color: #fff; }
 .unit-card:hover .uc-key, .unit-card:hover .uc-desc { color: var(--sidebar-text); }
-.unit-card .uc-counts { display: none; font-size: 13px; line-height: 20px; font-weight: 500; color: inherit; }
-.unit-card:hover .uc-counts { display: flex; }
-.unit-card:hover .uc-foot { display: none; }
+/* Прогресс и счётчики — в одной ячейке (grid-area), переключаются прозрачностью: высота карточки не прыгает при наведении */
+.unit-card .uc-stats { position: relative; display: grid; }
+.unit-card .uc-stats > .uc-foot, .unit-card .uc-stats > .uc-counts { grid-area: 1 / 1; transition: opacity .12s; }
+.unit-card .uc-counts { display: flex; opacity: 0; pointer-events: none; font-size: 13px; line-height: 20px; font-weight: 500; color: inherit; }
+.unit-card:hover .uc-counts { opacity: 1; }
+.unit-card:hover .uc-foot { opacity: 0; }
 .unit-card:hover .uc-desc { color: #fff; }
 .uc-head .uc-menu { opacity: 0; transition: opacity .12s; color: var(--sidebar-text); }
 .unit-card:hover .uc-menu, .uc-menu:focus-visible { opacity: 1; }

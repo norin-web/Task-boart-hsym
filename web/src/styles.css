@@ -109,13 +109,15 @@ svg.i { flex: none; display: block; }
 .btn.ghost:disabled { background: transparent; }
 .icon-btn { display: inline-flex; align-items: center; justify-content: center; border: 0; background: transparent; border-radius: 999px; width: 32px; height: 32px; color: var(--muted); flex: none; }
 .icon-btn:hover { background: var(--surface-3); color: var(--text); }
+.icon-btn.on { background: var(--selected); color: var(--text); }
 .icon-btn.sm { width: 28px; height: 28px; }
 .icon-btn:disabled { opacity: .35; cursor: default; }
 .link-btn { border: 0; background: none; padding: 0; color: var(--text); font-size: 12px; font-weight: 600; }
 .link-btn:hover { text-decoration: underline; }
 .link-btn.danger { color: var(--danger); }
 .inp { width: 100%; border: 1px solid var(--border); background: var(--surface); border-radius: var(--r); padding: 0 12px; outline: none; transition: border-color .12s, box-shadow .12s; height: 36px; font-size: 13px; line-height: 20px; }
-textarea.inp { height: auto; padding: 8px 12px; resize: vertical; line-height: 20px; }
+/* Растягивается по тексту сама, руками — нельзя (поле не должно расползаться) */
+textarea.inp { height: auto; padding: 8px 12px; resize: none; field-sizing: content; line-height: 20px; }
 .inp::placeholder { color: var(--muted); opacity: .7; }
 .inp:hover { border-color: var(--text); }
 .inp:focus { border-color: var(--focus); box-shadow: 0 0 0 3px var(--accent-soft); }
@@ -140,8 +142,11 @@ select.inp { cursor: pointer; }
 /* ================= Каркас ================= */
 /* Сайдбар парит над фоном: поля 16 и 6, радиус 34; страница — на светлом фоне, блоки без рамок */
 #shell { display: grid; grid-template-columns: 256px minmax(0, 1fr); gap: 6px; height: 100vh; padding: 16px 0 16px 6px; transition: grid-template-columns .2s; }
-#sidebar { background: var(--sidebar); color: var(--sidebar-text); border-radius: var(--r-shell); display: flex; flex-direction: column; gap: 4px; padding: 16px 12px; overflow-y: auto; scrollbar-width: none; }
-#sidebar::-webkit-scrollbar { display: none; }
+/* Сайдбар сам не скроллится: шапка и низ (аккаунт) неподвижны, скроллится только список юнитов, если не помещается. */
+#sidebar { background: var(--sidebar); color: var(--sidebar-text); border-radius: var(--r-shell); display: flex; flex-direction: column; gap: 4px; padding: 16px 12px; overflow: hidden; }
+.nav-top, .nav-bottom { flex: none; display: flex; flex-direction: column; gap: 4px; }
+.nav-scroll { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; scrollbar-width: none; }
+.nav-scroll::-webkit-scrollbar { display: none; }
 #main { display: flex; flex-direction: column; min-width: 0; height: calc(100vh - 32px); overflow: hidden; }
 .view-body { flex: 1; overflow-y: auto; }
 .page { padding: 8px 20px 48px; max-width: 1180px; margin: 0 auto; }
@@ -1775,7 +1780,6 @@ a.rc-more { text-decoration: none; }
 .flt-tab { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; font: inherit; font-size: 13px; color: var(--text-2); text-align: left; padding: 7px 10px; border-radius: var(--r); position: relative; }
 .flt-tab:hover { background: var(--surface-2); color: var(--text); }
 .flt-tab.on { background: var(--selected); color: var(--text); font-weight: 500; }
-.flt-tab.on::before { content: ''; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; border-radius: 2px; background: var(--accent); }
 .flt-n { margin-left: auto; font-size: 12px; font-weight: 600; background: var(--primary); color: var(--on-primary); border-radius: 999px; padding: 0 6px; line-height: 17px; }
 .flt-n.muted { background: var(--surface-2); color: var(--muted); }
 .flt-save { margin-top: auto; padding: 8px 10px 4px; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
@@ -1976,10 +1980,18 @@ button.rh-row:hover { background: var(--surface-2); }
 .rm-more { display: flex; justify-content: space-between; gap: 12px; padding: 8px 12px; border-top: 1px solid var(--border); font-size: 13px; }
 
 /* ---------- меню слева: юниты с командами, колокольчик ---------- */
-.nav-unit-row { display: flex; align-items: center; gap: 2px; }
-.nav-unit-row .nav-item { flex: 1; min-width: 0; }
-.nav-chev { color: var(--muted); transform: rotate(-90deg); transition: transform .15s ease-out; }
+.nav-chev { flex: none; color: var(--muted); transform: rotate(-90deg); transition: transform .15s ease-out; }
 .nav-unit.open .nav-chev { transform: none; }
+
+/* Меню аккаунта (сайдбар): раскрывается на месте, внутри сайдбара, а не всплывающим окном поверх страницы */
+.inline-menu.menu { position: static; z-index: auto; width: 100%; min-width: 0; max-width: none; max-height: none; overflow: visible; animation: none; background: var(--sidebar-2); border: 0; box-shadow: none; }
+.inline-menu .menu-item { color: var(--sidebar-on-active); }
+.inline-menu .menu-item:hover { background: var(--sidebar-active); }
+.inline-menu .menu-item .i { color: var(--sidebar-text); }
+.inline-menu .menu-item.danger, .inline-menu .menu-item.danger .i { color: var(--danger-fill); }
+.inline-menu .menu-sep { background: var(--sidebar-border); }
+.inline-menu .menu-label { color: var(--sidebar-text); }
+.inline-menu .me-card small { color: var(--sidebar-text); }
 .nav-subs { margin: 2px 0 6px 18px; padding-left: 10px; border-left: 1px solid var(--border); display: grid; gap: 1px; }
 .nav-sub { display: flex; align-items: center; gap: 9px; padding: 5px 8px; border-radius: var(--r); color: var(--text-2); text-decoration: none; font-size: 13px; min-height: 28px; }
 .nav-sub:hover { background: var(--surface-2); color: var(--text); }

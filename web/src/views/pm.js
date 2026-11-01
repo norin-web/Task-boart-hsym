@@ -10,6 +10,7 @@ import { currentView } from '../router.js';
 import { peekTask, openCreateTask } from './task.js';
 import { appIcon, prioTag, isHighPrio, openDecomposeDialog, sendRelease, openAppById } from './apps.js';
 import { newsBlock, loadNotes } from './home.js';
+import { renderLayout, editLayout } from './layout.js';
 
 export const PERIODS = [['week', 'Неделя'], ['month', 'Месяц'], ['quarter', 'Квартал']];
 const STATE = {
@@ -20,26 +21,38 @@ const STATE = {
 };
 const stateOf = s => (s.done ? 'done' : s.blocked ? 'blocked' : s.kind === 'todo' ? 'todo' : 'progress');
 
+let editHook = null;
 export async function renderPmHome() {
   const page = h('div', { class: 'page ceo-page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
   fill($('#main'),
     topbar([h('div', { class: 'screen-head' }, h('div', { class: 'screen-date' }, (() => { const t = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }); return t.charAt(0).toUpperCase() + t.slice(1); })()),
-      h('h1', { class: 'screen-title' }, 'Дашборд'))], [h('button', { class: 'btn primary', onclick: () => openCreateTask({ onCreated: load }), title: 'Новая задача (C)' }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Новая задача'))]),
+      h('h1', { class: 'screen-title' }, 'Дашборд'))], [
+      h('button', { class: 'btn', title: 'Блоки и порядок дашборда', onclick: () => editHook && editHook() }, icon('layers', 14), 'Настроить'),
+      h('button', { class: 'btn primary', onclick: () => openCreateTask({ onCreated: load }), title: 'Новая задача (C)' }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Новая задача'))]),
     h('div', { class: 'view-body' }, page));
   let period = PERIODS.some(([k]) => k === LS.get('kpiPeriod', '')) ? LS.get('kpiPeriod', '') : 'month';
+  let d;
   async function load() {
-    let d;
     try { [d] = await Promise.all([call('getPmDashboard', { today: todayStr(), period }), loadNotes()]); } catch (e) { return showErr(e); }
     if (currentView() !== 'home') return;
-    const person = me();
-    fill(page,
-      inbox(d, load),
-      h('div', { class: 'home-grid' },
-        h('div', { class: 'home-col' }, pipeline(d, load)),
-        h('div', { class: 'home-col' }, problems(d))),
-      team(d, period, p => { period = p; LS.set('kpiPeriod', p); load(); }));
+    draw();
   }
+  function setPeriod(p) { period = p; LS.set('kpiPeriod', p); load(); }
+  const blocks = () => pmBlocks(d, load, period, setPeriod);
+  const edit = () => editLayout('pmHome', blocks(), page, draw, { title: 'Настройка дашборда' });
+  editHook = edit;
+  function draw() { fill(page, renderLayout('pmHome', blocks())); }
   load();
+}
+
+function pmBlocks(d, reload, period, setPeriod) {
+  return [
+    { id: 'news', title: 'Новое для вас', col: 'full', off: true, empty: 'Появится, когда что-то придёт вам', render: () => newsBlock() },
+    { id: 'inbox', title: 'Входящие от CEO', col: 'full', render: () => inbox(d, reload) },
+    { id: 'pipeline', title: 'Приложения по этапам', col: 'left', render: () => pipeline(d, reload) },
+    { id: 'problems', title: 'Проблемы', col: 'right', render: () => problems(d) },
+    { id: 'team', title: 'Команда и KPI', col: 'full', render: () => team(d, period, setPeriod) },
+  ];
 }
 
 /* ---------- входящие от CEO ---------- */

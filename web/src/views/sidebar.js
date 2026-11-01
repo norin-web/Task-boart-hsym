@@ -64,11 +64,14 @@ async function openBell(anchor) {
   m.addEventListener('click', e => { if (e.target.closest('.news-row')) closeMenu(); }, true);
 }
 
-/** Раскрытые юниты в меню слева — запоминаются. */
-const openUnits = () => LS.get('navOpen', []) || [];
+/**
+ * Список команд текущего юнита в меню слева — открыт по умолчанию (переход в юнит сразу его открывает),
+ * но его можно свернуть; выбор запоминается в браузере per-юнит.
+ */
+const closedUnits = () => LS.get('navClosed', []) || [];
 function toggleUnit(id) {
-  const list = openUnits();
-  LS.set('navOpen', list.includes(id) ? list.filter(x => x !== id) : [...list, id]);
+  const list = closedUnits();
+  LS.set('navClosed', list.includes(id) ? list.filter(x => x !== id) : [...list, id]);
   renderSidebar();
 }
 /** Команды юнита: те, в которых состоят его участники. */
@@ -80,28 +83,27 @@ export const unitTeams = u => {
 function unitItem(u, r) {
   const n = openCount(u);
   const overdue = u.counts && u.counts.overdue;
-  const open = openUnits().includes(u.id) || r.unit === u.id;  // текущий юнит раскрыт (макет 11)
-  const teams = unitTeams(u);
   const here = r.unit === u.id && !r.team;
-  // подпункты — только текст (макет 11): «Доска юнита», команды, «+ Новая команда»
-  const sub = (route, label, ic, on) => link(route, { class: 'nav-sub' + (on ? ' active' : '') }, h('span', { class: 'nav-label' }, label));
+  const teams = unitTeams(u);
+  const canExpand = here && (teams.length > 0 || isSuper());
+  const open = canExpand && !closedUnits().includes(u.id);
+  // подпункты — только текст: команды юнита, «+ Новая команда»; «Доска юнита» убрана — она же вкладка «Доска» на странице юнита
+  const sub = (route, label, on) => link(route, { class: 'nav-sub' + (on ? ' active' : '') }, h('span', { class: 'nav-label' }, label));
   return h('div', { class: 'nav-unit' + (open ? ' open' : ''), dataset: { id: u.id } },
-    h('div', { class: 'nav-unit-row' },
-      link({ unit: u.id, mode: seesApps() ? 'overview' : 'board' }, {
-        // клик по юниту — его обзор (отдельного пункта «Обзор» нет)
-        class: 'nav-item unit' + (here && (!seesApps() || !['board', 'list'].includes(r.mode)) ? ' active' : '') + (u.archived ? ' archived' : ''),
-        dataset: { id: u.id },
-        // правый клик — меню юнита
-        oncontextmenu: isStaff() ? e => { e.preventDefault(); unitMenu({ x: e.clientX, y: e.clientY }, u); } : null,
-      },
-      h('span', { class: 'unit-dot', style: { background: u.color } }),
-      h('span', { class: 'nav-label' }, u.name),
-      h('span', { class: 'nav-count' + (overdue ? ' warn' : ''), title: overdue ? 'Просрочено: ' + overdue : 'Открытых задач' }, n || '')),
-      h('button', { class: 'icon-btn sm nav-chev', title: open ? 'Свернуть' : 'Команды юнита', 'aria-expanded': String(open), onclick: () => toggleUnit(u.id) }, icon('chevron', 14))),
+    link({ unit: u.id, mode: seesApps() ? 'overview' : 'board' }, {
+      // клик по юниту — его обзор; по уже открытому юниту — ещё и сворачивает/разворачивает список команд, без отдельной стрелки
+      class: 'nav-item unit nav-unit-row' + (here && (!seesApps() || !['board', 'list'].includes(r.mode)) ? ' active' : '') + (u.archived ? ' archived' : ''),
+      dataset: { id: u.id },
+      onclick: canExpand ? () => toggleUnit(u.id) : null,
+      // правый клик — меню юнита
+      oncontextmenu: isStaff() ? e => { e.preventDefault(); unitMenu({ x: e.clientX, y: e.clientY }, u); } : null,
+    },
+    h('span', { class: 'unit-dot', style: { background: u.color } }),
+    h('span', { class: 'nav-label' }, u.name),
+    h('span', { class: 'nav-count' + (overdue ? ' warn' : ''), title: overdue ? 'Просрочено: ' + overdue : 'Открытых задач' }, n || ''),
+    canExpand && h('span', { class: 'nav-chev', 'aria-hidden': 'true' }, icon('chevron', 14))),
     open && h('div', { class: 'nav-subs' },
-      // без обзора (сотрудник) юнит и так открывает доску
-      seesApps() && sub({ unit: u.id, mode: 'board' }, 'Доска юнита', 'board', here && ['board', 'list'].includes(r.mode)),
-      teams.map(t => sub({ unit: u.id, mode: 'board', team: t.id }, t.name, null, r.unit === u.id && r.team === t.id)),
+      teams.map(t => sub({ unit: u.id, mode: 'board', team: t.id }, t.name, r.unit === u.id && r.team === t.id)),
       isSuper() && h('button', { class: 'nav-sub add', onclick: () => { LS.set('peopleSub', 'teams'); navigate({ view: 'settings', tab: 'people' }); } }, icon('plus', 14), h('span', { class: 'nav-label' }, 'Новая команда'))));
 }
 
@@ -136,36 +138,43 @@ function drawSidebar() {
   const navLink = (route, ic, label, extra) => link(route, { class: 'nav-item' + (isHere(r, route) ? ' active' : '') }, icon(ic), h('span', { class: 'nav-label' }, label), extra);
   const sec = (label, extra) => h('div', { class: 'nav-section' }, h('span', null, label), extra);
 
+  const meBtn = h('button', { class: 'nav-item me', onclick: e => { e.stopPropagation(); meMenu(); }, title: 'Аккаунт', 'aria-haspopup': 'menu', 'aria-expanded': String(meOpen) },
+    avatar(person, 'lg'),
+    h('span', { class: 'nav-label me-label' }, h('span', null, person ? person.name : '—'),
+      person && h('small', null, (S.session && S.session.user.email) || personCaption(person) || ACCESS_LABELS[person.access])),
+    icon('chevron', 14));
+
   fill($('#sidebar'),
-    h('div', { class: 'brand' }, h('div', { class: 'brand-logo' }, icon('check', 16)), h('span', { class: 'brand-name' }, 'Tasks'),
-      h('button', { class: 'icon-btn sm sb-toggle', title: collapsed() ? 'Развернуть меню' : 'Свернуть меню', 'aria-label': collapsed() ? 'Развернуть меню' : 'Свернуть меню', onclick: toggleCollapse }, icon(collapsed() ? 'expand' : 'collapse', 16))),
-    lens && h('div', { class: 'lens-bar', role: 'status' }, icon('eye', 14),
-      h('span', null, 'Как ', h('b', null, lens.name)),
-      h('button', { class: 'link-btn', onclick: () => import('./dev.js').then(m => m.viewAs('')) }, 'Вернуться')),
-    ceo && h('div', { class: 'ceo-mode' }, h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Режим CEO' },
-      [['default', 'Обзор', 'Приложения и приоритеты — без деталей разработки'], ['admin', 'Полный', 'Всё: доски, задачи, настройки юнитов']].map(([m, label, hint]) =>
-        h('button', { class: ceoMode() === m ? 'on' : '', role: 'radio', 'aria-checked': String(ceoMode() === m), title: hint, onclick: () => setCeoMode(m) }, label)))),
-    h('button', { class: 'search-btn', onclick: openPalette }, icon('search', 15), h('span', null, 'Поиск'), h('kbd', null, isMac ? '⌘K' : 'Ctrl K')),
-    navLink({ view: 'home' }, person && person.access === 'rm' ? 'rocket' : 'home', staff ? 'Дашборд' : person && person.access === 'rm' ? 'Релизы' : 'Мой дашборд'),
-    seesApps() && navLink({ view: 'apps' }, 'app', 'Приложения'),
-    staff && navLink({ view: 'analytics' }, 'chart', 'Аналитика'),
-    !lite && navLink({ view: 'myboard' }, 'board', 'Моя доска'),
-    !lite && staff && navLink({ view: 'my' }, 'list', 'Мои задачи'),
-    sec(staff ? 'Юниты' : 'Мои юниты', ceo && h('button', { class: 'icon-btn sm', title: 'Новый юнит', onclick: openCreateUnit }, icon('plus', 14))),
-    list,
-    !units.length && h('div', { class: 'nav-empty' }, 'Юнитов пока нет'),
-    !units.length && !ceo && h('div', { class: 'nav-empty' }, 'Пока нет юнитов'),
-    h('div', { class: 'nav-spacer' }),
-    h('div', { class: 'nav-sep', role: 'separator' }),
-    isDev() && h('button', {
-      class: 'nav-item dev-item' + (isHere(r, { view: 'dev' }) ? ' active' : ''), title: 'Смотреть как, быстрые сценарии, тестовые данные',
-      onclick: () => import('./dev.js').then(m => m.openDevPanel()),
-    }, icon('code'), h('span', { class: 'nav-label' }, 'Режим разработчика'), h('kbd', null, isMac ? '⌥D' : 'Alt D')),
-    h('button', { class: 'nav-item me', onclick: e => meMenu(e.currentTarget), title: 'Аккаунт', 'aria-haspopup': 'menu' },
-      avatar(person, 'lg'),
-      h('span', { class: 'nav-label me-label' }, h('span', null, person ? person.name : '—'),
-        person && h('small', null, (S.session && S.session.user.email) || personCaption(person) || ACCESS_LABELS[person.access])),
-      icon('chevron', 14)));
+    h('div', { class: 'nav-top' },
+      h('div', { class: 'brand' }, h('div', { class: 'brand-logo' }, icon('check', 16)), h('span', { class: 'brand-name' }, 'Tasks'),
+        h('button', { class: 'icon-btn sm sb-toggle', title: collapsed() ? 'Развернуть меню' : 'Свернуть меню', 'aria-label': collapsed() ? 'Развернуть меню' : 'Свернуть меню', onclick: toggleCollapse }, icon(collapsed() ? 'expand' : 'collapse', 16))),
+      lens && h('div', { class: 'lens-bar', role: 'status' }, icon('eye', 14),
+        h('span', null, 'Как ', h('b', null, lens.name)),
+        h('button', { class: 'link-btn', onclick: () => import('./dev.js').then(m => m.viewAs('')) }, 'Вернуться')),
+      ceo && h('div', { class: 'ceo-mode' }, h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Режим CEO' },
+        [['default', 'Обзор', 'Приложения и приоритеты — без деталей разработки'], ['admin', 'Полный', 'Всё: доски, задачи, настройки юнитов']].map(([m, label, hint]) =>
+          h('button', { class: ceoMode() === m ? 'on' : '', role: 'radio', 'aria-checked': String(ceoMode() === m), title: hint, onclick: () => setCeoMode(m) }, label))))),
+    h('div', { class: 'nav-scroll' },
+      h('button', { class: 'search-btn', onclick: openPalette }, icon('search', 15), h('span', null, 'Поиск'), h('kbd', null, isMac ? '⌘K' : 'Ctrl K')),
+      navLink({ view: 'home' }, person && person.access === 'rm' ? 'rocket' : 'home', staff ? 'Дашборд' : person && person.access === 'rm' ? 'Релизы' : 'Мой дашборд'),
+      seesApps() && navLink({ view: 'apps' }, 'app', 'Приложения'),
+      staff && navLink({ view: 'analytics' }, 'chart', 'Аналитика'),
+      !lite && navLink({ view: 'myboard' }, 'board', 'Моя доска'),
+      !lite && staff && navLink({ view: 'my' }, 'list', 'Мои задачи'),
+      sec(staff ? 'Юниты' : 'Мои юниты', ceo && h('button', { class: 'icon-btn sm', title: 'Новый юнит', onclick: openCreateUnit }, icon('plus', 14))),
+      list,
+      !units.length && h('div', { class: 'nav-empty' }, 'Юнитов пока нет'),
+      !units.length && !ceo && h('div', { class: 'nav-empty' }, 'Пока нет юнитов')),
+    h('div', { class: 'nav-bottom' },
+      h('div', { class: 'nav-sep', role: 'separator' }),
+      isDev() && h('button', {
+        class: 'nav-item dev-item' + (isHere(r, { view: 'dev' }) ? ' active' : ''), title: 'Смотреть как, быстрые сценарии, тестовые данные',
+        onclick: () => import('./dev.js').then(m => m.openDevPanel()),
+      }, icon('code'), h('span', { class: 'nav-label' }, 'Режим разработчика'), h('kbd', null, isMac ? '⌥D' : 'Alt D')),
+      meOpen && meMenuPanel(),
+      meBtn));
+
+  if (meOpen) setTimeout(() => document.addEventListener('click', closeMe, { once: true }), 0);
 
   if (staff && units.length > 1) {
     Sortable.create(list, {
@@ -196,22 +205,39 @@ export async function setCeoMode(m) {
 }
 
 /** Меню аккаунта: сверху кто я (клик — профиль), настройки, дальше локальные действия или выход. */
-function meMenu(anchor) {
+/** Меню аккаунта раскрывается внутри сайдбара (над кнопкой аккаунта), а не поверх страницы всплывающим окном. */
+let meOpen = false;
+function closeMe() { if (meOpen) { meOpen = false; renderSidebar(); } }
+function meMenu() { meOpen = !meOpen; renderSidebar(); }
+
+function renderMenuItems(items) {
+  return items.filter(Boolean).map(it => {
+    if (it.sep) return h('div', { class: 'menu-sep' });
+    if (it.title) return h('div', { class: 'menu-label' }, it.title);
+    return h('button', {
+      class: 'menu-item' + (it.danger ? ' danger' : ''), role: 'menuitem',
+      onclick: e => { e.stopPropagation(); it.action(); },
+    }, it.icon && icon(it.icon, 15), it.label);
+  });
+}
+
+function meMenuPanel() {
   const p = me();
   const email = (S.session && S.session.user.email) || (p && p.email) || '';
-  menu(anchor, [
-    p && h('button', { class: 'menu-item me-card', role: 'menuitem', onclick: () => { closeMenu(); openMyProfile(); } },
-      avatar(p), h('span', { class: 'me-card-text' }, h('b', null, email || p.name), h('small', { class: 'muted' }, ACCESS_LABELS[p.access]))),
-    { sep: true },
-    { label: 'Настройки', icon: 'settings', action: () => navigate({ view: 'settings' }) },
-    { label: (THEMES[LS.get('theme', 'auto')] || THEMES.auto)[0], icon: (THEMES[LS.get('theme', 'auto')] || THEMES.auto)[1], action: cycleTheme },
-    mode === 'local' && { title: 'Локальный режим: данные только в этом браузере' },
-    mode === 'local' && { label: 'Войти как…', icon: 'users', action: openActAs },
-    mode === 'local' && { sep: true },
-    mode === 'local' && { label: 'Очистить локальную базу', icon: 'trash', danger: true, action: resetLocal },
-    mode === 'supabase' && { sep: true },
-    mode === 'supabase' && { label: 'Выйти', icon: 'back', action: () => supabase.auth.signOut() },
-  ], { cls: 'me-menu' });
+  return h('div', { class: 'menu inline-menu me-menu', role: 'menu', onclick: e => e.stopPropagation() },
+    renderMenuItems([
+      p && h('button', { class: 'menu-item me-card', role: 'menuitem', onclick: () => { closeMe(); openMyProfile(); } },
+        avatar(p), h('span', { class: 'me-card-text' }, h('b', null, email || p.name), h('small', { class: 'muted' }, ACCESS_LABELS[p.access]))),
+      { sep: true },
+      { label: 'Настройки', icon: 'settings', action: () => { closeMe(); navigate({ view: 'settings' }); } },
+      { label: (THEMES[LS.get('theme', 'auto')] || THEMES.auto)[0], icon: (THEMES[LS.get('theme', 'auto')] || THEMES.auto)[1], action: cycleTheme },
+      mode === 'local' && { title: 'Локальный режим: данные только в этом браузере' },
+      mode === 'local' && { label: 'Войти как…', icon: 'users', action: () => { closeMe(); openActAs(); } },
+      mode === 'local' && { sep: true },
+      mode === 'local' && { label: 'Очистить локальную базу', icon: 'trash', danger: true, action: () => { closeMe(); resetLocal(); } },
+      mode === 'supabase' && { sep: true },
+      mode === 'supabase' && { label: 'Выйти', icon: 'back', action: () => supabase.auth.signOut() },
+    ]));
 }
 
 /** Лёгкое обновление счётчиков без перерисовки (после правок на доске). */

@@ -377,6 +377,9 @@ function renderLanes(board) {
 }
 
 function onDragEnd(evt) {
+  // плейсхолдер «Пусто» — не карточка; убираем сразу, иначе он на миг виден под брошенной картой и та прыгает при перерисовке
+  const ph = evt.to.querySelector(':scope > .col-empty');
+  if (ph) ph.remove();
   if (evt.from === evt.to && evt.oldIndex === evt.newIndex) return;
   const t = taskById(evt.item.dataset.id);
   if (!t) return;

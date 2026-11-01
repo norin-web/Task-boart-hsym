@@ -494,13 +494,14 @@ export function unitCard(u, { apps, to = 'board' } = {}) {
         onclick: e => { e.preventDefault(); e.stopPropagation(); unitMenu(e.currentTarget, u); },
       }, icon('more'))),
     u.description && h('div', { class: 'uc-desc' }, u.description),
-    // в покое — прогресс, при наведении — счётчики (макет 12, карточка Gold)
-    h('div', { class: 'uc-foot' },
-      h('div', { class: 'progress', title: 'Выполнено ' + pct + '%' }, h('div', { style: { width: pct + '%' } })),
-      h('span', { class: 'uc-pct' }, pct + '%')),
-    h('div', { class: 'uc-counts' },
-      h('span', null, 'В работе ' + c.in_progress), h('span', { class: 'spacer' }),
-      h('span', null, 'На ревью ' + (c.review || 0)), h('span', null, 'Готово ' + c.done)));
+    // в покое — прогресс, при наведении — счётчики (макет 12, карточка Gold); оба в одной ячейке — высота карточки не прыгает
+    h('div', { class: 'uc-stats' },
+      h('div', { class: 'uc-foot' },
+        h('div', { class: 'progress', title: 'Выполнено ' + pct + '%' }, h('div', { style: { width: pct + '%' } })),
+        h('span', { class: 'uc-pct' }, pct + '%')),
+      h('div', { class: 'uc-counts' },
+        h('span', null, 'В работе ' + c.in_progress), h('span', { class: 'spacer' }),
+        h('span', null, 'На ревью ' + (c.review || 0)), h('span', null, 'Готово ' + c.done))));
 }
 
 
