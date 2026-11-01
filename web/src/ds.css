@@ -1692,3 +1692,19 @@ body { letter-spacing: -.01em; }
 .modal:has(.title-field) .field > label { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); margin-bottom: 4px; }
 .modal:has(.title-field) .grid2 .inp, .modal:has(.title-field) .field > .inp:not(.title-field), .modal:has(.title-field) .prio-select { height: 40px; padding: 0 12px; border: 0; border-radius: 12px; background-color: var(--surface-2); box-shadow: none; font-size: 13px; font-weight: 600; }
 .modal:has(.title-field) textarea.inp { height: 64px !important; padding: 10px 12px; font-weight: 500; }
+
+/* По отчёту: B05, B07 */
+.up-head .btn.ghost { padding: 0; height: auto; background: transparent; font-size: 12px; font-weight: 600; }
+.app-page .app-side .ap-props { gap: 12px; }
+.app-page .app-side .ap-props .field { margin: 0; gap: 2px; }
+.app-page .af-list .af-row { min-height: 44px; padding: 0; border-bottom: 1px solid var(--border); border-radius: 0; }
+.app-page .af-list .af-row:last-child { border-bottom: 0; }
+.modal:has(.title-field) .modal-body, .modal:has(.title-field) form { gap: 12px; }
+.modal:has(.title-field) .field { margin: 0 0 12px; min-height: 0; }
+.modal:has(.title-field) .grid2 { margin: 0; gap: 0 10px; }
+.modal:has(.title-field) .grid2 .inp, .modal:has(.title-field) .field > .inp:not(.title-field), .modal:has(.title-field) .prio-select { background-color: var(--surface-3); }
+.modal:has(.title-field) textarea.inp { background-color: var(--surface-3); }
+.modal:has(.title-field) .title-field { background: var(--surface-3); }
+.ap-note-add { display: flex; align-items: center; gap: 10px; }
+.ap-note-add textarea.inp { flex: 1; height: 44px; min-height: 44px; border: 0; border-radius: 12px; background: var(--surface-2); padding: 12px 14px; resize: none; }
+.ap-note-add .btn { height: 36px; padding: 0 16px; border-color: transparent; background: var(--surface-3); }
