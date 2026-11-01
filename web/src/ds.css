@@ -1191,7 +1191,7 @@ input.switch:disabled { opacity: .5; cursor: default; }
 #main { height: calc(100vh - 16px); margin-bottom: -16px; }
 .topbar { background: var(--bg); position: relative; z-index: 5; }
 .view-body { position: relative; }
-.view-body::before { content: ''; display: block; position: sticky; top: 0; height: 24px; margin-bottom: -24px; z-index: 4; pointer-events: none;
-  background: linear-gradient(var(--bg), transparent); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-  -webkit-mask-image: linear-gradient(#000, transparent); mask-image: linear-gradient(#000, transparent); }
+.view-body::before { content: ''; display: block; position: sticky; top: 0; height: 48px; margin-bottom: -48px; z-index: 4; pointer-events: none;
+  background: linear-gradient(var(--bg) 0, color-mix(in srgb, var(--bg) 70%, transparent) 40%, transparent); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  -webkit-mask-image: linear-gradient(#000 30%, transparent); mask-image: linear-gradient(#000 30%, transparent); }
 @media (max-width: 900px) { #main { height: 100vh; margin-bottom: 0; } }
