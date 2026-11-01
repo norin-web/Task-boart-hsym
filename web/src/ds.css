@@ -1295,3 +1295,6 @@ body.sb-collapsed .nav-unit-row .nav-abbr { display: inline; font-size: 12px; li
 .create-top { margin-bottom: 12px; }
 .create-top > .hint { grid-column: 1 / -1; color: var(--ok, #117b23); background: var(--ok-soft, #d7f5db); border-radius: 10px; padding: 8px 12px; }
 .create-top > .hint:empty { display: none; }
+
+/* Моя доска: пустая подсказка не лезет под тулбар и выровнена по колонкам */
+.my-empty { margin: 4px 16px 0 24px; }
