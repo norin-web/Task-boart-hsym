@@ -2,7 +2,7 @@ import {
   S, LS, todayStr, me, taskById, personById, activeFields, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDate, fmtDateTime, relTime, addDays,
   unitById, safeUrl, visibleLinkFields, REQUEST_TYPES, plural, appById, isSuper, ceoDefault, KIND_COLORS, whoName, teamById, activeTeams, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, fmtValue,
 } from '../state.js';
-import { $, h, append, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, statusIcon, fill, prioSelect } from '../ui.js';
+import { $, h, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, statusIcon, fill, prioSelect } from '../ui.js';
 import { call, send } from '../api.js';
 import { navigate, rerender } from '../router.js';
 import { renderTasks, patchTask, reloadBoard, loadBoard, canRecall, recallReview } from './board.js';
