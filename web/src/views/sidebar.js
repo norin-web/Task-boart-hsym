@@ -80,11 +80,11 @@ export const unitTeams = u => {
 function unitItem(u, r) {
   const n = openCount(u);
   const overdue = u.counts && u.counts.overdue;
-  const open = openUnits().includes(u.id) || (r.unit === u.id && !!r.team);
+  const open = openUnits().includes(u.id) || r.unit === u.id;  // текущий юнит раскрыт (макет 11)
   const teams = unitTeams(u);
   const here = r.unit === u.id && !r.team;
-  const sub = (route, label, ic, on, dot) => link(route, { class: 'nav-sub' + (on ? ' active' : '') },
-    dot ? h('span', { class: 'unit-dot sm', style: { background: dot } }) : icon(ic, 14), h('span', { class: 'nav-label' }, label));
+  // подпункты — только текст (макет 11): «Доска юнита», команды, «+ Новая команда»
+  const sub = (route, label, ic, on) => link(route, { class: 'nav-sub' + (on ? ' active' : '') }, h('span', { class: 'nav-label' }, label));
   return h('div', { class: 'nav-unit' + (open ? ' open' : ''), dataset: { id: u.id } },
     h('div', { class: 'nav-unit-row' },
       link({ unit: u.id, mode: seesApps() ? 'overview' : 'board' }, {
@@ -101,7 +101,8 @@ function unitItem(u, r) {
     open && h('div', { class: 'nav-subs' },
       // без обзора (сотрудник) юнит и так открывает доску
       seesApps() && sub({ unit: u.id, mode: 'board' }, 'Доска юнита', 'board', here && ['board', 'list'].includes(r.mode)),
-      teams.map(t => sub({ unit: u.id, mode: 'board', team: t.id }, t.name, null, r.unit === u.id && r.team === t.id, t.color))));
+      teams.map(t => sub({ unit: u.id, mode: 'board', team: t.id }, t.name, null, r.unit === u.id && r.team === t.id)),
+      isSuper() && h('button', { class: 'nav-sub add', onclick: () => { LS.set('peopleSub', 'teams'); navigate({ view: 'settings', tab: 'people' }); } }, icon('plus', 14), h('span', { class: 'nav-label' }, 'Новая команда'))));
 }
 
 
@@ -152,7 +153,7 @@ function drawSidebar() {
     !lite && staff && navLink({ view: 'my' }, 'list', 'Мои задачи'),
     sec(staff ? 'Юниты' : 'Мои юниты', ceo && h('button', { class: 'icon-btn sm', title: 'Новый юнит', onclick: openCreateUnit }, icon('plus', 14))),
     list,
-    !units.length && ceo && h('button', { class: 'nav-item', onclick: openCreateUnit }, icon('plus'), h('span', { class: 'nav-label muted' }, 'Новый юнит')),
+    !units.length && h('div', { class: 'nav-empty' }, 'Юнитов пока нет'),
     !units.length && !ceo && h('div', { class: 'nav-empty' }, 'Пока нет юнитов'),
     h('div', { class: 'nav-spacer' }),
     h('div', { class: 'nav-sep', role: 'separator' }),

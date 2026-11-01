@@ -1,5 +1,5 @@
 import {
-  S, LS, me, taskById, personById, activeFields, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDateTime, relTime, addDays,
+  S, LS, todayStr, me, taskById, personById, activeFields, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDateTime, relTime, addDays,
   unitById, safeUrl, visibleLinkFields, REQUEST_TYPES, plural, appById, isSuper, ceoDefault, KIND_COLORS, whoName, teamById, activeTeams, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, fmtValue,
 } from '../state.js';
 import { $, h, append, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, statusIcon, fill, prioSelect } from '../ui.js';
@@ -115,7 +115,7 @@ function buildPanel(t) {
       h('button', { class: 'btn sm', onclick: () => openQaReturn(t) }, icon('back', 13), 'Вернуть в разработку')),
     t.step === 'ios' && devFormBlock(t, t.assigneeId === S.meId || isStaff()),
     t.step === 'release' && t.assigneeId && releaseBlock(t, () => reloadBoard().catch(() => {})),
-    t.kind === 'request' || t.kind === 'stage' ? [flowBlock(t), t.kind === 'stage' && treeBlock(t)] : treeBlock(t),
+    t.kind === 'request' || t.kind === 'stage' ? [flowBlock(t), t.kind === 'stage' && treeBlock(t, { noParents: true })] : treeBlock(t),
     !B.description.hidden && !relHide('description') && descriptionBlock(t, B.description.label, editable),
     !relHide('spec') && specBlock(t, editable),
     !relHide('tasklinks') && linksBlock(t, editable),
@@ -138,7 +138,7 @@ function buildPanel(t) {
 }
 
 /** Связи задачи: откуда она (цепочка родителей) и подзадачи с прогрессом. Пусто — блока нет. */
-function treeBlock(t) {
+function treeBlock(t, { noParents = false } = {}) {
   const box = h('div', { class: 'tree-block' });
   const u = S.board.unit;
   const statusChip = n => h('span', { class: 'chip st-chip', style: { '--sc': n.statusColor || KIND_COLORS[n.statusKind] } }, n.statusName);
@@ -155,7 +155,7 @@ function treeBlock(t) {
     const tasks = tree.descendants.filter(n => !n.archived);
     const done = tasks.filter(n => n.statusKind === 'done').length;
     fill(box,
-      tree.ancestors.length > 0 && h('div', { class: 'tree-up' }, icon('tree', 13),
+      !noParents && tree.ancestors.length > 0 && h('div', { class: 'tree-up' }, icon('tree', 13),
         tree.ancestors.map((a, i) => [i > 0 && h('span', { class: 'muted' }, '›'),
           h('button', { class: 'link-btn', title: a.unit ? a.unit.name : '', onclick: () => peekTask(a.unit.id, a.id) }, a.title)])),
       tasks.length > 0 && h('div', { class: 'tree-head' },
@@ -214,15 +214,19 @@ function flowBlock(t) {
         h('span', { class: 'progress' }, h('div', { style: { width: Math.round(done / Math.max(1, stages.length) * 100) + '%' } })),
         h('span', { class: 'fc-count' }, `${done} из ${stages.length}`)));
     }
+    // макет 15: шапка — значок приложения, запрос (клик — открыть), полоска прогресса и «N из M»;
+    // этап ждёт предыдущих (макет 57) — жёлтая плашка с замком «Сначала закройте …»
+    const pct = stages.length ? Math.round(done / stages.length * 100) : 0;
     fill(box,
-      h('div', { class: 'tree-head' },
-        h('span', { class: 'sub-title', style: { margin: 0 } }, t.kind === 'request' ? (REQUEST_TYPES[t.requestType] || 'Запрос') + ' · этапы' : 'Этап запроса'),
-        appTag, stages.length > 0 && h('span', { class: 'muted' }, `${done} из ${stages.length} готово`)),
-      t.kind === 'stage' && h('div', { class: 'tree-up' }, icon('tree', 13),
-        h('button', { class: 'link-btn', onclick: () => peekTask(req.unit.id, req.id) }, req.title)),
-      waits.length > 0 && h('div', { class: 'readonly-note flow-wait' }, icon('lock', 14),
-        h('span', null, 'Этап заблокирован: сначала закройте ', h('b', null, waits.join(', ')), '. До этого его нельзя сдвинуть из «не начато».')),
-      stages.length > 0 && h('div', { class: 'progress' }, h('div', { style: { width: Math.round(done / stages.length * 100) + '%' } })),
+      h('div', { class: 'fb-head' },
+        app ? h('span', { class: 'fb-ic', style: { background: app.color } }, app.name.slice(0, 1).toUpperCase()) : h('span', { class: 'fb-ic' }, icon('tree', 16)),
+        t.kind === 'stage'
+          ? h('button', { class: 'fb-title link-btn', title: 'Открыть запрос', onclick: () => peekTask(req.unit.id, req.id) }, req.title)
+          : h('span', { class: 'fb-title' }, req.title),
+        stages.length > 0 && h('span', { class: 'fb-bar' }, h('span', { style: { width: pct + '%' } })),
+        stages.length > 0 && h('span', { class: 'fb-count' }, `${done} из ${stages.length}`)),
+      waits.length > 0 && h('div', { class: 'fb-wait' }, icon('lock', 14),
+        h('span', null, 'Сначала закройте ', h('b', null, waits.join(', ')))),
       stages.length > 0 && h('div', { class: 'rq-stages' }, (() => {
         const cur = stages.findIndex(n => n.id === t.id);
         const vis = expanded ? stages.length : Math.min(stages.length, Math.max(3, cur + 3));
@@ -602,7 +606,7 @@ function discussionBlock(t, editable) {
   };
 
   const composer = () => {
-    const ta = attachMentions(autosize(h('textarea', { class: 'inp', rows: 2, placeholder: 'Написать комментарий… (@ — отметить человека)', maxlength: 5000 })), t.unitId);
+    const ta = attachMentions(autosize(h('textarea', { class: 'inp', rows: 1, placeholder: 'Написать комментарий', title: '@ — отметить человека · ⌘/Ctrl + Enter — отправить', maxlength: 5000 })), t.unitId);
     const submit = () => {
       const text = ta.value.trim();
       if (!text) return;
@@ -615,12 +619,8 @@ function discussionBlock(t, editable) {
       }).catch(e => { ta.value = text; showErr(e); });
     };
     ta.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(); } });
-    return h('div', { class: 'composer' },
-      avatar(personById(S.meId)),
-      h('div', { class: 'grow' }, ta,
-        h('div', { class: 'row' },
-          h('button', { class: 'btn primary sm', onclick: submit }, icon('send', 13), 'Отправить'),
-          h('span', { class: 'hint' }, '⌘/Ctrl + Enter'))));
+    // макет 15: поле-пилюля 44, «Отправить» внутри справа
+    return h('div', { class: 'composer pill' }, h('div', { class: 'grow' }, ta), h('button', { class: 'btn primary sm', onclick: submit }, 'Отправить'));
   };
 
   const history = () => (data.activity.length
@@ -684,13 +684,15 @@ function sideBlock(t, { staff, editable }) {
         }, icon('users', 12), 'Передать целиком')),
     });
   } else if (!B.assignee.hidden) {
-    prop(B.assignee.label, assigneeSelect(t.assigneeId, v => {
+    // макет 15: аватар 34 и имя; выбор — по клику на имя
+    const cur = personById(t.assigneeId);
+    prop(B.assignee.label, h('div', { class: 'assignee-wrap' }, cur && avatar(cur, 'md'), assigneeSelect(t.assigneeId, v => {
       const p = personById(v);
       // команды ещё нет — берём первую команду исполнителя
       const patch = { assigneeId: v };
       if (p && !t.teamId && (p.teamIds || []).length) patch.teamId = p.teamIds[0];
       patchTask(t, patch).then(() => refreshPanel(t));
-    }), {
+    })), {
       after: S.meId && t.assigneeId !== S.meId && h('div', { class: 'quick-chips' }, h('button', {
         class: 'quick-chip', onclick: () => { patchTask(t, { assigneeId: S.meId }); refreshPanel(t); },
       }, icon('user', 12), 'Назначить на меня')),
@@ -703,7 +705,10 @@ function sideBlock(t, { staff, editable }) {
   } else if (!B.dueDate.hidden) {
     const info = dueInfo(t.dueDate, taskDone(t));
     const setDue = v => { patchTask(t, { dueDate: v }); refreshPanel(t); };
-    prop(B.dueDate.label, h('input', { class: 'inp', type: 'date', value: t.dueDate, onchange: e => setDue(e.target.value) }), {
+    // макет 15: срок текстом «14 декабря», календарь — по клику (поле лежит поверх прозрачным)
+    const dueText = t.dueDate ? new Date(t.dueDate + 'T00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', ...(t.dueDate.slice(0, 4) !== todayStr().slice(0, 4) ? { year: 'numeric' } : {}) }) : 'Не задан';
+    prop(B.dueDate.label, h('label', { class: 'due-wrap' + (t.dueDate ? '' : ' empty') }, h('span', null, dueText),
+      h('input', { class: 'due-inp', type: 'date', value: t.dueDate, 'aria-label': B.dueDate.label, onchange: e => setDue(e.target.value), onclick: e => { try { e.target.showPicker(); } catch { /* старый браузер */ } } })), {
       after: h('div', { class: 'quick-chips' },
         info && info.hint && h('span', { class: 'quick-note' + (info.cls === 'overdue' ? ' overdue' : '') }, info.hint),
         !t.dueDate && [

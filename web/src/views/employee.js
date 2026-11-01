@@ -3,7 +3,7 @@
  * и загрузка людей позиции лида. Данные — getMyDashboard.
  */
 import { S, personById, deptById, prioById, fmtDate, plural, dueInfo } from '../state.js';
-import { h, icon, avatar, statusIcon, toast, showErr } from '../ui.js';
+import { h, icon, avatar, statusIcon, toast, showErr, emptyBlock } from '../ui.js';
 import { send } from '../api.js';
 import { peekTask } from './task.js';
 import { appIcon, prioTag, isHighPrio } from './apps.js';
@@ -49,7 +49,7 @@ export function focusBlock(d, reload) {
         h('span', { class: 'fc-key' }, t.key),
         h('span', { class: 'fc-title' }, t.title),
         h('span', { class: 'fc-when ' + (REASON[t.reason] || REASON.progress).cls }, when(t)))))
-      : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Срочного нет')));
+      : emptyBlock('Срочного нет', { ok: true }));
 }
 
 /** Очередь ревью лида: чья задача и решение — «Аппрув» (в готово) или «Правки» (автору, с комментарием). */
@@ -64,7 +64,7 @@ export function reviewsBlock(d, reload) {
         h('button', { class: 'link-btn fc-main', onclick: () => peekTask(t.unitId, t.id) },
           h('span', { class: 'fc-title' }, t.title), h('span', { class: 'muted fc-sub' }, (author ? author.name : '') + (t.app ? ' · ' + t.app.name : ''))),
         h('div', { class: 'rv-actions' }, reviewButtons({ ...t, reviewFrom: t.authorId }, () => reload())));
-    })) : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Ревью никто не ждёт')));
+    })) : emptyBlock('Ревью никто не ждёт', { ic: 'eye' }));
 }
 
 /** Загрузка людей позиции лида в его юнитах: задач на человеке и полоса; перегруз (много открытых или есть просрочка) — оранжевым и красным числом. */
@@ -82,7 +82,7 @@ export function teamLoadBlock(d) {
             x.open + ' ' + plural(x.open, ['задача', 'задачи', 'задач']))),
         h('div', { class: 'tl-bar' }, h('div', { class: heavy ? 'heavy' : '', style: { width: Math.min(100, Math.round(x.open / cap * 100)) + '%' } })));
     }))
-      : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Никого нет')));
+      : emptyBlock('Никого нет', { ic: 'users' }));
 }
 
 export function splitBlock(d) {
@@ -101,5 +101,5 @@ export function splitBlock(d) {
           h('span', { class: 'muted split-st' + (c.inReview ? ' accent' : '') }, c.inReview ? 'на ревью у вас' : c.statusName),
           h('span', { class: c.late ? 'danger-text split-due' : 'muted split-due' }, c.dueDate ? fmtDate(c.dueDate) : ''));
       }))))
-      : h('div', { class: 'card-box empty-state sm' }, h('p', null, 'Пока ничего не роздано — откройте свой этап и нажмите «Раздать».')));
+      : emptyBlock('Пока ничего не роздано', { ic: 'users', sub: 'Откройте свой этап и нажмите «Раздать»' }));
 }

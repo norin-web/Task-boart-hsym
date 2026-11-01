@@ -3,7 +3,7 @@
  * «Вышло в стор» / «Реджект» прямо здесь), реджекты (причина, кто исправляет; «Отправить снова»). Клик — карточка релиза.
  */
 import { me, personById, greeting, plural, relTime } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill, toast, confirmDlg } from '../ui.js';
+import { $, h, icon, avatar, topbar, showErr, fill, toast, confirmDlg, emptyBlock } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
@@ -115,7 +115,7 @@ function storeBlock(rows) {
         rows.length > 3 && h('div', { class: 'rm-more' },
           h('button', { class: 'link-btn', onclick: () => { open = !open; draw(); } }, open ? 'Свернуть' : `Показать ещё ${Math.min(rows.length, 7) - 3}`),
           open && rows.length > 7 && h('button', { class: 'link-btn', onclick: () => openReleaseHistory({ result: 'live' }) }, `Вся история · ${rows.length}`)))
-      : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'В стор пока ничего не выходило')));
+      : emptyBlock('В стор пока ничего не выходило', { ic: 'app' }));
   draw();
   return box;
 }

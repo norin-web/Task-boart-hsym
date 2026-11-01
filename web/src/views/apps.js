@@ -95,10 +95,12 @@ function workSummary(r) {
 export async function renderApps({ unitId = '' } = {}) {
   const body = h('div', { class: 'page apps-page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
   const tools = h('div', { class: 'row', style: { gap: '8px' } });
+  // макет 59: в шапке — настройки и создание, ниже отдельной строкой — поиск, фильтр, группировка и «Выбрать»
+  const bar = h('div', { class: 'apps-bar' });
   const viewKey = unitId ? 'apps:' + unitId : 'apps';
   const here = () => currentView() === viewKey;
   const head = () => (unitId ? unitHeader('apps', [tools]) : [topbar([h('h1', null, 'Приложения')], [tools])]);
-  fill($('#main'), ...head(), h('div', { class: 'view-body' }, body));
+  fill($('#main'), ...head(), h('div', { class: 'view-body' }, bar, body));
 
   let apps;
   const load = async () => {
@@ -108,7 +110,7 @@ export async function renderApps({ unitId = '' } = {}) {
   };
   try { await load(); } catch (e) { return showErr(e); }
   if (!here()) return;
-  if (unitId) fill($('#main'), ...head(), h('div', { class: 'view-body' }, body));  // счётчик вкладки — по свежему списку
+  if (unitId) fill($('#main'), ...head(), h('div', { class: 'view-body' }, bar, body));  // счётчик вкладки — по свежему списку
   setTimeout(() => fillFromStore(apps, () => here() && drawList()), 0);
 
   // Только список: приложения по юнитам в сворачиваемых блоках, поиск по названию сверху
@@ -121,8 +123,8 @@ export async function renderApps({ unitId = '' } = {}) {
   const storeState = a => (!appStoreUrl(a) ? 'nolink' : a.storeOk === false ? 'gone' : 'ok');
   const active = () => f.statuses.length + f.prios.length + f.pms.length + f.units.length + f.store.length + (f.age ? 1 : 0);
   const chips = h('div', { class: 'feed-filters apps-chips' });
-  const filterBtn = h('button', { class: 'btn sm', 'aria-haspopup': 'dialog', onclick: e => { e.stopPropagation(); filterMenu(e.currentTarget); } });
-  const groupBtn = h('button', { class: 'btn sm', 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); groupMenu(e.currentTarget); } });
+  const filterBtn = h('button', { class: 'btn', 'aria-haspopup': 'dialog', onclick: e => { e.stopPropagation(); filterMenu(e.currentTarget); } });
+  const groupBtn = h('button', { class: 'btn', 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); groupMenu(e.currentTarget); } });
   const passes = a => (!f.statuses.length || f.statuses.includes(a.status))
     && (!f.prios.length || f.prios.includes(a.priority || ''))
     && (!f.pms.length || f.pms.includes(appPm(a)))
@@ -275,7 +277,7 @@ export async function renderApps({ unitId = '' } = {}) {
     } }, icon('trash', 14), 'Удалить'),
     h('button', { class: 'btn sm', onclick: () => setPicking(false) }, 'Готово'));
   const search = h('input', {
-    class: 'inp sm apps-search', type: 'search', placeholder: 'Поиск приложения', 'aria-label': 'Поиск приложения',
+    class: 'apps-search-inp', type: 'search', placeholder: 'Поиск приложения', 'aria-label': 'Поиск приложения',
     oninput: e => { q = e.target.value.trim().toLowerCase(); drawList(); },
   });
   const toggle = id => {
@@ -312,14 +314,18 @@ export async function renderApps({ unitId = '' } = {}) {
         open && appTable(list, reload, sel, pick, false, sort));
     })] : h('p', { class: 'muted apps-none' }, 'Ничего не найдено'));
   };
-  const drawTools = () => fill(tools,
-    search,
-    filterBtn,
-    groupBtn,
-    isSuper() && apps.length > 0 && h('button', { class: 'btn sm' + (sel ? ' on' : ''), title: 'Выбрать несколько приложений, чтобы удалить', onclick: () => setPicking(!sel) }, icon('check', 14), h('span', { class: 'btn-label' }, 'Выбрать')),
-    isSuper() && h('button', { class: 'icon-btn', title: 'Статусы и поля приложения', onclick: e => { e.stopPropagation(); settingsMenu(e.currentTarget, reload); } }, icon('settings', 17)),
-    isSuper() && units().length > 0 && h('button', { class: 'btn sm', title: 'Уже существующие приложения: название и ссылка на App Store построчно', onclick: () => openImportApps(reload, unitId) }, icon('layers', 14), h('span', { class: 'btn-label' }, 'Добавить списком')),
-    isSuper() && units().length > 0 && h('button', { class: 'btn primary sm', onclick: () => openCreateApp(reload, unitId || undefined) }, icon('plus', 14), h('span', { class: 'btn-label' }, 'Новое приложение')));
+  const drawTools = () => {
+    fill(tools,
+      isSuper() && h('button', { class: 'icon-btn', title: 'Статусы и поля приложения', onclick: e => { e.stopPropagation(); settingsMenu(e.currentTarget, reload); } }, icon('settings', 16)),
+      isSuper() && units().length > 0 && h('button', { class: 'btn', title: 'Уже существующие приложения: название и ссылка на App Store построчно', onclick: () => openImportApps(reload, unitId) }, icon('layers', 14), h('span', { class: 'btn-label' }, 'Добавить списком')),
+      isSuper() && units().length > 0 && h('button', { class: 'btn primary', onclick: () => openCreateApp(reload, unitId || undefined) }, icon('plus', 14), h('span', { class: 'btn-label' }, 'Новое приложение')));
+    fill(bar,
+      h('label', { class: 'apps-search' }, icon('search', 14), search),
+      filterBtn,
+      groupBtn,
+      h('span', { class: 'spacer' }),
+      isSuper() && apps.length > 0 && h('button', { class: 'btn' + (sel ? ' on' : ''), title: 'Выбрать несколько приложений, чтобы удалить', onclick: () => setPicking(!sel) }, icon('check', 14), h('span', { class: 'btn-label' }, 'Выбрать')));
+  };
   drawTools();
   drawList();
 }

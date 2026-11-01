@@ -707,6 +707,7 @@ export function createBackend(db, opts = {}) {
       const kind = kindOf(st, t.status);
       const c = counts[t.unit_id] || (counts[t.unit_id] = { ...emptyCounts(), doneWeek: 0 });
       c[KIND_COUNT_KEY[kind]]++;
+      if (st.review && st.review.column && t.status === st.review.column) c.review = (c.review || 0) + 1;
       if (kind !== 'done' && t.due_date && t.due_date < day) c.overdue++;
       if (kind === 'done' && weekAgo && t.done_at >= weekAgo) c.doneWeek++;
     }

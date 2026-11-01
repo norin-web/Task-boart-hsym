@@ -4,7 +4,7 @@
  * Команда: люди юнита — роль, позиция, открытые задачи в юните; добавить участника — руководителям.
  */
 import { S, isSuper, isStaff, todayStr, ACCESS_LABELS, personById, deptById, taskDone, plural, columns, colColor, appStatusById } from '../state.js';
-import { $, h, icon, avatar, showErr, fill, menu, toast } from '../ui.js';
+import { $, h, icon, avatar, showErr, fill, menu, toast, emptyBlock } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView, link } from '../router.js';
 import { openCreateApp, openNewAppTask, pmsOf, appIcon, appStatusCell, openAppPanel } from './apps.js';
@@ -76,7 +76,7 @@ function teamBrief(u) {
         h('span', { class: 'team-who' }, h('b', null, x.p.name), h('small', { class: 'muted' }, x.pos || ACCESS_LABELS[x.p.access] || '')),
         h('span', { class: 'team-load' + (x.late ? ' warn-text' : x.n ? '' : ' muted') }, x.n ? x.n + (x.late ? ` · ${x.late} просроч.` : '') : '—'))),
         rows.length > 6 && link({ unit: u.id, mode: 'team' }, { class: 'rc-more link-btn' }, `Ещё ${rows.length - 6}`))
-      : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Команда не собрана')));
+      : emptyBlock('Команда не собрана', { ic: 'users' }));
 }
 
 /** Задачи юнита по колонкам доски: полоса и цифры; клик — на вкладку «Задачи». */
@@ -92,7 +92,7 @@ function tasksByColumn(u, open) {
         h('div', { class: 'col-sum-bar', 'aria-hidden': 'true' }, cols.filter(x => x.n).map(x => h('span', { style: { flex: x.n, background: colColor(x.c) } }))),
         h('div', { class: 'col-sum-list' }, cols.map(x => h('span', { class: 'col-sum-item' + (x.n ? '' : ' zero') },
           h('span', { class: 'dot', style: { background: colColor(x.c) } }), x.c.name, h('b', null, x.n)))))
-      : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Задач пока нет')));
+      : emptyBlock('Задач пока нет', { ic: 'list' }));
 }
 
 /** Приложения юнита коротко: иконка, название, статус; клик — карточка. Все — на вкладке «Приложения». */
@@ -107,7 +107,7 @@ function appsBrief(u, apps, reload) {
         h('span', { class: 'app-brief-name' }, h('b', null, a.name), a.storeName && h('small', { class: 'muted' }, a.storeName)),
         appStatusCell(appStatusById(a.status), a))),
         apps.length > LIMIT && link({ unit: u.id, mode: 'apps' }, { class: 'rc-more link-btn' }, `Ещё ${apps.length - LIMIT}`))
-      : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Приложений пока нет')));
+      : emptyBlock('Приложений пока нет', { ic: 'app' }));
 }
 
 /** Вкладка «Команда»: участники юнита — роль, позиция в юните, открытые и просроченные задачи здесь. */

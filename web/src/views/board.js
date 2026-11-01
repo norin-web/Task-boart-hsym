@@ -34,7 +34,7 @@ export function renderBoardView() {
   fill($('#main'),
     ...unitHeader(team ? '' : mode === 'list' ? 'list' : 'board', [
       !team && teamStack(),
-      isStaff() && h('button', { class: 'btn primary', onclick: () => openCreateTask(), title: 'Новая задача (C)' }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Задача')),
+      isStaff() && h('button', { class: 'btn primary', onclick: () => openCreateTask(), title: 'Новая задача (C)' }, h('span', { class: 'btn-label' }, 'Задача')),
     ], team),
     team && whoDoesWhat(team),
     filterBar(),
@@ -317,7 +317,7 @@ function renderColumns(board) {
     const quickHere = S.quick.status === col.id && S.quick.dept == null;
     return h('section', { class: 'col', style: { '--cc': colColor(col) } },
       colHead(col, items.length),
-      makeList(items, col.id, null, !quickHere && (filtered ? 'Нет задач по фильтру' : isStaff() ? 'Перетащите задачу сюда' : 'Пусто')),
+      makeList(items, col.id, null, !quickHere && (filtered ? 'Нет задач по фильтру' : 'Пусто')),
       oldDoneToggle(col),
       quickAddEl(col.id, null));
   }), addColumnBtn());

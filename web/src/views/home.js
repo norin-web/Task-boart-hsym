@@ -1,5 +1,5 @@
 import { S, greeting, me, personById, plural, emptyCounts, isStaff, deptById, todayStr, fmtDate, activeDepts, ACCESS_LABELS, relTime, dueInfo } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill, toast, menu, closeMenu, modal } from '../ui.js';
+import { $, h, icon, avatar, topbar, showErr, fill, toast, menu, closeMenu, modal, emptyBlock } from '../ui.js';
 import { call } from '../api.js';
 import { currentView, link, navigate, taskLink, rerender } from '../router.js';
 import { renderSidebar, renderUnread } from './sidebar.js';
@@ -488,18 +488,19 @@ export function unitCard(u, { apps, to = 'board' } = {}) {
       h('div', { class: 'uc-icon', style: { background: u.color } }, u.key.slice(0, 2)),
       h('div', { class: 'uc-title' }, h('div', { class: 'uc-name' }, u.name),
         h('div', { class: 'uc-key' }, sub, c.overdue > 0 && h('span', { class: 'uc-late' }, ' · ' + c.overdue + ' просрочено'))),
+      // действия — по наведению, как в макете 12 (в покое у карточки нет кнопок)
       isStaff() && h('button', {
-        class: 'icon-btn sm uc-add', title: 'Новая задача в ' + u.name,
-        onclick: e => { e.preventDefault(); e.stopPropagation(); openCreateTask({ unitId: u.id, onCreated: () => rerender() }); },
-      }, icon('plus')),
-      isStaff() && h('button', {
-        class: 'icon-btn sm', title: 'Действия',
+        class: 'icon-btn sm uc-menu', title: 'Действия',
         onclick: e => { e.preventDefault(); e.stopPropagation(); unitMenu(e.currentTarget, u); },
       }, icon('more'))),
     u.description && h('div', { class: 'uc-desc' }, u.description),
+    // в покое — прогресс, при наведении — счётчики (макет 12, карточка Gold)
     h('div', { class: 'uc-foot' },
       h('div', { class: 'progress', title: 'Выполнено ' + pct + '%' }, h('div', { style: { width: pct + '%' } })),
-      h('span', { class: 'uc-pct' }, pct + '%')));
+      h('span', { class: 'uc-pct' }, pct + '%')),
+    h('div', { class: 'uc-counts' },
+      h('span', null, 'В работе ' + c.in_progress), h('span', { class: 'spacer' }),
+      h('span', null, 'На ревью ' + (c.review || 0)), h('span', null, 'Готово ' + c.done)));
 }
 
 
@@ -546,7 +547,7 @@ async function renderMemberHome() {
       h('div', { class: 'section-head' }, h('h2', null, 'Мои юниты')),
       units.length
         ? h('div', { class: 'unit-grid', style: { gridTemplateColumns: '1fr' } }, units.map(unitCard))
-        : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Юнитов пока нет'))) },
+        : emptyBlock('Юнитов пока нет', { ic: 'board' })) },
   ].filter(Boolean);
   editHook = () => editLayout('memberHome', BLOCKS, page, draw);
   const draw = () => fill(page, renderLayout('memberHome', BLOCKS));

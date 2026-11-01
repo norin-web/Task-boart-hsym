@@ -4,7 +4,7 @@
  * и команда с KPI за неделю / месяц / квартал. Только юниты PM (видимость решает база).
  */
 import { S, me, personById, deptById, REQUEST_TYPES, LS, greeting, plural, fmtDate, todayStr } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill } from '../ui.js';
+import { $, h, icon, avatar, topbar, showErr, fill, emptyBlock } from '../ui.js';
 import { call } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask, openCreateTask } from './task.js';
@@ -85,7 +85,7 @@ function pipeline(d, reload) {
       })),
       r.releaseReady && h('div', { class: 'pl-release' }, icon('check', 14), 'Все этапы закрыты',
         h('button', { class: 'btn primary sm', onclick: () => sendRelease(r.stages.find(s => s.step === 'release').id).then(reload) }, icon('rocket', 13), 'Передать в релиз')))))
-      : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Нет работ')));
+      : emptyBlock('Нет работ', { ic: 'progress' }));
 }
 
 /* ---------- проблемы ---------- */
@@ -111,7 +111,7 @@ function problems(d) {
           h('span', { class: 'att-what ' + a.cls }, a.text(t))),
         p ? avatar(p, 'sm') : h('span', { class: 'avatar-gap' }));
     }), rows.length > 14 && h('p', { class: 'muted att-more' }, `и ещё ${rows.length - 14}`))
-      : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Проблем нет')));
+      : emptyBlock('Проблем нет', { ok: true }));
 }
 
 /* ---------- команда и KPI ---------- */
@@ -138,6 +138,6 @@ export function team(d, period, setPeriod) {
         h('span', { class: 'num', role: 'cell', 'data-label': 'Ср. время' }, k.avgDays === null ? h('span', { class: 'muted' }, '—') : k.avgDays + ' дн.'),
         h('span', { class: 'num', role: 'cell', 'data-label': 'В работе' }, k.inProgress),
         h('span', { class: 'num' + (k.overdue ? ' danger-text' : ' muted'), role: 'cell', 'data-label': 'Просроч.' }, k.overdue))))
-      : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Сотрудников пока нет')));
+      : emptyBlock('Сотрудников пока нет', { ic: 'users' }));
 }
 

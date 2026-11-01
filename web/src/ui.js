@@ -471,3 +471,9 @@ export function prioSelect(options, value, onChange, { disabled = false, empty =
   paint();
   return btn;
 }
+
+/** Пустой блок дашборда (макет 61): иконка в круге и одна строка. ok — хороший итог: зелёная галочка. */
+export function emptyBlock(text, { ok = false, ic = 'circle', sub = '' } = {}) {
+  return h('div', { class: 'card-box empty-block' + (ok ? ' ok' : '') },
+    h('span', { class: 'eb-ic' }, icon(ok ? 'check' : ic, 18)), h('b', null, text), sub && h('span', { class: 'eb-sub' }, sub));
+}

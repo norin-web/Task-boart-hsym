@@ -3,7 +3,7 @@
  * работы в ходу (запросы и текущий этап), что недавно вышло. Клик — карточка приложения или задача поверх.
  */
 import { S, isSuper, personById, unitById, REQUEST_TYPES, greeting, me, plural, fmtDate, relTime, todayStr, appStatusById } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill, menu, modal, field } from '../ui.js';
+import { $, h, icon, avatar, topbar, showErr, fill, menu, modal, field, emptyBlock } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
@@ -26,9 +26,9 @@ export async function renderCeoHome() {
   const page = h('div', { class: 'page ceo-page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
   fill($('#main'),
     topbar([h('h1', { class: 'screen-title' }, greeting() + (me() ? ', ' + me().name.split(' ')[0] : ''))], [
-      h('button', { class: 'btn', title: 'Блоки, статистика и свои подборки', onclick: () => editHook && editHook() }, 'Настроить'),
-      isSuper() && S.apps.some(a => !a.archived) && h('button', { class: 'btn', onclick: () => openNewAppTask(load) }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Новая задача')),
-      isSuper() && units().length > 0 && h('button', { class: 'btn primary', onclick: () => openCreateApp(load) }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Новое приложение'))]),
+      units().length > 0 && h('button', { class: 'btn', title: 'Блоки, статистика и свои подборки', onclick: () => editHook && editHook() }, 'Настроить'),
+      isSuper() && S.apps.some(a => !a.archived) && h('button', { class: 'btn', onclick: () => openNewAppTask(load) }, h('span', { class: 'btn-label' }, 'Новая задача')),
+      isSuper() && units().length > 0 && h('button', { class: 'btn primary', onclick: () => openCreateApp(load) }, h('span', { class: 'btn-label' }, 'Новое приложение'))]),
     h('div', { class: 'view-body' }, page));
   async function load() {
     let d, apps;
@@ -39,15 +39,24 @@ export async function renderCeoHome() {
     const person = me();
     // без юнитов показывать нечего; юниты есть, а приложений нет — дашборд целиком, сверху подсказка
     if (!units().length) {
+      // первый вход (макет 44): «Новое для вас» пустой строкой, карточка пустого состояния и три шага
+      const step = (n, title, sub, on) => h('div', { class: 'fr-step' },
+        h('span', { class: 'fr-step-n' + (on ? ' on' : '') }, n), h('div', null, h('b', null, title), h('span', null, sub)));
       return fill(page,
-        h('div', { class: 'card-box empty-state' },
+        h('div', { class: 'fr-news' }, h('span', { class: 'fr-news-ic' }, icon('bell', 18)),
+          h('div', null, h('b', null, 'Новое для вас'), h('span', null, 'Появится, когда что-то придёт вам'))),
+        h('div', { class: 'first-run' },
+          h('span', { class: 'fr-ic' }, icon('app', 28)),
           h('h2', null, 'Приложений пока нет'),
-          !units().length && h('p', null, 'Сначала создайте юнит.'),
-          h('div', { class: 'row', style: { justifyContent: 'center', gap: '8px' } },
-            isSuper() && (units().length
-              ? h('button', { class: 'btn primary', onclick: () => openCreateApp(load) }, icon('plus', 15), 'Новое приложение')
-              : h('button', { class: 'btn primary', onclick: openCreateUnit }, icon('plus', 15), 'Создать юнит')),
-            mode === 'local' && !units().length && h('button', { class: 'btn', onclick: e => fillDemo(e.currentTarget) }, icon('layers', 15), 'Заполнить демо-данными'))));
+          h('p', null, isSuper() ? 'Сначала создайте юнит: в нём будут доска, люди и приложения.' + (mode === 'local' ? ' Или заполните всё демо-данными и посмотрите, как это работает.' : '') : 'Когда CEO создаст юниты и приложения, они появятся здесь.'),
+          isSuper() && h('div', { class: 'fr-actions' },
+            h('button', { class: 'btn primary xl', onclick: openCreateUnit }, icon('plus', 16), 'Создать юнит'),
+            mode === 'local' && h('button', { class: 'btn soft xl', onclick: e => fillDemo(e.currentTarget) }, icon('layers', 16), 'Заполнить демо-данными')),
+          isSuper() && mode === 'local' && h('small', { class: 'fr-note' }, 'Демо-данные есть только в локальном режиме, без входа в аккаунт'),
+          isSuper() && h('div', { class: 'fr-steps' },
+            step(1, 'Юнит', 'Название, ключ задач, цвет и колонки доски', true),
+            step(2, 'Люди', 'PM, команды и позиции — в «Настройках»'),
+            step(3, 'Приложения', 'По одному или списком из App Store'))));
     }
     const blocks = () => ceoBlocks(d, apps, load);
     const edit = () => editLayout('ceoHome', blocks(), page, draw, {
@@ -76,7 +85,7 @@ function portfolio(d, reload) {
   const count = u => S.apps.filter(a => a.unitId === u.id && !a.archived).length;
   return h('section', { class: 'ceo-portfolio' },
     h('div', { class: 'section-head' }, h('h2', null, 'Юниты'),
-      isSuper() && h('button', { class: 'btn ghost sm', onclick: () => openCreateUnit(reload) }, icon('plus', 14), 'Новый юнит')),
+      isSuper() && h('button', { class: 'btn ghost sm', onclick: () => openCreateUnit(reload) }, 'Новый юнит')),
     h('div', { class: 'unit-grid' }, units().map(u => unitCard(u, { apps: count(u), to: 'overview' }))));
 }
 
@@ -98,18 +107,17 @@ export function attention(d, reload) {
   // этапы лежат в юните запроса; реджект — карточка приложения
   const open = x => (x.request ? peekTask(x.request.unitId, x.task ? x.task.id : x.request.id) : openAppById(x.app.id, reload));
   return h('section', null,
-    h('div', { class: 'section-head' }, h('h2', null, 'Требует внимания', rows.length > 0 && h('span', { class: 'muted sec-n' }, rows.length))),
+    h('div', { class: 'section-head' }, h('h2', null, 'Требует внимания')),
     rows.length
       ? h('div', { class: 'card-box att-list' }, rows.slice(0, 12).map(x => {
         const a = ATT[x.type];
         const p = who(x);
-        return h('button', { class: 'att-row', onclick: () => open(x) },
-          appIcon(x.app, 'xs'),
-          h('span', { class: 'att-main' }, h('b', null, x.app.name), what(x) && h('span', { class: 'muted' }, ' · ' + what(x))),
-          h('span', { class: 'att-what ' + a.cls }, a.text(x)),
-          p ? avatar(p, 'sm') : h('span', { class: 'avatar-gap' }));
+        // как в макете 12: «Приложение · что случилось», справа — статус приложения пилюлей
+        return h('button', { class: 'att-row', onclick: () => open(x), title: p ? p.name : '' },
+          h('span', { class: 'att-main' }, x.app.name, ' · ', h('span', { class: a.cls === 'danger' ? 'danger-text' : '' }, [what(x), a.text(x)].filter(Boolean).join(', '))),
+          appStatusCell(appStatusById(x.app.status), x.app));
       }), rows.length > 12 && h('p', { class: 'muted att-more' }, `и ещё ${rows.length - 12}`))
-      : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Всё по плану')));
+      : emptyBlock('Всё по плану', { ok: true }));
 }
 
 /* ---------- работы в ходу ---------- */
@@ -136,7 +144,7 @@ export function inProgress(d, reload) {
             h('span', { class: 'wip-due' + (late ? ' late' : '') }, r.dueDate ? fmtDate(r.dueDate) : h('span', { class: 'muted' }, '—')),
             pm ? avatar(pm, 'sm') : h('span', { class: 'muted' }, '—'));
         }))
-      : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Нет работ')));
+      : emptyBlock('Нет работ', { ic: 'progress' }));
 }
 
 /* ---------- недавно вышло ---------- */
@@ -157,15 +165,14 @@ export function recent(d, reload, { title = 'Недавнее', empty = 'За 30
   let all = false;
   const draw = () => fill(box,
     h('div', { class: 'section-head', title: 'За 30 дней: смена статусов приложений, начало разработки, готовые задачи' },
-      h('h2', null, title, d.recent.length > 0 && h('span', { class: 'muted sec-n' }, d.recent.length))),
+      h('h2', null, title)),
     d.recent.length
       ? h('div', { class: 'card-box rc-list' }, (all ? d.recent : d.recent.slice(0, LIMIT)).map(x => h('button', { class: 'rc-row', onclick: () => openAppById(x.app.id, reload) },
-        appIcon(x.app, 'xs'),
         h('span', { class: 'rc-main rc-two' }, h('b', null, x.app.name), h('span', { class: 'rc-what' }, recentWhat(x))),
         h('span', { class: 'muted rc-at' }, relTime(x.at)))),
         d.recent.length > LIMIT && h('button', { class: 'rc-more link-btn', onclick: () => { all = !all; draw(); } },
           all ? 'Свернуть' : `Показать все · ${d.recent.length}`))
-      : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, empty)));
+      : emptyBlock(empty, { ic: 'clock' }));
   draw();
   return box;
 }
@@ -186,7 +193,7 @@ export function statBlocks(d, apps, reload) {
   const appRow = (a, right) => h('button', { class: 'rc-row', onclick: () => openAppById(a.id, reload) },
     appIcon(a, 'xs'), h('span', { class: 'rc-main' }, h('b', null, a.name)), right);
   const section = (title, body, n) => h('section', null, h('div', { class: 'section-head' }, h('h2', null, title, n != null && h('span', { class: 'muted sec-n' }, n))), body);
-  const list = (items, empty) => (items.length ? h('div', { class: 'card-box rc-list' }, items) : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, empty)));
+  const list = (items, empty) => (items.length ? h('div', { class: 'card-box rc-list' }, items) : emptyBlock(empty, { ic: 'clock' }));
   const overdue = d.attention.filter(x => x.type === 'overdue' && (!x.app || apps.some(a => a.id === x.app.id))).length;
   // вышло за 30 дней — по истории статусов (импорт уже вышедших сюда не попадает)
   const live30 = [...new Map(d.recent.filter(x => x.type === 'status' && (appStatusById(x.to) || {}).kind === 'live' && apps.some(a => a.id === x.app.id))
@@ -268,7 +275,7 @@ function customBlock(b, apps, reload) {
   return h('section', null, head, found.length
     ? h('div', { class: 'card-box rc-list' }, found.map(a => h('button', { class: 'rc-row', onclick: () => openAppById(a.id, reload) },
       appIcon(a, 'xs'), h('span', { class: 'rc-main' }, h('b', null, a.name)), statusPill(appStatusById(a.status)))))
-    : h('div', { class: 'card-box empty-state sm' }, h('p', { class: 'muted' }, 'Под фильтр ничего не попало')));
+    : emptyBlock('Под фильтр ничего не попало', { ic: 'filter' }));
 }
 
 /** Окно своего блока: название, фильтры (галочки), вид — список или число. */
