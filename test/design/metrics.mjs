@@ -44,5 +44,8 @@ export const METRICS = [
   { screen: 'C02', checks: [{ sel: '.topbar .back-btn', prop: 'display', want: null, absent: true }] },
   { screen: 'E02', checks: [{ sel: '.topbar .back-btn', prop: 'display', want: null, absent: true }, { sel: '.my-whose button.on', prop: 'height', want: 32 }] },
   { screen: 'P07', checks: [{ sel: '.app-brief-row', prop: 'height', want: 44 }, { sel: '.app-brief-row + .app-brief-row', prop: 'borderTopWidth', want: '0px' }, { sel: '.team-row.compact + .team-row.compact', prop: 'borderTopWidth', want: '0px' }, { sel: '.team-row.compact', prop: 'height', want: 44 }, { sel: '.att-row.att-two + .att-row.att-two', prop: 'borderTopWidth', want: '0px' }] },
+  { screen: 'D30', checks: [{ sel: '.modal.dlg', prop: 'width', want: 480 }, { sel: '.dlg select.inp', prop: 'height', want: 40 }, { sel: '.dlg .modal-foot .btn.primary', prop: 'height', want: 40 }] },
+  { screen: 'D33', checks: [{ sel: '.dlg .modal-body', prop: 'display', want: 'none' }] },
+  { screen: 'D37', checks: [{ sel: '.modal.dq-dlg', prop: 'width', want: 760 }, { sel: '.dq-row.yn', prop: 'height', want: 56 }, { sel: '.dq-row .seg button', prop: 'height', want: 32 }] },
   { screen: 'B05', checks: [{ sel: '.topbar .back-btn', prop: 'width', want: 44 }] },
 ];

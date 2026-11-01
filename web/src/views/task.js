@@ -258,11 +258,12 @@ function handoverPeople(t) {
 }
 
 /** QA: «Вернуть в разработку» — список багов уйдёт комментарием в этап разработки, он снова в работе, тестирование ждёт. */
-function openQaReturn(t) {
+export function openQaReturn(t) {
   const ta = h('textarea', { class: 'inp', rows: 6, maxlength: 5000, placeholder: '1. Краш при открытии онбординга\n2. Кнопка «Купить» не реагирует на iPhone SE\n…' });
   modal({
     title: 'Вернуть в разработку',
-    body: [h('p', { class: 'hint', style: { margin: '0 0 8px' } }, 'Этап разработки снова будет в работе у исполнителя, баги — комментарием в нём. Тестирование подождёт исправлений.'),
+    cls: 'dlg',
+    body: [h('p', { class: 'hint' }, 'Этап разработки снова будет в работе у исполнителя, баги придут ему комментарием. Тестирование подождёт.'),
       field('Баги', ta)],
     actions: [{ label: 'Отмена' }, { label: 'Вернуть', primary: true, action: async close => {
       if (!ta.value.trim()) { ta.focus(); return; }
@@ -599,7 +600,7 @@ function discussionBlock(t, editable) {
   };
 
   const removeComment = async c => {
-    if (!(await confirmDlg('Удалить комментарий?', { ok: 'Удалить', danger: true }))) return;
+    if (!(await confirmDlg('', { title: 'Удалить комментарий?', ok: 'Удалить', danger: true }))) return;
     data.comments = data.comments.filter(x => x !== c);
     t.commentCount = data.comments.length;
     draw();
@@ -1058,14 +1059,18 @@ export function deleteTaskUndoable(t) {
   });
 }
 
-function moveTaskDialog(t) {
+export function moveTaskDialog(t) {
   const others = S.board.units.filter(x => x.id !== S.board.unit.id && !x.archived);
-  const sel = h('select', { class: 'inp' }, others.map(u => h('option', { value: u.id }, u.name + ' · ' + u.key)));
+  const dot = h('span', { class: 'sel-dot-mark' });
+  const paint = () => { dot.style.background = (others.find(u => u.id === sel.value) || {}).color || ''; };
+  const sel = h('select', { class: 'inp', onchange: paint }, others.map(u => h('option', { value: u.id }, u.name)));
+  paint();
   modal({
     title: 'Перенести ' + taskKey(t),
+    cls: 'dlg',
     body: [
-      field('В юнит', sel),
-      h('p', { class: 'hint', style: { margin: 0 } }, 'Задача получит новый номер. Значения полей, которых нет в том юните, скроются, но не удалятся — при переносе обратно они вернутся.'),
+      field('В юнит', h('span', { class: 'sel-dot' }, dot, sel)),
+      h('p', { class: 'hint' }, 'Задача получит новый номер. Значения полей, которых нет в том юните, скроются, но не удалятся.'),
     ],
     actions: [
       { label: 'Отмена' },

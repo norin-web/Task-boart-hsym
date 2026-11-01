@@ -21,7 +21,8 @@ export function changesDialog(t, onDone) {
   const ta = h('textarea', { class: 'inp', rows: 4, maxlength: 5000, placeholder: 'Что поправить — или общая информация (необязательно)' });
   modal({
     title: 'Вернуть на правки · ' + t.title,
-    body: [h('p', { class: 'hint', style: { margin: '0 0 8px' } }, 'Задача вернётся автору в работу. Комментарий появится в обсуждении задачи.'), ta],
+    cls: 'dlg',
+    body: [h('p', { class: 'hint' }, 'Задача вернётся автору в работу. Комментарий появится в обсуждении задачи.'), ta],
     actions: [{ label: 'Отмена' }, { label: 'Отправить на правки', primary: true, action: async close => { await decide(t, false, ta.value.trim(), onDone); close(); } }],
   });
   setTimeout(() => ta.focus(), 0);

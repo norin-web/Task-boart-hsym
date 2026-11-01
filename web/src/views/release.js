@@ -53,13 +53,14 @@ const daysSince = iso => Math.max(0, Math.floor((Date.now() - Date.parse(iso)) /
  */
 export function openRejectForm(t, appName, no, onDone) {
   const desc = h('textarea', { class: 'inp', rows: 5, maxlength: 2000, placeholder: 'Guideline 3.1.2 — нет условий подписки на пейволле…' });
-  const shot = h('input', { class: 'inp', type: 'url', maxlength: 2000, placeholder: 'https://… (Google Drive, Telegram, CleanShot)' });
+  const shot = h('input', { class: 'inp', type: 'url', maxlength: 2000, placeholder: 'https://… ссылка на скриншот' });
   modal({
     title: `Реджект №${no || '…'} · ${appName || t.title}`,
+    cls: 'dlg',
     body: [
-      h('p', { class: 'hint', style: { margin: '0 0 10px' } }, 'PM юнита получит задачу «Реджект №' + (no || '…') + '» на исправление. Когда её закроют, релиз вернётся к вам в очередь.'),
+      h('p', { class: 'hint' }, 'PM юнита получит задачу «Реджект №' + (no || '…') + '» на исправление. Когда её закроют, релиз вернётся к вам в очередь.'),
       field('Описание', desc, 'Из письма Apple: guideline и что не так'),
-      field('Скрин реджекта', shot, 'Ссылка на скриншот'),
+      field('Скрин реджекта', shot),
     ],
     actions: [{ label: 'Отмена' }, { label: 'Записать реджект', danger: true, action: async close => {
       if (!desc.value.trim()) { desc.focus(); return; }
@@ -88,7 +89,7 @@ export function releaseBlock(t, onChange) {
     } catch (e) { showErr(e); }
   };
   const closeReject = async rel => {
-    if (await confirmDlg(`Закрыть реджект №${rel.rejectNo || ''}? Задача по нему закроется, релиз вернётся в очередь на отправку.`, { ok: 'Закрыть реджект', title: 'Реджект' })) step('close_reject');
+    if (await confirmDlg('Задача по нему закроется, релиз вернётся в очередь на отправку.', { ok: 'Закрыть реджект', title: `Закрыть реджект №${rel.rejectNo || ''}?` })) step('close_reject');
   };
   const saveValue = async (f, v) => {
     try {

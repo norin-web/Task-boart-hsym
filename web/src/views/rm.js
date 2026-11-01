@@ -62,7 +62,7 @@ export async function renderRmHome() {
     } catch (e) { showErr(e); }
   }
   async function closeReject(x) {
-    if (await confirmDlg(`Закрыть реджект №${x.rejectNo || ''}? Задача по нему закроется, релиз вернётся в очередь на отправку.`, { ok: 'Закрыть реджект', title: 'Реджект' })) step(x, 'close_reject');
+    if (await confirmDlg('Задача по нему закроется, релиз вернётся в очередь на отправку.', { ok: 'Закрыть реджект', title: `Закрыть реджект №${x.rejectNo || ''}?` })) step(x, 'close_reject');
   }
   async function reject(x) {
     let no = 0;

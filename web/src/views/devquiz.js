@@ -42,7 +42,8 @@ export function openDevForm(t, onSaved) {
   modal({
     title: 'Опросник перед релизом',
     wide: true,
-    body: [h('p', { class: 'hint', style: { marginTop: 0 } }, 'Ответы попадут в карточку релиза — по ним RM заполняет App Privacy и отвечает Apple.'), h('div', { class: 'dq-list' }, rows)],
+    cls: 'dlg dq-dlg',
+    body: [h('p', { class: 'hint' }, 'Ответы попадут в карточку релиза: по ним RM заполняет App Privacy и отвечает Apple.'), h('div', { class: 'dq-list' }, rows)],
     actions: [
       { label: 'Отмена' },
       {

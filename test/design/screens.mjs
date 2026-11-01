@@ -1,7 +1,16 @@
 /** Экраны для сверки: код листа в Paper, адрес, действие перед снимком, высота листа. */
 const click = sel => p => p.click(sel);
 const prefs = tab => '#/settings?tab=' + tab;
+const dlg = code => async p => { if (code.includes('S.board')) await p.waitForSelector('.card'); await p.evaluate(code); await p.waitForTimeout(400); };
 export const SCREENS = [
+  { code: 'D30', name: 'Перенести задачу', as: 'pm', route: ids => `#/u/${ids.mvp}`, act: dlg(`(async () => { const { S } = await import('/src/state.js'); const { moveTaskDialog } = await import('/src/views/task.js'); moveTaskDialog(S.board.tasks[0]); })()`) },
+  { code: 'D31', name: 'Вернуть в разработку', as: 'pm', route: ids => `#/u/${ids.mvp}`, act: dlg(`(async () => { const { S } = await import('/src/state.js'); const { openQaReturn } = await import('/src/views/task.js'); openQaReturn(S.board.tasks[0]); })()`) },
+  { code: 'D32', name: 'Вернуть на правки', as: 'pm', route: ids => `#/u/${ids.mvp}`, act: dlg(`(async () => { const { S } = await import('/src/state.js'); const { changesDialog } = await import('/src/views/review.js'); changesDialog(S.board.tasks.find(t => /Дизайн/.test(t.title))); })()`) },
+  { code: 'D33', name: 'Удалить комментарий', as: 'pm', route: '#/my', act: dlg(`(async () => { const { confirmDlg } = await import('/src/ui.js'); confirmDlg('', { title: 'Удалить комментарий?', ok: 'Удалить', danger: true }); })()`) },
+  { code: 'D34', name: 'Конфликт изменений', as: 'pm', route: '#/my', act: dlg(`(async () => { const { confirmDlg } = await import('/src/ui.js'); confirmDlg('Задачу MVP-3 только что изменил кто-то другой. Перезаписать вашим изменением или взять их версию?', { ok: 'Перезаписать', cancel: 'Взять их версию', title: 'Конфликт изменений' }); })()`) },
+  { code: 'D35', name: 'Реджект', as: 'pm', route: '#/my', act: dlg(`(async () => { const { openRejectForm } = await import('/src/views/release.js'); openRejectForm({ id: 'x', title: 'Старт' }, 'CARROT Weather', 2); })()`) },
+  { code: 'D36', name: 'Закрыть реджект', as: 'pm', route: '#/my', act: dlg(`(async () => { const { confirmDlg } = await import('/src/ui.js'); confirmDlg('Задача по нему закроется, релиз вернётся в очередь на отправку.', { ok: 'Закрыть реджект', title: 'Закрыть реджект №2?' }); })()`) },
+  { code: 'D37', name: 'Опросник перед релизом', as: 'pm', route: '#/my', height: 1500, act: dlg(`(async () => { const { openDevForm } = await import('/src/views/devquiz.js'); openDevForm({ id: 'x', devForm: { answers: { firebase: { v: 'Нет' }, analytics: { v: 'Да', note: 'Amplitude' }, permissions: { v: 'Фото, камера' } } } }); })()`) },
   { code: 'P20', name: 'Команда юнита, PM', as: 'pm', route: ids => `#/u/${ids.mvp}/team` },
   { code: 'P21', name: 'Дашборд и аналитика: блоки, PM', as: 'pm', route: '#/analytics', height: 1700 },
   { code: 'P22', name: 'Мои задачи, «Поставил я», PM', as: 'pm', route: '#/my', act: async (p, ids) => {

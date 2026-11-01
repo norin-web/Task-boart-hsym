@@ -300,9 +300,9 @@ export const isModalOpen = () => $('#modal-root').children.length > 0;
  * modal({ title, body, actions, wide, footLeft, onClose })
  * action: { label, primary, danger, action(close) } — без action кнопка просто закрывает.
  */
-export function modal({ title, body, actions, wide, footLeft, onClose }) {
+export function modal({ title, body, actions, wide, footLeft, onClose, cls }) {
   const titleId = 'dlg-' + Math.random().toString(36).slice(2, 8);
-  const box = h('div', { class: 'modal' + (wide ? ' wide' : ''), role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': titleId });
+  const box = h('div', { class: 'modal' + (wide ? ' wide' : '') + (cls ? ' ' + cls : ''), role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': titleId });
   const opener = document.activeElement;
   const wrap = h('div', { class: 'modal-wrap', onmousedown: e => { if (e.target === wrap) close(); } }, box);
   let closed = false;
@@ -361,7 +361,8 @@ export function confirmDlg(text, { ok = 'OK', cancel = 'Отмена', danger = 
     let result = false;
     modal({
       title,
-      body: h('p', { style: { margin: 0, lineHeight: 1.55 } }, text),
+      cls: 'dlg',
+      body: text ? h('p', { class: 'hint' }, text) : null,
       onClose: () => resolve(result),
       actions: [
         { label: cancel },
