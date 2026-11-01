@@ -5,6 +5,7 @@
  *   #/board                  моя доска (личные этапы)
  *   #/admin                  старый адрес — ведёт в «Настройки»
  *   #/analytics              аналитика (CEO и PM)
+ *   #/app/:id                карточка приложения на весь экран
  *   #/settings[?tab=…]       настройки: личные и студия
  *   #/u/:unit[/overview|/apps|/list|/team|/settings][?task=:id] — вкладки юнита; без режима — доска
  *   #/u/:unit/t/:team[?task=:id] — доска команды в юните и кто чем занят
@@ -15,7 +16,7 @@ import { renderSidebar } from './views/sidebar.js';
 import { renderHome } from './views/home.js';
 import { renderMy } from './views/my.js';
 import { renderMyBoard } from './views/myboard.js';
-import { renderApps } from './views/apps.js';
+import { renderApps, renderAppPage } from './views/apps.js';
 import { renderCeoHome } from './views/ceo.js';
 import { renderPmHome } from './views/pm.js';
 import { renderRmHome } from './views/rm.js';
@@ -37,6 +38,8 @@ export function parseLocation() {
   if (path === '/my') return { view: 'my' };
   if (path === '/board') return { view: 'myboard' };
   if (path === '/apps') return { view: 'apps' };
+  const ap = /^\/app\/([\w-]+)$/.exec(path);
+  if (ap) return { view: 'app', id: ap[1] };
   if (path === '/dev') return { view: 'dev' };
   if (path === '/analytics') return { view: 'analytics' };
   // панель админа переехала в «Настройки → Студия»
@@ -51,6 +54,7 @@ export function parseLocation() {
 export function routeUrl(r) {
   if (r.unit) return '#/u/' + r.unit + (r.team ? '/t/' + r.team : r.mode && r.mode !== 'board' ? '/' + r.mode : '') + (r.task ? '?task=' + encodeURIComponent(r.task) : '');
   if (r.view === 'settings' || r.view === 'admin') return '#/settings' + (r.tab ? '?tab=' + r.tab : '');
+  if (r.view === 'app') return '#/app/' + r.id;
   return r.view === 'my' ? '#/my' : r.view === 'myboard' ? '#/board' : r.view === 'apps' ? '#/apps' : r.view === 'dev' ? '#/dev' : r.view === 'analytics' ? '#/analytics' : '#/';
 }
 
@@ -72,6 +76,7 @@ export function navParent(r = S.route) {
     if (r.team || r.mode !== root) return { route: { unit: r.unit, mode: root }, label: u ? u.name : 'Юнит' };
     return { route: { view: 'home' }, label: 'Дашборд' };
   }
+  if (r.view === 'app') return { route: { view: 'apps' }, label: 'Приложения' };
   if (r.view && r.view !== 'home') return { route: { view: 'home' }, label: 'Дашборд' };
   return null;
 }
@@ -133,13 +138,13 @@ export async function render() {
     closePanel();
     S.board = null;
     if (r.view === 'analytics' && !isStaff()) return navigate({ view: 'home' }, { replace: true });
-    if (r.view === 'apps' && !seesApps()) return navigate({ view: 'home' }, { replace: true });
+    if ((r.view === 'apps' || r.view === 'app') && !seesApps()) return navigate({ view: 'home' }, { replace: true });
     const view = r.view;
-    const key = ['my', 'myboard', 'apps', 'dev', 'analytics'].includes(view) ? view : view === 'settings' ? 'settings:' + (r.tab || '') : 'home';
+    const key = view === 'app' ? 'app:' + r.id : ['my', 'myboard', 'apps', 'dev', 'analytics'].includes(view) ? view : view === 'settings' ? 'settings:' + (r.tab || '') : 'home';
     if (rendered !== key) {
       rendered = key;
       document.title = ({ my: 'Мои задачи', myboard: 'Моя доска', settings: 'Настройки', analytics: 'Аналитика', apps: 'Приложения', dev: 'Режим разработчика' }[view] || (isStaff() ? 'Дашборд' : myAccess() === 'rm' ? 'Релизы' : 'Главная')) + ' · Tasks';
-      if (view === 'my') renderMy(); else if (view === 'myboard') renderMyBoard(); else if (view === 'apps') renderApps(); else if (view === 'dev') renderDev();
+      if (view === 'my') renderMy(); else if (view === 'myboard') renderMyBoard(); else if (view === 'apps') renderApps(); else if (view === 'app') renderAppPage(r.id); else if (view === 'dev') renderDev();
       else if (view === 'settings') renderPrefs(r.tab || ''); else if (view === 'analytics') renderAnalytics();
       else if (isSuper()) renderCeoHome(); else if (myAccess() === 'moderator') renderPmHome(); else if (myAccess() === 'rm') renderRmHome(); else renderHome();
     }

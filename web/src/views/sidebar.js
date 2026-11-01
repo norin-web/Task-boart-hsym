@@ -180,7 +180,7 @@ function drawSidebar() {
 }
 
 /** Активен ли пункт меню для маршрута (главная — только без юнита и других экранов). */
-const isHere = (r, route) => !r.unit && (route.view === 'home' ? !r.view || r.view === 'home' : r.view === route.view);
+const isHere = (r, route) => !r.unit && (route.view === 'home' ? !r.view || r.view === 'home' : r.view === route.view || (route.view === 'apps' && r.view === 'app'));
 
 /** CEO: Default — только приложения; Admin — всё. Сохраняется в профиле (на всех устройствах). */
 export async function setCeoMode(m) {

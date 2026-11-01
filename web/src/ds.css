@@ -1201,3 +1201,25 @@ section:has(> .section-head + .card-box) > .section-head h2 { font-size: 18px; l
 .att-row:hover { background: var(--surface-2); }
 .att-row .att-main b, .rc-row .rc-two b { font-weight: 700; }
 .rc-row .rc-at { opacity: .4; }
+
+/* ---------- карточка приложения: на весь экран (макет 12б) и панель сбоку шире (12в) ---------- */
+.panel.unit-panel { width: min(840px, calc(100vw - 32px)); }
+.app-page { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+.app-page > .up-body { display: flex; flex-direction: column; gap: 16px; padding: 0; min-width: 0; }
+.app-page > .up-body > section { background: var(--surface); border-radius: 28px; padding: 20px 24px; }
+.app-page .app-side { background: var(--surface); border-radius: 28px; padding: 24px; display: flex; flex-direction: column; gap: 16px; min-width: 0; position: sticky; top: 0; }
+.app-page .app-side .ap-props { display: flex; flex-direction: column; gap: 14px; }
+.app-page .app-side .ap-props .inp, .app-page .app-side .ap-props .prio-select { height: 36px; }
+.app-page .app-team { border-top: 1px solid var(--border); padding-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+.app-page .app-team h3 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -.02em; }
+.app-page .app-team-row { display: flex; flex-direction: column; gap: 0; font-size: 14px; }
+.app-page .app-team-row span { font-size: 12px; font-weight: 500; }
+.app-page .app-dates { display: flex; flex-direction: column; gap: 2px; margin: 0; padding-top: 16px; border-top: 1px solid var(--border); font-size: 12px; }
+.topbar .app-title { display: flex; flex-direction: column; min-width: 0; }
+.topbar .app-title h1 { display: flex; align-items: center; gap: 8px; margin: 0; }
+.topbar .app-crumb { font-size: 12px; line-height: 16px; font-weight: 500; }
+.topbar .uc-icon.lg { width: 56px; height: 56px; border-radius: 14px; box-shadow: none; flex: none; }
+.topbar .aph-store-btn { background: var(--surface); }
+@media (max-width: 1100px) { .app-page { grid-template-columns: minmax(0, 1fr); } .app-page .app-side { position: static; } }
+.app-page .info-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 32px; }
+@media (max-width: 700px) { .app-page .info-list { grid-template-columns: minmax(0, 1fr); } }

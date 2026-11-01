@@ -7,7 +7,7 @@ import Sortable from 'sortablejs';
 import { S, isSuper, isStaff, seesApps, me, personById, unitById, appStatusById, prioById, REQUEST_TYPES, LS, plural, fmtDate, PALETTE, between, todayStr, relTime } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, modal, field, toast, menu, closeMenu, confirmDlg, promptDlg, prioMark, prioSelect } from '../ui.js';
 import { call, send } from '../api.js';
-import { currentView } from '../router.js';
+import { currentView, navigate } from '../router.js';
 import { peekTask } from './task.js';
 import { unitHeader } from './unitnav.js';
 import { brandIcon, brandOf } from './brand.js';
@@ -398,7 +398,7 @@ export function appTable(apps, reload, sel, onPick, withUnit, sort) {
       const pm = personById(appPm(a));
       const on = !!sel && sel.has(a.id);
       const po = prioById(a.priority);
-      return h('button', { class: 'ap-row' + (on ? ' picked' : '') + (po ? ' has-prio' : ''), style: po ? { '--pc': po.color } : null, 'aria-pressed': sel ? String(on) : null, onclick: () => (sel ? onPick(a.id) : openAppPanel(a, reload)) },
+      return h('button', { class: 'ap-row' + (on ? ' picked' : '') + (po ? ' has-prio' : ''), style: po ? { '--pc': po.color } : null, 'aria-pressed': sel ? String(on) : null, onclick: () => (sel ? onPick(a.id) : openAppCard(a, reload)) },
         h('span', { class: 'ap-name' }, sel && h('span', { class: 'aud-check pick-box' }, on && icon('check', 13)), appIcon(a),
           h('span', { class: 'ap-names' },
             h('span', { class: 'ap-title' }, h('b', null, a.name), a.isTest && h('span', { class: 'test-tag' }, 'тест')),
@@ -422,19 +422,35 @@ export async function openAppById(id, onChange) {
   try {
     const a = (await call('listApps', {})).find(x => x.id === id);
     if (!a) return toast('Приложение не найдено — возможно, его перенесли в архив', { type: 'error' });
-    openAppPanel(a, onChange);
+    openAppCard(a, onChange);
   } catch (e) { showErr(e); }
 }
 
 /** Реджект — запрос, который создаёт RM кнопкой «Реджект» (тип «Задача», название «Реджект: причина»). */
 const isReject = r => /^Реджект/i.test(r.title);
 const byCreated = (x, y) => String(x.createdAt).localeCompare(String(y.createdAt));
-/** Карточка приложения: справа или по центру — как у задачи (общая настройка cardMode). */
-const appCardCenter = () => LS.get('cardMode', 'side') === 'center';
+/** Карточка приложения: на весь экран (по умолчанию, макет 12б) или широкая панель сбоку (12в). */
+const appCardSide = () => LS.get('appCardMode', 'full') === 'side';
+/** Открыть карточку так, как выбрано: страница #/app/:id или панель сбоку. */
+export function openAppCard(a, onChange) {
+  if (appCardSide()) openAppPanel(a, onChange); else navigate({ view: 'app', id: a.id });
+}
+/** Страница карточки приложения (#/app/:id). */
+export async function renderAppPage(id) {
+  const main = $('#main');
+  fill(main, topbar([h('h1', null, 'Приложение')]), h('div', { class: 'view-body' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…')));
+  try {
+    const a = (await call('listApps', {})).find(x => x.id === id);
+    if (S.route.view !== 'app' || S.route.id !== id) return;
+    if (!a) { toast('Приложение не найдено — возможно, его перенесли в архив', { type: 'error' }); return navigate({ view: 'apps' }, { replace: true }); }
+    document.title = a.name + ' · Tasks';
+    openAppPanel(a, null, main);
+  } catch (e) { showErr(e); }
+}
 
-export function openAppPanel(a, onChange) {
+export function openAppPanel(a, onChange, page = null) {
   const root = $('#panel-root');
-  const close = () => { document.removeEventListener('keydown', onKey, true); fill(root); };
+  const close = () => { document.removeEventListener('keydown', onKey, true); if (page) navigate({ view: 'apps' }); else fill(root); };
   const onKey = e => {
     if (e.key !== 'Escape' || document.querySelector('.modal') || document.querySelector('.menu')) return;
     // Esc в поле карточки — отменить правку (поле обработает само) или просто выйти из поля, а не закрывать карточку
@@ -443,8 +459,9 @@ export function openAppPanel(a, onChange) {
     e.stopPropagation();
     close();
   };
-  document.addEventListener('keydown', onKey, true);
+  if (!page) document.addEventListener('keydown', onKey, true);
   const body = h('div', { class: 'up-body' });
+  const side = page ? h('aside', { class: 'app-side' }) : null;  // справа на странице: свойства, команда, даты
   let notes = null;
   let noteBox = null;  // поле заметки — для «Добавить заметку» в меню
   const loadNotes = () => call('getAppNotes', { appId: a.id }).then(list => { notes = list; draw(); }).catch(showErr);
@@ -558,11 +575,15 @@ export function openAppPanel(a, onChange) {
         })),
     };
     const L = appCardLayout();
-    fill(body, L.order.filter(id => !L.hidden.includes(id)).map(id => parts[id]));
+    if (page) {
+      // на странице «Статус / Юнит / Приоритет» уходят в правую колонку, остальные блоки — по раскладке человека
+      fill(body, L.order.filter(id => id !== 'props' && !L.hidden.includes(id)).map(id => parts[id]));
+      fill(side, parts.props, appTeam(a, u), appDates(a));
+    } else fill(body, L.order.filter(id => !L.hidden.includes(id)).map(id => parts[id]));
   };
   // «Настроить карточку» — сразу на нужной вкладке (пустые Info и Быстрый доступ открывают свою)
   const configure = (tab = 'blocks') => openCardSettings(a, { ceo: isSuper(), manage: canManage(a.unitId), save, redraw: draw, tab });
-  const panel = h('aside', { class: 'panel unit-panel' + (appCardCenter() ? ' center' : ''), role: 'dialog', 'aria-label': a.name });
+  const panel = page ? h('div', { class: 'app-page' }) : h('aside', { class: 'panel unit-panel', role: 'dialog', 'aria-label': a.name });
   // шапка: крупная иконка, своё название, название в сторе и ссылка на App Store
   const storeUrl = (() => { const sf = storeField(); return (sf && a.info && a.info[sf.id]) || ''; })();
   const head = () => h('div', { class: 'panel-head app-panel-head' },
@@ -574,13 +595,14 @@ export function openAppPanel(a, onChange) {
         h('img', { src: appStoreSvg, alt: '', width: 16, height: 16 }), 'Открыть в App Store', icon('arrowUpRight', 13))),
     h('span', { class: 'spacer' }),
     h('button', { class: 'icon-btn', title: 'Действия', 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); menu(e.currentTarget, actions()); } }, icon('more', 18)),
-    h('button', { class: 'icon-btn', title: 'Закрыть', onclick: close }, icon('x', 18)));
+    !page && h('button', { class: 'icon-btn', title: 'Закрыть', onclick: close }, icon('x', 18)));
   // быстрые действия карточки — в одном меню, чтобы не шуметь кнопками
   const actions = () => {
     const ceo = isSuper();
     return [
-      { label: appCardCenter() ? 'Открывать справа' : 'Открывать по центру', icon: appCardCenter() ? 'panelSide' : 'panelCenter',
-        action: () => { LS.set('cardMode', appCardCenter() ? 'side' : 'center'); panel.classList.toggle('center', appCardCenter()); backdrop.classList.toggle('center', appCardCenter()); } },
+      // два режима: на весь экран (по умолчанию) и панель сбоку; переключение — сразу, карточка остаётся открытой
+      { label: page ? 'Открывать сбоку' : 'Открывать на весь экран', icon: page ? 'panelSide' : 'panelCenter',
+        action: () => { LS.set('appCardMode', page ? 'side' : 'full'); close(); openAppCard(a, onChange); } },
       { label: 'Настроить карточку', icon: 'layers', action: () => configure() },
       canWatch() && { label: isWatched('app', a.id) ? 'Не отслеживать на дашборде' : 'Отслеживать на дашборде', icon: 'eye', action: () => toggleWatch('app', a.id, a.unitId, a.name) },
       ceo && { sep: true },
@@ -593,11 +615,41 @@ export function openAppPanel(a, onChange) {
     ];
   };
   const headBox = h('div', null, head());
-  const backdrop = h('div', { class: 'panel-backdrop' + (appCardCenter() ? ' center' : ''), onclick: close });
+  const backdrop = h('div', { class: 'panel-backdrop', onclick: close });
   draw();
   loadNotes();
-  panel.append(headBox, body);
-  fill(root, backdrop, panel);
+  if (page) {
+    // страница (макет 12б): шапка в topbar, ниже блоки слева и правая колонка
+    const storeA = storeUrl && h('a', { class: 'btn ghost sm aph-store-btn', href: storeUrl, target: '_blank', rel: 'noopener' }, 'Открыть в App Store', icon('arrowUpRight', 13));
+    const more = h('button', { class: 'icon-btn', title: 'Действия', 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); menu(e.currentTarget, actions()); } }, icon('more', 18));
+    const u0 = unitById(a.unitId);
+    fill(page, topbar([appIcon(a, 'lg'), h('div', { class: 'app-title' }, h('span', { class: 'app-crumb muted' }, 'Приложения' + (u0 ? ' / ' + u0.name : '')), h('h1', null, a.name, a.isTest && h('span', { class: 'test-tag' }, 'тест')))], [storeA, more]),
+      h('div', { class: 'view-body' }, h('div', { class: 'app-page' }, body, side)));
+  } else {
+    panel.append(headBox, body);
+    fill(root, backdrop, panel);
+  }
+}
+
+/** «Команда» справа на странице: PM юнита и те, кто назначен на этапы открытых работ (по названию этапа). */
+function appTeam(a, u) {
+  const rows = [['PM', personById(appPm(a)) || null]];
+  const seen = new Set();
+  (a.requests || []).filter(r => !r.done).forEach(r => (r.stages || []).forEach(s => {
+    const label = String(s.title || '').split(' · ')[0];
+    if (!label || seen.has(label) || !s.assigneeId) return;
+    seen.add(label);
+    rows.push([label, personById(s.assigneeId) || null]);
+  }));
+  return h('section', { class: 'app-team' }, h('h3', null, 'Команда'),
+    rows.slice(0, 7).map(([role, p]) => h('div', { class: 'app-team-row' }, h('span', { class: 'muted' }, role), p ? h('b', null, p.name) : h('span', { class: 'muted' }, 'Не назначен'))));
+}
+/** Создана / обновлена — внизу правой колонки. */
+function appDates(a) {
+  const by = personById(a.createdBy);
+  return h('p', { class: 'muted app-dates' },
+    a.createdAt && h('span', null, 'Создана ' + fmtDate(String(a.createdAt).slice(0, 10)) + (by ? ' · ' + by.name : '')),
+    a.lastActivity && h('span', null, 'Обновлена ' + relTime(a.lastActivity)));
 }
 
 /* ---------- раскладка карточки приложения (у каждого своя) ---------- */
@@ -1132,7 +1184,7 @@ export function storeCheckBlock(apps, reload, { compact = false } = {}) {
 
 /** Строки пропавших из стора: приложение (клик — карточка), юнит, ссылка для ручной проверки. */
 const goneRows = (gone, reload) => gone.map(a => h('div', { class: 'sc-row' },
-  h('button', { class: 'sc-app', onclick: () => openAppPanel(a, reload) }, appIcon(a, 'sm'),
+  h('button', { class: 'sc-app', onclick: () => openAppCard(a, reload) }, appIcon(a, 'sm'),
     h('span', { class: 'ap-names' }, h('b', null, a.name), a.storeName && h('small', { class: 'muted' }, a.storeName))),
   h('span', { class: 'muted sc-unit' }, (unitById(a.unitId) || {}).name || ''),
   h('a', { class: 'btn ghost sm', href: appStoreUrl(a), target: '_blank', rel: 'noopener', title: 'Проверить ссылку вручную' }, 'Открыть ссылку', icon('arrowUpRight', 13))));

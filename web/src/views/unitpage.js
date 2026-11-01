@@ -7,7 +7,7 @@ import { S, isSuper, isStaff, todayStr, ACCESS_LABELS, personById, deptById, tas
 import { $, h, icon, avatar, showErr, fill, menu, toast, emptyBlock } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView, link } from '../router.js';
-import { openCreateApp, openNewAppTask, pmsOf, appIcon, appStatusCell, openAppPanel } from './apps.js';
+import { openCreateApp, openNewAppTask, pmsOf, appIcon, appStatusCell, openAppCard } from './apps.js';
 import { attention, inProgress, recent } from './ceo.js';
 import { unitHeader } from './unitnav.js';
 import { addMemberDialog } from './people.js';
@@ -102,7 +102,7 @@ function appsBrief(u, apps, reload) {
     h('div', { class: 'section-head' }, h('h2', null, 'Приложения', apps.length > 0 && h('span', { class: 'muted sec-n' }, apps.length)),
       link({ unit: u.id, mode: 'apps' }, { class: 'btn ghost sm' }, 'Все приложения')),
     apps.length
-      ? h('div', { class: 'card-box app-brief' }, apps.slice(0, LIMIT).map(a => h('button', { class: 'app-brief-row', onclick: () => openAppPanel(a, reload) },
+      ? h('div', { class: 'card-box app-brief' }, apps.slice(0, LIMIT).map(a => h('button', { class: 'app-brief-row', onclick: () => openAppCard(a, reload) },
         appIcon(a, 'sm'),
         h('span', { class: 'app-brief-name' }, h('b', null, a.name), a.storeName && h('small', { class: 'muted' }, a.storeName)),
         appStatusCell(appStatusById(a.status), a))),
