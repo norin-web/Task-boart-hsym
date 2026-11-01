@@ -68,6 +68,7 @@ await hideDev();
 
 const go = async hash => {
   await page.evaluate(h => {
+    document.body.click(); // закрывает меню аккаунта в сайдбаре
     document.querySelectorAll('#palette-root > *, #modal-root > *, #panel-root > *, .menu').forEach(e => e.remove()); // окна прошлого экрана
     location.hash = '#/analytics';
     setTimeout(() => { location.hash = h; }, 50);

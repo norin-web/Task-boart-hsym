@@ -556,7 +556,7 @@ function columnMenu(anchor, col) {
   menu(anchor, [
     { label: 'Переименовать', icon: 'edit', action: async () => { const name = await promptDlg('Переименовать колонку', 'Название', col.name); if (name && name !== col.name) patch({ name }); } },
     { title: 'Тип колонки' },
-    ...KINDS.map(k => ({ label: KIND_LABELS[k] + (col.kind === k ? '  ✓' : ''), icon: KIND_ICONS[k], action: () => { if (col.kind !== k) patch({ kind: k }); } })),
+    ...KINDS.map(k => ({ label: h('span', { class: 'fm-row' }, KIND_LABELS[k], col.kind === k && icon('check', 14)), icon: KIND_ICONS[k], action: () => { if (col.kind !== k) patch({ kind: k }); } })),
     { title: 'Цвет' },
     colors,
     { sep: true },

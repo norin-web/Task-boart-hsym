@@ -1,4 +1,4 @@
-import { S, PALETTE, suggestKey } from '../state.js';
+import { S, PALETTE, suggestKey, isSuper } from '../state.js';
 import { h, field, menu, modal, confirmDlg, promptDlg, toast, showErr, colorPicker } from '../ui.js';
 import { send } from '../api.js';
 import { navigate, rerender } from '../router.js';
@@ -9,7 +9,7 @@ export function unitMenu(anchor, u) {
     { label: 'Открыть', icon: 'arrow', action: () => navigate({ unit: u.id, mode: 'board' }) },
     { label: 'Настройки', icon: 'settings', action: () => navigate({ unit: u.id, mode: 'settings' }) },
     { label: 'Переименовать', icon: 'edit', action: () => renameUnit(u) },
-    { label: 'Дублировать (со схемой полей)', icon: 'copy', action: () => duplicateUnit(u) },
+    isSuper() && { label: 'Дублировать (со схемой полей)', icon: 'copy', action: () => duplicateUnit(u) },
     { sep: true },
     ...(u.archived
       ? [{ label: 'Восстановить', icon: 'archive', action: () => archiveUnit(u, false) },
