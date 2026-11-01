@@ -204,9 +204,9 @@ export function statBlocks(d, apps, reload) {
 
   return [
     { id: 'kpi', title: 'Цифры', col: 'full', render: () => h('div', { class: 'cs-row' },
-      stat(apps.length, plural(apps.length, ['приложение', 'приложения', 'приложений'])), stat(open.length, plural(open.length, ['задача в работе', 'задачи в работе', 'задач в работе'])),
-      stat(overdue, 'просрочено', null, overdue ? 'danger' : ''), stat(live30.length + done30.length, 'выпущено за 30 дней'),
-      stat(stale.length, 'не трогали', d.staleDays + '+ дн.')) },
+      stat(apps.length, 'Приложения', apps.filter(a => (appStatusById(a.status) || {}).kind === 'live').length + ' в сторе'), stat(open.length, 'Задачи в работе'),
+      stat(overdue, 'Просрочено', overdue ? 'Требуют внимания' : null, overdue ? 'danger' : ''), stat(live30.length + done30.length, 'Выпущено', 'За 30 дней'),
+      stat(stale.length, 'Давно не трогали', d.staleDays + '+ ' + plural(d.staleDays, ['день', 'дня', 'дней']))) },
     { id: 'statuses', title: 'Приложения по статусам', col: 'full', render: () => section('По статусам', h('div', { class: 'card-box st-sum' },
       S.appStatuses.map(st => { const n = apps.filter(a => a.status === st.id).length; return h('div', { class: 'st-sum-row' + (n ? '' : ' zero') }, statusPill(st), h('span', { class: 'st-sum-bar' }, h('span', { style: { width: (apps.length ? n / apps.length * 100 : 0) + '%', background: st.color } })), h('b', null, n)); }))) },
     { id: 'byunit', title: 'Юниты × статусы', col: 'full', render: () => section('Юниты × статусы', h('div', { class: 'card-box mx', style: { '--n': S.appStatuses.length } },

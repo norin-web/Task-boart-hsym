@@ -1,5 +1,5 @@
 import { S, todayStr, dueInfo, KIND_COLORS, deptById, ACCESS_LABELS, LS, plural, isStaff } from '../state.js';
-import { $, h, icon, topbar, showErr, fill, statusIcon } from '../ui.js';
+import { $, h, icon, topbar, showErr, fill, statusIcon, emptyBlock } from '../ui.js';
 import { call } from '../api.js';
 import { currentView, taskLink, link } from '../router.js';
 
@@ -81,7 +81,7 @@ export function unitGroups(tasks) {
         h('span', { class: 'spacer' }),
         h('span', { class: 'count' }, items.length + ' ' + plural(items.length, ['задача', 'задачи', 'задач']))),
       h('div', { class: 'rows' }, items.map(t => row(t, { unit: false, done: t.statusKind === 'done' }))));
-  }) : h('div', { class: 'card-box empty-state' }, h('h2', null, 'На вас нет задач'), h('p', null, 'Когда вас назначат исполнителем, задачи появятся здесь.')));
+  }) : emptyBlock('На вас нет задач', { ic: 'list', sub: 'Когда вас назначат исполнителем, задачи появятся здесь' }));
   draw();
   return box;
 }
@@ -108,7 +108,7 @@ export function taskGroups(tasks) {
           h('span', { class: 'dot', style: { background: g.color } }), g.title, h('span', { class: 'count' }, g.items.length),
           g.collapsible && h('span', { class: 'muted', style: { fontWeight: 400 } }, showDone ? '— скрыть' : '— показать')),
         (!g.collapsible || showDone) && h('div', { class: 'rows' }, g.items.map(row))))
-      : h('div', { class: 'card-box empty-state' }, h('h2', null, 'На вас нет задач'), h('p', null, 'Когда вас назначат исполнителем, задачи появятся здесь.')));
+      : emptyBlock('На вас нет задач', { ic: 'list', sub: 'Когда вас назначат исполнителем, задачи появятся здесь' }));
   draw();
   return box;
 }
@@ -123,7 +123,7 @@ function row(t, { unit = true, done = false } = {}) {
     h('span', { class: 't-title' }, t.title),
     h('span', { class: 'trow-status' }, t.statusName),
     h('span', { class: 'trow-due' + (late ? ' danger-text' : due ? '' : ' muted'), title: due ? due.hint : '' },
-      due ? [icon('calendar', 14), late ? 'Просрочено · ' + due.text : due.text] : 'Без срока'),
+      due ? [icon('calendar', 14), due.text] : 'Без срока'),
     unit && h('span', { class: 'muted trow-unit' }, t.unit.name));
 }
 

@@ -45,9 +45,11 @@ export async function renderAnalytics() {
     const chartStatuses = () => cardOf('По статусам', daysSel,
       statusLines({ days: ser.days, aria: 'Приложения по статусам за период',
         series: ser.statuses.map((st, i) => ({ id: st.id, label: st.name, values: ser.counts[st.id], strong: st.kind === 'live', color: st.kind === 'live' ? accent : grays[i % grays.length] })) }));
-    const chartUnits = () => cardOf('Юниты × статусы', null,
+    const curveUnits = S.units.filter(u => !u.archived && (!unit || u.id === unit));
+    const chartUnits = () => cardOf('Юниты × статусы',
+      h('div', { class: 'chart-legend' }, curveUnits.map(u => h('span', null, h('i', { style: { background: u.color } }), u.name))),
       unitCurves({ categories: S.appStatuses.map(st => st.name), aria: 'Приложения юнитов по статусам',
-        units: S.units.filter(u => !u.archived && (!unit || u.id === unit)).map(u => ({ name: u.name, color: u.color, values: S.appStatuses.map(st => list.filter(a => a.unitId === u.id && a.status === st.id).length) })) }));
+        units: curveUnits.map(u => ({ name: u.name, color: u.color, values: S.appStatuses.map(st => list.filter(a => a.unitId === u.id && a.status === st.id).length) })) }));
     const shipped = byId.shipped;
     // как в макете: два графика рядом, ниже — «Команда и KPI» и «Выпущено за 30 дней»
     const idx = defs.findIndex(b => b.id === 'statuses');

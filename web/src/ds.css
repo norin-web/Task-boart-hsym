@@ -936,7 +936,7 @@ button.fb-title:hover { color: var(--text); text-decoration: none; opacity: .8; 
 .ceo-page .section-head .seg { background: transparent; padding: 0; gap: 2px; }
 .ceo-page .section-head .seg button { height: 32px; padding: 0 12px; }
 .ceo-page .section-head .seg button.on { background: var(--surface-3); color: var(--text); box-shadow: none; }
-.kpi-table .kt-row { grid-template-columns: minmax(0, 1fr) 88px 88px 96px 88px 88px; min-height: 52px; }
+.kpi-table .kt-row { min-height: 52px; }
 .kpi-table .kt-row + .kt-row { border-top: 1px solid var(--border); }
 .kpi-table .kt-head { min-height: 40px; }
 .kpi-table .kt-head span { text-transform: none; letter-spacing: 0; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); }
@@ -971,3 +971,18 @@ button.fb-title:hover { color: var(--text); text-decoration: none; opacity: .8; 
 .rv-row .avatar.md { width: 28px; height: 28px; flex: none; }
 .rv-actions .btn { height: 32px; padding: 0 14px; font-size: 12px; font-weight: 600; }
 .rv-actions .btn.success { order: 1; color: #fff; }
+
+/* ---------- Моя доска (19): срок — тихий текст с иконкой, просрочка красным ---------- */
+.my-card .due, .my-card .due.soon, .my-card .due.done { background: transparent; padding: 0; border-radius: 0; color: var(--muted); font-weight: 500; gap: 6px; }
+.my-card .due .i { color: currentColor; }
+.my-card .due.overdue { background: transparent; padding: 0; color: var(--danger); font-weight: 600; }
+.my-nodue { font-size: 12px; line-height: 16px; font-weight: 500; }
+/* Мои задачи (20): группы через 12 */
+.unit-groups { align-content: start; }
+.unit-groups .ugroup { margin: 0; }
+.cs.danger .cs-sub { color: var(--danger); font-weight: 600; }
+/* KPI в узкой колонке (аналитика 17): колонки сжимаются, имя не режется до 3 букв */
+@media (min-width: 641px) { .kpi-table .kt-row { grid-template-columns: minmax(150px, 1fr) repeat(5, minmax(60px, 88px)); min-width: 0; } }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--text-2); }
+.chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.chart-legend i { width: 8px; height: 8px; border-radius: 999px; flex: none; }

@@ -215,7 +215,7 @@ export function dueInfo(due, done) {
   if (!due) return null;
   const n = daysFromToday(due);
   if (done) return { text: fmtDate(due), cls: 'done', hint: '' };
-  if (n < 0) return { text: fmtDate(due), cls: 'overdue', hint: 'Просрочено на ' + -n + ' ' + plural(-n, ['день', 'дня', 'дней']) };
+  if (n < 0) return { text: n === -1 ? 'Вчера' : fmtDate(due), cls: 'overdue', hint: 'Просрочено на ' + -n + ' ' + plural(-n, ['день', 'дня', 'дней']) };
   if (n === 0) return { text: 'Сегодня', cls: 'soon', hint: 'Срок сегодня' };
   if (n === 1) return { text: 'Завтра', cls: 'soon', hint: 'Срок завтра' };
   if (n <= 3) return { text: fmtDate(due), cls: 'soon', hint: 'Через ' + n + ' ' + plural(n, ['день', 'дня', 'дней']) };
