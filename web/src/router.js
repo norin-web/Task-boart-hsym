@@ -11,7 +11,7 @@
  *   #/u/:unit/t/:team[?task=:id] — доска команды в юните и кто чем занят
  */
 import { S, isStaff, isSuper, myAccess, loadBoardView, ceoDefault, seesApps } from './state.js';
-import { $, h, fill, icon, closeMenu, closeNav, showErr, setBack } from './ui.js';
+import { $, h, fill, icon, closeMenu, closeNav, showErr, setBack, skeleton } from './ui.js';
 import { renderSidebar } from './views/sidebar.js';
 import { renderHome } from './views/home.js';
 import { renderMy } from './views/my.js';
@@ -159,7 +159,7 @@ export async function render() {
     rendered = 'loading';
     closePanel();
     loadBoardView(r.unit); // фильтры и дорожки этой доски — как оставили
-    fill($('#main'), h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
+    fill($('#main'), h('div', { class: 'page' }, skeleton()));
     try {
       await loadBoard(r.unit);
     } catch (e) {

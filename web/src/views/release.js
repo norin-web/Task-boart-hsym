@@ -105,10 +105,10 @@ export function releaseBlock(t, onChange) {
       icon('send', 14), hist.length ? 'Отправить снова' : 'Отправить в Apple'),
     phase === 'submitted' && [
       h('button', { class: 'btn danger solid sm', onclick: () => openRejectForm(t, data.app && data.app.name, data.nextRejectNo, () => { load(); if (onChange) onChange(); }) }, 'Реджект'),
-      h('button', { class: 'btn primary sm', onclick: () => step('live') }, 'Вышло в стор')],
+      h('button', { class: 'btn primary sm rl-live-btn', onclick: () => step('live') }, 'Вышло в стор')],
     phase === 'rejected' && [
       h('button', { class: 'btn ghost sm', onclick: () => step('resubmit') }, 'Отправить сейчас'),
-      h('button', { class: 'btn success sm', onclick: () => closeReject(rel) }, icon('check', 14), 'Закрыть реджект')]);
+      h('button', { class: 'btn primary sm', onclick: () => closeReject(rel) }, icon('check', 14), 'Закрыть реджект')]);
 
   // раскрыт ли список релизных полей (по умолчанию — пока есть незаполненные обязательные или релиз в очереди)
   let fieldsOpen = null;
@@ -129,11 +129,15 @@ export function releaseBlock(t, onChange) {
     const st1 = phase ? 'done' : 'now';
     const st2 = phase === 'live' ? 'done' : phase === 'rejected' ? 'bad' : phase === 'submitted' ? 'now' : 'next';
     const st3 = phase === 'live' ? 'done' : 'next';
+    // даты под шагами — когда шаг закончился: при реджекте и в сторе (B09)
+    const dated = phase === 'rejected' || phase === 'live';
     const steps = [
-      { label: 'Подготовка', state: st1, n: 1 },
-      { label: phase === 'rejected' ? 'Реджект №' + (rel.rejectNo || '') : 'Ревью Apple', state: st2, n: 2 },
-      { label: 'В сторе', state: st3, n: 3 },
+      { label: 'Подготовка', state: st1, n: 1, at: dated && (hist[0] || rel).submittedAt },
+      { label: phase === 'rejected' ? 'Реджект №' + (rel.rejectNo || '') : 'Ревью Apple', state: st2, n: 2, at: phase === 'rejected' ? rel.rejectedAt : phase === 'live' && rel.liveAt },
+      { label: 'В сторе', state: st3, n: 3, at: phase === 'live' && rel.liveAt },
     ];
+    const byName = re => { const f = data.fields.find(x => re.test(x.name)); return f ? values[f.id] : ''; };
+    const version = byName(/верси/i), build = byName(/сборк/i);
     // ссылки приложения и этапов команды — без повторов: одинаковый адрес — один раз; одинаковое название — с этапом
     const raw = [
       ...(data.app ? S.appFields.filter(f => f.kind === 'link' && data.app.info[f.id]).map(f => ({ name: f.name, url: data.app.info[f.id], icon: brandIcon(brandOf(f.name, data.app.info[f.id]), 13, 'link') })) : []),
@@ -147,6 +151,7 @@ export function releaseBlock(t, onChange) {
       h('div', { class: 'rl-card' },
         h('div', { class: 'rl-head' },
           h('b', { class: 'rl-app' }, appName),
+          version && h('span', { class: 'muted rl-try' }, 'v' + String(version).replace(/^v/i, '') + (build ? ` (${build})` : '')),
           hist.length > 1 && h('span', { class: 'muted rl-try' }, `попытка ${hist.length}`),
           h('span', { class: 'spacer' }),
           editable && actions(phase, rel, ready, hist)),
@@ -154,7 +159,7 @@ export function releaseBlock(t, onChange) {
           i > 0 && h('li', { class: 'rl-line-seg ' + (steps[i - 1].state === 'done' ? 'passed' : ''), 'aria-hidden': 'true' }),
           h('li', { class: 'rl-pt ' + x.state },
             h('span', { class: 'rl-dot' }, x.state === 'done' ? icon('check', 14) : x.state === 'bad' ? icon('x', 12) : x.n),
-            h('span', { class: 'rl-pt-label' }, x.label))]).flat().filter(Boolean)),
+            h('span', { class: 'rl-pt-text' }, h('span', { class: 'rl-pt-label' }, x.label), x.at && h('small', { class: 'rl-pt-at' }, fmtD(x.at))))]).flat().filter(Boolean)),
       // сейчас: одна строка состояния и одно главное действие
       !phase && (rel.fixedAt || !ready) && h('div', { class: 'rl-now' },
         rel.fixedAt && h('p', { class: 'rl-line ok-text' }, icon('check', 14), `Реджект №${rel.rejectNo || ''} исправили — можно отправлять`),
@@ -169,7 +174,7 @@ export function releaseBlock(t, onChange) {
           rel.shot && h('a', { class: 'rl-shot', href: rel.shot, target: '_blank', rel: 'noopener' }, 'скрин', icon('arrowUpRight', 12))),
         h('p', { class: 'rl-reason' }, rel.reason),
         h('p', { class: 'rl-line muted rl-small' }, `Исправляет ${pm ? pm.name : 'PM юнита'}; закроет задачу — релиз вернётся в очередь.`)),
-      phase === 'live' && h('div', { class: 'rl-now' }, h('p', { class: 'rl-line ok-text' }, icon('check', 14), h('b', null, 'В App Store'),
+      phase === 'live' && h('div', { class: 'rl-now' }, h('p', { class: 'rl-line' }, h('span', { class: 'phase-pill live' }, icon('check', 14), 'В App Store'),
         h('span', { class: 'muted' }, '· ' + fmtD(rel.liveAt) + (hist.length > 1 ? ` · с ${hist.length}-й попытки` : ' · с первой попытки'))))),
       // релизные поля — карточкой, всегда открытой
       !hide.includes('fields') && data.fields.length > 0 && h('div', { class: 'rl-card rl-fields-card' },

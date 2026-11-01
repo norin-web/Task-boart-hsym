@@ -1,5 +1,5 @@
 /**
- * Решение по ревью — две явные кнопки: «Принять» (в «готово») и «Вернуть» (обратно автору; можно оставить комментарий —
+ * Решение по ревью — две явные кнопки: «Аппрув» (в «готово») и «Правки» (обратно автору; можно оставить комментарий —
  * по правкам или общую информацию, он уйдёт в обсуждение задачи). Используют очередь ревью лида, карточка задачи и «Моя доска».
  */
 import { personById } from '../state.js';
@@ -31,7 +31,7 @@ export function changesDialog(t, onDone) {
 export function reviewButtons(t, onDone, { sm = true } = {}) {
   const cls = sm ? ' sm' : '';
   return [
-    h('button', { class: 'btn success' + cls, onclick: e => { e.stopPropagation(); decide(t, true, '', onDone); } }, 'Принять'),
-    h('button', { class: 'btn' + cls, onclick: e => { e.stopPropagation(); changesDialog(t, onDone); } }, 'Вернуть'),
+    h('button', { class: 'btn' + cls, onclick: e => { e.stopPropagation(); changesDialog(t, onDone); } }, icon('back', 13), 'Правки'),
+    h('button', { class: 'btn primary rv-ok' + cls, onclick: e => { e.stopPropagation(); decide(t, true, '', onDone); } }, icon('check', 13), 'Аппрув'),
   ];
 }

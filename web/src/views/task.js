@@ -98,6 +98,9 @@ function buildPanel(t) {
   const relHide = id => t.step === 'release' && releaseHidden().includes(id);
   const main = h('div', { class: 'panel-main' },
     title,
+    // задача закрыта (D03, состояние 6): когда и кто принял
+    taskDone(t) && t.doneAt && h('div', { class: 'done-bar' }, icon('check', 14),
+      ['Готово ' + fmtDate(String(t.doneAt).slice(0, 10)), personById(t.reviewerId) && 'аппрув: ' + personById(t.reviewerId).name].filter(Boolean).join(' · ')),
     // я — ревьюер этой задачи: решение явными кнопками
     t.reviewFrom && t.reviewFrom !== S.meId && t.assigneeId === S.meId && t.status === ((unitById(t.unitId) || u).settings.review || {}).column
       ? h('div', { class: 'review-bar' }, icon('eye', 15),
