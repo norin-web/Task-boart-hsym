@@ -124,7 +124,7 @@ export async function renderApps({ unitId = '' } = {}) {
   const active = () => f.statuses.length + f.prios.length + f.pms.length + f.units.length + f.store.length + (f.age ? 1 : 0);
   const chips = h('div', { class: 'feed-filters apps-chips' });
   const filterBtn = h('button', { class: 'btn', 'aria-haspopup': 'dialog', onclick: e => { e.stopPropagation(); filterMenu(e.currentTarget); } });
-  const groupBtn = h('button', { class: 'btn', 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); groupMenu(e.currentTarget); } });
+  const groupBtn = h('button', { class: 'btn ap-group-btn', 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); groupMenu(e.currentTarget); } });
   const passes = a => (!f.statuses.length || f.statuses.includes(a.status))
     && (!f.prios.length || f.prios.includes(a.priority || ''))
     && (!f.pms.length || f.pms.includes(appPm(a)))
@@ -296,7 +296,7 @@ export async function renderApps({ unitId = '' } = {}) {
       .map(u => ({ u, list: rest.filter(a => (a.unitId || '') === u.id || (!u.id && !unitById(a.unitId))) }))
       .filter(g => g.list.length);
     const workOpen = !!q || !collapsed.has('__work');
-    fill(body, !sel && !q && storeCheckBlock(apps, reload), sel && pickBar(found), chips, groups.length || work.length ? [appHead(sort, onSort),
+    fill(body, !sel && !q && !unitId && storeCheckBlock(apps, reload), sel && pickBar(found), chips, groups.length || work.length ? [appHead(sort, onSort),
       work.length > 0 && h('section', { class: 'ap-group ap-work-group' + (workOpen ? ' open' : '') },
         h('button', { class: 'ap-group-head', 'aria-expanded': String(workOpen), onclick: () => toggle('__work') },
           h('span', { class: 'ap-chev' }, icon('chevron', 14)), icon('progress', 14), h('b', null, 'В работе'),

@@ -116,12 +116,13 @@ export function renderUnitTeam() {
       isStaff() && h('button', { class: 'btn primary', onclick: async () => { if (await addMemberDialog(u.id)) draw(); } }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Участник')),
     ]), h('div', { class: 'view-body' }, body));
     fill(body, rows.length
-      ? h('div', { class: 'card-box team-list' }, rows.map(({ m, p }) => {
+      ? h('div', { class: 'card-box team-list team-table' }, h('div', { class: 'team-head' }, h('span', null, 'Человек'), h('span', null, 'Позиция'), h('span', null, 'Роль'), h('span', null, 'Задачи в юните')), rows.map(({ m, p }) => {
         const t = mine(p.id), late = t.filter(x => x.dueDate && x.dueDate < today).length;
         return h('div', { class: 'team-row' },
           avatar(p, 'sm'),
-          h('span', { class: 'team-who', 'data-pcard': p.id }, h('b', null, p.name), h('small', { class: 'muted' }, ACCESS_LABELS[p.access] || '')),
+          h('b', { class: 'team-who', 'data-pcard': p.id }, p.name),
           h('span', { class: 'muted team-pos' }, (deptById(m.departmentId) || deptById(p.positionId) || {}).name || '—'),
+          h('span', { class: 'muted team-role' }, ACCESS_LABELS[p.access] || ''),
           h('span', { class: 'team-load' }, t.length ? `${t.length} ${plural(t.length, ['задача', 'задачи', 'задач'])}` : h('span', { class: 'muted' }, 'нет задач'),
             late > 0 && h('span', { class: 'warn-text' }, ` · просрочено ${late}`)));
       }))

@@ -79,7 +79,7 @@ function trashTable(settings) {
     if (!days || !u.archivedAt) return h('span', { class: 'muted' }, '—');
     const at = new Date(new Date(u.archivedAt).getTime() + days * 864e5);
     const left = Math.max(0, Math.ceil((at - Date.now()) / 864e5));
-    return h('span', { class: left <= 3 ? 'warn-text' : '' }, at.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }), h('span', { class: 'muted' }, ' · через ' + left + ' ' + plural(left, ['день', 'дня', 'дней'])));
+    return h('span', { class: left <= 3 ? 'warn-text' : '' }, 'через ' + left + ' ' + plural(left, ['день', 'дня', 'дней']));
   };
   const retention = isSuper()
     ? h('select', {
@@ -92,21 +92,20 @@ function trashTable(settings) {
     h('div', { class: 'sub-tabs' }, unitsSwitch(true),
       h('label', { class: 'row muted', style: { gap: '8px', fontSize: '13px' } }, 'Удалять навсегда через', retention)),
     units.length
-      ? h('div', { class: 'table-wrap' }, h('table', { class: 'tasks admin-units' },
-        h('thead', null, h('tr', null, ['Юнит', 'Задач', 'Удалён', 'Удалится навсегда', ''].map(t => h('th', null, t)))),
-        h('tbody', null, units.map(u => {
-          const c = u.counts || emptyCounts();
-          return h('tr', null,
-            h('td', null, h('span', { class: 'row', style: { gap: '8px', flexWrap: 'nowrap' } },
-              h('span', { class: 'uc-icon sm', style: { background: u.color } }, u.key.slice(0, 2)),
-              h('span', null, h('b', null, u.name), ' ', h('span', { class: 'muted' }, u.key)))),
-            h('td', null, c.todo + c.in_progress + c.done),
-            h('td', null, u.archivedAt ? new Date(u.archivedAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : h('span', { class: 'muted' }, '—')),
-            h('td', null, until(u)),
-            h('td', { style: { width: '240px', textAlign: 'right' } },
-              h('button', { class: 'btn sm', onclick: () => archiveUnit(u, false) }, 'Восстановить'), ' ',
-              h('button', { class: 'btn ghost sm danger-text', onclick: () => deleteUnit(u) }, 'Удалить навсегда')));
-        }))))
+      ? h('div', { class: 'card-box trash-list' },
+        h('div', { class: 'trash-row head' }, h('span', null, 'Юнит'), h('span', null, 'Удалён'), h('span', null, 'Удалится навсегда'), h('span')),
+        units.map(u => {
+          const c = u.counts || emptyCounts(), n = c.todo + c.in_progress + c.done;
+          return h('div', { class: 'trash-row' },
+            h('span', { class: 'trash-unit' },
+              h('span', { class: 'uc-icon', style: { background: u.color } }, u.key.slice(0, 2)),
+              h('span', null, h('b', null, u.name), h('small', { class: 'muted' }, n + ' ' + plural(n, ['задача', 'задачи', 'задач'])))),
+            h('span', { class: 'muted' }, u.archivedAt ? new Date(u.archivedAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : '—'),
+            h('span', { class: 'muted' }, until(u)),
+            h('span', { class: 'trash-acts' },
+              h('button', { class: 'btn sm', onclick: () => archiveUnit(u, false) }, 'Восстановить'),
+              isSuper() && h('button', { class: 'btn ghost sm danger-text', onclick: () => deleteUnit(u) }, 'Удалить навсегда')));
+        }))
       : h('div', { class: 'card-box empty-state' }, h('p', { style: { margin: 0 } }, 'Корзина пуста. Удалённые юниты хранятся здесь со всеми задачами и историей.')));
 }
 
@@ -171,22 +170,20 @@ function openUnitPanel(u, onChange) {
     const col = r.column && u.settings.columns.find(x => x.id === r.column);
     const stat = (label, n, cls) => h('div', { class: 'up-stat' + (cls ? ' ' + cls : '') }, h('b', null, n), h('span', null, label));
     fill(body,
-      h('section', null,
-        h('div', { class: 'up-head' }, h('h3', null, 'Задачи')),
-        h('div', { class: 'up-stats' }, stat('не начато', c.todo), stat('в работе', c.in_progress), stat('готово', c.done), stat('просрочено', c.overdue, c.overdue ? 'warn' : ''))),
+      h('div', { class: 'up-stats' }, stat('ожидает', c.todo), stat('в процессе', c.in_progress), stat('готово', c.done), stat('просрочено', c.overdue, c.overdue ? 'warn' : '')),
       h('section', null,
         h('div', { class: 'up-head' }, h('h3', null, 'Команды и люди'),
-          h('button', { class: 'btn ghost sm', onclick: async () => { if (await addMemberDialog(u.id)) { u.members = unitById(u.id).members || u.members; draw(); } } }, icon('plus', 14), 'Добавить')),
+          h('button', { class: 'btn ghost sm', onclick: async () => { if (await addMemberDialog(u.id)) { u.members = unitById(u.id).members || u.members; draw(); } } }, '+ Добавить')),
         groups.length ? groups.map(g => h('div', { class: 'up-team' },
-          h('div', { class: 'up-team-name' }, h('span', { class: 'dot', style: { background: g.t.color } }), g.t.name, h('span', { class: 'muted' }, g.people.length)),
+          h('div', { class: 'up-team-name' }, g.t.name + ' · ' + g.people.length),
           g.people.map(p => h('div', { class: 'up-person' }, avatar(p, 'sm'), h('span', { class: 'up-pname', 'data-pcard': p.id }, p.name),
             h('span', { class: 'muted up-pos' }, (p.positionIds || []).map(id => (deptById(id) || {}).name).filter(Boolean).join(', ')),
             h('button', { class: 'icon-btn sm', title: 'Убрать из юнита', onclick: () => remove(p).catch(showErr) }, icon('x', 14))))))
           : h('p', { class: 'muted' }, 'В юните пока никого — добавьте участников.')),
       h('section', null,
         h('div', { class: 'up-head' }, h('h3', null, 'Ревью'),
-          h('button', { class: 'btn ghost sm', onclick: () => openReviewEditor(u, draw) }, icon('edit', 13), 'Настроить')),
-        col ? h('p', { class: 'up-line' }, 'Колонка «' + col.name + '» · ', rv.length ? rv.map(p => p.name).join(', ') : h('span', { class: 'warn-text' }, 'ревьюеры не выбраны'))
+          h('button', { class: 'btn ghost sm', onclick: () => openReviewEditor(u, draw) }, 'Настроить')),
+        col ? h('p', { class: 'up-line' }, 'Колонка «' + col.name + '»: ', rv.length ? rv.map(p => p.name).join(', ') : h('span', { class: 'warn-text' }, 'ревьюеры не выбраны'))
           : h('p', { class: 'muted up-line' }, 'Выключено')));
   };
   draw();
@@ -195,11 +192,9 @@ function openUnitPanel(u, onChange) {
     h('aside', { class: 'panel center unit-panel', role: 'dialog', 'aria-label': u.name },
       h('div', { class: 'panel-head' },
         h('span', { class: 'uc-icon sm', style: { background: u.color } }, u.key.slice(0, 2)),
-        h('b', null, u.name), h('span', { class: 'muted' }, u.key), h('span', { class: 'spacer' }),
-        !ceoDefault() && link({ unit: u.id, mode: 'settings' }, { class: 'btn ghost sm', onclick: () => fill(root) }, icon('settings', 14), 'Настройки'),
-        link({ unit: u.id, mode: 'board' }, { class: 'btn sm', onclick: () => fill(root) }, icon('board', 14), 'Доска'),
-        link({ unit: u.id, mode: 'overview' }, { class: 'btn primary sm', onclick: () => fill(root) }, 'Открыть юнит', icon('arrowUpRight', 14)),
-        h('button', { class: 'icon-btn', title: 'Закрыть', onclick: close }, icon('x', 18))),
+        h('b', null, u.name), h('span', { class: 'spacer' }),
+        !ceoDefault() && link({ unit: u.id, mode: 'settings' }, { class: 'btn sm', onclick: () => fill(root) }, 'Настройки'),
+        link({ unit: u.id, mode: 'overview' }, { class: 'btn primary sm', onclick: () => fill(root) }, 'Открыть юнит')),
       body));
 }
 

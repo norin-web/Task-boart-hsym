@@ -83,7 +83,7 @@ export function newsBlock() {
     // предложение, как в макете: «<b>Екатерина</b> назначила вас на «…»»; без автора — безлично
     const text = {
       assigned: who ? [who, ' назначил(а) вас на ', q] : ['Вас назначили на ', q],
-      handoff: who ? [who, ' передал(а) вам ', q] : ['Вам передали ', q],
+      handoff: who ? [who, ' поставил(а) вам ', n.title] : ['Вам поставили ', n.title],
       review: who ? [who, ' отдал(а) на ревью ', q] : ['На ревью: ', q],
       returned: who ? [who, ' вернул(а) на доработку ', q] : ['Вернули на доработку ', q],
       approved: who ? [who, ' принял(а) ', q] : ['Принято: ', q],
@@ -118,15 +118,15 @@ export function newsBlock() {
       h('h2', null, 'Новое для вас · ' + S.notes.length),
       h('button', { class: 'link-btn', onclick: readAll }, 'Прочитать все')),
     list);
-  // длинный список: 3 строки, «Ещё N» раскрывает до 15, больше — «Все уведомления» отдельным окном
-  const LIMIT = 3, MAX = 15;
+  // длинный список: 2 строки, «Ещё N» раскрывает до 15, больше — «Все уведомления» отдельным окном
+  const LIMIT = 2, MAX = 15;
   let all = false;
   function drawList() {
     const n = S.notes.length;
     fill(list, (all ? S.notes.slice(0, MAX) : S.notes.slice(0, LIMIT)).map(row),
       n > LIMIT && h('div', { class: 'news-more-row' },
         h('button', { class: 'link-btn news-more', 'aria-expanded': String(all), onclick: () => { all = !all; drawList(); } },
-          icon('chevron', 13), all ? 'Свернуть' : 'Ещё ' + (Math.min(n, MAX) - LIMIT)),
+          all ? 'Свернуть' : 'Показать ещё ' + (Math.min(n, MAX) - LIMIT)),
         all && n > MAX && h('button', { class: 'link-btn news-more', onclick: () => openAllNews(row) }, 'Все уведомления · ' + n)));
     list.classList.toggle('expanded', all);
   }
@@ -351,6 +351,7 @@ function attItem({ n, forms, rows, row, tone = 'warn', icon: ic = 'alert', open 
 }
 
 const loadFilter = { pos: '', unit: '' };
+const HEAVY = 5; // с этого числа открытых задач полоса предупреждает
 
 /** Загрузка: открытые задачи по людям, фильтр по позиции и юниту. Клик по строке — задачи человека здесь же, «+» — дать задачу. */
 export function workloadBlock(ov, { all = false } = {}) {
@@ -387,10 +388,9 @@ export function workloadBlock(ov, { all = false } = {}) {
           avatar(p, 'sm'),
           h('span', { class: 'load-name' }, p.name, h('small', null, personCaption(p))),
           h('div', { class: 'load-bar' },
-            h('div', { class: 'load-fill', style: { width: (c.open / max) * 100 + '%' } },
-              h('div', { class: 'load-progress', style: { width: c.open ? (c.inProgress / c.open) * 100 + '%' : 0 } }))),
-          h('span', { class: 'load-num' }, c.open),
-          h('span', { class: 'load-late' + (c.overdue ? '' : ' zero') }, c.overdue ? c.overdue + ' просроч.' : ''))),
+            h('div', { class: 'load-fill' + (c.open >= HEAVY ? ' heavy' : ''), style: { width: (c.open / max) * 100 + '%' } })),
+          h('span', { class: 'load-num' + (c.open ? '' : ' muted') }, c.open ? c.open + ' ' + plural(c.open, ['задача', 'задачи', 'задач']) : 'нет задач')),
+        h('button', { class: 'btn sm load-give', onclick: () => give(p) }, 'Поставить задачу')),
       tasks);
     return wrap;
   };
@@ -414,18 +414,13 @@ export function workloadBlock(ov, { all = false } = {}) {
       .sort((a, b) => b.c.open - a.c.open || b.c.overdue - a.c.overdue);
     const max = Math.max(1, ...rows.map(r => r.c.open));
     const shown = expanded ? rows : rows.slice(0, 6);
-    const pos = activeDepts().map(d => ({ d, c: ov.byPosition[d.id] || zero })).filter(x => x.c.open);
     fill(head, h('h2', null, 'Загрузка команды'),
       h('div', { class: 'row', style: { gap: '4px' } },
         filterBtn('pos', 'Позиция', 'Все позиции', activeDepts().map(d => [d.id, d.name])),
         filterBtn('unit', 'Юнит', 'Все юниты', units.map(u => [u.id, u.name])),
         rows.length > 6 && h('button', { class: 'btn ghost sm', onclick: () => { expanded = !expanded; draw(); } }, expanded ? 'Свернуть' : 'Все ' + rows.length)));
     fill(body,
-      shown.length ? shown.map(r => personRow(r, max)) : h('p', { class: 'muted', style: { margin: 0 } }, flt.pos || flt.unit ? 'Никого по этим фильтрам' : 'Участников пока нет'),
-      !flt.unit && !flt.pos && pos.length > 0 && h('div', { class: 'load-pos' }, pos.map(({ d, c }) => h('button', {
-        class: 'chip tag', title: 'Показать только ' + d.name, onclick: () => { flt.pos = d.id; draw(); },
-        style: { '--dc': d.color },
-      }, d.name + ': ' + c.open + (c.overdue ? ' · ' + c.overdue + ' просроч.' : '')))));
+      shown.length ? shown.map(r => personRow(r, max)) : h('p', { class: 'muted', style: { margin: 0 } }, flt.pos || flt.unit ? 'Никого по этим фильтрам' : 'Участников пока нет'));
   };
   draw();
   return h('section', null, head, body);

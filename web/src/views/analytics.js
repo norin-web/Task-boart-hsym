@@ -41,8 +41,8 @@ export async function renderAnalytics(tile) {
     const grays = ['#787c87', '#9aa0ad', '#b6bbc6', '#5d6270'];
     const cardOf = (title, control, body) => h('section', null,
       h('div', { class: 'section-head' }, h('h2', null, title), control), h('div', { class: 'card-box' }, body));
-    const daysSel = h('select', { class: 'mini-select', 'aria-label': 'Период', onchange: e => { days = Number(e.target.value); LS.set('anDays', days); load(); } },
-      [[7, '7 дней'], [30, '30 дней'], [90, '90 дней']].map(([v, t]) => h('option', { value: v, selected: v === days }, t)));
+    const daysSel = h('div', { class: 'an-period', role: 'group', 'aria-label': 'Период' },
+      [[7, '7 дней'], [30, '30 дней'], [90, '90 дней']].map(([v, t]) => h('button', { class: v === days ? 'on' : '', onclick: () => { days = v; LS.set('anDays', days); load(); } }, t)));
     const byId = Object.fromEntries(defs.map(b => [b.id, b]));
     const chartStatuses = () => cardOf('По статусам', daysSel,
       statusLines({ days: ser.days, aria: 'Приложения по статусам за период',

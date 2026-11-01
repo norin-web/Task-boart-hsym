@@ -273,10 +273,12 @@ export function tileTable(key, d, apps, reload) {
  * Статистика для «Аналитики»: цифры, по статусам, юниты × статусы, загрузка PM, давно не трогали, выпущено за 30 дней.
  * d — getCeoDashboard, apps — listApps (уже отфильтрованные по юниту, если выбран).
  */
+const daysAgo = at => { const n = Math.max(1, Math.floor((Date.now() - new Date(at)) / 864e5)); return n + ' ' + plural(n, ['день', 'дня', 'дней']) + ' назад'; };
+
 export function statBlocks(d, apps, reload, tile = '') {
   const { open, overdue, live30, done30, stale } = figures(d, apps);
   const stat = (n, label, sub, tone, spark, key) => link({ view: 'analytics', tile: tile === key ? '' : key }, { class: 'cs cs-link' + (tone ? ' ' + tone : '') + (tile === key ? ' on' : '') }, h('div', { class: 'cs-n' }, n), h('div', { class: 'cs-label' }, label), sub && h('div', { class: 'cs-sub muted' }, sub), spark);
-  const appRow = (a, right) => h('button', { class: 'rc-row', onclick: () => openAppById(a.id, reload) },
+  const appRow = (a, right, cls = '') => h('button', { class: ('rc-row ' + cls).trim(), onclick: () => openAppById(a.id, reload) },
     appIcon(a, 'xs'), h('span', { class: 'rc-main' }, h('b', null, a.name)), right);
   const section = (title, body, n) => h('section', null, h('div', { class: 'section-head' }, h('h2', null, title, n != null && h('span', { class: 'muted sec-n' }, n))), body);
   const list = (items, empty) => (items.length ? h('div', { class: 'card-box rc-list' }, items) : emptyBlock(empty, { ic: 'clock' }));
@@ -299,7 +301,7 @@ export function statBlocks(d, apps, reload, tile = '') {
       return h('div', { class: 'pm-load-row' }, avatar(p, 'sm'), h('b', { 'data-pcard': p.id }, p.name),
         h('span', { class: 'muted' }, mine.length + ' в работе', late > 0 && h('span', { class: 'warn-text' }, ' · ' + late + ' просроч.')));
     }), 'PM нет')) },
-    { id: 'stale', title: 'Без движения', col: 'right', render: () => section('Давно не трогали', list(stale.map(a => appRow(a, h('span', { class: 'muted rc-at' }, relTime(a.lastActivity)))), 'Таких нет'), stale.length || null) },
+    { id: 'stale', title: 'Без движения', col: 'right', render: () => section('Давно не трогали', list(stale.map(a => appRow(a, h('span', { class: 'muted rc-at' }, daysAgo(a.lastActivity)), 'stale-row')), 'Таких нет')) },
     { id: 'shipped', title: 'Выпущено за 30 дней', col: 'right', render: () => section('Выпущено за 30 дней', list([
       ...live30.map(a => appRow(a, h('span', { class: 'muted rc-at' }, 'App Store · ' + relTime(a.statusAt)))),
       ...done30.map(({ a, r }) => appRow(a, h('span', { class: 'muted rc-at' }, r.title.slice(0, 40) + ' · ' + relTime(r.doneAt))))], 'Пока ничего')) },

@@ -57,11 +57,11 @@ function whoDoesWhat(team) {
     const open = S.board.tasks.filter(t => !t.archived && !taskDone(t) && t.assigneeId === p.id);
     const now = open.find(t => colById(t.status).kind === 'progress');
     const late = open.filter(t => isOverdue(t, today)).length;
-    return h('button', { class: 'who-card', title: 'Показать задачи: ' + p.name, onclick: () => { S.filters.assignees = S.filters.assignees.includes(p.id) ? [] : [p.id]; renderTasks(); drawFilterRest(); markWho(); }, dataset: { person: p.id } },
+    return h('button', { class: 'who-card', title: `Показать задачи: ${p.name}. Открыто ${open.length}, просрочено ${late}`, onclick: () => { S.filters.assignees = S.filters.assignees.includes(p.id) ? [] : [p.id]; renderTasks(); drawFilterRest(); markWho(); }, dataset: { person: p.id } },
       avatar(p, 'sm'),
       h('span', { class: 'who-main' }, h('b', null, p.name),
         h('small', { class: now ? '' : 'muted' }, now ? now.title : open.length ? 'ничего в работе' : 'свободен')),
-      h('span', { class: 'who-n' }, open.length || '', late > 0 && h('span', { class: 'danger-text' }, ' · ' + late)));
+      null);
   }));
 }
 function markWho() {
@@ -317,7 +317,7 @@ function renderColumns(board) {
     const quickHere = S.quick.status === col.id && S.quick.dept == null;
     return h('section', { class: 'col', style: { '--cc': colColor(col) } },
       colHead(col, items.length),
-      makeList(items, col.id, null, !quickHere && (filtered ? 'Нет задач по фильтру' : 'Пусто')),
+      makeList(items, col.id, null, !quickHere && (S.route.team ? 'Здесь пусто' : filtered ? 'Нет задач по фильтру' : 'Пусто')),
       oldDoneToggle(col),
       quickAddEl(col.id, null));
   }));
@@ -650,11 +650,11 @@ function renderList(container) {
     { key: 'title', label: B.title.label, cls: 't-title', val: t => t.title.toLowerCase(), cell: t => t.title },
     !B.department.hidden && {
       key: 'dept', label: B.department.label, val: t => (deptById(t.departmentId) || { order: 1e9 }).order,
-      cell: t => deptChip(t.departmentId) || h('span', { class: 'muted' }, '—'),
+      cell: t => h('span', { class: 'muted' }, (deptById(t.departmentId) || {}).name || '—'),
     },
     !B.assignee.hidden && {
       key: 'assignee', label: B.assignee.label, val: t => (personById(t.assigneeId) || { name: '￿' }).name.toLowerCase(),
-      cell: t => { const p = personById(t.assigneeId); return p ? h('span', { class: 'row', style: { flexWrap: 'nowrap', gap: '6px' } }, avatar(p, 'sm'), p.name) : h('span', { class: 'muted' }, '—'); },
+      cell: t => { const p = personById(t.assigneeId); return p ? p.name : h('span', { class: 'muted' }, '—'); },
     },
     !B.dueDate.hidden && {
       key: 'due', label: B.dueDate.label, val: t => t.dueDate || '9999',
@@ -664,7 +664,6 @@ function renderList(container) {
       key: f.id, label: f.name, val: t => fmtValue(f, t.fields[f.id]).toLowerCase(),
       cell: t => { const c = fieldChip(f, t); return c ? h('span', { class: 'chips' }, c) : h('span', { class: 'muted' }, '—'); },
     })),
-    { key: 'updated', label: 'Обновлена', val: t => t.updatedAt, cell: t => h('span', { class: 'muted' }, relTime(t.updatedAt)) },
   ].filter(Boolean);
 
   // Задачи сгруппированы по колонкам доски (в их порядке); сортировка по заголовку — внутри группы
@@ -680,17 +679,17 @@ function renderList(container) {
     class: (t.archived ? 'archived' : '') + (taskDone(t) ? ' done' : ''),
     onclick: () => { if (!t._temp) navigate({ unit: S.board.unit.id, mode: 'list', task: t.id }); },
     oncontextmenu: e => { e.preventDefault(); cardMenu({ x: e.clientX, y: e.clientY }, t); },
-  }, cols.map(c => h('td', { class: c.cls || '' }, c.cell(t))));
+  }, cols.map(c => h('td', { class: (c.cls || '') + ' c-' + c.key }, c.cell(t))));
 
   fill(container, h('div', { class: 'page', style: { maxWidth: 'none' } },
     tasks.length
-      ? h('div', { class: 'table-wrap' }, h('table', { class: 'tasks' },
-        h('thead', null, h('tr', null, cols.map(c => h('th', {
+      ? h('div', { class: 'table-wrap' }, h('table', { class: 'tasks unit-list' },
+        h('thead', null, h('tr', null, cols.map(c => h('th', { class: 'c-' + c.key,
           onclick: () => { S.listSort = { key: c.key, dir: sort.key === c.key ? -sort.dir : 1 }; renderTasks(); },
         }, c.label, sort.key === c.key ? (sort.dir > 0 ? ' ↑' : ' ↓') : '')))),
         groups.map(({ c, list, more }) => h('tbody', { class: 'grp' },
           h('tr', { class: 'grp-head' }, h('td', { colspan: cols.length },
-            h('span', { class: 'grp-name' }, statusDot(colColor(c), 8), c.name), h('span', { class: 'grp-count' }, list.length))),
+            h('span', { class: 'grp-name' }, statusDot(colColor(c), 8), c.name + ' · ' + list.length))),
           list.map(taskRow),
           more && h('tr', { class: 'grp-more' }, h('td', { colspan: cols.length }, more))))))
       : h('div', { class: 'card-box empty-state' },

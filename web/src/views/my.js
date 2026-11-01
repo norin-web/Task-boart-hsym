@@ -1,4 +1,4 @@
-import { S, todayStr, dueInfo, KIND_COLORS, deptById, ACCESS_LABELS, LS, plural, isStaff, personById } from '../state.js';
+import { S, todayStr, dueInfo, KIND_COLORS, KIND_LABELS, deptById, ACCESS_LABELS, LS, plural, isStaff, personById } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, statusIcon, emptyBlock, skeleton } from '../ui.js';
 import { call } from '../api.js';
 import { currentView, taskLink, link } from '../router.js';
@@ -90,7 +90,7 @@ export function unitGroups(tasks) {
   const draw = () => fill(box, groups.length ? groups.map(g => {
     const items = [...g.open.sort(byDue), ...(showDone ? g.done : [])];
     if (!items.length) return null;
-    return h('section', { class: 'ugroup' },
+    return h('section', { class: 'ugroup' + (whose === 'set' ? ' set' : '') },
       h('div', { class: 'ugroup-head' },
         h('span', { class: 'dot', style: { background: g.unit.color } }),
         link({ unit: g.unit.id, mode: 'board' }, { class: 'ug-name' }, g.unit.name),
@@ -134,12 +134,12 @@ function row(t, { unit = true, done = false } = {}) {
   const d = deptById(t.departmentId);
   const late = due && due.cls.includes('overdue');
   return taskLink(t.unit.id, t.id, { class: 'trow' + (done ? ' done' : ''), title: [t.key, d && d.name].filter(Boolean).join(' · ') },
-    statusIcon(t.statusKind === 'progress' && /ревью/i.test(t.statusName) ? 'review' : t.statusKind, 16),
+    whose !== 'set' && statusIcon(t.statusKind === 'progress' && /ревью/i.test(t.statusName) ? 'review' : t.statusKind, 16),
     h('span', { class: 'trow-key' }, t.key),
     h('span', { class: 't-title' }, t.title),
-    h('span', { class: 'trow-status' }, h('span', { class: 'trow-chip' }, t.statusName)),
+    whose === 'set' ? h('span', { class: 'trow-status ' + t.statusKind }, KIND_LABELS[t.statusKind]) : h('span', { class: 'trow-status' }, h('span', { class: 'trow-chip' }, t.statusName)),
     h('span', { class: 'trow-due' + (late ? ' danger-text' : due ? '' : ' muted'), title: due ? due.hint : '' },
-      due ? [icon('calendar', 14), due.text] : 'Без срока'),
+      due ? [whose !== 'set' && icon('calendar', 14), due.text] : whose === 'set' ? '—' : 'Без срока'),
     whose === 'set' && avatar(personById(t.assigneeId), 'sm'),
     unit && h('span', { class: 'muted trow-unit' }, t.unit.name));
 }

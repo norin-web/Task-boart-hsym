@@ -2,6 +2,19 @@
 const click = sel => p => p.click(sel);
 const prefs = tab => '#/settings?tab=' + tab;
 export const SCREENS = [
+  { code: 'P20', name: 'Команда юнита, PM', as: 'pm', route: ids => `#/u/${ids.mvp}/team` },
+  { code: 'P21', name: 'Дашборд и аналитика: блоки, PM', as: 'pm', route: '#/analytics', height: 1700 },
+  { code: 'P22', name: 'Мои задачи, «Поставил я», PM', as: 'pm', route: '#/my', act: async (p, ids) => {
+    await p.evaluate(async unitId => { const { call } = await import('/src/api.js'); const { S } = await import('/src/state.js'); if (!(await call('queryTasks', { authorId: S.meId, limit: 5 })).length) { const st = S.units.find(u => u.id === unitId).settings.columns[0].id; const stage = S.people.find(x => x.name === 'Мария Иванова'); await call('createTask', { unitId, title: 'Проверить графику', status: st, assigneeId: stage.id, departmentId: stage.positionId, dueDate: '2026-11-14' }); await call('createTask', { unitId, title: 'Обновить скриншоты', status: st, departmentId: stage.positionId, dueDate: '2026-10-29' }); } }, ids.mvp);
+    await p.reload(); await p.waitForSelector('.my-whose'); await p.addStyleTag({ content: '.dev-item, .view-as, .lens-bar { display: none !important; }' }); await p.click('.my-whose button:has-text("Поставил я")'); await p.waitForTimeout(700); } },
+  { code: 'P28', name: 'Доска команды, PM', as: 'pm', route: ids => `#/u/${ids.mvp}/board`, act: async (p, ids) => { await p.evaluate(async unit => { const { call } = await import('/src/api.js'); const b = await call('bootstrap', { today: new Date().toISOString().slice(0, 10) }); const t = (b.teams || []).find(x => /UX/.test(x.name)); location.hash = `#/u/${unit}/t/${t.id}`; }, ids.mvp); await p.waitForTimeout(1000); } },
+  { code: 'P29', name: 'Блоки: Новое, Загрузка, Давно не трогали', as: 'pm', route: '#/analytics', height: 1300, act: async p => { await p.evaluate(async () => {
+    const { newsBlock, workloadBlock, loadNotes } = await import('/src/views/home.js'); const { call } = await import('/src/api.js'); const { statBlocks } = await import('/src/views/ceo.js'); const { todayStr } = await import('/src/state.js');
+    await loadNotes(); const ov = await call('getOverview', { today: new Date().toISOString().slice(0, 10) }); const d = await call('getCeoDashboard', { today: new Date().toISOString().slice(0, 10) }).catch(() => null); const apps = await call('listApps', {});
+    const m = document.querySelector('.view-body') || document.querySelector('#main'); m.replaceChildren(); m.append(newsBlock()); if (d) { apps.forEach(a => { a.lastActivity = '2026-10-21T10:00:00Z'; }); const b = statBlocks({ ...d, stale: apps.slice(0, 2), staleDays: 7 }, apps.slice(0, 2), () => {}).find(x => x.id === 'stale'); m.append(b.render()); } m.append(workloadBlock(ov, { all: true })); }); await p.waitForTimeout(400); } },
+  { code: 'P24', name: 'Задачи юнита, PM', as: 'pm', route: ids => `#/u/${ids.mvp}/list` },
+  { code: 'P25', name: 'Приложения юнита, PM', as: 'pm', route: ids => `#/u/${ids.mvp}/apps` },
+  { code: 'P26', name: 'Карточка юнита, PM', as: 'pm', route: '#/settings?tab=units', act: async p => { await p.click('.un-list .un-row .btn:has-text("Открыть")'); await p.waitForTimeout(500); } },
   { code: 'A01', name: 'Дашборд CEO', route: '#/', act: async p => { await p.click('.ceo-mode button:has-text("Полный")'); await p.waitForTimeout(800); } },
   { code: 'A02', name: 'Дашборд, режим Обзор', route: '#/', act: async p => { await p.click('.ceo-mode button:has-text("Обзор")'); await p.waitForTimeout(800); await p.click('.ceo-mode button:has-text("Обзор")'); } },
   { code: 'A03', name: 'Настройка дашборда', route: '#/', act: async p => { await p.click('.ceo-mode button:has-text("Полный")'); await p.waitForTimeout(800); await p.click('.topbar .btn:has-text("Настроить")'); } },
@@ -54,6 +67,7 @@ export const SCREENS = [
   { code: 'P17', name: 'Автоматизации, PM', as: 'pm', route: prefs('automations') },
   { code: 'P18', name: 'Шаблоны чеклистов (D06), PM', as: 'pm', route: prefs('boards'), act: async p => { await p.click('text=Шаблоны чеклистов'); await p.waitForTimeout(400); await p.click('.ct-add'); } },
   { code: 'P05', name: 'Дашборд PM, пусто', as: 'pm2', route: '#/' },
+  { code: 'P27', name: 'Корзина юнитов', route: '#/settings?tab=trash', act: async p => { await p.evaluate(async () => { const { call } = await import('/src/api.js'); const u = await call('createUnit', { name: 'Atlas', key: 'AT', color: '#787C87' }); await call('updateUnit', { id: u.id, archived: true }); }); await p.reload(); await p.waitForSelector('.trash-list'); await p.addStyleTag({ content: '.dev-item, .view-as, .lens-bar { display: none !important; }' }); } },
 ];
 
 /** Намеренные отличия: чтобы процент не вводил в заблуждение. */
