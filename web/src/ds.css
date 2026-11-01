@@ -1152,3 +1152,18 @@ input.switch:disabled { opacity: .5; cursor: default; }
 .prefs-row { align-items: flex-start; }
 .prefs-row .prefs-go { align-self: center; }
 .prefs-body:not(.narrow) .prefs-row { padding: 16px 24px; }
+
+/* ---------- Новая задача (34): поля 40, срок плашкой, исполнитель с аватаром ---------- */
+.modal .grid2.create-props { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.create-props .inp, .create-props select { height: 40px; border: 0; border-radius: 12px; background-color: var(--surface-2); font-size: 13px; font-weight: 500; }
+.date-pill { position: relative; display: flex; align-items: center; gap: 8px; padding: 0 12px; cursor: pointer; color: var(--text); }
+.date-pill .i { color: var(--muted); flex: none; }
+.date-pill.empty span { color: var(--muted); }
+.sel-av { position: relative; display: block; }
+.sel-av > .avatar { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; z-index: 1; }
+.sel-av > .avatar + select { padding-left: 38px; }
+.sel-av > select { width: 100%; }
+@media (max-width: 640px) { .modal .grid2.create-props { grid-template-columns: minmax(0, 1fr); } }
+.create-props .prio-select { white-space: nowrap; overflow: hidden; }
+.create-props .prio-select > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.create-props .prio-select { padding: 0 10px; gap: 4px; }

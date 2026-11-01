@@ -1,5 +1,5 @@
 import {
-  S, LS, todayStr, me, taskById, personById, activeFields, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDateTime, relTime, addDays,
+  S, LS, todayStr, me, taskById, personById, activeFields, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDate, fmtDateTime, relTime, addDays,
   unitById, safeUrl, visibleLinkFields, REQUEST_TYPES, plural, appById, isSuper, ceoDefault, KIND_COLORS, whoName, teamById, activeTeams, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, fmtValue,
 } from '../state.js';
 import { $, h, append, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, statusIcon, fill, prioSelect } from '../ui.js';
@@ -919,7 +919,7 @@ export function openCreateTask(opts = {}) {
     h('span', { class: 'quick-note' }, 'Шаблон:'),
     taskTpls.map(tpl => h('button', { class: 'quick-chip', dataset: { id: tpl.id }, onclick: () => applyTemplate(tpl) }, tpl.name)),
     tplNote);
-  const props = h('div', { class: 'grid2' });
+  const props = h('div', { class: 'grid2 create-props' });
 
   const statusBox = h('div');
   const drawProps = () => {
@@ -931,16 +931,20 @@ export function openCreateTask(opts = {}) {
         class: 'inp', value: unit.id,
         onchange: e => { unit = unitById(e.target.value); drawProps(); },
       }, units.map(u => h('option', { value: u.id }, u.name + ' · ' + u.key)))),
-      !B.assignee.hidden && field(B.assignee.label, assigneeSelect(draft.assigneeId, v => {
+      !B.assignee.hidden && field(B.assignee.label, h('span', { class: 'sel-av' }, personById(draft.assigneeId) && avatar(personById(draft.assigneeId), 'sm'), assigneeSelect(draft.assigneeId, v => {
         draft.assigneeId = v;
         const p = personById(v);
         // команда — его первая, если не выбрана; позиция — основная, если выбранная не его
         if (p && !draft.teamId && (p.teamIds || []).length) draft.teamId = p.teamIds[0];
         if (p && !(p.positionIds || [p.positionId]).includes(draft.departmentId)) draft.departmentId = p.positionId;
         drawProps();
-      }, inBoard ? {} : { ids: unit.members || [], unitId: unit.id })),
+      }, inBoard ? {} : { ids: unit.members || [], unitId: unit.id }))),
       // позицию не спрашиваем — её подставит исполнитель (или шаблон)
-      !B.dueDate.hidden && field(B.dueDate.label, h('input', { class: 'inp', type: 'date', value: draft.dueDate, onchange: e => { draft.dueDate = e.target.value; } })),
+      // макет 34: срок — плашкой «📅 2 нояб.», календарь по клику; исполнитель — с аватаром
+      !B.dueDate.hidden && field(B.dueDate.label, h('label', { class: 'inp date-pill' + (draft.dueDate ? '' : ' empty') }, icon('calendar', 14),
+        h('span', null, draft.dueDate ? fmtDate(draft.dueDate) : 'Без срока'),
+        h('input', { class: 'due-inp', type: 'date', value: draft.dueDate, 'aria-label': B.dueDate.label,
+          onchange: e => { draft.dueDate = e.target.value; drawProps(); }, onclick: e => { try { e.target.showPicker(); } catch { /* старый браузер */ } } }))),
       inBoard && [...activeFields()].sort((a, b) => (b.role === 'priority') - (a.role === 'priority')).map(f => field(f.name + (f.required || f.requiredOnCreate ? ' *' : ''),
         fieldInput(f, draft.fields[f.id], v => { if (isEmpty(v)) delete draft.fields[f.id]; else draft.fields[f.id] = v; }))),
       !inBoard && h('div', { class: 'hint', style: { gridColumn: '1 / -1' } }, 'Дополнительные поля юнита можно заполнить в карточке после создания.'));
