@@ -12,6 +12,7 @@ import { mode, supabase } from '../data.js';
 import { THEME_LIST, setTheme, resetLocal } from './sidebar.js';
 import { openMyProfile, openActAs, addPersonDialog } from './people.js';
 import { renderStudio, STUDIO_TABS } from './admin.js';
+import { openCreateUnit } from './units.js';
 
 const PERSONAL = [
   ['profile', 'Профиль', 'user'],
@@ -46,7 +47,9 @@ export function renderPrefs(tab) {
   const item = ([id, label, ic]) => link({ view: 'settings', tab: id }, { class: 'prefs-tab' + (id === navTab ? ' on' : '') }, icon(ic, 15), label);
   fill($('#main'),
     topbar([h('h1', { class: 'screen-title' }, 'Настройки')],
-      [tab === 'people' && h('button', { class: 'btn primary people-add', onclick: () => addPersonDialog(() => rerender()) }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Человек'))]),
+      [isSuper() && (tab === 'units' || tab === 'trash') && h('button', { class: 'btn primary', onclick: openCreateUnit }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Юнит')),
+        tab === 'automations' && h('button', { class: 'btn primary tpl-add' }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Шаблон')),
+        tab === 'people' && h('button', { class: 'btn primary people-add', onclick: () => addPersonDialog(() => rerender()) }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Человек'))]),
     h('div', { class: 'view-body prefs-page' },
       h('nav', { class: 'prefs-nav', 'aria-label': 'Разделы настроек' },
         h('div', { class: 'prefs-sec' }, 'Личное'), PERSONAL.map(item),

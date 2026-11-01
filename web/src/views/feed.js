@@ -69,7 +69,26 @@ export function feedItem(a) {
  * Лента с фильтрами в одной кнопке-меню (тип, человек, юнит, позиция) и чипами активных фильтров.
  * «Скрыть текущие» прячет прошлые события только у вас. Возвращает элемент.
  */
-export function activityFeed({ limit = 15, title = 'Последние события' } = {}) {
+/** Строка журнала (макет 23): аватар, «Имя действие — задача», бейдж нового статуса, время справа. */
+function journalRow(a) {
+  const status = a.action === 'update' && a.field === 'status';
+  return h('div', { class: 'jr-row' },
+    avatar(personById(a.actorId), 'md'),
+    h('div', { class: 'jr-text' }, h('b', null, whoName(a.actorId)), ' ',
+      status ? 'сменил(а) статус' : activityText(a),
+      a.task && a.unit && [' · ', taskLink(a.unit.id, a.task.id, { class: 'jr-task' }, a.task.title)]),
+    status && h('span', { class: 'jr-badge' }, a.toText),
+    h('span', { class: 'jr-time', title: fmtDateTime(a.at) }, new Date(a.at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })));
+}
+
+/** Подпись дня: «Сегодня», «Вчера», иначе «14 окт.». */
+const dayLabel = iso => {
+  const d = new Date(iso);
+  const diff = Math.round((dayStart() - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 864e5);
+  return diff === 0 ? 'Сегодня' : diff === 1 ? 'Вчера' : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+};
+
+export function activityFeed({ limit = 15, title = 'Последние события', journal = false } = {}) {
   const f = { kind: '', actorId: '', unitId: '', departmentId: '' };
   let period = null; // { label, from?: Date, to?: Date }
   let items = [];
@@ -81,8 +100,8 @@ export function activityFeed({ limit = 15, title = 'Последние собы�
   const footer = h('div', { class: 'feed-footer' });
   const actions = h('div', { class: 'row', style: { gap: '6px' } });
   const chips = h('div', { class: 'feed-filters' });
-  const box = h('section', { class: 'feed-wrap' },
-    h('div', { class: 'section-head' }, h('h2', null, title), actions),
+  const box = h('section', { class: 'feed-wrap' + (journal ? ' journal card-box' : '') },
+    h('div', { class: 'section-head' }, h('h2', null, title), journal && h('span', { class: 'muted jr-limit' }, 'Последние ' + limit), actions),
     chips, list, footer);
 
   const GROUPS = [
@@ -160,7 +179,12 @@ export function activityFeed({ limit = 15, title = 'Последние собы�
   };
 
   const draw = () => {
-    fill(list, items.length ? items.map(feedItem)
+    const rows = () => {
+      if (!journal) return items.map(feedItem);
+      let day = '';
+      return items.flatMap(a => { const l = dayLabel(a.at); const head = l !== day && h('div', { class: 'jr-day' }, l); day = l; return [head, journalRow(a)].filter(Boolean); });
+    };
+    fill(list, items.length ? rows()
       : h('div', { class: 'empty-state', style: { padding: '28px 16px' } },
         period || Object.values(f).some(Boolean) ? 'Нет событий по этим фильтрам' : clearedAt() ? 'Новых событий нет' : 'Здесь появятся изменения в задачах'));
     fill(footer, more && h('button', { class: 'btn ghost sm', onclick: () => load(true) }, 'Показать ещё'));

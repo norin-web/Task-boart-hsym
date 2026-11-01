@@ -56,7 +56,7 @@ export async function renderStudio(page, tab, key) {
     case 'automations': fill(page, automationsTab()); break;
     case 'units': fill(page, unitsTable(ov)); break;
     case 'trash': fill(page, trashTable(ov)); break;
-    case 'journal': fill(page, activityFeed({ limit: 40, title: 'Журнал событий' })); break;
+    case 'journal': fill(page, activityFeed({ limit: 40, title: 'Журнал событий', journal: true })); break;
     default: fill(page, peopleTab());
   }
 }
@@ -65,8 +65,8 @@ export async function renderStudio(page, tab, key) {
 function unitsSwitch(trash) {
   const n = S.units.filter(u => u.archived).length;
   return h('div', { class: 'seg' },
-    link({ view: 'settings', tab: 'units' }, { class: trash ? '' : 'on' }, 'Активные'),
-    link({ view: 'settings', tab: 'trash' }, { class: trash ? 'on' : '' }, icon('trash', 13), 'Корзина' + (n ? ' · ' + n : '')));
+    link({ view: 'settings', tab: 'units' }, { class: trash ? '' : 'on' }, 'Активные · ' + S.units.filter(u => !u.archived).length),
+    link({ view: 'settings', tab: 'trash' }, { class: trash ? 'on' : '' }, icon('trash', 14), 'Корзина · ' + n));
 }
 
 const RETENTION = [[7, '7 дней'], [15, '15 дней'], [30, '30 дней'], [60, '2 месяца'], [90, '3 месяца'], [0, 'Никогда']];
@@ -89,7 +89,7 @@ function trashTable(settings) {
     }, RETENTION.map(([v, t]) => h('option', { value: String(v) }, t)))
     : h('b', null, (RETENTION.find(r => r[0] === days) || [0, days + ' дн.'])[1]);
   return h('div', null,
-    h('div', { class: 'section-head' }, unitsSwitch(true),
+    h('div', { class: 'sub-tabs' }, unitsSwitch(true),
       h('label', { class: 'row muted', style: { gap: '8px', fontSize: '13px' } }, 'Удалять навсегда через', retention)),
     units.length
       ? h('div', { class: 'table-wrap' }, h('table', { class: 'tasks admin-units' },
@@ -129,16 +129,15 @@ function unitsTable(ov) {
         rv.length ? h('span', { class: 'un-rv' }, rv.map(p => p.name.split(' ').slice(0, 2).join(' ')).slice(0, 2).join(', '))
           : h('span', { class: 'un-rv warn-text' }, icon('alert', 14), 'Нет ревьюеров'),
         h('span', { class: 'un-actions' },
-          link({ unit: u.id, mode: 'settings' }, { class: 'link-btn muted' }, 'Настройки'),
-          h('button', { class: 'btn', onclick: () => openUnitPanel(u, draw) }, 'Открыть')));
+          link({ unit: u.id, mode: 'settings' }, { class: 'un-set' }, 'Настройки'),
+          h('button', { class: 'btn soft', onclick: () => openUnitPanel(u, draw) }, 'Открыть')));
     })] : h('div', { class: 'card-box empty-state' },
     h('h2', null, 'Юнитов пока нет'),
     h('p', { style: { margin: 0 } }, 'Юниты — направления студии (Gold, RF, MVP…): в них приложения, PM, RM, лиды и сотрудники.'),
     isSuper() && h('button', { class: 'btn primary', onclick: openCreateUnit }, icon('plus', 15), 'Создать юнит')));
   draw();
   return h('div', null,
-    h('div', { class: 'section-head' }, unitsSwitch(false), h('div', { class: 'row', style: { gap: '6px' } },
-      isSuper() && h('button', { class: 'btn primary sm', onclick: openCreateUnit }, icon('plus', 14), 'Юнит'))),
+    h('div', { class: 'sub-tabs' }, unitsSwitch(false)),
     list);
 }
 
@@ -394,19 +393,15 @@ function templatesManager() {
   const row = t => {
     const d = deptById(t.departmentId);
     const tm = S.teams.find(x => x.id === t.teamId);
-    return h('div', { class: 'lf-row', dataset: { id: t.id } },
-      h('span', { class: 'drag', title: 'Перетащите, чтобы изменить порядок' }, icon('grip', 16)),
+    // как в макете: название, ниже тихо «команда · срок · чеклист»; справа позиция
+    const meta = [tm && tm.name, t.dueDays >= 0 && 'срок ' + String((DUE_DAYS.find(x => x[0] === t.dueDays) || [0, ''])[1]).toLowerCase(),
+      t.assigneeId && personById(t.assigneeId) && personById(t.assigneeId).name, t.checklist.length > 0 && 'чеклист ' + t.checklist.length].filter(Boolean).join(' · ');
+    return h('div', { class: 'lf-row tpl-row', dataset: { id: t.id } },
+      h('span', { class: 'drag', title: 'Перетащите, чтобы изменить порядок' }, icon('grip', 14)),
       h('button', { class: 'tpl-open', onclick: () => editTemplate(t, draw) },
-        h('span', { class: 'tpl-name' }, t.name),
-        h('span', { class: 'tpl-meta' },
-          tm && h('span', { class: 'chip tag', style: { '--dc': tm.color } }, tm.name),
-          d && h('span', { class: 'chip tag', title: 'Позиция', style: { '--dc': d.color } }, d.name),
-          t.dueDays >= 0 && h('span', { class: 'chip' }, icon('calendar', 11), (DUE_DAYS.find(x => x[0] === t.dueDays) || [0, ''])[1]),
-          t.assigneeId && personById(t.assigneeId) && h('span', { class: 'chip' }, icon('user', 11), personById(t.assigneeId).name),
-          t.checklist.length > 0 && h('span', { class: 'chip' }, icon('checklist', 11), t.checklist.length + ' п.'),
-          Object.keys(t.links || {}).length > 0 && h('span', { class: 'chip' }, icon('link', 11), Object.keys(t.links).length))),
-      h('button', { class: 'icon-btn sm', title: 'Изменить', onclick: () => editTemplate(t, draw) }, icon('edit', 14)),
-      h('button', { class: 'icon-btn sm', title: 'Удалить', onclick: () => remove(t).catch(showErr) }, icon('trash', 15)));
+        h('span', { class: 'tpl-name' }, t.name), meta && h('span', { class: 'tpl-sub' }, meta)),
+      d && h('span', { class: 'pick-chip', title: 'Позиция' }, d.name),
+      h('button', { class: 'icon-btn sm tpl-del', title: 'Удалить', onclick: () => remove(t).catch(showErr) }, icon('trash', 15)));
   };
   let sortable = null;
   const draw = () => {
@@ -422,10 +417,10 @@ function templatesManager() {
     });
   };
   draw();
+  // «+ Шаблон» — в шапке настроек (макет 22)
+  setTimeout(() => { const b = document.querySelector('.tpl-add'); if (b) b.onclick = () => editTemplate(null, draw); });
   return h('div', null,
-    h('div', { class: 'section-head' }, h('h2', { style: { margin: 0, fontSize: '16px' } }, 'Шаблоны задач'),
-      h('button', { class: 'btn primary sm', onclick: () => editTemplate(null, draw) }, icon('plus', 14), 'Шаблон')),
-    h('p', { class: 'hint', style: { marginTop: 0 } }, 'Заготовки для повторяющихся задач: при создании задачи выберите шаблон — подставятся название, описание, позиция, срок и чеклист.'),
+    h('div', { class: 'section-head' }, h('h2', { style: { margin: 0, fontSize: '16px' }, title: 'Заготовки для повторяющихся задач: при создании задачи выберите шаблон — подставятся название, описание, позиция, срок и чеклист' }, 'Шаблоны задач')),
     list);
 }
 
@@ -555,28 +550,28 @@ function unitRules() {
     const col = r.column && u.settings.columns.find(c => c.id === r.column);
     if (!col) return h('span', { class: 'muted' }, 'выключено');
     const who = [...new Set([...Object.values(r.byPosition || {}), r.default].filter(Boolean))].map(personById).filter(Boolean);
-    return h('span', { class: 'rv-sum' }, h('b', null, col.name),
-      who.length ? h('span', { class: 'avatars-stack', title: who.map(p => p.name).join(', ') }, who.slice(0, 4).map(p => avatar(p, 'sm')))
-        : h('span', { class: 'warn-text', title: 'Выберите ревьюеров' }, icon('alert', 13), 'нет ревьюеров'));
+    // как в макете: «В ревью» · Олег Кузнецов; без ревьюеров — жёлтым
+    return who.length
+      ? h('span', { class: 'rv-sum', title: who.map(p => p.name).join(', ') }, `«${col.name}» · ` + (who.length === 1 ? who[0].name : who.map(p => p.name.split(' ')[0]).join(', ')))
+      : h('span', { class: 'rv-sum warn-text', title: 'Выберите ревьюеров' }, icon('alert', 13), `«${col.name}» · нет ревьюеров`);
   };
   const editReview = u => openReviewEditor(u, draw);
   const row = u => h('div', { class: 'ur-row' },
-    h('div', { class: 'ur-unit' }, h('span', { class: 'uc-icon sm', style: { background: u.color } }, u.key.slice(0, 2)), h('b', null, u.name)),
+    h('div', { class: 'ur-unit' }, h('span', { class: 'dot', style: { background: u.color } }), h('b', null, u.name)),
     h('button', { class: 'ur-cell ur-review', title: 'Настроить ревью', onclick: () => editReview(u) }, reviewText(u), icon('edit', 13)),
     h('label', { class: 'ur-cell ur-check', title: 'Сотрудник не перенесёт в «готово», пока в чеклисте есть открытые пункты' },
-      h('input', { type: 'checkbox', checked: !!u.settings.checklistBeforeDone, onchange: e => save(u, { checklistBeforeDone: e.target.checked }).catch(showErr) }),
+      h('input', { type: 'checkbox', class: 'switch', checked: !!u.settings.checklistBeforeDone, onchange: e => save(u, { checklistBeforeDone: e.target.checked }).catch(showErr) }),
       h('span', { class: 'ur-mobile' }, 'Чеклист перед «готово»')),
     h('div', { class: 'ur-cell' }, h('span', { class: 'ur-mobile ur-label' }, 'Готовые на доске'),
-      h('select', { class: 'inp sm', value: String(u.settings.hideDoneDays || 0), onchange: e => save(u, { hideDoneDays: Number(e.target.value) }).catch(showErr) },
+      h('select', { class: 'quiet-select', value: String(u.settings.hideDoneDays || 0), onchange: e => save(u, { hideDoneDays: Number(e.target.value) }).catch(showErr) },
         HIDE_DONE.map(([d, l]) => h('option', { value: String(d) }, l)))),
     h('div', { class: 'ur-cell' }, h('span', { class: 'ur-mobile ur-label' }, 'Автоархив'),
-      h('select', { class: 'inp sm', value: String(u.settings.autoArchiveDays || 0), onchange: e => save(u, { autoArchiveDays: Number(e.target.value) }).catch(showErr) },
+      h('select', { class: 'quiet-select', value: String(u.settings.autoArchiveDays || 0), onchange: e => save(u, { autoArchiveDays: Number(e.target.value) }).catch(showErr) },
         AUTO_ARCHIVE.map(d => h('option', { value: String(d) }, d ? `через ${d} дн.` : 'выключен')))));
   const draw = () => fill(box,
     h('div', { class: 'section-head' }, h('h2', { style: { margin: 0, fontSize: '16px' } }, 'Правила юнитов')),
-    h('p', { class: 'hint', style: { marginTop: 0 } }, 'Ревью — задача в колонке ревью уходит ревьюеру своей позиции и возвращается исполнителю. Чеклист — в «готово» только с закрытым чеклистом. Готовые на доске — сколько дней держать выполненные. Меняется сразу.'),
     units().length ? h('div', { class: 'ur-list' },
-      h('div', { class: 'ur-row ur-head' }, h('span', null, 'Юнит'), h('span', null, 'Ревью'), h('span', null, 'Чеклист перед «готово»'),
+      h('div', { class: 'ur-row ur-head' }, h('span', null, 'Юнит'), h('span', null, 'Ревью'), h('span', { title: 'Сотрудник не перенесёт в «Готово», пока в чеклисте есть открытые пункты' }, 'Чеклист перед «Готово»'),
         h('span', null, 'Готовые на доске'), h('span', null, 'Автоархив')),
       units().map(row)) : h('p', { class: 'muted' }, 'Юнитов пока нет'));
   draw();
@@ -585,11 +580,8 @@ function unitRules() {
 
 /** Что приложение делает само — для понимания, без настроек. */
 function autoNotes() {
-  const item = (ic, title, text) => h('div', { class: 'an-item' }, h('span', { class: 'an-ic' }, icon(ic, 15)), h('div', null, h('b', null, title), h('div', { class: 'hint' }, text)));
-  return h('div', null,
-    h('h2', { style: { margin: '0 0 10px', fontSize: '16px' } }, 'Уведомления — работают сами'),
-    h('div', { class: 'an-list' },
-      item('user', 'Назначили задачу', 'Исполнителю — «Новое для вас» на главной и счётчик в меню (кроме назначения на себя).'),
-      item('eye', 'Ревью', 'Ревьюеру — «Ревью»; исполнителю — «Вернули» или «Закрыта по ревью».'),
-      item('alert', 'Сроки', 'Исполнителю — «Срок сегодня / завтра» и «Просрочено», по одному разу на срок.')));
+  return h('div', { class: 'auto-notes' },
+    h('h2', { style: { margin: '0 0 12px', fontSize: '16px' } }, 'Уведомления работают сами'),
+    h('p', null, 'Задачу назначили, отдали на ревью или вернули, упомянули в комментарии, срок завтра, реджект от Apple.'),
+    h('p', { class: 'muted' }, 'Настраивать нечего: каждый видит только своё.'));
 }
