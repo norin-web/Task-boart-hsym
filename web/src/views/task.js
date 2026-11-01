@@ -907,7 +907,7 @@ export function openCreateTask(opts = {}) {
       draft.links = {};
     }
     tplNote.textContent = draft.checklist && draft.checklist.length ? 'Чеклист из шаблона: ' + draft.checklist.length + ' п.' : '';
-    tplRow.querySelectorAll('.quick-chip').forEach(b => b.classList.toggle('on', b.dataset.id === (used && used.id)));
+    if (tplSel) tplSel.value = used ? used.id : '';
     title.dispatchEvent(new Event('input'));
     desc.dispatchEvent(new Event('input'));
     drawProps();
@@ -915,9 +915,15 @@ export function openCreateTask(opts = {}) {
     title.focus();
   };
   const taskTpls = S.templates.filter(x => x.kind !== 'update');
-  const tplRow = taskTpls.length > 0 && h('div', { class: 'quick-chips tpl-row' },
-    h('span', { class: 'quick-note' }, 'Шаблон:'),
-    taskTpls.map(tpl => h('button', { class: 'quick-chip', dataset: { id: tpl.id }, onclick: () => applyTemplate(tpl) }, tpl.name)),
+  // макет 34: сверху «Юнит» и «Шаблон» выпадающими списками; выбор шаблона подставляет название, описание, чеклист
+  const tplSel = taskTpls.length > 0 && h('select', { class: 'inp', onchange: e => {
+    const tpl = taskTpls.find(x => x.id === e.target.value);
+    if (tpl) applyTemplate(tpl); else if (used) applyTemplate(used);
+  } }, h('option', { value: '' }, 'Без шаблона'), taskTpls.map(tpl => h('option', { value: tpl.id }, tpl.name)));
+  const tplRow = h('div', { class: 'grid2 create-top' },
+    field('Юнит', h('select', { class: 'inp', value: unit.id, disabled: inBoard, onchange: e => { unit = unitById(e.target.value); drawProps(); } },
+      units.map(u => h('option', { value: u.id }, u.name)))),
+    tplSel && field('Шаблон', tplSel),
     tplNote);
   const props = h('div', { class: 'grid2 create-props' });
 
@@ -927,10 +933,6 @@ export function openCreateTask(opts = {}) {
     fill(statusBox, field(B.status.label, h('select', { class: 'inp', value: draft.status || unit.settings.columns[0].id, onchange: e => { draft.status = e.target.value; } },
       unit.settings.columns.map(c => h('option', { value: c.id }, c.name)))));
     fill(props, 
-      !inBoard && field('Юнит', h('select', {
-        class: 'inp', value: unit.id,
-        onchange: e => { unit = unitById(e.target.value); drawProps(); },
-      }, units.map(u => h('option', { value: u.id }, u.name + ' · ' + u.key)))),
       !B.assignee.hidden && field(B.assignee.label, h('span', { class: 'sel-av' }, personById(draft.assigneeId) && avatar(personById(draft.assigneeId), 'sm'), assigneeSelect(draft.assigneeId, v => {
         draft.assigneeId = v;
         const p = personById(v);
