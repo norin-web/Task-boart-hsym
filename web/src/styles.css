@@ -1120,7 +1120,12 @@ button.kpi { font: inherit; text-align: left; cursor: pointer; color: inherit; }
 .ap-name { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
 .ap-name b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
 .ap-unit { display: inline-flex; align-items: center; gap: 7px; min-width: 0; white-space: nowrap; }
-.ap-work { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.ap-work { display: inline-flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; }
+.ap-req { flex: none; }
+.ap-stage { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.stage-dots { flex: none; }
+/* шапка списка — колонки те же, что в строках; подписи обрезаются, а не наезжают друг на друга */
+.ap-head > * { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .ap-type { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 6px; background: var(--surface-2); font-size: 12px; font-weight: 600; color: var(--text-2); white-space: nowrap; }
 .ap-pct { font-variant-numeric: tabular-nums; }
 .st-pill { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: 999px; font-size: 13px; font-weight: 500;
@@ -1337,18 +1342,13 @@ a.af-val:hover { text-decoration: underline; }
 .pl-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .pl-app { display: inline-flex; align-items: center; gap: 7px; color: var(--text); white-space: nowrap; }
 .pl-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); text-align: left; min-width: 0; }
-.pl-steps { display: flex; flex-wrap: wrap; gap: 6px; }
-.pl-step { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 8px 0 6px; border-radius: var(--r); border: 1px solid var(--border);
-  background: var(--surface); font: inherit; font-size: 13px; color: var(--text); cursor: pointer; }
-.pl-step:hover { border-color: var(--border-strong); }
-.pl-ic { display: inline-flex; color: var(--muted); }
-.pl-step.st-done { background: var(--ok-soft); border-color: transparent; }
-.pl-step.st-done .pl-ic { color: var(--ok); }
-.pl-step.st-done .pl-name { color: var(--text-2); }
-.pl-step.st-progress { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
-.pl-step.st-progress .pl-ic { color: var(--accent); }
-.pl-step.st-blocked { border-style: dashed; color: var(--muted); }
-.pl-who { font-size: 12px; min-width: 16px; text-align: center; }
+/* этапы приложения — выпадающий список-чеклист (.rq-stages, тот же стиль что в карточке задачи) */
+.pl-toggle { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: transparent; padding: 4px; border-radius: var(--r); cursor: pointer; }
+.pl-toggle:hover { background: var(--surface-2); }
+.pl-toggle .progress { flex: 1; }
+.pl-toggle .i { transition: transform .15s ease-out; }
+.pl-toggle.open .i { transform: rotate(180deg); }
+.pl-count { font-size: 12px; color: var(--muted); white-space: nowrap; }
 .pl-late { font-size: 12px; font-weight: 600; color: var(--danger); }
 .pl-release { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--r); background: var(--ok-soft); color: var(--ok); font-size: 13px; font-weight: 500; }
 .pl-release .btn { margin-left: auto; }
@@ -1794,7 +1794,8 @@ a.rc-more { text-decoration: none; }
 @media (max-width: 520px) { .flt { grid-template-columns: 1fr; width: calc(100vw - 16px); } .flt-nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); } .flt-tab { width: auto; white-space: nowrap; } .flt-save { display: none; } }
 
 /* Список приложений: сортировка кликом по заголовку колонки */
-.ap-head .ap-sort { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; padding: 2px 4px; margin: -2px -4px; font: inherit; color: inherit; border-radius: var(--r-sm); width: fit-content; }
+.ap-head .ap-sort { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; padding: 2px 4px; margin: -2px -4px; font: inherit; color: inherit; border-radius: var(--r-sm);
+  max-width: 100%; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .ap-head .ap-sort:hover { color: var(--text); background: var(--surface-2); }
 .ap-sort-ic { display: inline-flex; opacity: 0; transition: transform .15s, opacity .12s; }
 .ap-sort:hover .ap-sort-ic { opacity: .5; }

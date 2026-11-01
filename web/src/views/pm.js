@@ -4,7 +4,7 @@
  * и команда с KPI за неделю / месяц / квартал. Только юниты PM (видимость решает база).
  */
 import { S, me, personById, deptById, REQUEST_TYPES, LS, greeting, plural, fmtDate, todayStr } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill, emptyBlock } from '../ui.js';
+import { $, h, icon, avatar, topbar, showErr, fill, emptyBlock, statusIcon } from '../ui.js';
 import { call } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask, openCreateTask } from './task.js';
@@ -38,18 +38,18 @@ export async function renderPmHome() {
     draw();
   }
   function setPeriod(p) { period = p; LS.set('kpiPeriod', p); load(); }
-  const blocks = () => pmBlocks(d, load, period, setPeriod);
+  function draw() { fill(page, renderLayout('pmHome', blocks())); }
+  const blocks = () => pmBlocks(d, load, draw, period, setPeriod);
   const edit = () => editLayout('pmHome', blocks(), page, draw, { title: 'Настройка дашборда' });
   editHook = edit;
-  function draw() { fill(page, renderLayout('pmHome', blocks())); }
   load();
 }
 
-function pmBlocks(d, reload, period, setPeriod) {
+function pmBlocks(d, reload, redraw, period, setPeriod) {
   return [
     { id: 'news', title: 'Новое для вас', col: 'full', off: true, empty: 'Появится, когда что-то придёт вам', render: () => newsBlock() },
     { id: 'inbox', title: 'Входящие от CEO', col: 'full', render: () => inbox(d, reload) },
-    { id: 'pipeline', title: 'Приложения по этапам', col: 'left', render: () => pipeline(d, reload) },
+    { id: 'pipeline', title: 'Приложения по этапам', col: 'left', render: () => pipeline(d, reload, redraw) },
     { id: 'problems', title: 'Проблемы', col: 'right', render: () => problems(d) },
     { id: 'team', title: 'Команда и KPI', col: 'full', render: () => team(d, period, setPeriod) },
   ];
@@ -76,31 +76,46 @@ function inbox(d, reload) {
 // «New App: Streaks» → «New App»: название приложения уже стоит рядом
 const shortTitle = r => (r.app ? r.title.replace(new RegExp('\\s*[:·—-]\\s*' + r.app.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$'), '') : r.title) || r.title;
 
-function pipeline(d, reload) {
+// Раскрытые карточки (этапы списком) — запоминаются только на сессию, по id запроса
+const pipelineOpen = new Set();
+
+function pipeline(d, reload, redraw) {
   const rows = [...d.pipeline].sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999'));
   const today = todayStr();
   return h('section', null,
     h('div', { class: 'section-head' }, h('h2', null, 'Приложения по этапам')),
-    rows.length ? h('div', { class: 'pl-list' }, rows.map(r => h('div', { class: 'card-box pl-card' },
-      h('div', { class: 'pl-head' },
-        r.app && h('button', { class: 'link-btn pl-app', onclick: () => openAppById(r.app.id, reload) }, appIcon(r.app, 'md'), h('b', null, r.app.name)),
-        h('button', { class: 'link-btn pl-title', title: r.title, onclick: () => peekTask(r.unitId, r.id) }, shortTitle(r)),
-        h('span', { class: 'spacer' }),
-        r.dueDate && h('span', { class: 'ib-due' + (r.dueDate < today ? ' late' : ''), title: r.progress + '% этапов готово' }, icon('calendar', 14), fmtDate(r.dueDate))),
-      h('div', { class: 'pl-steps' }, r.stages.map(s => {
-        const st = stateOf(s);
-        const p = personById(s.assigneeId);
-        const late = !s.done && s.dueDate && s.dueDate < today;
-        return h('button', { class: 'pl-step st-' + st, title: `${s.title} — ${STATE[st].label}`, onclick: () => peekTask(s.unitId, s.id) },
-          h('span', { class: 'pl-dot' }),
-          h('span', { class: 'pl-name' }, s.title.split(' · ')[0]),
-          s.step === 'release' && !s.assigneeId
-            ? h('span', { class: 'muted pl-who' }, 'RM')
-            : p ? avatar(p, 'sm') : h('span', { class: 'pl-who pl-none', title: 'Без исполнителя' }, '?'),
-          late && h('span', { class: 'pl-late', title: 'Просрочено' }, fmtDate(s.dueDate)));
-      })),
-      r.releaseReady && h('div', { class: 'pl-release' }, icon('done', 16), h('span', { class: 'grow' }, 'Все этапы закрыты'),
-        h('button', { class: 'btn sm', onclick: () => sendRelease(r.stages.find(s => s.step === 'release').id).then(reload) }, icon('rocket', 13), 'Передать в релиз')))))
+    rows.length ? h('div', { class: 'pl-list' }, rows.map(r => {
+      const done = r.stages.filter(s => stateOf(s) === 'done').length;
+      const total = r.stages.length;
+      const open = pipelineOpen.has(r.id);
+      return h('div', { class: 'card-box pl-card' },
+        h('div', { class: 'pl-head' },
+          r.app && h('button', { class: 'link-btn pl-app', onclick: () => openAppById(r.app.id, reload) }, appIcon(r.app, 'md'), h('b', null, r.app.name)),
+          h('button', { class: 'link-btn pl-title', title: r.title, onclick: () => peekTask(r.unitId, r.id) }, shortTitle(r)),
+          h('span', { class: 'spacer' }),
+          r.dueDate && h('span', { class: 'ib-due' + (r.dueDate < today ? ' late' : ''), title: r.progress + '% этапов готово' }, icon('calendar', 14), fmtDate(r.dueDate))),
+        // этапы — выпадающим списком-чеклистом (как в карточке задачи), а не чипами в ряд
+        total > 0 && h('button', { class: 'pl-toggle' + (open ? ' open' : ''), 'aria-expanded': String(open),
+          onclick: () => { open ? pipelineOpen.delete(r.id) : pipelineOpen.add(r.id); redraw(); } },
+          h('span', { class: 'progress' }, h('div', { style: { width: Math.round(done / total * 100) + '%' } })),
+          h('span', { class: 'pl-count' }, `${done} из ${total}`),
+          icon('chevron', 14)),
+        open && h('div', { class: 'rq-stages' }, r.stages.map(s => {
+          const st = stateOf(s);
+          const p = personById(s.assigneeId);
+          const late = !s.done && s.dueDate && s.dueDate < today;
+          return h('div', { class: 'rq-stage st-' + st },
+            statusIcon(st === 'blocked' ? 'todo' : st, 16),
+            h('button', { class: 'link-btn rq-stitle', onclick: () => peekTask(s.unitId, s.id) }, s.title.split(' · ')[0]),
+            h('span', { class: 'muted rq-state' }, STATE[st].label),
+            late && h('span', { class: 'pl-late', title: 'Просрочено' }, fmtDate(s.dueDate)),
+            s.step === 'release' && !s.assigneeId
+              ? h('span', { class: 'muted rq-who' }, 'RM')
+              : p ? avatar(p, 'sm') : h('span', { class: 'rq-who muted' }, '—'));
+        })),
+        r.releaseReady && h('div', { class: 'pl-release' }, icon('done', 16), h('span', { class: 'grow' }, 'Все этапы закрыты'),
+          h('button', { class: 'btn sm', onclick: () => sendRelease(r.stages.find(s => s.step === 'release').id).then(reload) }, icon('rocket', 13), 'Передать в релиз')));
+    }))
       : emptyBlock('Нет работ', { ic: 'progress' }));
 }
 

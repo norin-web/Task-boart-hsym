@@ -15,7 +15,7 @@ import { statusLines, unitCurves } from './charts.js';
 
 export async function renderAnalytics() {
   const page = h('div', { class: 'page ceo-page analytics-page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
-  const tools = h('div', { class: 'row', style: { gap: '8px' } });
+  const tools = h('div', { class: 'row an-tools', style: { gap: '8px' } });
   fill($('#main'), topbar([h('h1', null, 'Аналитика')], [tools]), h('div', { class: 'view-body' }, page));
   let unit = LS.get('anUnit', '');
   let period = PERIODS.some(([k]) => k === LS.get('kpiPeriod', '')) ? LS.get('kpiPeriod', '') : 'month';
