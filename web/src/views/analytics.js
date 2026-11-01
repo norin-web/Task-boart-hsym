@@ -78,10 +78,10 @@ export async function renderAnalytics(tile) {
     }
     fill(tools,
       units.length > 1 && h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Юнит' },
-        [['', 'Все юниты'], ...units.map(u => [u.id, u.name])].map(([id, name]) => h('button', {
+        [['', 'Все юниты'], ...units.map(u => [u.id, u.name, u.color])].map(([id, name, color]) => h('button', {
           class: unit === id ? 'on' : '', role: 'radio', 'aria-checked': String(unit === id), title: id ? 'Блоки по приложениям — только этот юнит' : '',
           onclick: () => { unit = id; LS.set('anUnit', id); draw(); },
-        }, name))),
+        }, color && h('span', { class: 'dot', style: { background: color } }), name))),
       h('button', { class: 'btn ghost sm', title: 'Какие блоки показывать и где', onclick: () => editLayout('analytics', blocks(), page, draw, { title: 'Настройка аналитики' }) }, icon('layers', 14), 'Настроить'));
     fill(page, renderLayout('analytics', blocks()));
   }

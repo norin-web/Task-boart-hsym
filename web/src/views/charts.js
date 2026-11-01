@@ -40,7 +40,7 @@ function responsive(height, draw) {
 }
 
 /** series: [{ id, label, values[], color, strong }]; days — подписи по оси X (YYYY-MM-DD). */
-export function statusLines({ days, series, height = 240, aria = '' }) {
+export function statusLines({ days, series, height = 220, aria = '' }) {
   const live = series.filter(s => s.values.some(Boolean));
   const maxV = niceMax(Math.max(1, ...live.flatMap(s => s.values)));
   const box = responsive(height, (svg, w, H, tip, host) => {
@@ -89,7 +89,7 @@ export function statusLines({ days, series, height = 240, aria = '' }) {
 }
 
 /** Кривые юнитов по статусам: categories — названия статусов (ось X), units: [{ name, color, values[] }]. */
-export function unitCurves({ categories, units, height = 240, aria = '' }) {
+export function unitCurves({ categories, units, height = 220, aria = '' }) {
   const maxV = niceMax(Math.max(1, ...units.flatMap(u => u.values)));
   return responsive(height, (svg, w, H, tip) => {
     const L = 30, R = 12, T = 14, B = 30;
