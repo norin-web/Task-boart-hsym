@@ -1,0 +1,48 @@
+/** Экраны для сверки: код листа в Paper, адрес, действие перед снимком, высота листа. */
+const click = sel => p => p.click(sel);
+const prefs = tab => '#/settings?tab=' + tab;
+export const SCREENS = [
+  { code: 'A01', name: 'Дашборд CEO', route: '#/', act: async p => { await p.click('.ceo-mode button:has-text("Полный")'); await p.waitForTimeout(800); } },
+  { code: 'A02', name: 'Дашборд, режим Обзор', route: '#/', act: async p => { await p.click('.ceo-mode button:has-text("Обзор")'); await p.waitForTimeout(800); await p.click('.ceo-mode button:has-text("Обзор")'); } },
+  { code: 'A03', name: 'Настройка дашборда', route: '#/', act: async p => { await p.click('.ceo-mode button:has-text("Полный")'); await p.waitForTimeout(800); await p.click('.topbar .btn:has-text("Настроить")'); } },
+  { code: 'A07', name: 'Поиск ⌘K', route: '#/', act: async p => { await p.keyboard.press('Control+k'); await p.keyboard.press('Meta+k'); await p.waitForSelector('.palette-inp'); await p.fill('.palette-inp', 'stre'); await p.waitForTimeout(500); } },
+  { code: 'A09', name: 'Аналитика', route: '#/analytics' },
+  { code: 'G03', name: 'Экран плитки', route: '#/analytics/work' },
+  { code: 'B01', name: 'Приложения', route: '#/apps' },
+  { code: 'B04', name: 'Панель приложения', route: '#/apps', act: async p => { await p.evaluate(async () => { const { LS } = await import('/src/state.js'); LS.set('appCardMode', 'side'); }); await p.click('.ap-row:has-text("CARROT")'); await p.waitForTimeout(600); await p.evaluate(async () => { const { LS } = await import('/src/state.js'); LS.set('appCardMode', 'full'); }); } },
+  { code: 'B05', name: 'Приложение, полный экран', route: ids => '#/app/' + ids.carrot, height: 1560 },
+  { code: 'B07', name: 'Новое приложение', route: '#/', act: click('.topbar .btn.primary') },
+  { code: 'B08', name: 'Карточка релиза', route: ids => `#/u/${ids.rf}/list?task=${ids.release}` },
+  { code: 'C02', name: 'Обзор юнита', route: ids => `#/u/${ids.mvp}/overview` },
+  { code: 'C03', name: 'Доска юнита', route: ids => `#/u/${ids.mvp}` },
+  { code: 'C04', name: 'Таймлайн', route: ids => `#/u/${ids.mvp}/timeline` },
+  { code: 'C06', name: 'Настройки юнита', route: ids => `#/u/${ids.mvp}/settings`, height: 1240 },
+  { code: 'C07', name: 'Флоу', route: ids => `#/u/${ids.mvp}/settings`, act: p => p.evaluate(() => document.querySelector('.fl-heads').scrollIntoView({ block: 'center' })) },
+  { code: 'D01', name: 'Карточка задачи', route: ids => `#/u/${ids.mvp}/list?task=${ids.stage}` },
+  { code: 'D05', name: 'Новая задача', route: ids => `#/u/${ids.mvp}`, act: click('.topbar .btn.primary') },
+  { code: 'E01', name: 'Моя доска', route: '#/board' },
+  { code: 'E02', name: 'Мои задачи', route: '#/my' },
+  { code: 'F01', name: 'Люди и доступы', route: prefs('people'), act: click('.prefs-body .seg button:has-text("Люди")') },
+  { code: 'F02', name: 'Профиль', route: '#/settings' },
+  { code: 'F03', name: 'Уведомления', route: prefs('notify') },
+  { code: 'F04', name: 'Доски', route: prefs('boards') },
+  { code: 'F05', name: 'Приложения', route: prefs('apps') },
+  { code: 'F06', name: 'Релизы', route: prefs('releases') },
+  { code: 'F07', name: 'Юниты', route: prefs('units') },
+  { code: 'F09', name: 'Автоматизации', route: prefs('automations') },
+  { code: 'F10', name: 'Журнал', route: prefs('journal') },
+  { code: 'F11', name: 'Команды', route: prefs('people'), act: click('.prefs-body .seg button:has-text("Команды")') },
+  { code: 'F12', name: 'Позиции', route: prefs('people'), act: click('.prefs-body .seg button:has-text("Позиции")') },
+];
+
+/** Намеренные отличия: чтобы процент не вводил в заблуждение. */
+export const NOTES = {
+  A01: 'Блоки по решению 3 (как A03): нет «Проверки App Store», есть «Работы в процессе». Колокольчик — решение 1.',
+  A02: 'Те же отличия, что на A01.',
+  B04: 'Приложение из демо-данных, блоки «Сейчас» и Info другого содержания.',
+  C03: 'Переключатель Доска/Список/Таймлайн — решение 16: доска ниже на его высоту. Вкладка «Настройки» — лист C05.',
+  C04: 'Демо-задачи другие: сравнивать вид полос, а не их положение.',
+  E01: 'В макете свои задачи Анны; в демо-данных у неё их нет.',
+  E02: 'В макете свои задачи Анны; в демо-данных у неё их нет.',
+  F01: 'В демо 10 человек с другими адресами.',
+};

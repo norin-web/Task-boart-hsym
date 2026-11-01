@@ -1632,7 +1632,6 @@ a.cs-link { color: inherit; text-decoration: none; }
 .panel-side .prop .quick-chip { display: none; opacity: 1; }
 .panel-side .prop:hover .quick-chip, .panel-side .prop:focus-within .quick-chip { display: inline-flex; }
 .panel-side .prop .inp, .panel-side .prop .due-wrap { font-size: 13px; font-weight: 600; }
-.panel-main .link-name { white-space: nowrap; }
 .modal:has(.create-top) .modal-foot .btn:not(.primary), .modal:has(.title-field) .modal-foot .btn:not(.primary) { color: #FF0D07; }
 @media (max-width: 900px) { .panel-side .prop .quick-chip { display: inline-flex; } .panel-side .side-meta { margin-top: 8px; } }
 .panel .crumbs .key-badge { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; }
@@ -1669,3 +1668,27 @@ section:has(> .up-head + .ap-now) > .up-head { display: none; }
 @media (min-width: 901px) { .people-card .access-row { grid-template-columns: 30px minmax(180px, 412fr) minmax(0, 224fr) minmax(0, 204fr) 132px 28px; } }
 .bell-menu:has(.bell-empty) { width: 300px; }
 .bell-empty { text-align: center; }
+
+/* Дизайн-ревью по снимкам */
+body { letter-spacing: -.01em; }
+.tb-right .btn { font-size: 12px; }
+.uc-head { align-items: center; }
+.uc-sub, .uc-head small { line-height: 16px; }
+.analytics-page .cs-row { margin: 0; }
+.page.unit-page { padding-top: 17px; }
+.lz-mode .lz-grid { grid-template-columns: minmax(0, 1fr) 456px; }
+.title-inp { font-size: 24px; line-height: 32px; padding: 0; }
+.panel-side .prop { margin-bottom: 12px; }
+.panel-side .props { padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.panel-side .side-meta { border-top: 0; }
+.rel-team h3, .rel-team > h3 { color: var(--text); }
+.rl-pt { align-items: center; }
+.rl-pt-label { display: block; line-height: 20px; }
+.tl-page { padding-top: 17px; gap: 16px; }
+.panel-main .link-name { width: 144px; }
+.rel-team-title { color: var(--text); }
+/* B07: новое приложение — поля как в новой задаче */
+.modal:has(.title-field) .field { margin-bottom: 12px; }
+.modal:has(.title-field) .field > label { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); margin-bottom: 4px; }
+.modal:has(.title-field) .grid2 .inp, .modal:has(.title-field) .field > .inp:not(.title-field), .modal:has(.title-field) .prio-select { height: 40px; padding: 0 12px; border: 0; border-radius: 12px; background-color: var(--surface-2); box-shadow: none; font-size: 13px; font-weight: 600; }
+.modal:has(.title-field) textarea.inp { height: 64px !important; padding: 10px 12px; font-weight: 500; }

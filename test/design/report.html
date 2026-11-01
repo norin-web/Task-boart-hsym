@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Сверка с дизайном</title>
+<style>
+:root { --bg:#f2f3f6; --s:#fff; --t:#111318; --m:#646975; --b:#e3e5ea; --ok:#0f6e1f; --bad:#ba3045; --warn:#7f5500; }
+* { box-sizing: border-box; } body { margin:0; background:var(--bg); color:var(--t); font:14px/20px system-ui,sans-serif; }
+.wrap { display:grid; grid-template-columns:260px minmax(0,1fr); height:100vh; }
+nav { background:var(--s); border-right:1px solid var(--b); overflow:auto; padding:16px 8px; }
+h1 { font-size:18px; margin:0 8px 4px; } .sum { margin:0 8px 12px; color:var(--m); font-size:13px; }
+nav button { display:flex; justify-content:space-between; gap:8px; width:100%; padding:8px; border:0; border-radius:10px; background:none; font:inherit; text-align:left; cursor:pointer; }
+nav button.on { background:var(--bg); font-weight:600; } nav b { font-weight:600; } .g { color:var(--ok); } .y { color:var(--warn); } .r { color:var(--bad); }
+main { overflow:auto; padding:16px 24px 48px; }
+.bar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:8px; } .bar h2 { margin:0 12px 0 0; font-size:18px; }
+.bar button { padding:6px 12px; border:1px solid var(--b); border-radius:999px; background:var(--s); font:inherit; cursor:pointer; } .bar button.on { background:var(--t); color:#fff; border-color:var(--t); }
+.note { margin:0 0 8px; padding:8px 12px; border-radius:10px; background:#ffefd1; color:var(--warn); font-size:13px; }
+.view { display:grid; grid-template-columns:1fr 1fr; gap:12px; } .view.one { grid-template-columns:minmax(0,1fr); }
+figure { margin:0; } figcaption { font-size:12px; color:var(--m); margin-bottom:4px; } img { display:block; width:100%; border:1px solid var(--b); border-radius:8px; background:#fff; }
+.over { position:relative; } .over img + img { position:absolute; inset:0; }
+input[type=range] { width:240px; }
+table { border-collapse:collapse; width:100%; margin-top:16px; background:var(--s); font-size:13px; } td,th { padding:6px 10px; border-bottom:1px solid var(--b); text-align:left; }
+@media (max-width:760px) { .wrap { grid-template-columns:minmax(0,1fr); height:auto; } nav { max-height:220px; } .view { grid-template-columns:minmax(0,1fr); } }
+</style></head><body>
+<div class="wrap"><nav id="nav"></nav><main id="main"></main></div>
+<script>
+/*DATA*/
+const $ = (t, a = {}, ...k) => { const e = document.createElement(t); Object.assign(e, a); e.append(...k.flat().filter(x => x != null)); return e; };
+let cur = 0, mode = localStorage.getItem('dr-mode') || 'side', op = 50;
+const tone = d => d == null ? '' : d < 3 ? 'g' : d < 10 ? 'y' : 'r';
+function draw() {
+  const r = DATA.results[cur], bad = DATA.checks.filter(c => !c.ok), mine = DATA.checks.filter(c => c.screen === r.code);
+  const nav = document.getElementById('nav');
+  nav.replaceChildren($('h1', { textContent: 'Сверка с дизайном' }), $('p', { className: 'sum', textContent: `${DATA.results.length} экранов · размеры ${DATA.checks.length - bad.length} из ${DATA.checks.length}` }),
+    ...DATA.results.map((x, i) => { const b = $('button', { className: i === cur ? 'on' : '', onclick: () => { cur = i; draw(); } }, $('span', {}, $('b', { textContent: x.code + ' ' }), x.name), $('span', { className: tone(x.diff), textContent: x.diff == null ? '—' : x.diff + '%' })); return b; }));
+  const img = (d, cap) => $('figure', {}, $('figcaption', { textContent: cap }), $('img', { src: `${d}/${r.code}.png`, alt: cap, loading: 'lazy' }));
+  const btn = (m, t) => $('button', { className: mode === m ? 'on' : '', textContent: t, onclick: () => { mode = m; localStorage.setItem('dr-mode', m); draw(); } });
+  let view;
+  if (mode === 'side') view = $('div', { className: 'view' }, img('design', 'Макет'), img('code', 'Код'));
+  else if (mode === 'diff') view = $('div', { className: 'view one' }, img('diff', 'Отличия подсвечены красным'));
+  else { const top = $('img', { src: `code/${r.code}.png`, alt: 'Код' }); top.style.opacity = op / 100;
+    const range = $('input', { type: 'range', min: 0, max: 100, value: op, oninput: e => { op = +e.target.value; top.style.opacity = op / 100; } });
+    view = $('div', {}, $('p', {}, 'Макет ', range, ' Код'), $('div', { className: 'over' }, $('img', { src: `design/${r.code}.png`, alt: 'Макет' }), top)); }
+  const note = DATA.notes[r.code];
+  document.getElementById('main').replaceChildren(
+    $('div', { className: 'bar' }, $('h2', { textContent: `${r.code} · ${r.name}` }), btn('side', 'Рядом'), btn('over', 'Наложить'), btn('diff', 'Отличия'), $('span', { className: tone(r.diff), textContent: r.diff == null ? '' : `отличие ${r.diff}%` })),
+    note ? $('p', { className: 'note', textContent: note }) : null, view,
+    mine.length ? $('table', {}, $('tr', {}, ...['Элемент', 'Свойство', 'Макет', 'Код', ''].map(t => $('th', { textContent: t }))), ...mine.map(c => $('tr', {}, ...[c.sel, c.prop, c.want, c.got, c.ok ? '✓' : '✗'].map(t => $('td', { textContent: t }))))) : null);
+}
+draw();
+</script></body></html>

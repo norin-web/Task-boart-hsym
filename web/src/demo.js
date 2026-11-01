@@ -48,9 +48,9 @@ const PEOPLE = [
 ];
 
 const UNITS = [
-  { name: 'Gold', key: 'GLD', color: '#d97706', description: 'Флагманские приложения: рост и удержание' },
-  { name: 'RF', key: 'RF', color: '#0ea5e9', description: 'Приложения для рынка RF' },
-  { name: 'MVP', key: 'MVP', color: '#10b981', description: 'Новые продукты: быстрые запуски' },
+  { name: 'Gold', key: 'GLD', color: '#EC9900', description: 'Флагманские приложения: рост и удержание' },
+  { name: 'RF', key: 'RF', color: '#0087EA', description: 'Приложения для рынка RF' },
+  { name: 'MVP', key: 'MVP', color: '#5FCD74', description: 'Новые продукты: быстрые запуски' },
 ];
 
 const makeApi = () => {
