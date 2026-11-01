@@ -128,8 +128,7 @@ export function watchBlock(apps, { openApp, openTask, appIcon, appStatusCell, st
     if (box.hidden) return;
     fill(box,
       h('div', { class: 'section-head' },
-        h('h2', null, 'Отслеживаю', items.length > 0 && h('span', { class: 'muted sec-n' }, items.length)),
-        h('span', { class: 'w-live muted', title: 'Обновляется само каждые 20 секунд' }, h('span', { class: 'w-dot' }), 'обновлено ' + relTime(new Date(at).toISOString())),
+        h('span', { class: 'w-head' }, h('h2', null, 'Отслеживаю'), h('span', { class: 'w-live muted' }, 'Обновляется само каждые 20 секунд')),
         h('span', { class: 'spacer' }),
         h('button', { class: 'btn ghost sm', onclick: () => openWatchPicker(appsNow, () => refresh(true)) }, icon('plus', 14), 'Добавить')),
       items.length

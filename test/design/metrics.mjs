@@ -54,6 +54,7 @@ export const METRICS = [
   { screen: 'S01', checks: [{ sel: '.toast', prop: 'height', want: 44 }, { sel: '.toast.error', prop: 'backgroundColor', want: 'rgb(255, 22, 15)' }, { sel: '.empty-block > b', prop: 'fontWeight', want: '600' }] },
   { screen: 'R01', checks: [{ sel: '.dt-card', prop: 'display', want: 'block' }] },
   { screen: 'R02', checks: [{ sel: '.auto-fields .field-row .btn', prop: 'display', want: null, absent: true }] },
+  { screen: 'RM01', checks: [{ sel: '.rm-grid .rm-row', prop: 'minHeight', want: '60px' }, { sel: '.rm-grid .rm-row .app-img, .rm-grid .rm-row .uc-icon', prop: 'width', want: 34 }, { sel: '.rm-actions .btn', prop: 'height', want: 32 }, { sel: '#sidebar', noText: 'Мои задачи', prop: 'text', want: 'есть' }, { sel: '#sidebar', noText: 'Мои юниты', prop: 'text', want: 'нет' }] },
   { screen: 'D37', checks: [{ sel: '.modal.dq-dlg', prop: 'width', want: 760 }, { sel: '.dq-row.yn', prop: 'height', want: 56 }, { sel: '.dq-row .seg button', prop: 'height', want: 32 }] },
   { screen: 'B05', checks: [{ sel: '.topbar .back-btn', prop: 'width', want: 44 }] },
 ];
