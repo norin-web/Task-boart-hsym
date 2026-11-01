@@ -2278,3 +2278,23 @@ table.tasks.unit-list .chips .chip::before { display: none; }
 .inline-menu .menu-sep { background: var(--border); }
 .inline-menu .menu-label { color: var(--muted); }
 .inline-menu .me-card { height: auto; min-height: 52px; padding: 8px 10px 10px; }
+
+/* P40, P41: состояния */
+.empty-block > b { font-size: 13px; line-height: 20px; font-weight: 600; color: var(--text); }
+.eb-sub { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); text-align: center; }
+.card-box.empty-block, section:has(> .section-head + .card-box) > .card-box.empty-block { gap: 8px; }
+.card-box.empty-state:not(.sm):not(.center), section:has(> .section-head + .card-box) > .card-box.empty-state:not(.sm):not(.center) { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 208px; padding: 24px; border-radius: 28px; background: var(--surface); text-align: center; }
+.card-box.empty-state:not(.sm):not(.center):not(:has(.btn, h2)) { min-height: 120px; }
+.card-box.empty-state:not(.sm):not(.center) h2 { margin: 0; font-size: 13px; line-height: 20px; font-weight: 600; letter-spacing: 0; color: var(--text); }
+.card-box.empty-state:not(.sm):not(.center) p { margin: 0; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); }
+.card-box.empty-state:not(.sm):not(.center) .btn { height: 40px; margin-top: 8px; padding: 0 20px; font-size: 13px; font-weight: 600; }
+.nav-empty { height: 36px; padding: 0 12px; font-size: 13px; line-height: 20px; font-weight: 500; color: var(--sidebar-text); }
+.toast { min-height: 44px; padding: 0 20px; gap: 12px; font-size: 13px; line-height: 20px; font-weight: 500; }
+.toast.error { background: #FF160F; color: #fff; }
+.toast-action { font-size: 13px; font-weight: 600; }
+.readonly-note { min-height: 40px; padding: 0 14px; gap: 8px; border-radius: 16px; background: var(--surface-3); font-size: 13px; line-height: 20px; font-weight: 500; color: var(--muted); }
+.readonly-note .i { color: var(--muted); }
+.login-error { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--danger); }
+.fatal-card { gap: 8px; text-align: center; color: var(--text); }
+.fatal-card .eb-ic { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--danger-soft); color: var(--danger); font-size: 16px; font-weight: 700; }
+.fatal-card > b { font-size: 13px; line-height: 20px; font-weight: 600; color: var(--text); }

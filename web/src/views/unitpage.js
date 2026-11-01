@@ -126,7 +126,7 @@ export function renderUnitTeam() {
           h('span', { class: 'team-load' }, t.length ? `${t.length} ${plural(t.length, ['задача', 'задачи', 'задач'])}` : h('span', { class: 'muted' }, 'нет задач'),
             late > 0 && h('span', { class: 'warn-text' }, ` · просрочено ${late}`)));
       }))
-      : h('div', { class: 'card-box empty-state' }, h('p', { style: { margin: 0 } }, 'Команда не собрана'),
+      : h('div', { class: 'card-box empty-state' }, h('h2', null, 'Команда не собрана'),
         isStaff() && h('button', { class: 'btn primary', onclick: async () => { if (await addMemberDialog(u.id)) draw(); } }, icon('plus', 15), 'Добавить участника')));
   };
   draw();

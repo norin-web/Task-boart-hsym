@@ -28,8 +28,8 @@ function lockedScreen() {
       h('button', { class: 'btn', onclick: () => location.reload() }, 'Проверить снова'))));
 }
 
-const fatal = text => fill($('#shell'), h('div', { class: 'boot error', style: { gridColumn: '1 / -1', flexDirection: 'column' } },
-  h('div', null, text),
+const fatal = (title, text) => fill($('#shell'), h('div', { class: 'boot error fatal-card', style: { gridColumn: '1 / -1', flexDirection: 'column' } },
+  h('span', { class: 'eb-ic' }, '!'), h('b', null, title), h('span', { class: 'eb-sub' }, text),
   h('div', { class: 'row', style: { justifyContent: 'center', marginTop: '12px' } },
     h('button', { class: 'btn primary', onclick: () => location.reload() }, 'Обновить'),
     supabase && h('button', { class: 'btn', onclick: () => supabase.auth.signOut() }, 'Выйти'))));
@@ -39,7 +39,7 @@ async function start() {
     await initBackend({ takeOver: takeOver });
   } catch (e) {
     if (e.code === 'LOCKED') return lockedScreen();
-    return fatal('Не удалось подключить хранилище: ' + e.message);
+    return fatal('Не удалось подключить хранилище', e.message);
   }
   if (mode === 'supabase') {
     const { data } = await supabase.auth.getSession();
@@ -102,7 +102,7 @@ async function boot() {
       else if (lens.access !== 'superadmin') S.units = S.units.filter(u => (u.members || []).includes(lens.id));
     }
   } catch (e) {
-    return fatal('Не удалось загрузить данные: ' + e.message);
+    return fatal('Не удалось загрузить данные', e.message);
   }
   S.route = parseLocation();
   S.started = true;

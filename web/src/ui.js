@@ -217,7 +217,7 @@ export function topbar(left, right) {
 export function toast(msg, opts = {}) {
   const el = h('div', { class: 'toast' + (opts.type ? ' ' + opts.type : ''), role: opts.type === 'error' ? 'alert' : 'status' },
     h('span', null, msg),
-    opts.action && h('button', { class: 'toast-action', onclick: () => { el.remove(); opts.action.run(); } }, opts.action.label));
+    opts.action && h('button', { class: 'toast-action' + (opts.action.label === 'Отменить' ? ' undo' : ''), onclick: () => { el.remove(); opts.action.run(); } }, opts.action.label));
   $('#toast-root').append(el);
   setTimeout(() => el.remove(), opts.duration || (opts.type === 'error' ? 6000 : 3000));
 }

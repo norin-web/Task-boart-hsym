@@ -51,6 +51,7 @@ export const METRICS = [
   { screen: 'D46', checks: [{ sel: '.modal.dlg-p', prop: 'width', want: 640 }] },
   { screen: 'D47', checks: [{ sel: '.sk-row kbd', prop: 'height', want: 24 }, { sel: '.sk-row + .sk-row', prop: 'height', want: 44 }] },
   { screen: 'M01', checks: [{ sel: 'body > .menu', prop: 'width', want: 264 }, { sel: 'body > .menu', prop: 'borderRadius', want: '20px' }, { sel: 'body > .menu .menu-item', prop: 'height', want: 40 }, { sel: 'body > .menu .menu-item', prop: 'borderRadius', want: '12px' }, { sel: 'body > .menu', noText: 'Дублировать', prop: 'text', want: 'нет' }] },
+  { screen: 'S01', checks: [{ sel: '.toast', prop: 'height', want: 44 }, { sel: '.toast.error', prop: 'backgroundColor', want: 'rgb(255, 22, 15)' }, { sel: '.empty-block > b', prop: 'fontWeight', want: '600' }] },
   { screen: 'D37', checks: [{ sel: '.modal.dq-dlg', prop: 'width', want: 760 }, { sel: '.dq-row.yn', prop: 'height', want: 56 }, { sel: '.dq-row .seg button', prop: 'height', want: 32 }] },
   { screen: 'B05', checks: [{ sel: '.topbar .back-btn', prop: 'width', want: 44 }] },
 ];
