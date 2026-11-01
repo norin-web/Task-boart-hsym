@@ -28,7 +28,7 @@ const STAGE_STATE = {
   todo: { label: 'не начато', icon: 'circle' },
 };
 const stageState = s => (s.done ? 'done' : s.blocked ? 'blocked' : s.kind === 'todo' ? 'todo' : 'progress');
-export const STATUS_KINDS = { dev: 'В разработке', release: 'Релиз', review: 'Ревью Apple', live: 'В сторе', reject: 'Реджект', '': 'Свой (без автоматики)' };
+export const STATUS_KINDS = { dev: 'В разработке', release: 'Релиз', review: 'Ревью Apple', live: 'App Store', reject: 'Реджект', '': 'Свой (без автоматики)' };
 
 /* ---------- мелкие части (их же использует дашборд CEO) ---------- */
 
@@ -62,7 +62,7 @@ export const storeGoneBadge = () => h('span', { class: 'store-badge gone', title
 export const appStatusCell = (st, a) => (a && a.storeOk === false ? storeGoneBadge() : st && st.kind === 'live' ? storeBadge() : statusPill(st));
 /** Статус приложения: значок формы + слово (цвет только помогает); «ревью Apple» — заливкой. */
 const PILL_ICON = { dev: 'progress', release: 'rocket', review: 'eye', live: 'done', reject: 'rejected' };
-export const statusPill = st => (st
+export const statusPill = st => (st && st.kind === 'live' ? storeBadge() : st
   ? h('span', { class: 'st-pill k-' + (st.kind || 'x'), style: { '--sc': st.color } }, PILL_ICON[st.kind] ? icon(PILL_ICON[st.kind], 14) : h('span', { class: 'dot' }), st.name)
   : h('span', { class: 'muted' }, '—'));
 /** Приоритет: цветная метка с названием (не только цветом). */

@@ -74,15 +74,11 @@ export function navigate(r, { replace = false } = {}) {
 }
 
 /**
- * «Назад» — только с экрана, куда зашли внутрь раздела: приложение, плитка аналитики, команда юнита, настройки.
- * Разделы сайдбара и вкладки юнита переключаются сами, кнопка там не нужна. Родитель — уровень выше, а не история. null — кнопки нет.
+ * «Назад» — только с экрана, куда зашли внутрь раздела: приложение, плитка аналитики, настройки.
+ * Разделы сайдбара, команды в нём и вкладки юнита переключаются сами, кнопка там не нужна. Родитель — уровень выше, а не история. null — кнопки нет.
  */
 export function navParent(r = S.route) {
-  if (r.unit) {
-    if (!r.team) return null;
-    const u = S.units.find(x => x.id === r.unit);
-    return { route: { unit: r.unit, mode: seesApps() ? 'overview' : 'board' }, label: u ? u.name : 'Юнит' };
-  }
+  if (r.unit) return null;
   if (r.view === 'app') {
     const from = appFrom || { view: 'apps' };
     return { route: from, label: from.unit ? (S.units.find(x => x.id === from.unit) || {}).name || 'Юнит' : LABELS[from.view] || 'Назад' };

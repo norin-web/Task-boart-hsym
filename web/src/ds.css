@@ -1869,3 +1869,8 @@ body { letter-spacing: -.01em; }
 .pm-load-row b { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pm-load-row > .muted { flex: none; font-size: 12px; line-height: 16px; font-weight: 500; }
 
+/* плитка аналитики: приложение с иконкой */
+.an-row b.an-app { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.an-row b.an-app > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.an-st .store-badge { font-size: 12px; font-weight: 600; color: var(--text); }
+

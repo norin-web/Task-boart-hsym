@@ -57,7 +57,7 @@ export async function renderRmHome() {
   async function step(x, action, reason) {
     try {
       await send('releaseStep', { taskId: x.id, action, reason });
-      toast({ close_reject: 'Реджект закрыт — релиз в очереди', live: `«${x.app ? x.app.name : x.title}» в сторе`, resubmit: 'Отправлено снова', reject: 'Реджект: задача ушла PM' }[action]);
+      toast({ close_reject: 'Реджект закрыт — релиз в очереди', live: `«${x.app ? x.app.name : x.title}» в App Store`, resubmit: 'Отправлено снова', reject: 'Реджект: задача ушла PM' }[action]);
       load();
     } catch (e) { showErr(e); }
   }

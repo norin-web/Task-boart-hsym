@@ -522,7 +522,7 @@ insert into app_settings (key, value, updated_at) values ('appStatuses', '[
   {"id": "dev", "name": "В разработке", "color": "#6366f1", "kind": "dev"},
   {"id": "release", "name": "Релиз", "color": "#8b5cf6", "kind": "release"},
   {"id": "review", "name": "Ревью Apple", "color": "#f59e0b", "kind": "review"},
-  {"id": "live", "name": "В сторе", "color": "#0d9488", "kind": "live"},
+  {"id": "live", "name": "App Store", "color": "#0d9488", "kind": "live"},
   {"id": "button", "name": "На кнопке", "color": "#0ea5e9", "kind": ""},
   {"id": "reject", "name": "Реджект", "color": "#ef4444", "kind": "reject"}
 ]'::jsonb, '') on conflict (key) do nothing;

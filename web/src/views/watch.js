@@ -76,7 +76,7 @@ export function watchBlock(apps, { openApp, openTask, appIcon, appStatusCell, st
           : r.phase === 'submitted' ? h('span', { class: 'muted' }, 'на ревью Apple' + (days(r.submittedAt) ? ` · ждёт ${days(r.submittedAt)} дн.` : ' · отправлено сегодня'))
             : r.phase === 'rejected' ? h('span', null, h('span', { class: 'danger-text' }, `реджект №${r.rejectNo} · ${r.reason}`), h('span', { class: 'muted' }, ' · исправляет ' + (pm ? pm.name : 'PM')))
               : h('span', { class: 'ok-text' }, 'в App Store' + (r.liveAt ? ' · ' + fmtDate(r.liveAt.slice(0, 10)) : ''));
-    const PH = { '': 'К отправке', waiting: 'В разработке', submitted: 'Ревью Apple', rejected: 'Реджект', live: 'В сторе' };
+    const PH = { '': 'К отправке', waiting: 'В разработке', submitted: 'Ревью Apple', rejected: 'Реджект', live: 'App Store' };
     return [
       appIcon(a, 'sm'),
       h('span', { class: 'w-main' }, h('span', { class: 'w-title' }, h('b', null, a.name), prioTag && prioTag(a.priority)), h('small', { class: 'w-line' }, line)),

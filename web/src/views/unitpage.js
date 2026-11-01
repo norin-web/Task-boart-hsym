@@ -7,7 +7,7 @@ import { S, isSuper, isStaff, todayStr, ACCESS_LABELS, personById, deptById, tas
 import { $, h, icon, avatar, showErr, fill, menu, toast, emptyBlock, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView, link } from '../router.js';
-import { openCreateApp, openNewAppTask, pmsOf, openAppCard } from './apps.js';
+import { openCreateApp, openNewAppTask, pmsOf, openAppCard, appStatusCell } from './apps.js';
 import { attention, inProgress, recent } from './ceo.js';
 import { unitHeader } from './unitnav.js';
 import { addMemberDialog } from './people.js';
@@ -99,7 +99,7 @@ function appsBrief(u, apps, reload) {
     apps.length
       ? h('div', { class: 'card-box app-brief' }, apps.slice(0, LIMIT).map(a => h('button', { class: 'app-brief-row', onclick: () => openAppCard(a, reload) },
         h('span', { class: 'app-brief-name' }, a.name),
-        h('span', { class: 'muted app-brief-st' }, (appStatusById(a.status) || {}).name || ''))))
+        h('span', { class: 'app-brief-st' }, appStatusCell(appStatusById(a.status), a)))))
       : emptyBlock('Приложений пока нет', { ic: 'app' }));
 }
 

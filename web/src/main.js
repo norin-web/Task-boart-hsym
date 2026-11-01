@@ -80,7 +80,7 @@ async function boot() {
     S.linkFields = d.linkFields || [];
     S.templates = d.templates || [];
     S.apps = d.apps || [];
-    S.appStatuses = d.appStatuses || [];
+    S.appStatuses = (d.appStatuses || []).map(s => (s.kind === 'live' ? { ...s, name: 'App Store' } : s)); // статус «в продаже» всегда называется App Store
     S.appFields = d.appFields || [];
     S.appInfoItems = d.appInfoItems || [];
     S.priorityOptions = d.priorityOptions || [];

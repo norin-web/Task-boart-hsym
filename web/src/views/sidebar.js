@@ -73,9 +73,10 @@ export const unitTeams = u => {
 function unitItem(u, r) {
   const n = openCount(u);
   const overdue = u.counts && u.counts.overdue;
-  const here = r.unit === u.id && !r.team;
+  const inside = r.unit === u.id; // на странице юнита или его команды: список команд остаётся открытым
+  const here = inside && !r.team;
   const teams = unitTeams(u);
-  const canExpand = here && (teams.length > 0 || isSuper());
+  const canExpand = inside && (teams.length > 0 || isSuper());
   const open = canExpand && !closedUnits().includes(u.id);
   // подпункты — только текст: команды юнита, «+ Новая команда» на странице юнита
   const sub = (route, label, on) => link(route, { class: 'nav-sub' + (on ? ' active' : '') }, h('span', { class: 'nav-label' }, label));
@@ -84,7 +85,7 @@ function unitItem(u, r) {
       // клик по юниту — его обзор; по уже открытому юниту — ещё и сворачивает/разворачивает список команд, без отдельной стрелки
       class: 'nav-item unit nav-unit-row' + (here && (!seesApps() || !['board', 'list', 'timeline'].includes(r.mode)) ? ' active' : '') + (u.archived ? ' archived' : ''),
       dataset: { id: u.id },
-      onclick: canExpand ? () => toggleUnit(u.id) : null,
+      onclick: canExpand && here ? () => toggleUnit(u.id) : null,
       // правый клик — меню юнита
       oncontextmenu: isStaff() ? e => { e.preventDefault(); unitMenu({ x: e.clientX, y: e.clientY }, u); } : null,
     },

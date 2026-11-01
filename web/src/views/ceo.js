@@ -217,17 +217,17 @@ function figures(d, apps) {
 }
 
 const appPmName = a => (personById(appPm(a)) || {}).name || '';
-const statusText = a => { const st = appStatusById(a.status); return { text: st ? st.name : '' }; };
+const statusText = a => { const st = appStatusById(a.status); return { node: appStatusCell(st, a) }; };
 
 /** Строки экрана плитки: что за цифрой (G03). */
 function tileRows(key, d, apps, reload) {
   const { open, overdue, live30, done30, stale } = figures(d, apps);
-  const appLine = (a, date) => ({ title: a.name, app: (unitById(a.unitId) || {}).name || '', status: statusText(a), who: appPmName(a), date, open: () => openAppById(a.id, reload) });
+  const appLine = (a, date) => ({ icon: a, title: a.name, app: (unitById(a.unitId) || {}).name || '', status: statusText(a), who: appPmName(a), date, open: () => openAppById(a.id, reload) });
   const taskOpen = (r, t) => () => peekTask(r.unitId, (t || r).id);
   if (key === 'apps') return { heads: ['Приложение', 'Юнит', 'Статус', 'PM', 'Обновлено'], rows: apps.map(a => appLine(a, a.lastActivity ? relTime(a.lastActivity) : '')) };
   if (key === 'stale') return { heads: ['Приложение', 'Юнит', 'Статус', 'PM', 'Движение'], rows: stale.map(a => appLine(a, relTime(a.lastActivity))) };
   if (key === 'shipped') return { heads: ['Что вышло', 'Приложение', 'Статус', 'Исполнитель', 'Когда'], rows: [
-    ...live30.map(a => ({ title: 'В сторе', app: a.name, status: statusText(a), who: appPmName(a), date: relTime(a.statusAt), open: () => openAppById(a.id, reload) })),
+    ...live30.map(a => ({ icon: a, title: a.name, app: 'App Store', status: statusText(a), who: appPmName(a), date: relTime(a.statusAt), open: () => openAppById(a.id, reload) })),
     ...done30.map(({ a, r }) => ({ title: r.title, app: a.name, status: { text: 'Готово', cls: 'ok' }, who: (personById(r.assigneeId) || {}).name || '', date: relTime(r.doneAt), open: taskOpen(r) }))] };
   const heads = ['Задача', 'Приложение', 'Статус', 'Исполнитель', 'Срок'];
   if (key === 'late') return { heads, rows: overdue.map(x => ({ title: (x.task || x.request).title, app: x.app ? x.app.name : '', status: { text: 'Просрочено', cls: 'late' },
@@ -258,8 +258,8 @@ export function tileTable(key, d, apps, reload) {
         ? h('div', { class: 'an-table' },
           h('div', { class: 'an-row an-th' }, heads.map(x => h('span', null, x))),
           shown.map(x => h('button', { class: 'an-row', onclick: x.open },
-            h('b', null, x.title), h('span', { class: 'an-sub' }, x.app),
-            h('span', { class: 'an-st ' + (x.status.cls || '') }, x.status.text),
+            h('b', { class: x.icon ? 'an-app' : null }, x.icon && appIcon(x.icon, 'md'), h('span', null, x.title)), h('span', { class: 'an-sub' }, x.app),
+            h('span', { class: 'an-st ' + (x.status.cls || '') }, x.status.node || x.status.text),
             h('span', { class: 'an-sub' }, x.who || '—'), h('span', { class: 'an-date' + (x.late ? ' late' : '') }, x.date || '—'))))
         : emptyBlock('Здесь пусто', { ic: 'clock' }),
       rows.length > LIMIT && !all && h('button', { class: 'an-more', onclick: () => { all = true; draw(); } }, `Показать ещё ${rows.length - LIMIT}`),
@@ -284,7 +284,7 @@ export function statBlocks(d, apps, reload, tile = '') {
 
   return [
     { id: 'kpi', title: 'Цифры', col: 'full', render: () => h('div', { class: 'cs-row' },
-      stat(apps.length, 'Приложения', apps.filter(a => (appStatusById(a.status) || {}).kind === 'live').length + ' в сторе', '', null, 'apps'), stat(open.length, 'Задачи в работе', null, '', sparkline(openSeries(apps.flatMap(a => a.requests))), 'work'),
+      stat(apps.length, 'Приложения', apps.filter(a => (appStatusById(a.status) || {}).kind === 'live').length + ' в App Store', '', null, 'apps'), stat(open.length, 'Задачи в работе', null, '', sparkline(openSeries(apps.flatMap(a => a.requests))), 'work'),
       stat(overdue.length, 'Просрочено', overdue.length ? 'Требуют внимания' : null, overdue.length ? 'danger' : '', null, 'late'), stat(live30.length + done30.length, 'Выпущено', 'За 30 дней', '', null, 'shipped'),
       stat(stale.length, 'Давно не трогали', d.staleDays + '+ ' + plural(d.staleDays, ['день', 'дня', 'дней']), '', null, 'stale')) },
     { id: 'statuses', title: 'Приложения по статусам', col: 'full', render: () => section('По статусам', h('div', { class: 'card-box st-sum' },
@@ -301,7 +301,7 @@ export function statBlocks(d, apps, reload, tile = '') {
     }), 'PM нет')) },
     { id: 'stale', title: 'Без движения', col: 'right', render: () => section('Давно не трогали', list(stale.map(a => appRow(a, h('span', { class: 'muted rc-at' }, relTime(a.lastActivity)))), 'Таких нет'), stale.length || null) },
     { id: 'shipped', title: 'Выпущено за 30 дней', col: 'right', render: () => section('Выпущено за 30 дней', list([
-      ...live30.map(a => appRow(a, h('span', { class: 'muted rc-at' }, 'в сторе · ' + relTime(a.statusAt)))),
+      ...live30.map(a => appRow(a, h('span', { class: 'muted rc-at' }, 'App Store · ' + relTime(a.statusAt)))),
       ...done30.map(({ a, r }) => appRow(a, h('span', { class: 'muted rc-at' }, r.title.slice(0, 40) + ' · ' + relTime(r.doneAt))))], 'Пока ничего')) },
   ];
 }

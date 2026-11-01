@@ -134,7 +134,7 @@ export function releaseBlock(t, onChange) {
     const steps = [
       { label: 'Подготовка', state: st1, n: 1, at: dated && (hist[0] || rel).submittedAt },
       { label: phase === 'rejected' ? 'Реджект №' + (rel.rejectNo || '') : 'Ревью Apple', state: st2, n: 2, at: phase === 'rejected' ? rel.rejectedAt : phase === 'live' && rel.liveAt },
-      { label: 'В сторе', state: st3, n: 3, at: phase === 'live' && rel.liveAt },
+      { label: 'App Store', state: st3, n: 3, at: phase === 'live' && rel.liveAt },
     ];
     const byName = re => { const f = data.fields.find(x => re.test(x.name)); return f ? values[f.id] : ''; };
     const version = byName(/верси/i), build = byName(/сборк/i);
@@ -189,7 +189,7 @@ export function releaseBlock(t, onChange) {
       !hide.includes('attempts') && hist.length > 1 && h('details', { class: 'rl-sec rl-hist-d' }, h('summary', null, `Попытки · ${hist.length}`),
         h('div', { class: 'rl-hist' }, hist.map(x => h('div', { class: 'rl-hist-row' },
           h('span', null, '№' + x.n), h('span', { class: 'muted' }, fmtD(x.submittedAt)),
-          h('span', { class: x.result === 'reject' ? 'danger-text' : x.result === 'live' ? 'ok-text' : 'muted' }, x.result === 'reject' ? `реджект №${x.rejectNo || ''}` : x.result === 'live' ? 'в сторе' : 'ждёт'),
+          h('span', { class: x.result === 'reject' ? 'danger-text' : x.result === 'live' ? 'ok-text' : 'muted' }, x.result === 'reject' ? `реджект №${x.rejectNo || ''}` : x.result === 'live' ? 'App Store' : 'ждёт'),
           h('span', { class: 'muted rl-hist-why', title: x.reason || '' }, x.reason || ''))))));
   };
   const load = async () => {
@@ -308,7 +308,7 @@ export function openReleaseHistory(preset = {}) {
   const paintApps = () => fill(appSel, h('option', { value: '' }, 'Все приложения'),
     (S.apps || []).filter(a => !f.unitId || a.unitId === f.unitId).sort((x, y) => x.name.localeCompare(y.name)).map(a => h('option', { value: a.id }, a.name)));
   const resSel = h('select', { class: 'inp', onchange: e => { f.result = e.target.value; load(); } },
-    [['', 'Любой итог'], ['live', 'В сторе'], ['reject', 'Реджект'], ['pending', 'Ждёт Apple']].map(([v, l]) => h('option', { value: v, selected: v === f.result }, l)));
+    [['', 'Любой итог'], ['live', 'App Store'], ['reject', 'Реджект'], ['pending', 'Ждёт Apple']].map(([v, l]) => h('option', { value: v, selected: v === f.result }, l)));
   const stats = h('div', { class: 'cs-row rh-stats' });
   const list = h('div', { class: 'card-box rh-list' });
   const paintSeg = () => {
@@ -342,7 +342,7 @@ export function openReleaseHistory(preset = {}) {
           h('span', { class: 'muted' }, x.version || '—'),
           h('span', null, fmtD(x.submittedAt)),
           h('span', { class: x.result === 'reject' ? 'danger-text' : x.result === 'live' ? 'ok-text' : 'muted', title: x.reason || '' },
-            x.result === 'reject' ? `реджект №${x.rejectNo || ''}` : x.result === 'live' ? 'в сторе' : 'ждёт', x.at ? ' · ' + fmtD(x.at) : ''),
+            x.result === 'reject' ? `реджект №${x.rejectNo || ''}` : x.result === 'live' ? 'App Store' : 'ждёт', x.at ? ' · ' + fmtD(x.at) : ''),
           h('span', { class: 'muted' }, x.reviewDays == null ? '—' : x.reviewDays < 1 ? '< 1 дн.' : Math.round(x.reviewDays * 10) / 10 + ' дн.')))]
       : h('p', { class: 'muted', style: { margin: 0, padding: '14px' } }, 'За период релизов нет'));
   }
