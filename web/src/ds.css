@@ -901,3 +901,73 @@ button.fb-title:hover { color: var(--text); text-decoration: none; opacity: .8; 
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .rl-card { background: var(--surface-2); } }
 :root[data-theme="dark"] .rl-card { background: var(--surface-2); }
 .rl-card .af-val.af-empty, .af-val.af-empty { color: var(--warn); font-weight: 600; }
+
+/* ---------- Дашборд PM (55) ---------- */
+.sec-badge { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; background: var(--surface-3); color: var(--text-2); font-size: 12px; line-height: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.uc-icon.md, .app-img.md { width: 28px; height: 28px; border-radius: 8px; font-size: 12px; flex: none; }
+.ib-due { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; line-height: 16px; font-weight: 500; white-space: nowrap; }
+.ib-due .i { color: var(--muted); }
+.ib-due.late, .ib-due.late .i { color: var(--danger); font-weight: 600; }
+.ib-row { display: flex; align-items: center; gap: 12px; min-height: 56px; }
+.ib-row + .ib-row { border-top: 1px solid var(--border); }
+.ib-title { flex: 1; min-width: 0; text-align: left; font-size: 13px; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ib-title b { font-weight: 600; }
+.pl-card { padding: 14px; gap: 12px; border: 1px solid var(--border); border-radius: 20px; background: transparent; }
+.pl-head { gap: 10px; }
+.pl-app { gap: 10px; font-size: 14px; line-height: 20px; }
+.pl-app b { font-weight: 600; }
+.pl-title { color: var(--muted); font-size: 13px; line-height: 20px; font-weight: 500; }
+.pl-steps { gap: 6px; }
+.pl-step, .pl-step.st-done, .pl-step.st-blocked, .pl-step.st-todo { height: 32px; padding: 0 6px 0 10px; gap: 6px; border: 0; box-shadow: none; border-radius: 999px; background: var(--surface-2); color: var(--muted); font-size: 12px; line-height: 16px; font-weight: 600; }
+.pl-step:hover { background: var(--surface-3); }
+.pl-step .pl-name { color: inherit; }
+.pl-step.st-progress { background: var(--info-soft); color: var(--text); }
+.pl-dot { width: 8px; height: 8px; border-radius: 999px; flex: none; box-sizing: border-box; border: 1.5px solid var(--border-strong); }
+.pl-step.st-done .pl-dot { background: var(--accent); border: 0; }
+.pl-step.st-progress .pl-dot { background: var(--info-fill); border: 0; }
+.pl-who { font-size: 11px; font-weight: 500; min-width: 20px; }
+.pl-none { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 999px; background: var(--warn-soft); color: var(--warn); font-weight: 600; }
+.pl-release { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; border-radius: 999px; background: var(--primary); color: var(--on-primary); font-size: 13px; line-height: 20px; font-weight: 600; }
+.pl-release .grow { flex: 1; }
+.pl-release .btn { height: 32px; padding: 0 14px; gap: 6px; background: var(--on-primary); color: var(--primary); border: 0; font-size: 12px; font-weight: 600; }
+.pb-row { display: flex; align-items: center; gap: 10px; min-height: 56px; }
+.pb-row + .pb-row { border-top: 1px solid var(--border); }
+.pb-row .avatar.sm { width: 24px; height: 24px; }
+.ceo-page .section-head .seg { background: transparent; padding: 0; gap: 2px; }
+.ceo-page .section-head .seg button { height: 32px; padding: 0 12px; }
+.ceo-page .section-head .seg button.on { background: var(--surface-3); color: var(--text); box-shadow: none; }
+.kpi-table .kt-row { grid-template-columns: minmax(0, 1fr) 88px 88px 96px 88px 88px; min-height: 52px; }
+.kpi-table .kt-row + .kt-row { border-top: 1px solid var(--border); }
+.kpi-table .kt-head { min-height: 40px; }
+.kpi-table .kt-head span { text-transform: none; letter-spacing: 0; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); }
+.kpi-table .kt-row:not(.kt-head) .num { font-size: 13px; line-height: 20px; font-weight: 500; color: var(--text); text-transform: none; }
+.kpi-table .kt-row:not(.kt-head) .num b { font-weight: 600; }
+.kpi-table .kt-row:not(.kt-head) .num.muted { color: var(--muted); }
+.kpi-table .kt-row:not(.kt-head) .num.danger-text { color: var(--danger); }
+.kpi-table .kt-who { gap: 10px; }
+.kpi-table .kt-who .avatar.md { width: 28px; height: 28px; }
+.kpi-table .kt-who b { font-size: 13px; line-height: 20px; font-weight: 600; }
+.kpi-table .kt-who small { font-size: 12px; line-height: 16px; font-weight: 500; }
+
+/* ---------- Дашборд RM (32) ---------- */
+.rm-row .rm-title { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.rm-row .rm-title b { font-size: 13px; line-height: 20px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.rm-row .rm-actions { flex: none; display: flex; gap: 8px; }
+.rm-row.rm-live { min-height: 44px; padding: 10px 0; gap: 10px; border: 0; background: transparent; width: 100%; font: inherit; color: inherit; }
+.rm-row.rm-live + .rm-row.rm-live { border-top: 1px solid var(--border); }
+.rm-live-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--accent); flex: none; }
+.rm-live-at { font-size: 12px; line-height: 16px; font-weight: 500; white-space: nowrap; }
+.rm-grid .card-box.empty-state.center .i { color: var(--accent-text, var(--accent)); }
+.rm-grid .card-box.empty-state.center b { font-size: 16px; line-height: 24px; font-weight: 600; color: var(--text); }
+.rm-grid .card-box.empty-state.center p { font-size: 13px; line-height: 20px; }
+
+/* ---------- Дашборд сотрудника (31): загрузка позиции ---------- */
+.card-box.tl-list { padding: 0; gap: 12px; }
+.tl-list .tl-row { grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 0; border: 0; }
+.tl-list .tl-name { font-weight: 500; }
+.rv-row .fc-main { flex: 1; }
+.rv-row .fc-title { font-size: 13px; line-height: 20px; font-weight: 600; }
+.rv-row .fc-sub { font-size: 12px; line-height: 16px; font-weight: 500; }
+.rv-row .avatar.md { width: 28px; height: 28px; flex: none; }
+.rv-actions .btn { height: 32px; padding: 0 14px; font-size: 12px; font-weight: 600; }
+.rv-actions .btn.success { order: 1; color: #fff; }

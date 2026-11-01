@@ -33,7 +33,7 @@ export function focusBlock(d, reload) {
       .flatMap((x, i) => (i ? [' · ', x] : [x]));
   };
   return h('section', null,
-    h('div', { class: 'section-head' }, h('h2', null, 'Фокус', rows.length > 0 && h('span', { class: 'muted sec-n' }, rows.length)), h('span', { class: 'muted fc-hint' }, 'Что делать сейчас')),
+    h('div', { class: 'section-head' }, h('h2', null, 'Фокус'), h('span', { class: 'muted fc-hint' }, 'Что делать сейчас')),
     rows.length ? h('div', { class: 'card-box fc-list' },
       h('div', { class: 'fc-hero' },
         first.app ? appIcon(first.app, 'lg') : statusIcon(first.statusKind || 'progress', 24),
@@ -52,17 +52,23 @@ export function focusBlock(d, reload) {
       : emptyBlock('Срочного нет', { ok: true }));
 }
 
+const waited = iso => {
+  const n = iso ? Math.floor((Date.now() - Date.parse(iso)) / 864e5) : -1;
+  return n < 0 ? '' : n < 1 ? 'отдано сегодня' : `ждёт ${n} ${plural(n, ['день', 'дня', 'дней'])}`;
+};
+
 /** Очередь ревью лида: чья задача и решение — «Аппрув» (в готово) или «Правки» (автору, с комментарием). */
 export function reviewsBlock(d, reload) {
   const rows = d.lead.reviews;
   return h('section', null,
-    h('div', { class: 'section-head' }, h('h2', null, 'Ждут вашего ревью', rows.length > 0 && h('span', { class: 'muted sec-n' }, rows.length))),
+    h('div', { class: 'section-head' }, h('h2', null, 'Ждут вашего ревью'), rows.length > 0 && h('span', { class: 'muted fc-hint' }, rows.length)),
     rows.length ? h('div', { class: 'card-box att-list' }, rows.map(t => {
       const author = personById(t.authorId);
       return h('div', { class: 'rv-row' },
-        author ? avatar(author, 'sm') : h('span'),
+        author ? avatar(author, 'md') : h('span'),
         h('button', { class: 'link-btn fc-main', onclick: () => peekTask(t.unitId, t.id) },
-          h('span', { class: 'fc-title' }, t.title), h('span', { class: 'muted fc-sub' }, (author ? author.name : '') + (t.app ? ' · ' + t.app.name : ''))),
+          h('span', { class: 'fc-title' }, t.title.split(' · ')[0] + (t.app ? ' · ' + t.app.name : '')),
+          h('span', { class: 'muted fc-sub' }, [author && author.name, waited(t.updatedAt)].filter(Boolean).join(' · '))),
         h('div', { class: 'rv-actions' }, reviewButtons({ ...t, reviewFrom: t.authorId }, () => reload())));
     })) : emptyBlock('Ревью никто не ждёт', { ic: 'eye' }));
 }

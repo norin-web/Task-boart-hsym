@@ -84,7 +84,7 @@ function section(title, hint, sub, rows, line, actions, limit = 0) {
       ? h('div', { class: 'card-box att-list' }, (limit && !all ? rows.slice(0, limit) : rows).map(x => h('div', { class: 'rm-row' },
         x.app ? appIcon(x.app, 'sm') : h('span'),
         h('button', { class: 'link-btn rm-main', onclick: () => peekTask(x.unitId, x.id) },
-          h('span', { class: 'rm-title' }, h('b', null, x.app ? x.app.name : x.title), x.app && prioTag(x.app.priority), x.app && x.app.isTest && h('span', { class: 'test-tag' }, 'тест')),
+          h('span', { class: 'rm-title' }, h('b', null, x.app ? x.app.name : x.title, x.version ? ' · ' + x.version : ''), x.app && x.app.isTest && h('span', { class: 'test-tag' }, 'тест')),
           line(x)),
         h('div', { class: 'rm-actions' }, actions(x)))),
         limit > 0 && rows.length > limit && h('button', { class: 'rc-more link-btn', onclick: () => { all = !all; draw(); } }, all ? 'Свернуть' : `Показать ещё ${rows.length - limit}`))
@@ -102,11 +102,10 @@ function storeBlock(rows) {
   const box = h('section');
   let open = false;
   const fmt = iso => (iso ? new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : '');
-  const row = x => h('button', { class: 'rm-row rm-live', onclick: () => peekTask(x.unitId, x.taskId) },
-    x.app ? appIcon(x.app, 'sm') : h('span'),
-    h('span', { class: 'rm-main' }, h('span', { class: 'rm-title' }, h('b', null, x.app ? x.app.name : x.key), x.version && h('span', { class: 'muted' }, ' v' + x.version)),
-      h('span', { class: 'rq-line muted' }, x.n > 1 ? `с ${x.n}-й попытки` : 'с первой попытки')),
-    h('span', { class: 'ok-text rm-live-at' }, icon('check', 13), fmt(x.at)));
+  const row = x => h('button', { class: 'rm-row rm-live', title: x.n > 1 ? `С ${x.n}-й попытки` : 'С первой попытки', onclick: () => peekTask(x.unitId, x.taskId) },
+    h('span', { class: 'rm-live-dot' }),
+    h('span', { class: 'rm-main' }, h('span', { class: 'rm-title' }, h('b', null, x.app ? x.app.name : x.key, x.version ? ' · ' + x.version : ''))),
+    h('span', { class: 'muted rm-live-at' }, fmt(x.at)));
   const draw = () => fill(box,
     h('div', { class: 'section-head' }, h('h2', null, 'Релизы в App Store', rows.length > 0 && h('span', { class: 'muted sec-n' }, rows.length)),
       h('button', { class: 'link-btn', onclick: () => openReleaseHistory({ result: 'live' }) }, 'История')),

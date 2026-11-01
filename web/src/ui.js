@@ -202,7 +202,7 @@ export function topbar(left, right) {
   return h('header', { class: 'topbar' },
     h('button', { class: 'icon-btn hamburger', title: 'Меню', onclick: toggleNav }, icon('menu', 18)),
     h('div', { class: 'tb-left' }, left),
-    h('div', { class: 'tb-right' }, right, bellFactory && bellFactory()));
+    h('div', { class: 'tb-right' }, bellFactory && bellFactory(), right));
 }
 
 /* ---------- тосты ---------- */

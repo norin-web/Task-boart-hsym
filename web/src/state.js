@@ -184,7 +184,9 @@ export function fmtDate(s, withYear) {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || '');
   if (!m) return String(s || '');
   const sameYear = Number(m[1]) === new Date().getFullYear();
-  return `${m[3]}.${m[2]}${sameYear && !withYear ? '' : '.' + m[1]}`;
+  // как в макете: «14 дек.», другой год — «14 дек. 2025»
+  const mon = ['янв.', 'февр.', 'мар.', 'апр.', 'мая', 'июн.', 'июл.', 'авг.', 'сент.', 'окт.', 'нояб.', 'дек.'][Number(m[2]) - 1];
+  return `${Number(m[3])} ${mon}${sameYear && !withYear ? '' : ' ' + m[1]}`;
 }
 
 export function fmtDateTime(iso) {

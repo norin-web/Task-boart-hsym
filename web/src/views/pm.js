@@ -47,18 +47,21 @@ export async function renderPmHome() {
 function inbox(d, reload) {
   if (!d.inbox.length) return null;
   return h('section', null,
-    h('div', { class: 'section-head' }, h('h2', null, 'Входящие от CEO', h('span', { class: 'muted sec-n' }, d.inbox.length))),
+    h('div', { class: 'section-head' }, h('h2', null, 'Входящие от CEO'), h('span', { class: 'sec-badge' }, d.inbox.length)),
     h('div', { class: 'card-box att-list' }, d.inbox.map(r => h('div', { class: 'ib-row' },
-      r.app ? appIcon(r.app, 'xs') : h('span'),
-      h('button', { class: 'link-btn ib-title', onclick: () => peekTask(r.unitId, r.id) }, h('b', null, r.app ? r.app.name : ''), h('span', { class: 'muted' }, (r.app ? ' · ' : '') + r.title)),
+      r.app ? appIcon(r.app, 'md') : h('span'),
+      h('button', { class: 'link-btn ib-title', onclick: () => peekTask(r.unitId, r.id) }, h('b', null, r.app ? r.app.name : ''), h('span', { class: 'muted' }, (r.app ? ' · ' : '') + shortTitle(r))),
       (r.app && prioTag(r.app.priority)) || h('span'),
-      r.dueDate && h('span', { class: 'muted ib-due' + (r.dueDate < todayStr() ? ' late' : '') }, icon('calendar', 12), fmtDate(r.dueDate)),
+      r.dueDate && h('span', { class: 'ib-due' + (r.dueDate < todayStr() ? ' late' : '') }, icon('calendar', 14), fmtDate(r.dueDate)),
       h('button', {
-        class: 'btn primary sm', onclick: () => openDecomposeDialog({ id: r.id, unitId: r.unitId, type: r.type, title: r.title, dueDate: r.dueDate }).then(ok => ok && reload()),
+        class: 'btn soft sm', onclick: () => openDecomposeDialog({ id: r.id, unitId: r.unitId, type: r.type, title: r.title, dueDate: r.dueDate }).then(ok => ok && reload()),
       }, icon('tree', 13), 'Разложить')))));
 }
 
 /* ---------- приложения по этапам ---------- */
+
+// «New App: Streaks» → «New App»: название приложения уже стоит рядом
+const shortTitle = r => (r.app ? r.title.replace(new RegExp('\\s*[:·—-]\\s*' + r.app.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$'), '') : r.title) || r.title;
 
 function pipeline(d, reload) {
   const rows = [...d.pipeline].sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999'));
@@ -67,24 +70,24 @@ function pipeline(d, reload) {
     h('div', { class: 'section-head' }, h('h2', null, 'Приложения по этапам')),
     rows.length ? h('div', { class: 'pl-list' }, rows.map(r => h('div', { class: 'card-box pl-card' },
       h('div', { class: 'pl-head' },
-        r.app && h('button', { class: 'link-btn pl-app', onclick: () => openAppById(r.app.id, reload) }, appIcon(r.app, 'xs'), h('b', null, r.app.name)),
-        h('button', { class: 'link-btn pl-title', title: REQUEST_TYPES[r.type] || '', onclick: () => peekTask(r.unitId, r.id) }, r.title),
+        r.app && h('button', { class: 'link-btn pl-app', onclick: () => openAppById(r.app.id, reload) }, appIcon(r.app, 'md'), h('b', null, r.app.name)),
+        h('button', { class: 'link-btn pl-title', title: r.title, onclick: () => peekTask(r.unitId, r.id) }, shortTitle(r)),
         h('span', { class: 'spacer' }),
-        r.dueDate && h('span', { class: 'muted ib-due' + (r.dueDate < today ? ' late' : ''), title: r.progress + '% этапов готово' }, fmtDate(r.dueDate))),
+        r.dueDate && h('span', { class: 'ib-due' + (r.dueDate < today ? ' late' : ''), title: r.progress + '% этапов готово' }, icon('calendar', 14), fmtDate(r.dueDate))),
       h('div', { class: 'pl-steps' }, r.stages.map(s => {
         const st = stateOf(s);
         const p = personById(s.assigneeId);
         const late = !s.done && s.dueDate && s.dueDate < today;
         return h('button', { class: 'pl-step st-' + st, title: `${s.title} — ${STATE[st].label}`, onclick: () => peekTask(s.unitId, s.id) },
-          h('span', { class: 'pl-ic' }, icon(STATE[st].icon, 12)),
+          h('span', { class: 'pl-dot' }),
           h('span', { class: 'pl-name' }, s.title.split(' · ')[0]),
           s.step === 'release' && !s.assigneeId
             ? h('span', { class: 'muted pl-who' }, 'RM')
-            : p ? avatar(p, 'sm') : h('span', { class: 'warn-text pl-who', title: 'Без исполнителя' }, '?'),
+            : p ? avatar(p, 'sm') : h('span', { class: 'pl-who pl-none', title: 'Без исполнителя' }, '?'),
           late && h('span', { class: 'pl-late', title: 'Просрочено' }, fmtDate(s.dueDate)));
       })),
-      r.releaseReady && h('div', { class: 'pl-release' }, icon('check', 14), 'Все этапы закрыты',
-        h('button', { class: 'btn primary sm', onclick: () => sendRelease(r.stages.find(s => s.step === 'release').id).then(reload) }, icon('rocket', 13), 'Передать в релиз')))))
+      r.releaseReady && h('div', { class: 'pl-release' }, icon('done', 16), h('span', { class: 'grow' }, 'Все этапы закрыты'),
+        h('button', { class: 'btn sm', onclick: () => sendRelease(r.stages.find(s => s.step === 'release').id).then(reload) }, icon('rocket', 13), 'Передать в релиз')))))
       : emptyBlock('Нет работ', { ic: 'progress' }));
 }
 
@@ -102,7 +105,7 @@ const PROB = {
 function problems(d) {
   const rows = d.problems;
   return h('section', null,
-    h('div', { class: 'section-head' }, h('h2', null, 'Проблемы', rows.length > 0 && h('span', { class: 'muted sec-n' }, rows.length))),
+    h('div', { class: 'section-head' }, h('h2', null, 'Проблемы'), rows.length > 0 && h('span', { class: 'sec-badge' }, rows.length)),
     rows.length ? h('div', { class: 'card-box att-list' }, rows.slice(0, 14).map(x => {
       const a = PROB[x.type], t = x.task;
       const p = personById(t.assigneeId);
@@ -128,10 +131,10 @@ export function team(d, period, setPeriod) {
     rows.length ? h('div', { class: 'card-box kpi-table', role: 'table', 'aria-label': 'KPI команды' },
       h('div', { class: 'kt-row kt-head', role: 'row' },
         // пояснения колонок — в подсказках, а не текстом под таблицей
-        [['Сотрудник'], ['Сделано', 'Закрыто за период'], ['В срок', 'Доля закрытых в срок'], ['Ср. время', 'От «в работе» до «готово»'], ['В работе', 'Сейчас'], ['Просрочено', 'Сейчас']]
+        [['Сотрудник'], ['Сделано', 'Закрыто за период'], ['В срок', 'Доля закрытых в срок'], ['Ср. время', 'От «в работе» до «готово»'], ['В работе', 'Сейчас'], ['Просроч.', 'Просрочено сейчас']]
           .map(([t, tip], i) => h('span', { role: 'columnheader', class: i ? 'num' : '', title: tip || '' }, t))),
       rows.map(k => h('div', { class: 'kt-row', role: 'row' },
-        h('span', { class: 'kt-who', role: 'cell' }, avatar(k.p, 'sm'), h('span', { 'data-pcard': k.p.id }, h('b', null, k.p.name),
+        h('span', { class: 'kt-who', role: 'cell' }, avatar(k.p, 'md'), h('span', { 'data-pcard': k.p.id }, h('b', null, k.p.name),
           h('small', { class: 'muted' }, (k.p.positionIds || []).map(id => (deptById(id) || {}).name).filter(Boolean).join(', ')))),
         h('span', { class: 'num', role: 'cell', 'data-label': 'Сделано' }, h('b', null, k.done)),
         h('span', { class: 'num', role: 'cell', 'data-label': 'В срок' }, pct(k.onTime)),
