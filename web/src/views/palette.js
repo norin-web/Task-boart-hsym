@@ -8,6 +8,12 @@ import { openShortcuts } from './people.js';
 import { mode } from '../data.js';
 import { fillDemo } from './home.js';
 
+/** Совпадение с запросом — зелёным, как в макете 26. */
+const mark = (text, q) => {
+  const i = q ? text.toLowerCase().indexOf(q) : -1;
+  return i < 0 ? text : [text.slice(0, i), h('span', { class: 'pal-hl' }, text.slice(i, i + q.length)), text.slice(i + q.length)];
+};
+
 export const isPaletteOpen = () => $('#palette-root').children.length > 0;
 
 /** Глобальный поиск (⌘K): задачи всех юнитов, юниты и команды. */
@@ -37,8 +43,7 @@ export function openPalette() {
   const wrap = h('div', { class: 'palette-wrap', onmousedown: e => { if (e.target === wrap) close(); } },
     h('div', { class: 'palette' },
       h('div', { class: 'palette-top' }, icon('search', 18), inp, h('kbd', null, 'Esc')),
-      list,
-      h('div', { class: 'palette-foot' }, h('span', null, '↑↓ выбрать'), h('span', null, '↵ открыть'))));
+      list));
 
   function close() {
     wrap.remove();
@@ -65,8 +70,9 @@ export function openPalette() {
         onclick: () => { close(); it.run(); },
       },
       it.dot ? h('span', { class: 'unit-dot', style: { background: it.dot } }) : icon(it.icon, 16),
-      h('span', { class: 'lbl' }, it.label),
-      it.hint && h('span', { class: 'hint' }, it.hint)));
+      h('span', { class: 'lbl' }, mark(it.label, q)),
+      it.hint && h('span', { class: 'hint' }, it.hint),
+      i === sel && h('span', { class: 'pal-enter', 'aria-hidden': 'true' }, '↵')));
     });
     fill(list, ...(nodes.length ? nodes : [h('div', { class: 'pal-empty' }, q.length < 2 ? 'Введите хотя бы 2 символа' : 'Ничего не найдено')]));
     const cur = list.querySelector('.sel');
