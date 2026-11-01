@@ -509,7 +509,7 @@ function checklistBlock(t, editable) {
   if (!editable) {
     const items = t.checklist || [];
     if (!items.length) return null;
-    return append(box, h('div', { class: 'block-title' }, 'Чеклист', h('span', { class: 'muted', style: { fontWeight: 400 } }, items.filter(i => i.done).length + ' из ' + items.length)),
+    return fill(box, h('div', { class: 'block-title' }, 'Чеклист', h('span', { class: 'muted', style: { fontWeight: 400 } }, items.filter(i => i.done).length + ' из ' + items.length)),
       h('div', { class: 'cl-list' }, items.map(it => h('div', { class: 'cl-item' + (it.done ? ' done' : '') },
         h('input', { type: 'checkbox', checked: it.done, disabled: true }), h('span', { class: 'cl-text' }, it.text)))));
   }
