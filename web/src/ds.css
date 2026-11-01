@@ -1191,4 +1191,6 @@ input.switch:disabled { opacity: .5; cursor: default; }
 #main { height: calc(100vh - 16px); margin-bottom: -16px; }
 .topbar { background: var(--bg); position: relative; z-index: 5; }
 .view-body { position: relative; }
+/* продолжение подложки шапки: контент заезжает под неё, снизу лёгкая тень 5% */
+.view-body::before { content: ''; display: block; position: sticky; top: 0; height: 24px; margin-bottom: -24px; z-index: 4; pointer-events: none; background: var(--bg); box-shadow: 0 6px 16px rgba(0, 0, 0, .05); }
 @media (max-width: 900px) { #main { height: 100vh; margin-bottom: 0; } }
