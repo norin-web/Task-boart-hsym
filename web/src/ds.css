@@ -1107,3 +1107,48 @@ input.switch:focus-visible { outline: 2px solid var(--focus, var(--accent)); out
 .jr-task:hover { text-decoration: underline; }
 .jr-badge { flex: none; display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border); font-size: 12px; line-height: 16px; font-weight: 500; color: var(--text-2); white-space: nowrap; }
 .jr-time { flex: none; width: 40px; text-align: right; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ---------- Настройки · Профиль (49): иконка строки ---------- */
+.prefs-ic { width: 36px; height: 36px; flex: none; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; background: var(--surface-3); color: var(--text); }
+.prefs-row.danger .prefs-ic { color: var(--text); }
+.prefs-row-text b { font-weight: 600; font-size: 14px; line-height: 20px; }
+.prefs-row-text small { font-size: 13px; line-height: 20px; font-weight: 500; }
+
+/* ---------- Настройки · Внешний вид (50) ---------- */
+.theme-pick { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 0; }
+.theme-card { display: grid; gap: 12px; padding: 12px; border: 0; border-radius: 20px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--border); color: var(--text); text-align: left; font: inherit; cursor: pointer; }
+.theme-card:hover { box-shadow: inset 0 0 0 1px var(--border-strong); }
+.theme-card.on { box-shadow: inset 0 0 0 2px var(--text); }
+.th-prev { display: flex; gap: 4px; height: 112px; }
+.th-shot { --b: #ECEEF2; --sd: #191D36; --pn: #FFFFFF; --ln: #E3E5EA; flex: 1; display: flex; gap: 8px; padding: 8px; border-radius: 14px; background: var(--b); min-width: 0; }
+.th-shot.dark { --b: #0F1222; --sd: #1F243C; --pn: #1F243C; --ln: #3A4266; }
+.th-shot .th-side { width: 36px; flex: none; border-radius: 8px; background: var(--sd); }
+.th-shot.dark .th-side { background: #191D36; }
+.th-main { flex: 1; display: grid; grid-template-rows: auto 1fr; gap: 6px; min-width: 0; }
+.th-main > i { display: block; height: 4px; width: 50%; border-radius: 999px; background: var(--ln); margin-top: 6px; }
+.th-panel { display: grid; align-content: start; gap: 6px; padding: 10px 8px; border-radius: 8px; background: var(--pn); }
+.th-panel i { display: block; height: 4px; border-radius: 999px; background: var(--ln); width: 80%; }
+.th-panel i + i { width: 45%; }
+.th-foot { display: flex; align-items: center; gap: 8px; padding: 0 4px 2px; }
+.th-foot b { flex: 1; font-size: 13px; line-height: 20px; font-weight: 600; }
+.th-radio { width: 20px; height: 20px; flex: none; border-radius: 999px; box-shadow: inset 0 0 0 1.5px var(--border-strong); display: inline-flex; align-items: center; justify-content: center; }
+.theme-card.on .th-radio { background: var(--text); color: var(--surface); box-shadow: none; }
+@media (max-width: 640px) { .theme-pick { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- Настройки · Уведомления (51) ---------- */
+.nt-table { padding: 8px 24px; }
+.nt-row { grid-template-columns: minmax(0, 1fr) 96px 96px 104px; min-height: 64px; }
+.nt-row > [role=cell]:not(:first-child), .nt-row > [role=columnheader]:not(:first-child) { justify-self: center; display: inline-flex; align-items: center; gap: 6px; }
+.nt-row > .prefs-row-text { justify-self: stretch; display: grid; text-align: left; }
+.nt-row input.switch { width: 32px; height: 20px; padding: 0; accent-color: auto; }
+.nt-head { min-height: 48px; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); text-transform: none; letter-spacing: 0; background: transparent; }
+.soon-tag { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 999px; background: var(--surface-3); font-size: 11px; line-height: 16px; font-weight: 600; color: var(--muted); }
+input.switch:disabled { opacity: .5; cursor: default; }
+/* стрелка строки настроек видна всегда (49, 52) */
+.prefs-go { opacity: 1; }
+.dot-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.dot-chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--border); font-size: 12px; line-height: 16px; font-weight: 500; color: var(--text-2); white-space: nowrap; }
+.dot-chip i { width: 6px; height: 6px; border-radius: 999px; flex: none; }
+.prefs-row { align-items: flex-start; }
+.prefs-row .prefs-go { align-self: center; }
+.prefs-body:not(.narrow) .prefs-row { padding: 16px 24px; }
