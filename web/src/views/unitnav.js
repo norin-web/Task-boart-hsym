@@ -16,6 +16,7 @@ function tabs(u) {
     ['list', 'Задачи', 'list'],
     ['board', 'Доска', 'board'],
     ['team', 'Команда', 'users', S.board ? S.board.members.length : 0],
+    isStaff() && !ceoDefault() && ['settings', 'Настройки', 'settings'],
   ].filter(Boolean);
 }
 
@@ -25,10 +26,6 @@ const TITLES = { overview: 'Обзор юнита', apps: 'Приложения 
 export function unitHeader(active, right = [], team = null) {
   const u = S.board.unit;
   const sep = () => h('span', { class: 'crumb-sep', 'aria-hidden': 'true' }, '/');
-  // настройки юнита — иконкой в шапке (как колокольчик), а не вкладкой среди разделов; доступно в режиме «Полный» у CEO
-  const settingsBtn = isStaff() && !ceoDefault() && link({ unit: u.id, mode: 'settings' }, {
-    class: 'icon-btn' + (active === 'settings' ? ' on' : ''), title: 'Настройки юнита', 'aria-label': 'Настройки юнита',
-  }, icon('settings', 18));
   return [
     topbar([
       h('div', { class: 'unit-head' },
@@ -38,7 +35,7 @@ export function unitHeader(active, right = [], team = null) {
           team ? link({ unit: u.id, mode: seesApps() ? 'overview' : 'board' }, { class: 'crumb' }, u.name) : h('span', { class: 'crumb' }, u.name),
           u.archived && h('span', { class: 'badge' }, 'в архиве')),
         h('h1', null, team ? team.name : TITLES[active] || u.name)),
-    ], [settingsBtn, ...right]),
+    ], right),
     h('nav', { class: 'unit-tabs', role: 'tablist', 'aria-label': 'Разделы юнита' },
       tabs(u).map(([mode, label, ic, n]) => link({ unit: u.id, mode }, {
         class: 'unit-tab' + (active === mode ? ' on' : ''), role: 'tab', 'aria-selected': String(active === mode),

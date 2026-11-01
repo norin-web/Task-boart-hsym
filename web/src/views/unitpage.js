@@ -49,11 +49,10 @@ export async function renderUnitPage() {
         stat(apps.length, plural(apps.length, ['приложение', 'приложения', 'приложений']), 'apps'),
         stat(apps.filter(a => a.active > 0).length, 'в работе', 'apps'),
         stat(open.length, 'открытых задач', 'list'),
-        stat(late, 'просрочено', 'list', late ? 'danger' : ''),
-        stat(S.board.members.length, 'в команде', 'team')),
+        stat(late, 'просрочено', 'list', late ? 'danger' : '')),
       h('div', { class: 'home-grid' },
-        h('div', { class: 'home-col' }, inProgress(ud, load), attention(ud, load), appsBrief(u, apps, load)),
-        h('div', { class: 'home-col' }, owner(u, load), tasksByColumn(u, open), teamBrief(u), recent(ud, load, { empty: 'За 30 дней статусы приложений юнита не менялись' }))));
+        h('div', { class: 'home-col' }, inProgress(ud, load), appsBrief(u, apps, load), attention(ud, load)),
+        h('div', { class: 'home-col' }, tasksByColumn(u, open), teamBrief(u), owner(u, load), recent(ud, load, { empty: 'За 30 дней статусы приложений юнита не менялись' }))));
   }
 
   load();

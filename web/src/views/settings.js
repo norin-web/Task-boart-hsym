@@ -86,8 +86,9 @@ export function renderSettings() {
     h('button', { class: 'btn ghost sm', title: 'Убрать с карточек (значения сохранятся)', onclick: () => setFieldArchived(f, true) }, 'Убрать'))));
 
   fill($('#main'),
-    ...unitHeader('settings'),
-    h('div', { class: 'view-body' }, h('div', { class: 'page settings-page' },
+    ...unitHeader('settings', [h('button', { class: 'btn primary', onclick: e => save(e.currentTarget) }, 'Сохранить изменения')]),
+    h('div', { class: 'view-body' }, h('div', { class: 'page settings-page unit-set' },
+      h('div', { class: 'us-col' },
       h('section', { class: 'card-box' },
         h('h2', null, 'Основное'),
         h('p', { class: 'hint' }, 'Название, ключ и внешний вид юнита.'),
@@ -97,19 +98,17 @@ export function renderSettings() {
         h('p', { class: 'hint rules-link' }, icon('progress', 13), 'Ревью, чеклист перед «готово», скрытие и архив выполненных — в ',
           link({ view: 'settings', tab: 'automations' }, null, 'Настройках → Автоматизации'), '.'),
 
-        h('div', { class: 'sub-title' }, 'Колонки доски'),
-        h('p', { class: 'hint', style: { marginTop: '-4px' } }, 'Тип колонки влияет на статистику: «Готово» — задача выполнена (не просрочена, считается в прогрессе).'),
+        ),
+
+      h('section', { class: 'card-box' },
+        h('h2', null, 'Колонки доски'),
+        h('p', { class: 'hint' }, 'Тип колонки влияет на статистику: «Готово» — задача выполнена (не просрочена, считается в прогрессе).'),
         colEditor.el,
 
         h('div', { class: 'sub-title' }, 'Стандартные поля'),
-        builtinRows.map(r => r.el),
+        builtinRows.map(r => r.el))),
 
-        h('div', { class: 'row', style: { marginTop: '16px' } }, h('button', { class: 'btn primary', onclick: e => save(e.currentTarget) }, 'Сохранить изменения'))),
-
-      teamSection(),
-
-      flowSection(u),
-
+      h('div', { class: 'us-col' },
       h('section', { class: 'card-box' },
         h('div', { class: 'section-head', style: { marginBottom: '4px' } },
           h('h2', null, 'Поля карточки'),
@@ -135,7 +134,9 @@ export function renderSettings() {
         h('p', { class: 'hint' }, 'Архивный юнит скрывается из меню, но все задачи сохраняются. Удаление необратимо.'),
         h('div', { class: 'row' },
           h('button', { class: 'btn', onclick: () => { archiveUnit(unitById(u.id) || u, !u.archived); renderSettings(); } }, icon('archive', 15), u.archived ? 'Вернуть из архива' : 'В архив'),
-          h('button', { class: 'btn danger', onclick: () => deleteUnit(unitById(u.id) || u) }, icon('trash', 15), 'Удалить юнит'))))));
+          h('button', { class: 'btn danger', onclick: () => deleteUnit(unitById(u.id) || u) }, icon('trash', 15), 'Удалить юнит')))),
+
+      h('div', { class: 'us-wide' }, teamSection(), flowSection(u)))));
 
   if (active.length > 1) {
     Sortable.create(fieldList, {
