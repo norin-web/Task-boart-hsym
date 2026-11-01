@@ -923,65 +923,76 @@ export async function openDecomposeDialog(req) {
   }
   const body = h('div', { class: 'dc-list' });
   const deptName = id => (S.departments.find(d => d.id === id) || {}).name || '—';
-  const peopleOptions = (positionId, value) => {
-    const fit = team.filter(p => (p.positionIds || []).includes(positionId));
-    const rest = team.filter(p => !fit.includes(p));
-    return [h('option', { value: '' }, '— без исполнителя —'),
-      fit.length && h('optgroup', { label: deptName(positionId) }, fit.map(p => h('option', { value: p.id, selected: p.id === value }, p.name + (p.access === 'lead' ? ' · лид' : '')))),
-      rest.length && h('optgroup', { label: 'Остальные в юните' }, rest.map(p => h('option', { value: p.id, selected: p.id === value }, p.name)))];
+  const active = () => steps.filter(s => s.on);
+  const syncGo = () => {
+    const go = body.closest('.modal')?.querySelector('.modal-foot .btn.primary');
+    if (go) { const n = active().length; go.textContent = `Разложить на ${n} ${plural(n, ['этап', 'этапа', 'этапов'])}`; }
   };
+  // выбор из меню вместо системного списка: подпись, галочка у текущего
+  const pickBtn = (cls, content, items) => h('button', { class: cls, type: 'button', 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); menu(e.currentTarget, items(), { cls: 'dc-menu', align: 'left' }); } }, content, icon('chevron', 14));
+  const whoPick = st => {
+    const fit = team.filter(p => (p.positionIds || []).includes(st.positionId));
+    const row = p => ({ label: p.name + (p.access === 'lead' ? ' · лид' : ''), icon: p.id === st.assigneeId ? 'check' : null, action: () => { st.assigneeId = p.id; draw(); } });
+    const cur = personById(st.assigneeId);
+    return pickBtn('dc-pick', [cur ? avatar(cur, 'sm') : h('span', { class: 'dc-noone' }), h('span', { class: 'dc-pick-name' + (cur ? '' : ' muted') }, cur ? cur.name : 'Исполнитель')], () => [
+      { label: 'Без исполнителя', icon: st.assigneeId ? null : 'check', action: () => { st.assigneeId = ''; draw(); } },
+      fit.length > 0 && { title: deptName(st.positionId) }, ...fit.map(row),
+      !fit.length && h('p', { class: 'muted', style: { padding: '4px 10px', margin: 0 } }, 'В юните нет людей этой позиции')]);
+  };
+  const datePick = st => {
+    const inp = h('input', { type: 'date', value: st.dueDate, disabled: !st.on, 'aria-label': 'Срок', onchange: e => { st.dueDate = e.target.value; draw(); } });
+    return h('label', { class: 'dc-date', onclick: () => { try { inp.showPicker(); } catch { /* браузер откроет сам */ } } }, icon('calendar', 14), h('span', null, st.dueDate ? fmtDate(st.dueDate) : 'Срок'), inp);
+  };
+  const customMeta = st => h('div', { class: 'dc-own' },
+    pickBtn('dc-mini', deptName(st.positionId), () => S.departments.filter(d => !d.archived).map(d => ({
+      label: d.name, icon: d.id === st.positionId ? 'check' : null,
+      action: () => { st.positionId = d.id; st.assigneeId = suggest(d.id); draw(); },
+    }))),
+    pickBtn('dc-mini', st.dependsOn[0] ? 'После «' + ((steps.find(s => s.key === st.dependsOn[0]) || {}).title || '') + '»' : 'Сразу, параллельно', () => [
+      { label: 'Сразу, параллельно', icon: st.dependsOn.length ? null : 'check', action: () => { st.dependsOn = []; draw(); } },
+      ...steps.filter(s => s.on && !s.release && s.key !== st.key).map(s => ({
+        label: 'После «' + s.title + '»', icon: st.dependsOn[0] === s.key ? 'check' : null, action: () => { st.dependsOn = [s.key]; draw(); },
+      }))]));
   const draw = () => {
-    const on = steps.filter(s => s.on);
+    const on = active();
     const titleOf = k => (steps.find(s => s.key === k) || {}).title;
     fill(body, steps.map(st => {
       const deps = st.dependsOn.filter(k => on.some(s => s.key === k)).map(titleOf);
-      return h('div', { class: 'dc-row' + (st.on ? '' : ' off') },
+      return h('div', { class: 'dc-row' + (st.on ? '' : ' off') + (st.custom ? ' own' : '') },
         h('label', { class: 'dc-on', title: st.on ? 'Убрать этап' : 'Вернуть этап' }, h('input', { type: 'checkbox', checked: st.on, 'aria-label': 'Этап «' + st.title + '»', onchange: e => { st.on = e.target.checked; draw(); } })),
         h('div', { class: 'dc-main' },
-          h('input', { class: 'inp sm dc-title', value: st.title, maxlength: 120, disabled: !st.on, 'aria-label': 'Название этапа', oninput: e => { st.title = e.target.value; } }),
-          h('span', { class: 'dc-meta muted' }, deptName(st.positionId), deps.length ? ' · после: ' + deps.join(', ') : ' · сразу', st.release ? ' · последним' : '')),
-        st.release
-          ? h('span', { class: 'dc-rm muted' }, icon('rocket', 13), 'RM — после «Передать в релиз»')
-          : h('select', { class: 'inp sm', disabled: !st.on, 'aria-label': 'Исполнитель', onchange: e => { st.assigneeId = e.target.value; } }, peopleOptions(st.positionId, st.assigneeId)),
-        h('input', { class: 'inp sm', type: 'date', value: st.dueDate, disabled: !st.on, 'aria-label': 'Срок', onchange: e => { st.dueDate = e.target.value; } }));
+          h('input', { class: 'dc-title' + (st.custom ? ' inp' : ''), value: st.title, maxlength: 120, disabled: !st.on, placeholder: 'Название этапа', 'aria-label': 'Название этапа', oninput: e => { st.title = e.target.value; } }),
+          st.custom ? customMeta(st) : h('span', { class: 'dc-meta muted', title: deps.join(', ') }, deptName(st.positionId), st.release ? ' · последним' : deps.length ? ' · после: ' + deps.join(', ') : ' · сразу')),
+        st.release ? h('span', { class: 'dc-rm muted' }, 'RM, после передачи в релиз') : whoPick(st),
+        datePick(st));
     }));
+    syncGo();
   };
   draw();
-  // свой этап: название, позиция, после какого (по умолчанию — сразу); встаёт перед релизом, релиз ждёт и его
+  // свой этап — строкой в этом же окне: встаёт перед релизом, релиз ждёт и его
   const addStep = () => {
-    const title = h('input', { class: 'inp', maxlength: 120, placeholder: 'Например, Промо-ролик' });
-    const pos = h('select', { class: 'inp' }, S.departments.filter(d => !d.archived).map(d => h('option', { value: d.id }, d.name)));
-    const after = h('select', { class: 'inp' }, h('option', { value: '' }, 'Сразу, параллельно'), steps.filter(s => s.on && !s.release).map(s => h('option', { value: s.key }, 'После «' + s.title + '»')));
-    modal({
-      title: 'Свой этап',
-      body: [field('Название', title), h('div', { class: 'grid2' }, field('Позиция', pos), field('Когда', after))],
-      actions: [{ label: 'Отмена' }, {
-        label: 'Добавить', primary: true,
-        action: close => {
-          if (!title.value.trim()) { title.focus(); return; }
-          const key = 'x' + Date.now().toString(36);
-          const st = { key, title: title.value.trim(), positionId: pos.value, dependsOn: after.value ? [after.value] : [], release: false, on: true, assigneeId: suggest(pos.value), dueDate: req.dueDate || '' };
-          const ri = steps.findIndex(s => s.release);
-          if (ri >= 0) { steps.splice(ri, 0, st); steps[ri + 1].dependsOn = [...steps[ri + 1].dependsOn, key]; } else steps.push(st);
-          close();
-          draw();
-        },
-      }],
-    });
+    const positionId = (S.departments.find(d => !d.archived) || {}).id || '';
+    const st = { key: 'x' + Date.now().toString(36), title: '', positionId, dependsOn: [], release: false, custom: true, on: true, assigneeId: suggest(positionId), dueDate: req.dueDate || '' };
+    const ri = steps.findIndex(s => s.release);
+    if (ri >= 0) { steps.splice(ri, 0, st); steps[ri + 1].dependsOn = [...steps[ri + 1].dependsOn, st.key]; } else steps.push(st);
+    draw();
+    const own = [...body.querySelectorAll('.dc-row.own .dc-title')].pop();
+    if (own) own.focus();
   };
   return new Promise(resolve => {
     let done = false;
     modal({
-      title: 'Разложить по этапам · ' + req.title,
+      title: 'Разложить по этапам · ' + (req.appName || req.title),
       wide: true,
-      body: [h('p', { class: 'hint', style: { marginTop: 0 } }, 'Флоу юнита «' + (u ? u.name : '') + '». Уберите лишнее, назначьте исполнителей и сроки — этапы появятся у команды. Следующий этап ждёт, пока не закроют предыдущие.'),
-        body, h('button', { class: 'btn sm', onclick: addStep }, icon('plus', 13), 'Свой этап')],
-      footLeft: u && h('span', { class: 'muted dc-foot' }, 'Флоу юнита — в его настройках'),
+      body: [h('p', { class: 'hint', style: { marginTop: 0 } }, `Флоу юнита ${u ? u.name : ''}. Уберите лишнее, назначьте исполнителей и сроки. Следующий этап ждёт, пока не закроют предыдущие.`), body],
+      footLeft: h('button', { class: 'btn soft', onclick: addStep }, icon('plus', 14), 'Свой этап'),
       actions: [{ label: 'Отмена' }, {
         label: 'Разложить', primary: true,
         action: async close => {
           const on = steps.filter(s => s.on);
           if (!on.length) return toast('Оставьте хотя бы один этап', { type: 'error' });
+          const unnamed = on.find(s => s.custom && !s.title.trim());
+          if (unnamed) { [...body.querySelectorAll('.dc-row.own .dc-title')].find(i => !i.value.trim())?.focus(); return toast('Назовите свой этап', { type: 'error' }); }
           const keys = new Set(on.map(s => s.key));
           const plan = on.map(s => ({ key: s.key, title: s.title.trim() || 'Этап', positionId: s.positionId, dependsOn: s.dependsOn.filter(k => keys.has(k)), release: s.release, checklist: s.checklist, assigneeId: s.assigneeId, dueDate: s.dueDate }));
           const made = await send('decomposeRequest', { taskId: req.id, plan });
@@ -992,6 +1003,8 @@ export async function openDecomposeDialog(req) {
       }],
       onClose: () => resolve(done),
     });
+    body.closest('.modal')?.classList.add('dc-modal');
+    syncGo();
   });
 }
 

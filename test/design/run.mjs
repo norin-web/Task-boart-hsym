@@ -58,8 +58,8 @@ const ids = await page.evaluate(async () => {
   const stage = streaks.requests[0].stages.find(s => /^Дизайн/.test(s.title));
   const release = carrot.requests[0].stages.find(s => /^Релиз/.test(s.title));
   const { people } = await call('bootstrap', { today: new Date().toISOString().slice(0, 10) });
-  const pm = people.find(x => x.name === 'Екатерина Соколова');
-  return { carrot: carrot.id, streaks: streaks.id, mvp: streaks.unitId, rf: carrot.unitId, stage: stage.id, release: release.id, ceo: localStorage.getItem('tm.localActor'), pm: JSON.stringify(pm.id) };
+  const pm = people.find(x => x.name === 'Екатерина Соколова'), pm2 = people.find(x => x.name === 'Олег Никитин');
+  return { carrot: carrot.id, streaks: streaks.id, mvp: streaks.unitId, rf: carrot.unitId, stage: stage.id, release: release.id, ceo: localStorage.getItem('tm.localActor'), pm: JSON.stringify(pm.id), pm2: JSON.stringify(pm2.id) };
 });
 
 // служебное режима разработчика в снимках не нужно: в макетах его нет
@@ -136,7 +136,7 @@ const measure = async m => {
       const r = e.getBoundingClientRect();
       return { x: r.x, y: r.y, width: r.width, height: r.height }[prop] ?? getComputedStyle(e)[prop];
     }, c);
-    const ok = got !== null && (typeof c.want === 'number' ? Math.abs(got - c.want) <= (c.tol ?? 1) : String(got) === String(c.want));
+    const ok = c.absent ? got === null : got !== null && (typeof c.want === 'number' ? Math.abs(got - c.want) <= (c.tol ?? 1) : String(got) === String(c.want));
     checks.push({ screen: m.screen, ...c, got: typeof got === 'number' ? Math.round(got * 10) / 10 : got, ok });
   }
 };

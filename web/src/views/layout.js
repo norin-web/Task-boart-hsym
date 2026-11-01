@@ -130,6 +130,7 @@ export function editLayout(key, defs, container, onDone, opts = {}) {
   container.classList.add('lz-mode');
   fill(container,
     h('header', { class: 'lz-head' },
+      h('button', { class: 'icon-btn back-btn', title: 'Назад: Дашборд', 'aria-label': 'Назад: Дашборд', onclick: () => { container.classList.remove('lz-mode'); done(); } }, icon('back', 18)),
       h('div', { class: 'lz-titles' }, h('span', { class: 'lz-crumb muted' }, 'Дашборд'), h('h1', null, opts.title || 'Настройка главной')),
       h('div', { class: 'lz-actions' },
         opts.extra,

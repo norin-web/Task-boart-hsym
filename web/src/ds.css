@@ -1751,3 +1751,46 @@ body { letter-spacing: -.01em; }
 .pm-page .pb-row:hover { background: none; }
 .pm-page .pb-main { flex: 1; }
 @media (max-width: 720px) { .ib-row > .ib-prio { display: none; } }
+
+/* ---------- P05: пустой дашборд PM ---------- */
+.pm-page .pm-pipeline:has(> .empty-block) { background: var(--surface); border-radius: 28px; padding: 20px; }
+.pm-page section:has(> .empty-block) { display: flex; flex-direction: column; gap: 12px; min-height: 208px; padding: 20px; }
+.pm-page section:has(> .empty-block) > .section-head { margin: 0; }
+.pm-page section:has(> .section-head + .card-box) > .card-box.empty-block { flex: 1; justify-content: center; gap: 8px; margin: 0; padding: 0; background: transparent; }
+.pm-page .empty-block > b { font-weight: 600; color: var(--text); }
+.pm-page .eb-sub { max-width: none; }
+
+/* ---------- P02, P03: окно «Разложить» ---------- */
+.modal.dc-modal { width: min(760px, calc(100vw - 32px)); max-width: none; }
+.dc-modal .dc-list { display: flex; flex-direction: column; gap: 0; margin: 0; }
+.dc-modal .dc-row { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0; border-radius: 0; }
+.dc-modal .dc-row + .dc-row { border-top: 1px solid var(--border); }
+.dc-modal .dc-row:hover { background: none; }
+.dc-modal .dc-row.own { align-items: flex-start; padding: 10px 0; }
+.dc-modal .dc-row.own .dc-on { height: 40px; align-items: center; }
+.dc-modal .dc-row.off .dc-main, .dc-modal .dc-row.off .dc-pick, .dc-modal .dc-row.off .dc-date { opacity: .45; }
+.dc-on input { appearance: none; width: 20px; height: 20px; margin: 0; border: 1.5px solid var(--border-strong); border-radius: 6px; background: transparent center / 12px no-repeat; cursor: pointer; }
+.dc-on input:checked { border-color: var(--primary); background-color: var(--primary); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 13l4 4L19 7'/%3E%3C/svg%3E"); }
+.dc-modal .dc-main { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dc-modal .dc-title:not(.inp) { width: 100%; padding: 0; border: 0; background: none; outline: 0; font: inherit; font-size: 13px; line-height: 20px; font-weight: 600; letter-spacing: -.01em; color: var(--text); text-overflow: ellipsis; }
+.dc-modal .dc-title:not(.inp):focus { box-shadow: 0 1px 0 var(--focus, var(--accent)); }
+.dc-modal .dc-title.inp { height: 40px; font-size: 13px; font-weight: 500; }
+.dc-modal .dc-row.own .dc-main { gap: 6px; }
+.dc-modal .dc-meta { font-size: 12px; line-height: 16px; font-weight: 500; }
+.dc-own { display: flex; flex-wrap: wrap; gap: 12px; }
+.dc-mini { display: inline-flex; align-items: center; gap: 2px; padding: 0; border: 0; background: none; color: var(--text-2); font: inherit; font-size: 12px; line-height: 16px; font-weight: 600; cursor: pointer; }
+.dc-mini .i { width: 12px; height: 12px; color: var(--muted); }
+.dc-pick, .dc-date { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border: 0; border-radius: 10px; background: var(--surface-2); font: inherit; font-size: 13px; line-height: 20px; font-weight: 600; color: var(--text); flex: none; cursor: pointer; }
+.dc-pick { width: 208px; }
+.dc-pick-name { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dc-pick-name.muted { font-weight: 500; }
+.dc-pick > .i, .dc-date > .i { color: var(--muted); flex: none; }
+.dc-noone { width: 24px; height: 24px; border-radius: 999px; border: 1.5px dashed var(--border-strong); flex: none; }
+.dc-date { position: relative; }
+.dc-date input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
+.dc-modal .dc-rm { width: 208px; padding: 0 12px; flex: none; font-size: 12px; line-height: 16px; font-weight: 500; white-space: nowrap; }
+.menu.dc-menu { max-height: 320px; overflow: auto; }
+@media (max-width: 720px) { .dc-modal .dc-row { flex-wrap: wrap; padding: 8px 0; } .dc-modal .dc-main { flex-basis: calc(100% - 32px); } .dc-pick { flex: 1; width: auto; } .dc-modal .dc-rm { flex: 1; width: auto; padding: 0; white-space: normal; } }
+.dc-modal .modal-foot .left .btn { height: 40px; padding: 0 16px; background: var(--surface-3); }
+.lz-head .back-btn { flex: none; width: 44px; height: 44px; border-radius: 50%; background: var(--surface); color: var(--text); }
+.lz-head .back-btn:hover { background: var(--surface-3); }

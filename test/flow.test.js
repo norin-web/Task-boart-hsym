@@ -95,6 +95,11 @@ test('New App: CEO → PM юнита → этапы по флоу → блоки
   assert.equal(imported.request, null);
   await api.as(ceo, () => api('updateApp', { id: imported.app.id, archived: true }));
 
+  // неподходящий исполнитель: отказ до создания этапов, запрос не разложен наполовину
+  const flow = (await api.as(pm, () => api('getFlows', { unitId: request.unitId }))).new_app;
+  const wrong = flow.map(s => ({ ...s, assigneeId: s.release ? '' : lead.id, dueDate: '' }));
+  await api.as(pm, () => assert.rejects(() => api('decomposeRequest', { taskId: request.id, plan: wrong }), /выберите человека/));
+
   // PM раскладывает запрос по флоу
   const stages = await api.as(pm, () => api('decomposeRequest', { taskId: request.id }));
   const by = Object.fromEntries(stages.map(t => [t.step, t]));

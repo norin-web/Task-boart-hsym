@@ -80,7 +80,7 @@ function inbox(d, reload, redraw) {
       prioLabel(r.app) || h('span'),
       r.dueDate && h('span', { class: 'ib-due' + (r.dueDate < todayStr() ? ' late' : '') }, icon('calendar', 14), dueText(r.dueDate)),
       h('button', {
-        class: 'btn soft sm', onclick: () => openDecomposeDialog({ id: r.id, unitId: r.unitId, type: r.type, title: r.title, dueDate: r.dueDate }).then(ok => ok && reload()),
+        class: 'btn soft sm', onclick: () => openDecomposeDialog({ id: r.id, unitId: r.unitId, type: r.type, title: r.title, appName: r.app && r.app.name, dueDate: r.dueDate }).then(ok => ok && reload()),
       }, icon('tree', 13), 'Разложить')))),
     d.inbox.length > INBOX_LIMIT && h('button', { class: 'pm-more', onclick: () => { inboxAll = !inboxAll; redraw(); } }, inboxAll ? 'Свернуть' : 'Показать больше'));
 }
@@ -96,7 +96,7 @@ const pipelineOpen = new Set();
 function pipeline(d, reload, redraw) {
   const rows = [...d.pipeline].sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999'));
   const today = todayStr();
-  return h('section', null,
+  return h('section', { class: 'pm-pipeline' },
     h('div', { class: 'section-head' }, h('h2', null, 'Приложения по этапам')),
     rows.length ? h('div', { class: 'pl-list' }, rows.map(r => {
       const done = r.stages.filter(s => stateOf(s) === 'done').length;
@@ -130,7 +130,7 @@ function pipeline(d, reload, redraw) {
         r.releaseReady && h('div', { class: 'pl-release' }, icon('done', 16), h('span', { class: 'grow' }, 'Все этапы закрыты'),
           h('button', { class: 'btn sm', onclick: () => sendRelease(r.stages.find(s => s.step === 'release').id).then(reload) }, icon('rocket', 13), 'Передать в релиз')));
     }))
-      : emptyBlock('Нет работ', { ic: 'progress' }));
+      : emptyBlock('Нет работ', { ic: 'clock', sub: 'Появятся, когда вы разложите запрос от CEO' }));
 }
 
 /* ---------- проблемы ---------- */

@@ -2018,6 +2018,8 @@ export function createBackend(db, opts = {}) {
       };
       const who = st => (st.release ? '' : extra[st.key] && 'assigneeId' in extra[st.key] ? str(extra[st.key].assigneeId, 40) : pick(st.positionId));
       const due = st => (extra[st.key] && 'dueDate' in extra[st.key] ? date(extra[st.key].dueDate) : r.due_date);
+      // проверяем всех до первого создания: иначе запрос останется разложен наполовину
+      for (const st of steps) await fitsAssignee(r.unit_id, { kind: 'stage', step: st.key, departmentId: st.positionId }, who(st));
       const ids = {}, created = [];
       const prio = (json(r.fields, {}) || {})[PRIORITY_FIELD]; // приоритет запроса — этапам
       for (const st of steps) {

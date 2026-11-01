@@ -37,6 +37,11 @@ export const SCREENS = [
   { code: 'F11', name: 'Команды', route: prefs('people'), act: click('.prefs-body .seg button:has-text("Команды")') },
   { code: 'F12', name: 'Позиции', route: prefs('people'), act: click('.prefs-body .seg button:has-text("Позиции")') },
   { code: 'P01', name: 'Дашборд PM', as: 'pm', route: '#/' },
+  { code: 'P02', name: 'Окно «Разложить»', as: 'pm', route: '#/', act: click('.ib-row .btn.soft') },
+  { code: 'P03', name: 'Свой этап в списке', as: 'pm', route: '#/', act: async p => { await p.click('.ib-row .btn.soft'); await p.waitForTimeout(500); await p.click('.modal-foot .left .btn'); } },
+  { code: 'P04', name: 'Этапы раскрыты', as: 'pm', route: '#/', act: click('.pl-toggle') },
+  { code: 'P06', name: 'Настройка дашборда PM', as: 'pm', route: '#/', act: click('.topbar .btn:has-text("Настроить")') },
+  { code: 'P05', name: 'Дашборд PM, пусто', as: 'pm2', route: '#/' },
 ];
 
 /** Намеренные отличия: чтобы процент не вводил в заблуждение. */
