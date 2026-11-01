@@ -1632,7 +1632,7 @@ a.cs-link { color: inherit; text-decoration: none; }
 .panel-side .prop:hover .quick-chip, .panel-side .prop:focus-within .quick-chip { display: inline-flex; }
 .panel-side .prop .inp, .panel-side .prop .due-wrap { font-size: 13px; font-weight: 600; }
 .panel-main .link-name { white-space: nowrap; }
-.modal:has(.create-top) .modal-foot .btn:not(.primary) { color: #FF0D07; }
+.modal:has(.create-top) .modal-foot .btn:not(.primary), .modal:has(.title-field) .modal-foot .btn:not(.primary) { color: #FF0D07; }
 @media (max-width: 900px) { .panel-side .prop .quick-chip { display: inline-flex; } .panel-side .side-meta { margin-top: 8px; } }
 .panel .crumbs .key-badge { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; }
 .cl-head .link-btn { opacity: 0; transition: opacity .12s; font-size: 12px; }
@@ -1644,3 +1644,10 @@ a.cs-link { color: inherit; text-decoration: none; }
 /* Дизайн-ревью E01, E02 */
 @media (min-width: 901px) { #main:has(.myboard, .my-toggle) .topbar .tb-left > h1 { font-size: 24px; line-height: 32px; } }
 .myboard .col { min-height: calc(100vh - 180px); }
+
+/* Дизайн-ревью F01–F12: ряд вкладок настроек */
+.prefs-page.view-body { padding: 20px 16px 48px 24px; }
+.prefs-nav { gap: 24px; }
+.prefs-tab { padding: 7px 0; }
+.prefs-body { margin-top: 5px; }
+.auto-fields { gap: 12px; }

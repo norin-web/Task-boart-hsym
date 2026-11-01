@@ -1048,7 +1048,7 @@ export function openCreateApp(onDone, unitId) {
     body: [
       // порядок как в макете 35: название, юнит и PM, срок и приоритет, ссылка в стор, описание
       field('Название', name),
-      h('div', { class: 'grid2' }, field('Юнит', unit), field('PM', pm.el)),
+      h('div', { class: 'grid2' }, field('Юнит', unit), field('PM', pm.el, 'Получит задачу «New App»')),
       h('div', { class: 'grid2' }, field('Срок', due), field('Приоритет', prio)),
       field('Ссылка в App Store', store, preview),
       field('Описание', desc),

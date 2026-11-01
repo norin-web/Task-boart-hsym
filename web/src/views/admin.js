@@ -522,8 +522,8 @@ function automationsTab() {
   return h('div', { class: 'auto-page' },
     h('div', { class: 'card-box' }, unitRules()),
     h('div', { class: 'an-grid an-grid-32' }, h('div', { class: 'card-box' }, templatesManager()), h('div', { class: 'card-box' }, autoNotes())),
-    h('div', { class: 'card-box' }, globalFieldsManager()),
-    isSuper() && h('div', { class: 'card-box' }, linkFieldsManager()));
+    h('div', { class: 'an-grid auto-fields' }, h('div', { class: 'card-box' }, globalFieldsManager()),
+      isSuper() && h('div', { class: 'card-box' }, linkFieldsManager())));
 }
 
 /** Настройка ревью юнита окном (колонка, ревьюеры по позиции, по умолчанию). */
