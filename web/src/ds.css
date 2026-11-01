@@ -1624,3 +1624,23 @@ a.cs-link { color: inherit; text-decoration: none; }
 .tl-nav .icon-btn:first-child .i { transform: none; }
 /* подложка шапки (G01) — только когда контент прокручен, иначе она закрывает верх страницы */
 .view-body:not(.scrolled)::before { display: none; }
+
+/* Дизайн-ревью D01, D05: карточка задачи */
+.panel-side { display: flex; flex-direction: column; }
+.panel-side .side-meta { margin-top: auto; }
+.panel-side .prop .quick-chip { display: none; opacity: 1; }
+.panel-side .prop:hover .quick-chip, .panel-side .prop:focus-within .quick-chip { display: inline-flex; }
+.panel-side .prop .inp, .panel-side .prop .due-wrap { font-size: 13px; font-weight: 600; }
+.panel-main .link-name { white-space: nowrap; }
+.modal:has(.create-top) .modal-foot .btn:not(.primary) { color: #FF0D07; }
+@media (max-width: 900px) { .panel-side .prop .quick-chip { display: inline-flex; } .panel-side .side-meta { margin-top: 8px; } }
+.panel .crumbs .key-badge { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; }
+.cl-head .link-btn { opacity: 0; transition: opacity .12s; font-size: 12px; }
+.cl-head:hover .link-btn, .cl-head .link-btn:focus-visible { opacity: 1; }
+.cl-count { font-size: 12px; font-weight: 500; }
+@media (hover: none) { .cl-head .link-btn { opacity: 1; } }
+.board-wrap > .skel { padding: 16px 16px 16px 24px; }
+
+/* Дизайн-ревью E01, E02 */
+@media (min-width: 901px) { #main:has(.myboard, .my-toggle) .topbar .tb-left > h1 { font-size: 24px; line-height: 32px; } }
+.myboard .col { min-height: calc(100vh - 180px); }

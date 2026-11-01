@@ -105,6 +105,7 @@ async function boot() {
     return fatal('Не удалось загрузить данные: ' + e.message);
   }
   S.route = parseLocation();
+  S.started = true;
   render();
   startPulse();
   initPersonCard();

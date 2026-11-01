@@ -187,6 +187,7 @@ export async function render() {
 }
 
 const onLocation = () => {
+  if (!S.started) return; // приложение ещё загружается: первый показ сделает main.js по текущему адресу
   const next = parseLocation();
   if (routeUrl(next) === routeUrl(S.route)) return;
   S.route = next;

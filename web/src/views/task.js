@@ -527,12 +527,11 @@ function checklistBlock(t, editable) {
       },
     });
     fill(box, 
-      h('div', { class: 'block-title' }, 'Чеклист',
-        items.length > 0 && h('span', { class: 'muted', style: { fontWeight: 400 } }, done + ' из ' + items.length),
+      h('div', { class: 'block-title cl-head' }, 'Чеклист',
         h('span', { class: 'spacer' }),
         h('button', { class: 'link-btn', onclick: e => { e.stopPropagation(); templateMenu(e.currentTarget, list => update(items.concat(list.map(text => ({ id: 'k_' + Math.random().toString(36).slice(2, 12), text, done: false }))))); } }, 'Из шаблона'),
-        done > 0 && h('button', { class: 'link-btn', onclick: () => update(items.filter(i => !i.done)) }, 'Убрать выполненные')),
-      items.length > 0 && h('div', { class: 'progress' }, h('div', { style: { width: pct + '%' } })),
+        done > 0 && h('button', { class: 'link-btn', onclick: () => update(items.filter(i => !i.done)) }, 'Убрать выполненные'),
+        items.length > 0 && h('span', { class: 'muted cl-count' }, done + ' из ' + items.length)),
       h('div', { class: 'cl-list' }, items.map(it => h('div', { class: 'cl-item' + (it.done ? ' done' : '') },
         h('input', { type: 'checkbox', checked: it.done, onchange: e => update(items.map(x => (x === it ? { ...x, done: e.target.checked } : x))) }),
         h('input', {
