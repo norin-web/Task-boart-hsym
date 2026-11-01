@@ -1,5 +1,5 @@
 import { S, greeting, me, personById, plural, emptyCounts, isStaff, deptById, todayStr, fmtDate, activeDepts, ACCESS_LABELS, relTime, dueInfo } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill, toast, menu, closeMenu, modal, emptyBlock } from '../ui.js';
+import { $, h, icon, avatar, topbar, showErr, fill, toast, menu, closeMenu, modal, emptyBlock, skeleton } from '../ui.js';
 import { call } from '../api.js';
 import { currentView, link, navigate, taskLink, rerender } from '../router.js';
 import { renderSidebar, renderUnread } from './sidebar.js';
@@ -157,7 +157,7 @@ export async function fillDemo(btn) {
 
 export async function renderHome() {
   if (!isStaff()) return renderMemberHome();
-  const page = h('div', { class: 'page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
+  const page = h('div', { class: 'page' }, skeleton());
   fill($('#main'),
     topbar([h('h1', null, 'Главная')], [
       h('button', { class: 'btn primary', onclick: () => openCreateTask() }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Задача')),
@@ -507,7 +507,7 @@ export function unitCard(u, { apps, to = 'board' } = {}) {
 
 /** Дашборд участника: его юниты (доска и бэклог своей позиции) и его задачи. */
 async function renderMemberHome() {
-  const page = h('div', { class: 'page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
+  const page = h('div', { class: 'page' }, skeleton());
   let editHook = null;
   fill($('#main'), topbar([h('div', { class: 'screen-head' }, h('div', { class: 'screen-date' }, (() => { const t = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }); return t.charAt(0).toUpperCase() + t.slice(1); })()),
     h('h1', { class: 'screen-title' }, 'Мой дашборд'))], [h('button', { class: 'btn', title: 'Настроить дашборд под себя', onclick: () => editHook && editHook() }, 'Настроить')]), h('div', { class: 'view-body' }, page));

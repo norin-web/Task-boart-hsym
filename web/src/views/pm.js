@@ -4,7 +4,7 @@
  * и команда с KPI за неделю / месяц / квартал. Только юниты PM (видимость решает база).
  */
 import { S, me, personById, deptById, REQUEST_TYPES, LS, greeting, plural, fmtDate, todayStr } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill, emptyBlock, statusIcon } from '../ui.js';
+import { $, h, icon, avatar, topbar, showErr, fill, emptyBlock, statusIcon, skeleton } from '../ui.js';
 import { call } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask, openCreateTask } from './task.js';
@@ -23,7 +23,7 @@ const stateOf = s => (s.done ? 'done' : s.blocked ? 'blocked' : s.kind === 'todo
 
 let editHook = null;
 export async function renderPmHome() {
-  const page = h('div', { class: 'page ceo-page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
+  const page = h('div', { class: 'page ceo-page' }, skeleton());
   fill($('#main'),
     topbar([h('div', { class: 'screen-head' }, h('div', { class: 'screen-date' }, (() => { const t = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }); return t.charAt(0).toUpperCase() + t.slice(1); })()),
       h('h1', { class: 'screen-title' }, 'Дашборд'))], [

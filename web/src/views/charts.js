@@ -131,3 +131,23 @@ export function unitCurves({ categories, units, height = 240, aria = '' }) {
     svg.addEventListener('pointerleave', () => { hv.innerHTML = ''; tip.hidden = true; });
   });
 }
+
+/** Сколько записей было открыто в каждый из последних days дней: создана раньше, закрыта позже. */
+export function openSeries(items, days = 14) {
+  const end = Date.now();
+  return Array.from({ length: days }, (_, i) => {
+    const at = end - (days - 1 - i) * 864e5;
+    return items.filter(x => Date.parse(x.createdAt) <= at && !(x.doneAt && Date.parse(x.doneAt) <= at)).length;
+  });
+}
+
+/** Мини-график на плитке (A09, C01): только линия, без осей. */
+export function sparkline(values, { width = 96, height = 28 } = {}) {
+  const max = Math.max(...values), min = Math.min(...values);
+  const pts = values.map((v, i) => `${(i / (values.length - 1) * width).toFixed(1)},${(height - 3 - (max === min ? 0.5 : (v - min) / (max - min)) * (height - 6)).toFixed(1)}`).join(' ');
+  const box = document.createElement('div');
+  box.className = 'cs-spark';
+  box.setAttribute('aria-hidden', 'true');
+  box.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}"><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  return box;
+}

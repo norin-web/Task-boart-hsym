@@ -144,7 +144,7 @@ export function editLayout(key, defs, container, onDone, opts = {}) {
   for (const z of Object.values(zones)) {
     sortables.push(Sortable.create(z, {
       group: 'layout', animation: 160, handle: '.lb-head', draggable: '.lb',
-      ghostClass: 'lb-ghost', fallbackClass: 'lb-drag', forceFallback: true, fallbackTolerance: 4,
+      ghostClass: 'lb-ghost', fallbackClass: 'lb-drag', forceFallback: true, fallbackTolerance: 4, scroll: true, bubbleScroll: true, scrollSensitivity: 80, scrollSpeed: 12,
       onEnd: collect,
     }));
   }

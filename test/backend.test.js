@@ -30,7 +30,7 @@ test('юниты: ключи, настройки, дублирование, уд
   assert.deepEqual(u1.settings.columns.map(c => c.name), ['К выполнению', 'В работе', 'В ревью', 'Готово']); // константы досок
   assert.equal(u1.settings.review.column, 'review');
   assert.ok(u1.settings.builtins.dueDate);
-  assert.equal(u1.settings.hideDoneDays, 0);
+  assert.equal(u1.settings.hideDoneDays, 7);
   assert.equal((await api('createUnit', { name: 'Без ключа' })).key, 'U');
   await assert.rejects(() => api('createUnit', { name: 'X', key: 'MKT' }), /уже занят/);
 

@@ -1336,3 +1336,36 @@ body.sb-collapsed .nav-unit-row .nav-abbr { display: inline; font-size: 12px; li
 .tl-empty { padding: 40px 24px; text-align: center; }
 @media (max-width: 900px) { .tl-card { overflow-x: auto; } .tl-head, .tl-body { min-width: 840px; } }
 .view-switch .vs-item { text-decoration: none; }
+
+/* G02: заголовок страницы 28px */
+@media (min-width: 901px) {
+  .topbar h1, .screen-title, .unit-head h1, .lz-head h1 { font-size: 28px; line-height: 36px; }
+}
+/* #25: скелетон загрузки */
+.skel { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; }
+.skel i { display: block; height: 44px; border-radius: 12px; background: var(--surface-3); animation: skel 1.4s ease-in-out infinite; }
+.skel .skel-t { height: 16px; width: 200px; border-radius: 8px; }
+.skel .skel-s { width: 70%; }
+@keyframes skel { 50% { opacity: .55; } }
+@media (prefers-reduced-motion: reduce) { .skel i { animation: none; } }
+/* #17: подсветка входящих скруглённая */
+.ib-row { border-radius: 12px; }
+/* #18: строка задачи — меняется только фон; срок виден всегда; статус чипом */
+.trow { padding: 0 12px; }
+.trow:hover { background: var(--surface-2); border-radius: 12px; }
+.trow-status { width: auto; min-width: 0; display: inline-flex; flex: none; padding: 3px 14px; border-radius: 999px; background: var(--surface); color: var(--text); font-size: 12px; line-height: 16px; font-weight: 600; }
+/* #27: шапка настройки закреплена */
+.lz-head { position: sticky; top: 0; z-index: 5; padding: 8px 0; background: var(--bg); }
+/* G02: статус задачи — чип с меню, без стрелки */
+.panel-side .status-wrap::after { display: none; }
+.panel-side .status-wrap select.inp { appearance: none; -webkit-appearance: none; background-image: none; padding-right: 12px; }
+/* G02: свойства приложения — чипы */
+.ap-props .inp, .ap-props .prio-select,
+.unit-panel .ap-props .inp, .unit-panel .ap-props .prio-select,
+.app-page .app-side .ap-props .inp, .app-page .app-side .ap-props .prio-select {
+  appearance: none; -webkit-appearance: none; display: inline-flex; width: auto; max-width: 100%; height: 28px; padding: 0 12px;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--surface); background-image: none; font-size: 12px; font-weight: 600;
+}
+.cs-spark { margin-top: 8px; color: var(--accent); line-height: 0; }
+.ap-props .field { justify-items: start; }
+.ap-props .prio-select-chev { display: none; }

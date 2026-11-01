@@ -63,7 +63,7 @@ export function defaultSettings() {
       description: { label: 'Описание',    hideable: true,  hidden: false },
     },
     autoArchiveDays: 0,
-    hideDoneDays: 0, // сколько дней держать выполненные на доске и в списке (0 — всегда)
+    hideDoneDays: 7, // сколько дней держать выполненные на доске и в списке (0 — всегда)
     checklistBeforeDone: false, // участник не перенесёт в «готово», пока чеклист не закрыт
   };
 }

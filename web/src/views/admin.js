@@ -4,7 +4,7 @@ import { AUTO_ARCHIVE, HIDE_DONE } from '../state.js';
 import { reviewSection, openFieldEditor, requiredLabel } from './settings.js';
 import { TYPE_LABELS } from '../state.js';
 import { S, LS, me, ceoDefault, byOrder, unitById, emptyCounts, personById, todayStr, isSuper, plural, LINK_KINDS, activeDepts, deptById, activeTeams } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill, toast, confirmDlg, menu, modal, field } from '../ui.js';
+import { $, h, icon, avatar, topbar, showErr, fill, toast, confirmDlg, menu, modal, field, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView, link, rerender } from '../router.js';
 import { renderSidebar } from './sidebar.js';
@@ -33,7 +33,7 @@ export async function renderStudio(page, tab, key) {
     if (MOVED[tab][1]) LS.set('peopleSub', MOVED[tab][1]);
     tab = MOVED[tab][0];
   }
-  fill(page, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
+  fill(page, skeleton());
   // Свежие люди, юниты и позиции — общая основа всех вкладок
   let d, ov;
   try {

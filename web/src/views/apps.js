@@ -5,7 +5,7 @@
  */
 import Sortable from 'sortablejs';
 import { S, isSuper, isStaff, seesApps, me, personById, unitById, appStatusById, prioById, REQUEST_TYPES, LS, plural, fmtDate, PALETTE, between, todayStr, relTime } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill, modal, field, toast, menu, closeMenu, confirmDlg, promptDlg, prioMark, prioSelect } from '../ui.js';
+import { $, h, icon, avatar, topbar, showErr, fill, modal, field, toast, menu, closeMenu, confirmDlg, promptDlg, prioMark, prioSelect, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView, navigate } from '../router.js';
 import { peekTask } from './task.js';
@@ -93,7 +93,7 @@ function workSummary(r) {
 
 /** Список приложений: общий (#/apps) или вкладка юнита (unitId, #/u/:id/apps — шапка юнита, только его приложения). */
 export async function renderApps({ unitId = '' } = {}) {
-  const body = h('div', { class: 'page apps-page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
+  const body = h('div', { class: 'page apps-page' }, skeleton());
   const tools = h('div', { class: 'row', style: { gap: '8px' } });
   // макет 59: в шапке — настройки и создание, ниже отдельной строкой — поиск, фильтр, группировка и «Выбрать»
   const bar = h('div', { class: 'apps-bar' });
@@ -438,7 +438,7 @@ export function openAppCard(a, onChange) {
 /** Страница карточки приложения (#/app/:id). */
 export async function renderAppPage(id) {
   const main = $('#main');
-  fill(main, topbar([h('h1', null, 'Приложение')]), h('div', { class: 'view-body' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…')));
+  fill(main, topbar([h('h1', null, 'Приложение')]), h('div', { class: 'view-body' }, skeleton()));
   try {
     const a = (await call('listApps', {})).find(x => x.id === id);
     if (S.route.view !== 'app' || S.route.id !== id) return;

@@ -7,7 +7,7 @@
  */
 import Sortable from 'sortablejs';
 import { S, me, activeTeams, between, dueInfo, todayStr, PALETTE, isStaff } from '../state.js';
-import { $, h, icon, topbar, fill, modal, showErr, statusDot, statusIcon, confirmDlg, menu, closeMenu, toast } from '../ui.js';
+import { $, h, icon, topbar, fill, modal, showErr, statusDot, statusIcon, confirmDlg, menu, closeMenu, toast, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
@@ -62,7 +62,7 @@ let mbQuery = '';
 let mbUnit = '';
 
 export async function renderMyBoard() {
-  const host = h('div', { class: 'board-wrap myboard' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
+  const host = h('div', { class: 'board-wrap myboard' }, skeleton());
   const controls = h('div', { class: 'mb-controls' });
   const top = () => topbar([h('h1', null, 'Моя доска')], [
     isStaff() && h('button', { class: 'btn primary', onclick: () => import('./task.js').then(m => m.openCreateTask()) }, 'Задача'),

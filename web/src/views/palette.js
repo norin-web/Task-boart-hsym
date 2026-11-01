@@ -1,4 +1,4 @@
-import { S, byOrder, isStaff } from '../state.js';
+import { S, isStaff } from '../state.js';
 import { $, h, icon, fill } from '../ui.js';
 import { call } from '../api.js';
 import { navigate } from '../router.js';
@@ -16,7 +16,7 @@ const mark = (text, q) => {
 
 export const isPaletteOpen = () => $('#palette-root').children.length > 0;
 
-/** Глобальный поиск (⌘K): задачи всех юнитов, юниты и команды. */
+/** Глобальный поиск (⌘K): задачи, приложения, люди и действия (G02). */
 export function openPalette() {
   if (isPaletteOpen()) return;
   const actions = [
@@ -35,10 +35,11 @@ export function openPalette() {
   let items = [];
   let sel = 0;
   let tasks = [];
+  let apps = S.apps.filter(a => !a.archived);
   let seq = 0;
   let timer = null;
 
-  const inp = h('input', { class: 'palette-inp', placeholder: 'Найти задачу, юнит или команду…', 'aria-label': 'Поиск' });
+  const inp = h('input', { class: 'palette-inp', placeholder: 'Найти задачу, приложение или человека…', 'aria-label': 'Поиск' });
   const list = h('div', { class: 'palette-list', role: 'listbox' });
   const wrap = h('div', { class: 'palette-wrap', onmousedown: e => { if (e.target === wrap) close(); } },
     h('div', { class: 'palette' },
@@ -52,12 +53,13 @@ export function openPalette() {
 
   function draw() {
     const q = inp.value.trim().toLowerCase();
-    const units = S.units.filter(u => !u.archived).sort(byOrder)
-      .filter(u => !q || (u.name + ' ' + u.key).toLowerCase().includes(q)).slice(0, 6)
-      .map(u => ({ group: 'Юниты', label: u.name, hint: u.key, dot: u.color, run: () => navigate({ unit: u.id, mode: 'board' }) }));
+    const foundApps = (q ? apps.filter(a => a.name.toLowerCase().includes(q)) : []).slice(0, 6)
+      .map(a => ({ group: 'Приложения', label: a.name, icon: 'app', run: () => import('./apps.js').then(m => m.openAppById(a.id)) }));
+    const people = (q ? S.people.filter(p => p.active && p.name.toLowerCase().includes(q)) : []).slice(0, 6)
+      .map(p => ({ group: 'Люди', label: p.name, icon: 'user', run: () => navigate({ view: 'settings', tab: 'people' }) }));
     const acts = actions.filter(a => !q || a.label.toLowerCase().includes(q)).map(a => ({ ...a, group: 'Действия' }));
     const found = tasks.map(t => ({ group: 'Задачи', label: t.title, hint: t.key, dot: t.unit.color, run: () => peekTask(t.unit.id, t.id) }));
-    items = [...found, ...units, ...acts];
+    items = [...found, ...foundApps, ...people, ...acts];
     sel = Math.max(0, Math.min(sel, items.length - 1));
 
     const nodes = [];
@@ -102,5 +104,6 @@ export function openPalette() {
 
   $('#palette-root').append(wrap);
   draw();
+  if (!apps.length) call('listApps', {}).then(list => { apps = list.filter(a => !a.archived); if (isPaletteOpen()) draw(); }).catch(() => {});
   inp.focus();
 }

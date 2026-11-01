@@ -1,5 +1,5 @@
 import { S, todayStr, dueInfo, KIND_COLORS, deptById, ACCESS_LABELS, LS, plural, isStaff } from '../state.js';
-import { $, h, icon, topbar, showErr, fill, statusIcon, emptyBlock } from '../ui.js';
+import { $, h, icon, topbar, showErr, fill, statusIcon, emptyBlock, skeleton } from '../ui.js';
 import { call } from '../api.js';
 import { currentView, taskLink, link } from '../router.js';
 
@@ -7,7 +7,7 @@ let showDone = false;
 let query = '';
 
 export async function renderMy() {
-  const page = h('div', { class: 'page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
+  const page = h('div', { class: 'page' }, skeleton());
   fill($('#main'), topbar([h('h1', null, 'Мои задачи')],
     [isStaff() && h('button', { class: 'btn primary', onclick: () => import('./task.js').then(m => m.openCreateTask()) }, 'Задача')]),
   h('div', { class: 'view-body' }, page));

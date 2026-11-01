@@ -3,7 +3,7 @@
  * «Вышло в стор» / «Реджект» прямо здесь), реджекты (причина, кто исправляет; «Отправить снова»). Клик — карточка релиза.
  */
 import { me, personById, greeting, plural, relTime } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill, toast, confirmDlg, emptyBlock } from '../ui.js';
+import { $, h, icon, avatar, topbar, showErr, fill, toast, confirmDlg, emptyBlock, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
@@ -15,7 +15,7 @@ import { openReleaseSettings, openReleaseHistory, openRejectForm } from './relea
 const days = iso => Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 864e5));
 
 export async function renderRmHome() {
-  const page = h('div', { class: 'page ceo-page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
+  const page = h('div', { class: 'page ceo-page' }, skeleton());
   const date = (() => { const t = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }); return t.charAt(0).toUpperCase() + t.slice(1); })();
   fill($('#main'),
     topbar([h('div', { class: 'screen-head' }, h('div', { class: 'screen-date' }, date), h('h1', { class: 'screen-title' }, 'Релизы'))], []),

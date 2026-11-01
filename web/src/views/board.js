@@ -307,8 +307,6 @@ function colHead(col, count) {
     isStaff() && h('button', { class: 'icon-btn sm col-menu-btn', title: 'Настроить колонку', onclick: e => { e.stopPropagation(); columnMenu(e.currentTarget, col); } }, icon('more', 15)));
 }
 
-const addColumnBtn = () => isStaff() && h('button', { class: 'col-add', title: 'Добавить колонку', onclick: addColumn }, icon('plus', 18), h('span', null, 'Колонка'));
-
 function renderColumns(board) {
   const done = beginRender();
   board.classList.remove('lanes');
@@ -322,7 +320,7 @@ function renderColumns(board) {
       makeList(items, col.id, null, !quickHere && (filtered ? 'Нет задач по фильтру' : 'Пусто')),
       oldDoneToggle(col),
       quickAddEl(col.id, null));
-  }), addColumnBtn());
+  }));
   done();
 }
 
@@ -351,10 +349,9 @@ function renderLanes(board) {
     if (orphan.length && !S.filters.depts.length) lanes.push({ id: '', name: 'Без позиции', color: 'var(--border-strong)' });
   }
 
-  const grid = h('div', { class: 'lanes-grid', style: { gridTemplateColumns: `repeat(${cols.length}, minmax(216px, 1fr)) 40px` } },
+  const grid = h('div', { class: 'lanes-grid', style: { gridTemplateColumns: `repeat(${cols.length}, minmax(216px, 1fr))` } },
     cols.map(col => h('div', { class: 'lane-col-head', style: { '--cc': colColor(col) } },
-      colHead(col, tasks.filter(t => colById(t.status).id === col.id).length), oldDoneToggle(col))),
-    h('div', { class: 'lane-col-head add' }, addColumnBtn()));
+      colHead(col, tasks.filter(t => colById(t.status).id === col.id).length), oldDoneToggle(col))));
 
   for (const lane of lanes) {
     const inLane = byKind ? tasks.filter(t => laneKind(t) === lane.id) : byApp ? (lane.id ? tasks.filter(t => t.appId === lane.id) : orphan)
@@ -540,16 +537,6 @@ export async function saveColumns(cols, remap) {
 }
 
 const newColumnId = () => 'c_' + Math.random().toString(36).slice(2, 10);
-
-async function addColumn() {
-  const name = await promptDlg('Новая колонка', 'Название', '');
-  if (!name) return;
-  const cols = columns().map(c => ({ ...c }));
-  // Новая колонка «в работе» встаёт перед первой колонкой «готово»
-  const doneAt = cols.findIndex(c => c.kind === 'done');
-  cols.splice(doneAt < 0 ? cols.length : doneAt, 0, { id: newColumnId(), name, kind: 'progress', color: '' });
-  saveColumns(cols).then(() => toast('Колонка «' + name + '» добавлена')).catch(showErr);
-}
 
 function columnMenu(anchor, col) {
   const cols = columns();

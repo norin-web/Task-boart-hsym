@@ -477,6 +477,9 @@ export function prioSelect(options, value, onChange, { disabled = false, empty =
   return btn;
 }
 
+/** Загрузка страницы: серые блоки вместо спиннера, страница появляется целиком (G02, баг #25). */
+export const skeleton = () => h('div', { class: 'skel', role: 'status', 'aria-label': 'Загрузка' }, h('i', { class: 'skel-t' }), h('i'), h('i'), h('i', { class: 'skel-s' }));
+
 /** Пустой блок дашборда (макет 61): иконка в круге и одна строка. ok — хороший итог: зелёная галочка. */
 export function emptyBlock(text, { ok = false, ic = 'circle', sub = '' } = {}) {
   return h('div', { class: 'card-box empty-block' + (ok ? ' ok' : '') },

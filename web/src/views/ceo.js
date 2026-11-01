@@ -3,13 +3,14 @@
  * работы в ходу (запросы и текущий этап), что недавно вышло. Клик — карточка приложения или задача поверх.
  */
 import { S, isSuper, personById, unitById, REQUEST_TYPES, greeting, me, plural, fmtDate, relTime, todayStr, appStatusById } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill, menu, modal, field, emptyBlock } from '../ui.js';
+import { $, h, icon, avatar, topbar, showErr, fill, menu, modal, field, emptyBlock, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
 import { openAppById, openCreateApp, openImportApps, storeCheckBlock, appStatusCell, openNewAppTask, appIcon, prioTag, stageDots, statusPill, appPm } from './apps.js';
 import { newsBlock, loadNotes, fillDemo, unitCard } from './home.js';
 import { renderLayout, editLayout } from './layout.js';
+import { sparkline, openSeries } from './charts.js';
 import { openCreateUnit } from './units.js';
 import { watchBlock } from './watch.js';
 import { mode } from '../data.js';
@@ -23,7 +24,7 @@ const daysLate = due => Math.max(1, Math.round((Date.parse(todayStr()) - Date.pa
 
 let editHook = null;
 export async function renderCeoHome() {
-  const page = h('div', { class: 'page ceo-page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
+  const page = h('div', { class: 'page ceo-page' }, skeleton());
   fill($('#main'),
     topbar([h('h1', { class: 'screen-title' }, greeting() + (me() ? ', ' + me().name.split(' ')[0] : ''))], [
       units().length > 0 && h('button', { class: 'btn', title: 'Блоки, статистика и свои подборки', onclick: () => editHook && editHook() }, 'Настроить'),
@@ -197,7 +198,7 @@ const ago = iso => (iso ? (Date.now() - Date.parse(iso)) / DAY : Infinity);
  */
 export function statBlocks(d, apps, reload) {
   const open = apps.flatMap(a => a.requests.filter(r => !r.done).map(r => ({ a, r })));
-  const stat = (n, label, sub, tone) => h('div', { class: 'cs' + (tone ? ' ' + tone : '') }, h('div', { class: 'cs-n' }, n), h('div', { class: 'cs-label' }, label), sub && h('div', { class: 'cs-sub muted' }, sub));
+  const stat = (n, label, sub, tone, spark) => h('div', { class: 'cs' + (tone ? ' ' + tone : '') }, h('div', { class: 'cs-n' }, n), h('div', { class: 'cs-label' }, label), sub && h('div', { class: 'cs-sub muted' }, sub), spark);
   const appRow = (a, right) => h('button', { class: 'rc-row', onclick: () => openAppById(a.id, reload) },
     appIcon(a, 'xs'), h('span', { class: 'rc-main' }, h('b', null, a.name)), right);
   const section = (title, body, n) => h('section', null, h('div', { class: 'section-head' }, h('h2', null, title, n != null && h('span', { class: 'muted sec-n' }, n))), body);
@@ -212,7 +213,7 @@ export function statBlocks(d, apps, reload) {
 
   return [
     { id: 'kpi', title: 'Цифры', col: 'full', render: () => h('div', { class: 'cs-row' },
-      stat(apps.length, 'Приложения', apps.filter(a => (appStatusById(a.status) || {}).kind === 'live').length + ' в сторе'), stat(open.length, 'Задачи в работе'),
+      stat(apps.length, 'Приложения', apps.filter(a => (appStatusById(a.status) || {}).kind === 'live').length + ' в сторе'), stat(open.length, 'Задачи в работе', null, '', sparkline(openSeries(apps.flatMap(a => a.requests)))),
       stat(overdue, 'Просрочено', overdue ? 'Требуют внимания' : null, overdue ? 'danger' : ''), stat(live30.length + done30.length, 'Выпущено', 'За 30 дней'),
       stat(stale.length, 'Давно не трогали', d.staleDays + '+ ' + plural(d.staleDays, ['день', 'дня', 'дней']))) },
     { id: 'statuses', title: 'Приложения по статусам', col: 'full', render: () => section('По статусам', h('div', { class: 'card-box st-sum' },
@@ -240,14 +241,14 @@ export function statBlocks(d, apps, reload) {
  */
 function ceoBlocks(d, apps, reload) {
   const blocks = [
-    { id: 'news', title: 'Новое для вас', col: 'full', off: true, empty: 'Появится, когда что-то придёт вам', render: () => newsBlock() },
+    { id: 'news', title: 'Новое для вас', col: 'full', empty: 'Появится, когда что-то придёт вам', render: () => newsBlock() },
     { id: 'units', title: 'Юниты', col: 'full', render: () => portfolio(d, reload) },
-    { id: 'storeCheck', title: 'Проверка App Store', col: 'full', render: () => storeCheckBlock(apps, reload, { compact: true }) },
-    { id: 'watch', title: 'Отслеживаю', col: 'full', render: () => watchBlock(apps, { openApp: id => openAppById(id, reload), openTask: peekTask, appIcon, appStatusCell, stageDots }) },
-    // внимание и недавнее — рядом, широкая таблица работ — на всю ширину под ними
+    // как на A03: слева внимание и работы, справа недавнее и отслеживаемое; проверка App Store включается в настройке
     { id: 'attention', title: 'Требует внимания', col: 'left', render: () => attention(d, reload) },
+    { id: 'inprogress', title: 'Работы в процессе', col: 'left', render: () => inProgress(d, reload) },
     { id: 'recent', title: 'Недавнее', col: 'right', render: () => recent(d, reload) },
-    { id: 'inprogress', title: 'Работы в процессе', col: 'full', render: () => inProgress(d, reload) },
+    { id: 'watch', title: 'Отслеживаю', col: 'right', render: () => watchBlock(apps, { openApp: id => openAppById(id, reload), openTask: peekTask, appIcon, appStatusCell, stageDots }) },
+    { id: 'storeCheck', title: 'Проверка App Store', col: 'full', off: true, render: () => storeCheckBlock(apps, reload, { compact: true }) },
   ];
   // свои подборки
   for (const b of customBlocks()) blocks.push({ id: 'c:' + b.id, title: b.name, col: b.col || 'right', custom: true, render: () => customBlock(b, apps, reload) });

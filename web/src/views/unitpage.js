@@ -4,18 +4,19 @@
  * Команда: люди юнита — роль, позиция, открытые задачи в юните; добавить участника — руководителям.
  */
 import { S, isSuper, isStaff, todayStr, ACCESS_LABELS, personById, deptById, taskDone, plural, columns, colColor, appStatusById } from '../state.js';
-import { $, h, icon, avatar, showErr, fill, menu, toast, emptyBlock } from '../ui.js';
+import { $, h, icon, avatar, showErr, fill, menu, toast, emptyBlock, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView, link } from '../router.js';
 import { openCreateApp, openNewAppTask, pmsOf, appIcon, appStatusCell, openAppCard } from './apps.js';
 import { attention, inProgress, recent } from './ceo.js';
 import { unitHeader } from './unitnav.js';
 import { addMemberDialog } from './people.js';
+import { sparkline, openSeries } from './charts.js';
 
 export async function renderUnitPage() {
   const u = S.board.unit;
   const key = 'overview:' + u.id;
-  const page = h('div', { class: 'page unit-page' }, h('div', { class: 'boot' }, h('span', { class: 'spinner' }), 'Загрузка…'));
+  const page = h('div', { class: 'page unit-page' }, skeleton());
   const actions = h('div', { class: 'row', style: { gap: '8px' } });
   const draw = () => fill($('#main'), ...unitHeader('overview', [actions]), h('div', { class: 'view-body' }, page));
   draw();
@@ -34,7 +35,7 @@ export async function renderUnitPage() {
     const open = S.board.tasks.filter(t => !t.archived && !taskDone(t));
     const today = todayStr();
     const late = open.filter(t => t.dueDate && t.dueDate < today).length;
-    const stat = (n, label, mode, tone) => link({ unit: u.id, mode }, { class: 'cs' + (tone ? ' ' + tone : '') }, h('div', { class: 'cs-n' }, n), h('div', { class: 'cs-label' }, label));
+    const stat = (n, label, mode, tone, spark) => link({ unit: u.id, mode }, { class: 'cs' + (tone ? ' ' + tone : '') }, h('div', { class: 'cs-n' }, n), h('div', { class: 'cs-label' }, label), spark);
 
     fill(actions,
       isSuper() && h('button', {
@@ -46,8 +47,8 @@ export async function renderUnitPage() {
     fill(page,
       u.description && h('p', { class: 'muted unit-desc' }, u.description),
       h('div', { class: 'cs-row unit-stats' },
-        stat(apps.length, plural(apps.length, ['приложение', 'приложения', 'приложений']), 'apps'),
-        stat(apps.filter(a => a.active > 0).length, 'в работе', 'apps'),
+        stat(apps.length, plural(apps.length, ['приложение', 'приложения', 'приложений']), 'apps', '', sparkline(openSeries(apps.map(a => ({ createdAt: a.createdAt }))))),
+        stat(apps.filter(a => a.active > 0).length, 'в работе', 'apps', '', sparkline(openSeries(apps.flatMap(a => a.requests)))),
         stat(open.length, 'открытых задач', 'list'),
         stat(late, 'просрочено', 'list', late ? 'danger' : '')),
       h('div', { class: 'home-grid' },
