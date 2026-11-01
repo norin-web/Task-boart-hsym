@@ -1856,5 +1856,5 @@ body { letter-spacing: -.01em; }
 .modal .sel-av > .avatar + select.inp { padding-left: 44px; }
 
 /* без «Назад» шапка раздела той же высоты */
-#main:has(.apps-page) .topbar { min-height: 44px; }
+#main:has(.apps-page):not(:has(.unit-tabs)) .topbar { min-height: 64px; }
 
