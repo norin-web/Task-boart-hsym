@@ -1359,13 +1359,21 @@ body.sb-collapsed .nav-unit-row .nav-abbr { display: inline; font-size: 12px; li
 /* G02: статус задачи — чип с меню, без стрелки */
 .panel-side .status-wrap::after { display: none; }
 .panel-side .status-wrap select.inp { appearance: none; -webkit-appearance: none; background-image: none; padding-right: 12px; }
-/* G02: свойства приложения — чипы */
+/* B05: статус приложения — чип с точкой и стрелкой, юнит и приоритет — текстом */
+.ap-props .field { justify-items: start; }
+.ap-props .field { justify-items: start; }
+.ap-props .prio-select-chev { display: none; }
+.ap-st-chip { position: relative; display: inline-flex; align-items: center; max-width: 100%; }
+.ap-st-chip .dot { position: absolute; left: 12px; width: 8px; height: 8px; pointer-events: none; }
+.ap-st-chip::after { content: ''; position: absolute; right: 12px; top: 50%; width: 5px; height: 5px; margin-top: -4px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); pointer-events: none; }
 .ap-props .inp, .ap-props .prio-select,
 .unit-panel .ap-props .inp, .unit-panel .ap-props .prio-select,
 .app-page .app-side .ap-props .inp, .app-page .app-side .ap-props .prio-select {
-  appearance: none; -webkit-appearance: none; display: inline-flex; width: auto; max-width: 100%; height: 28px; padding: 0 12px;
-  border: 1px solid var(--border); border-radius: 999px; background: var(--surface); background-image: none; font-size: 12px; font-weight: 600;
+  appearance: none; -webkit-appearance: none; display: inline-flex; align-items: center; width: auto; max-width: 100%; height: 24px; padding: 0;
+  border: 0; border-radius: 0; background: transparent; background-image: none; box-shadow: none; font-size: 14px; line-height: 20px; font-weight: 600; color: var(--text);
 }
-.cs-spark { margin-top: 8px; color: var(--accent); line-height: 0; }
-.ap-props .field { justify-items: start; }
-.ap-props .prio-select-chev { display: none; }
+.ap-props .ap-st-chip select.inp,
+.unit-panel .ap-props .ap-st-chip select.inp,
+.app-page .app-side .ap-props .ap-st-chip select.inp { height: 28px; padding: 0 26px 0 28px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); font-size: 13px; }
+.cs-spark { margin-top: 8px; color: var(--accent-text, #0F6E1F); line-height: 0; }
+.cs-spark svg { width: 72px; height: 26px; }

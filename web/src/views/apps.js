@@ -527,7 +527,7 @@ export function openAppPanel(a, onChange, page = null) {
     // блоки карточки — по раскладке человека (порядок и видимость: «⋯» → «Настроить карточку»)
     const parts = {
       props: h('section', { class: 'ap-props' },
-        field('Статус', statusSel), field('Юнит', ceo ? unitSel : h('div', { class: 'ap-static' }, u ? u.name : '—')), field('Приоритет', prioSel)),
+        field('Статус', h('div', { class: 'ap-st-chip' }, h('span', { class: 'dot', style: { background: st ? st.color : 'var(--border-strong)' } }), statusSel)), field('Юнит', ceo ? unitSel : h('div', { class: 'ap-static' }, u ? u.name : '—')), field('Приоритет', prioSel)),
       // где приложение сейчас: статус, с какого числа, текущие этапы открытых работ
       now: h('section', null,
         h('div', { class: 'up-head' }, h('h3', null, 'Сейчас')),
