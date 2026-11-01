@@ -121,7 +121,7 @@ function row(t, { unit = true, done = false } = {}) {
     statusIcon(t.statusKind === 'progress' && /ревью/i.test(t.statusName) ? 'review' : t.statusKind, 16),
     h('span', { class: 'trow-key' }, t.key),
     h('span', { class: 't-title' }, t.title),
-    h('span', { class: 'trow-status' }, t.statusName),
+    h('span', { class: 'trow-status' }, h('span', { class: 'trow-chip' }, t.statusName)),
     h('span', { class: 'trow-due' + (late ? ' danger-text' : due ? '' : ' muted'), title: due ? due.hint : '' },
       due ? [icon('calendar', 14), due.text] : 'Без срока'),
     unit && h('span', { class: 'muted trow-unit' }, t.unit.name));

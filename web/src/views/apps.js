@@ -206,7 +206,7 @@ export async function renderApps({ unitId = '' } = {}) {
     paintNav();
     paintList();
     box.addEventListener('click', e => e.stopPropagation());
-    menu(anchor, [box]);
+    menu(anchor, [box], { align: 'left' });
     if (!search.hidden) search.focus();
   }
   /** Группировка списка: «В работе» сверху отдельным разделом или только по юнитам. */
