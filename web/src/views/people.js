@@ -92,18 +92,19 @@ const accessSelect = (value, onChange) => h('select', { class: 'inp', value, onc
   Object.entries(ACCESS_LABELS).map(([k, v]) => h('option', { value: k }, v)));
 
 /** Окно «Отправьте коллеге»: ссылка, email и временный пароль. */
-function showCredentials(person, password) {
+export function showCredentials(person, password) {
   const site = location.origin + location.pathname;
   const text = `Вход в Tasks: ${site}\nEmail: ${person.email}\nВременный пароль: ${password}\nПосле входа смените пароль: аккаунт внизу слева → «Настройки» → «Профиль».`;
   modal({
     title: 'Доступ создан',
+    cls: 'dlg',
     body: [
-      h('p', { style: { marginTop: 0 } }, 'Отправьте это ', h('b', null, person.name), ' — пароль больше нигде не показывается:'),
+      h('p', { class: 'hint' }, 'Отправьте это ', h('b', null, person.name), ' — пароль больше нигде не показывается:'),
       h('pre', { class: 'creds' }, text),
     ],
     actions: [
-      { label: 'Скопировать', primary: true, action: async () => { await navigator.clipboard.writeText(text).catch(() => {}); toast('Скопировано'); } },
       { label: 'Готово' },
+      { label: 'Скопировать', primary: true, action: async () => { await navigator.clipboard.writeText(text).catch(() => {}); toast('Скопировано'); } },
     ],
   });
 }
@@ -136,6 +137,7 @@ export function addPersonDialog(onDone) {
   let access = 'member';
   modal({
     title: 'Добавить человека',
+    cls: 'dlg',
     body: [
       h('div', { class: 'grid2' }, field('Имя', name), field('Email', email, mode === 'supabase' ? 'С email сразу создастся вход с временным паролем' : 'Локальный режим: входа нет')),
       h('div', { class: 'grid2' },
@@ -194,7 +196,7 @@ export function peopleManager({ search = false, bare = false } = {}) {
   };
 
   const toggleActive = async p => {
-    if (p.active && !(await confirmDlg(`Отключить ${p.name}? Человек не сможет войти; его задачи останутся.`, { ok: 'Отключить', danger: true }))) return;
+    if (p.active && !(await confirmDlg('Человек не сможет войти; его задачи останутся.', { title: `Отключить ${p.name}?`, ok: 'Отключить', danger: true }))) return;
     save(p, { active: !p.active });
   };
 
@@ -278,6 +280,7 @@ export function peopleManager({ search = false, bare = false } = {}) {
     const em = h('input', { class: 'inp', type: 'email', value: p.email, placeholder: 'email' });
     modal({
       title: 'Вход для ' + p.name,
+      cls: 'dlg',
       body: [field('Email', em, 'Создадим аккаунт с временным паролем и покажем его вам.')],
       actions: [
         { label: 'Отмена' },
@@ -296,7 +299,7 @@ export function peopleManager({ search = false, bare = false } = {}) {
   }
 
   async function resetDialog(p) {
-    if (!(await confirmDlg(`Выдать ${p.name} новый временный пароль? Старый перестанет работать.`, { ok: 'Выдать' }))) return;
+    if (!(await confirmDlg(`Выдать ${p.name} новый временный пароль? Старый перестанет работать.`, { title: 'Новый временный пароль', ok: 'Выдать' }))) return;
     const password = tempPassword();
     await send('resetPassword', { personId: p.id, password }).then(() => showCredentials(p, password)).catch(showErr);
   }
@@ -324,9 +327,10 @@ export function openMyProfile() {
   const posNames = (p.positionIds || []).map(id => (deptById(id) || {}).name).filter(Boolean).join(', ');
   modal({
     title: 'Мой профиль',
+    cls: 'dlg dlg-p',
     body: [
-      h('div', { class: 'row', style: { gap: '14px', marginBottom: '14px', flexWrap: 'nowrap' } }, preview,
-        h('div', null, h('div', { style: { fontWeight: 600 } }, p.name), h('div', { class: 'hint' }, [ACCESS_LABELS[p.access], posNames, p.email].filter(Boolean).join(' · ')))),
+      h('div', { class: 'pf-top' }, preview,
+        h('div', null, h('div', { class: 'pf-name' }, p.name), h('div', { class: 'hint' }, [ACCESS_LABELS[p.access], posNames, p.email].filter(Boolean).join(' · ')))),
       field('Аватар', picker),
       h('div', { class: 'grid2' }, field('Имя', name), field('Должность', role, 'Свободный текст; позицию назначает администратор')),
       h('div', { class: 'grid2' }, field('Telegram', tg, 'Видно в карточке сотрудника'), field('Часовой пояс', tz, 'Коллеги видят ваше местное время')),
@@ -470,6 +474,7 @@ export function addMemberDialog(unitId) {
     let result = null;
     modal({
       title: 'Добавить в команду' + (unit ? ' «' + unit.name + '»' : ''),
+      cls: 'dlg',
       body: [field('Участник', person, 'Позиции — из профиля человека («Люди и доступы»).')],
       onClose: () => resolve(result),
       actions: [
@@ -498,7 +503,7 @@ export function applyMembers(unitId, list) {
 /* ================= Позиции (общий справочник) ================= */
 
 export function openDepartments() {
-  modal({ title: 'Позиции', body: positionsManager(), actions: [{ label: 'Готово', primary: true, action: c => c() }], onClose: rerender });
+  modal({ title: 'Позиции', cls: 'dlg dlg-w', body: positionsManager({ bare: true }), actions: [{ label: 'Готово', primary: true, action: c => c() }], onClose: rerender });
 }
 
 /**
@@ -679,10 +684,12 @@ export const teamsManager = ({ bare = false } = {}) => dictionaryManager({
 });
 
 export function openShortcuts() {
-  const row = (keys, text) => h('div', { class: 'row', style: { justifyContent: 'space-between', padding: '6px 0' } },
-    h('span', null, text), h('span', { class: 'row', style: { gap: '4px' } }, keys.map(k => h('kbd', null, k))));
+  const row = (keys, text) => h('div', { class: 'sk-row' },
+    h('span', null, text), h('span', { class: 'sk-keys' }, keys.map(k => h('kbd', null, k))));
   modal({
     title: 'Горячие клавиши',
+    cls: 'dlg',
+    actions: [{ label: 'Закрыть', primary: true, action: c => c() }],
     body: [
       row(['⌘/Ctrl', 'K'], 'Поиск и команды'),
       isStaff() && row(['C'], 'Новая задача'),
@@ -695,11 +702,12 @@ export function openShortcuts() {
 }
 
 /** Шаблон этапов личной доски команды: его получает человек команды, пока не настроит свою. */
-function editTeamStages(team, onDone) {
+export function editTeamStages(team, onDone) {
   const ed = columnsEditor((team.boardTemplate || []).map(c => ({ ...c })));
   modal({
     title: `Этапы доски · ${team.name}`, wide: true,
-    body: [h('p', { class: 'hint', style: { marginTop: 0 } }, 'Стартовые этапы личной доски для людей этой команды. Кто уже настроил свою доску — у того она не изменится.'), ed.el],
+    cls: 'dlg dlg-w',
+    body: [h('p', { class: 'hint' }, 'Стартовые этапы личной доски для людей этой команды. Кто уже настроил свою доску — у того она не изменится.'), ed.el],
     actions: [
       { label: 'Отмена' },
       { label: 'Сохранить', primary: true, action: async close => {

@@ -157,7 +157,8 @@ export function activityFeed({ limit = 15, title = 'Последние собы�
     const to = h('input', { class: 'inp', type: 'date', value: period && period.to ? isoDay(new Date(period.to - 1)) : isoDay(dayStart()) });
     modal({
       title: 'Период событий',
-      body: h('div', { class: 'row', style: { gap: '12px', flexWrap: 'wrap' } }, field('С', from), field('По (включительно)', to)),
+      cls: 'dlg',
+      body: h('div', { class: 'grid2' }, field('С', from), field('По (включительно)', to)),
       actions: [{ label: 'Отмена' }, {
         label: 'Применить', primary: true, action: close => {
           const a = from.value ? new Date(from.value + 'T00:00') : null;

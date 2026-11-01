@@ -137,7 +137,7 @@ export function newsBlock() {
 /** Все непрочитанные отдельным окном (когда их больше 15). */
 function openAllNews(row) {
   const list = h('div', { class: 'news card-box news-all' }, S.notes.map(row));
-  const close = modal({ title: 'Новое для вас · ' + S.notes.length, body: list, actions: [{ label: 'Закрыть' }], wide: true });
+  const close = modal({ title: 'Новое для вас · ' + S.notes.length, cls: 'dlg', body: list, actions: [{ label: 'Закрыть', primary: true, action: c => c() }] });
   list.addEventListener('click', e => { if (e.target.closest('.news-row')) close(); });
 }
 

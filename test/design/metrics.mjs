@@ -48,6 +48,8 @@ export const METRICS = [
   { screen: 'D33', checks: [{ sel: '.dlg .modal-body', prop: 'display', want: 'none' }] },
   { screen: 'D39', checks: [{ sel: '.modal.cs-dlg', prop: 'width', want: 480 }, { sel: '.cs-dlg .le-row', prop: 'height', want: 44 }] },
   { screen: 'D42', checks: [{ sel: '.modal.dlg-w', prop: 'width', want: 760 }, { sel: '.dlg .opt-row input[type=color]', prop: 'width', want: 28 }] },
+  { screen: 'D46', checks: [{ sel: '.modal.dlg-p', prop: 'width', want: 640 }] },
+  { screen: 'D47', checks: [{ sel: '.sk-row kbd', prop: 'height', want: 24 }, { sel: '.sk-row + .sk-row', prop: 'height', want: 44 }] },
   { screen: 'D37', checks: [{ sel: '.modal.dq-dlg', prop: 'width', want: 760 }, { sel: '.dq-row.yn', prop: 'height', want: 56 }, { sel: '.dq-row .seg button', prop: 'height', want: 32 }] },
   { screen: 'B05', checks: [{ sel: '.topbar .back-btn', prop: 'width', want: 44 }] },
 ];
