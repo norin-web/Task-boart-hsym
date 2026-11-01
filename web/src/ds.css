@@ -986,3 +986,64 @@ button.fb-title:hover { color: var(--text); text-decoration: none; opacity: .8; 
 .chart-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--text-2); }
 .chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .chart-legend i { width: 8px; height: 8px; border-radius: 999px; flex: none; }
+
+/* ---------- Настройки · Люди (18) ---------- */
+.sub-tabs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+.sub-tabs > .seg { background: var(--surface); padding: 4px; gap: 2px; border-radius: 999px; }
+.sub-tabs > .seg .seg-btn { height: 32px; padding: 0 12px; border-radius: 999px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--muted); }
+.sub-tabs > .seg .seg-btn.on { background: var(--surface-3); color: var(--text); box-shadow: none; }
+.sub-tools { margin-left: auto; display: flex; }
+.people-tools { display: flex; align-items: center; gap: 8px; }
+.people-tools .apps-search { width: 240px; height: 40px; background: var(--surface); }
+.pill-select.inp { height: 40px; width: auto; padding: 0 32px 0 16px; border: 0; border-radius: 999px; background-color: var(--surface); font-size: 12px; font-weight: 600; }
+.people-card { padding: 8px 20px 12px; }
+.people-card .access-row { grid-template-columns: 28px minmax(180px, 1.8fr) minmax(0, 1fr) minmax(0, 1fr) 140px 28px; gap: 12px; min-height: 60px; padding: 0; border-bottom: 0; }
+.people-card .access-row + .access-row { border-top: 1px solid var(--border); }
+.people-card .access-head { min-height: 40px; background: transparent; text-transform: none; letter-spacing: 0; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); }
+.people-card .access-row > .avatar { width: 28px; height: 28px; }
+.people-card .person-name { font-size: 13px; line-height: 20px; font-weight: 600; }
+.people-card .person-sub { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); }
+.people-card .person-sub.warn-text { color: var(--warn); }
+.people-card .pos-btn.as-chips, .people-card .pos-btn.as-chips:hover { height: auto; min-height: 28px; padding: 0; background: transparent; border: 0; justify-content: flex-start; gap: 4px; }
+.people-card .pos-btn.as-chips > .i { opacity: 0; color: var(--muted); }
+.people-card .pos-btn.as-chips:hover > .i { opacity: 1; }
+.pick-chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.pick-chip { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: 999px; background: var(--surface-3); color: var(--text-2); font-size: 12px; line-height: 16px; font-weight: 500; white-space: nowrap; }
+.people-card .access-row select.inp { justify-self: start; width: auto; height: 32px; padding: 0 28px 0 12px; background-color: transparent; border: 1px solid var(--border); border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--text); }
+.people-card .access-row select.inp:hover { border-color: var(--border-strong); background-color: transparent; }
+.people-card .access-badge { justify-self: start; background: transparent; padding: 0 12px; font-size: 12px; font-weight: 600; color: var(--text); }
+.people-card .access-row.inactive > :not(.icon-btn) { opacity: .45; }
+@media (max-width: 640px) {
+  .people-card .access-row { grid-template-columns: 28px minmax(0, 1fr) 28px; }
+  .sub-tools, .people-tools, .people-tools .apps-search { width: 100%; margin-left: 0; }
+}
+.people-card .access-row select.inp { field-sizing: content; min-width: 0; }
+.people-card .pos-btn.as-chips .pick-val.muted { font-size: 12px; font-weight: 500; }
+
+/* ---------- Настройки · Команды и Позиции (37, 38) ---------- */
+.dt-card { padding: 8px 20px 20px; }
+.dt-row { display: grid; grid-template-columns: 16px 14px minmax(0, 1fr) 96px minmax(0, 1fr) 28px; gap: 0 16px; align-items: center; min-height: 56px; }
+.dt-list .dt-row, .dt-head + .dt-list > .dt-row:first-child { border-top: 1px solid var(--border); }
+.dt-head { min-height: 40px; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); }
+.dt-row .drag { color: var(--border-strong); opacity: .5; cursor: grab; display: flex; }
+.dt-row:hover .drag { opacity: 1; }
+.dt-dot { position: relative; width: 14px; height: 14px; border-radius: 999px; cursor: pointer; }
+.dt-dot input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+.dt-main { display: grid; min-width: 0; }
+.dt-name { border: 0; background: transparent; padding: 0; margin: 0; font: inherit; font-size: 13px; line-height: 20px; font-weight: 600; color: var(--text); border-radius: 4px; min-width: 0; }
+.dt-name:hover { background: var(--surface-2); }
+.dt-name:focus { outline: none; background: var(--surface-2); }
+.dt-sub { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dt-n { font-size: 13px; line-height: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dt-third { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--text-2); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+button.dt-third:hover { color: var(--text); text-decoration: none; }
+.dt-row.off .dt-main, .dt-row.off .dt-n, .dt-row.off .dt-dot { opacity: .45; }
+.dt-empty { padding: 16px 0; margin: 0; }
+.dt-add { display: flex; gap: 12px; align-items: center; padding-top: 12px; border-top: 1px solid var(--border); }
+.dt-add-inp.inp { flex: 1; height: 40px; border: 0; border-radius: 999px; background: var(--surface-2); padding: 0 16px; font-size: 13px; }
+.dt-add .btn { height: 40px; padding: 0 18px; }
+.sub-tools > .apps-search { width: 240px; height: 40px; background: var(--surface); }
+@media (max-width: 640px) {
+  .dt-row { grid-template-columns: 16px 14px minmax(0, 1fr) 40px 28px; }
+  .dt-row > .dt-third, .dt-head > :nth-child(5) { display: none; }
+}

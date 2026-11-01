@@ -37,13 +37,14 @@ export const teamChips = ids => dictChips(ids, teamById, { empty: 'без ком
  * Выбор из справочника: кнопка с чипами → меню с галочками (меню не закрывается, пока отмечаешь).
  * main — первая выбранная «основная» (★), последнюю не снять; иначе можно снять все.
  */
-function dictPicker({ title, items, byId, get, set, main = false, note = '', empty = '', disabled = false }) {
-  const btn = h('button', { class: 'pos-btn', type: 'button', disabled, title: disabled ? '' : title, onclick: e => { e.stopPropagation(); open(); } });
+function dictPicker({ title, items, byId, get, set, main = false, note = '', empty = '', disabled = false, chips = false }) {
+  const btn = h('button', { class: 'pos-btn' + (chips ? ' as-chips' : ''), type: 'button', disabled, title: disabled ? '' : title, onclick: e => { e.stopPropagation(); open(); } });
   // Внутри поля — как в обычном списке: точки цветов и названия через запятую (без чипов)
   const paint = () => {
     const list = get().map(byId).filter(Boolean);
     fill(btn,
-      list.length
+      chips && list.length ? h('span', { class: 'pick-chips', title: list.map(d => d.name).join(', ') }, list.map(d => h('span', { class: 'pick-chip' }, d.name)))
+      : list.length
         ? h('span', { class: 'pick-val', title: list.map(d => d.name).join(', ') },
           h('span', { class: 'aud-dots' }, list.slice(0, 3).map(d => h('span', { class: 'dot', style: { background: d.color } }))),
           h('span', { class: 'pick-text' }, list.map(d => d.name).join(', ')))
@@ -166,7 +167,7 @@ export function openPeople() {
  * Управление людьми: позиции, роли (только супер-админ), вход и доступ. filter — функция-фильтр списка.
  * Возвращает элемент (используется в окне и в панели админа).
  */
-export function peopleManager({ search = false } = {}) {
+export function peopleManager({ search = false, bare = false } = {}) {
   const box = h('div', { class: 'rows people-list' });
   let q = '';
   let accessFilter = '';
@@ -203,9 +204,10 @@ export function peopleManager({ search = false } = {}) {
       avatar(p),
       h('span', { class: 'person-text', 'data-pcard': p.id },
         h('span', { class: 'person-name' }, p.name, S.meId === p.id && h('span', { class: 'badge' }, 'вы')),
-        h('span', { class: 'person-sub' }, [p.email || 'без email', p.linked ? 'вход есть' : mode === 'supabase' ? 'нет входа' : ''].filter(Boolean).join(' · '))),
-      teamsPicker(() => p.teamIds || [], ids => { p.teamIds = ids; save(p, { teamIds: ids }); }, { disabled: !editableTarget }),
-      positionsPicker(() => p.positionIds, ids => { p.positionIds = ids; save(p, { positionId: ids[0], extraPositionIds: ids.slice(1) }); }, { disabled: !editableTarget }),
+        h('span', { class: 'person-sub' + (p.active && !p.linked && mode === 'supabase' ? ' warn-text' : '') },
+          [p.email || 'без email', !p.active ? 'доступ отключён' : p.linked ? 'вход есть' : mode === 'supabase' ? 'нет входа' : ''].filter(Boolean).join(' · '))),
+      teamsPicker(() => p.teamIds || [], ids => { p.teamIds = ids; save(p, { teamIds: ids }); }, { disabled: !editableTarget, chips: bare }),
+      positionsPicker(() => p.positionIds, ids => { p.positionIds = ids; save(p, { positionId: ids[0], extraPositionIds: ids.slice(1) }); }, { disabled: !editableTarget, chips: bare }),
       isSuper() && p.id !== S.meId ? accessSelect(p.access, v => save(p, { access: v })) : h('span', { class: 'badge access-badge' }, ACCESS_LABELS[p.access]),
       editableTarget && p.id !== S.meId
         ? h('button', { class: 'icon-btn sm', title: 'Доступ', onclick: e => { e.stopPropagation(); accountMenu(e.currentTarget, p); } }, icon('more'))
@@ -240,13 +242,24 @@ export function peopleManager({ search = false } = {}) {
     draw();
   };
   draw();
-  const toolbar = search && h('div', { class: 'row', style: { marginBottom: '10px' } },
-    h('input', { class: 'inp', type: 'search', placeholder: 'Поиск по имени или email', style: { maxWidth: '280px' }, oninput: ev => { q = ev.target.value.trim().toLowerCase(); draw(); } }),
-    h('select', { class: 'inp', style: { width: 'auto' }, onchange: ev => { accessFilter = ev.target.value; draw(); } },
-      h('option', { value: '' }, 'Все'),
+  const filterSel = () => h('select', { class: 'inp' + (bare ? ' pill-select' : ''), style: bare ? null : { width: 'auto' }, 'aria-label': 'Роль', onchange: ev => { accessFilter = ev.target.value; draw(); } },
+      h('option', { value: '' }, bare ? 'Все роли' : 'Все'),
       Object.entries(ACCESS_LABELS).map(([k, v]) => h('option', { value: k }, v)),
       mode === 'supabase' && h('option', { value: 'nologin' }, 'Без входа'),
-      h('option', { value: 'off' }, 'Отключённые')));
+      h('option', { value: 'off' }, 'Отключённые'));
+  const onSearch = ev => { q = ev.target.value.trim().toLowerCase(); draw(); };
+  if (bare) {
+    // настройки (макет 18): поиск и роль — справа от вкладок, «+ Человек» — в шапке, подсказки и форма — не здесь
+    const el = h('div', { class: 'card-box people-card' }, box);
+    el.toolbar = h('div', { class: 'people-tools' },
+      h('label', { class: 'apps-search' }, icon('search', 16), h('input', { class: 'apps-search-inp', type: 'search', placeholder: 'Имя или email', oninput: onSearch })),
+      filterSel());
+    el.refresh = draw;
+    return el;
+  }
+  const toolbar = search && h('div', { class: 'row', style: { marginBottom: '10px' } },
+    h('input', { class: 'inp', type: 'search', placeholder: 'Поиск по имени или email', style: { maxWidth: '280px' }, oninput: onSearch }),
+    filterSel());
   const el = h('div', null,
     h('p', { class: 'hint', style: { marginTop: 0 } },
       'Сотрудник видит в своих юнитах задачи своих команд и позиций. ' + (isSuper() ? 'Роли меняете только вы (CEO).' : 'Роли назначает CEO.')),
@@ -538,6 +551,7 @@ function dictionaryManager(cfg) {
       },
     });
   };
+  if (cfg.bare) return dictTable(cfg, { save, remove });
   const name = h('input', { class: 'inp', placeholder: cfg.placeholder, maxlength: 40 });
   const add = async () => {
     if (!name.value.trim()) return name.focus();
@@ -556,8 +570,81 @@ function dictionaryManager(cfg) {
     h('div', { class: 'lf-add' }, name, h('button', { class: 'btn primary', onclick: () => add().catch(showErr) }, icon('plus', 14), 'Добавить')));
 }
 
+/**
+ * Справочник таблицей (настройки, макеты 37/38): ручка, цвет, название и люди, число людей, третья колонка, меню «⋯».
+ * Добавление — строкой внизу, поиск — el.toolbar (рисуется справа от вкладок), el.focusAdd — для кнопки в шапке.
+ */
+function dictTable(cfg, { save, remove }) {
+  let q = '';
+  const name = h('input', { class: 'inp dt-add-inp', placeholder: cfg.placeholder, maxlength: 40 });
+  const add = async () => {
+    if (!name.value.trim()) return name.focus();
+    const d = await send(cfg.api.create, { name: name.value, color: PALETTE[cfg.items().length % PALETTE.length] });
+    cfg.setItems([...cfg.items(), d]);
+    name.value = '';
+    name.focus();
+  };
+  const list = h('div', { class: 'dt-list' });
+  const members = d => {
+    const ps = cfg.people(d);
+    return !ps.length ? 'Пока никого' : ps.length === 1 ? ps[0].name : ps.map(p => p.name.split(' ')[0]).join(', ');
+  };
+  const rowMenu = (anchor, d) => menu(anchor, [
+    cfg.third.edit && { label: cfg.third.editLabel, icon: 'board', action: () => cfg.third.edit(d, draw) },
+    { label: d.archived ? 'Показать в списках' : 'Скрыть из списков', icon: 'eye', action: () => save(d, { archived: !d.archived }).then(draw).catch(showErr) },
+    cfg.locked !== d.id && { sep: true },
+    cfg.locked !== d.id && { label: 'Удалить', icon: 'trash', danger: true, action: () => remove(d).then(draw).catch(showErr) },
+  ]);
+  const row = d => {
+    const color = h('input', { type: 'color', value: d.color, title: 'Цвет', onchange: e => save(d, { color: e.target.value }).then(draw).catch(showErr) });
+    return h('div', { class: 'dt-row' + (d.archived ? ' off' : ''), dataset: { id: d.id } },
+      h('span', { class: 'drag', title: 'Перетащите, чтобы изменить порядок' }, icon('grip', 14)),
+      h('label', { class: 'dt-dot', style: { background: d.color }, title: 'Цвет' }, color),
+      h('span', { class: 'dt-main' },
+        h('input', {
+          class: 'dt-name', value: d.name, maxlength: 40, 'aria-label': 'Название',
+          onchange: e => { const v = e.target.value.trim(); if (!v) { e.target.value = d.name; return; } save(d, { name: v }).catch(showErr); },
+          onkeydown: e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') { e.target.value = d.name; e.target.blur(); } },
+        }),
+        h('span', { class: 'dt-sub' }, members(d))),
+      h('b', { class: 'dt-n' }, cfg.count(d)),
+      cfg.third.edit
+        ? h('button', { class: 'dt-third link-btn', title: cfg.third.editLabel, onclick: () => cfg.third.edit(d, draw) }, cfg.third.text(d))
+        : h('span', { class: 'dt-third' }, cfg.third.text(d)),
+      h('button', { class: 'icon-btn sm', title: 'Действия', onclick: e => { e.stopPropagation(); rowMenu(e.currentTarget, d); } }, icon('more')));
+  };
+  let sortable = null;
+  const draw = () => {
+    const items = [...cfg.items()].sort(byOrder).filter(d => !q || d.name.toLowerCase().includes(q));
+    fill(list, items.length ? items.map(row) : h('p', { class: 'muted dt-empty' }, q ? 'Ничего не найдено' : cfg.emptyText));
+    if (sortable) sortable.destroy();
+    sortable = Sortable.create(list, {
+      handle: '.drag', animation: 150, ghostClass: 'sortable-ghost', forceFallback: true, fallbackTolerance: 4, disabled: !!q,
+      onEnd: () => {
+        const ids = [...list.children].map(el => el.dataset.id).filter(Boolean);
+        ids.forEach((id, i) => { const d = cfg.items().find(x => x.id === id); if (d) d.order = i + 1; });
+        send(cfg.api.reorder, { ids }).catch(showErr);
+      },
+    });
+  };
+  const addAndDraw = () => add().then(draw).catch(showErr);
+  name.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); addAndDraw(); } };
+  draw();
+  const el = h('div', { class: 'card-box dt-card' },
+    h('div', { class: 'dt-row dt-head' }, h('span'), h('span'), h('span', null, cfg.colTitle), h('span', null, 'Людей'), h('span', null, cfg.third.title), h('span')),
+    list,
+    h('div', { class: 'dt-add' }, name, h('button', { class: 'btn soft', onclick: addAndDraw }, icon('plus', 14), cfg.addTitle)));
+  el.toolbar = h('label', { class: 'apps-search' }, icon('search', 16),
+    h('input', { class: 'apps-search-inp', type: 'search', placeholder: cfg.searchText, oninput: e => { q = e.target.value.trim().toLowerCase(); draw(); } }));
+  el.focusAdd = () => name.focus();
+  return el;
+}
+
 /** Позиции: есть у каждого человека (можно несколько) и у каждой задачи. Other не удалить. */
-export const positionsManager = () => dictionaryManager({
+export const positionsManager = ({ bare = false } = {}) => dictionaryManager({
+  bare, colTitle: 'Позиция', searchText: 'Название позиции',
+  people: d => S.people.filter(p => p.active && (p.positionIds || [p.positionId]).includes(d.id)),
+  third: { title: 'Видимость', text: d => (d.id === 'd_other' ? 'Нельзя удалить · для людей без позиции' : d.archived ? 'Скрыта' : 'В списках') },
   items: () => S.departments, setItems: v => { S.departments = v; },
   api: { create: 'createDepartment', update: 'updateDepartment', reorder: 'reorderDepartments', remove: 'deleteDepartment' },
   count: d => S.people.filter(p => (p.positionIds || [p.positionId]).includes(d.id)).length,
@@ -573,7 +660,13 @@ export const positionsManager = () => dictionaryManager({
 });
 
 /** Команды людей: у человека несколько, у задачи одна; участник видит задачи своих команд. */
-export const teamsManager = () => dictionaryManager({
+export const teamsManager = ({ bare = false } = {}) => dictionaryManager({
+  bare, colTitle: 'Команда', searchText: 'Название команды',
+  people: d => S.people.filter(p => p.active && (p.teamIds || []).includes(d.id)),
+  third: {
+    title: 'Этапы личной доски', editLabel: 'Этапы доски', edit: (d, redraw) => editTeamStages(d, redraw),
+    text: d => ((d.boardTemplate || []).length ? d.boardTemplate.map(c => c.name).join(' · ') : 'Стандартная доска'),
+  },
   items: () => S.teams, setItems: v => { S.teams = v; },
   api: { create: 'createTeam', update: 'updateTeam', reorder: 'reorderTeams', remove: 'deleteTeam' },
   count: d => S.people.filter(p => (p.teamIds || []).includes(d.id)).length,

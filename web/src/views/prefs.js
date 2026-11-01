@@ -7,10 +7,10 @@
 import { S, LS, me, isStaff, isSuper, myAccess, ACCESS_LABELS, deptById } from '../state.js';
 import { $, h, icon, avatar, topbar, fill, showErr, toast } from '../ui.js';
 import { send } from '../api.js';
-import { link, currentView } from '../router.js';
+import { link, currentView, rerender } from '../router.js';
 import { mode, supabase } from '../data.js';
 import { THEME_LIST, setTheme, resetLocal } from './sidebar.js';
-import { openMyProfile, openActAs } from './people.js';
+import { openMyProfile, openActAs, addPersonDialog } from './people.js';
 import { renderStudio, STUDIO_TABS } from './admin.js';
 
 const PERSONAL = [
@@ -45,7 +45,8 @@ export function renderPrefs(tab) {
   const body = h('div', { class: 'prefs-body' + (PERSONAL.some(t => t[0] === tab) ? ' narrow' : '') });
   const item = ([id, label, ic]) => link({ view: 'settings', tab: id }, { class: 'prefs-tab' + (id === navTab ? ' on' : '') }, icon(ic, 15), label);
   fill($('#main'),
-    topbar([h('h1', { class: 'screen-title' }, 'Настройки')], []),
+    topbar([h('h1', { class: 'screen-title' }, 'Настройки')],
+      [tab === 'people' && h('button', { class: 'btn primary people-add', onclick: () => addPersonDialog(() => rerender()) }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Человек'))]),
     h('div', { class: 'view-body prefs-page' },
       h('nav', { class: 'prefs-nav', 'aria-label': 'Разделы настроек' },
         h('div', { class: 'prefs-sec' }, 'Личное'), PERSONAL.map(item),

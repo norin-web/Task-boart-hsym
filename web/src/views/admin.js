@@ -499,16 +499,24 @@ function peopleTab() {
   if (!PEOPLE_SUB.some(x => x[0] === sub)) sub = 'people';
   const body = h('div');
   const seg = h('div', { class: 'seg' });
+  const tools = h('div', { class: 'sub-tools' });
+  const count = { people: () => S.people.length, teams: () => activeTeams().length, positions: () => activeDepts().length };
   const draw = () => {
     fill(seg, PEOPLE_SUB.map(([id, label, ic]) => h('button', {
       class: 'seg-btn' + (id === sub ? ' on' : ''), onclick: () => { sub = id; LS.set('peopleSub', id); draw(); },
-    }, icon(ic, 14), label)));
-    fill(body, sub === 'teams' ? h('div', { class: 'card-box', style: { maxWidth: '760px' } }, teamsManager())
-      : sub === 'positions' ? h('div', { class: 'card-box', style: { maxWidth: '760px' } }, positionsManager())
-        : h('div', { class: 'card-box' }, peopleManager({ search: true })));
+    }, icon(ic, 14), label + ' · ' + count[id]())));
+    const view = sub === 'teams' ? teamsManager({ bare: true }) : sub === 'positions' ? positionsManager({ bare: true }) : peopleManager({ search: true, bare: true });
+    fill(tools, view.toolbar);
+    fill(body, view);
+    // кнопка в шапке — по вкладке: «Человек», «Команда», «Позиция»
+    const btn = document.querySelector('.people-add');
+    if (btn) {
+      fill(btn.querySelector('.btn-label'), { people: 'Человек', teams: 'Команда', positions: 'Позиция' }[sub]);
+      btn.onclick = sub === 'people' ? () => addPersonDialog(() => draw()) : () => view.focusAdd();
+    }
   };
   draw();
-  return h('div', null, h('div', { class: 'sub-tabs' }, seg), body);
+  return h('div', null, h('div', { class: 'sub-tabs' }, seg, tools), body);
 }
 
 /* ---------- автоматизации ---------- */
