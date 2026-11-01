@@ -48,7 +48,7 @@ export async function renderPmHome() {
 function pmBlocks(d, reload, redraw, period, setPeriod) {
   return [
     { id: 'news', title: 'Новое для вас', col: 'full', off: true, empty: 'Появится, когда что-то придёт вам', render: () => newsBlock() },
-    { id: 'inbox', title: 'Входящие от CEO', col: 'full', render: () => inbox(d, reload) },
+    { id: 'inbox', title: 'Входящие от CEO', col: 'full', render: () => inbox(d, reload, redraw) },
     { id: 'pipeline', title: 'Приложения по этапам', col: 'left', render: () => pipeline(d, reload, redraw) },
     { id: 'problems', title: 'Проблемы', col: 'right', render: () => problems(d) },
     { id: 'team', title: 'Команда и KPI', col: 'full', render: () => team(d, period, setPeriod) },
@@ -57,18 +57,32 @@ function pmBlocks(d, reload, redraw, period, setPeriod) {
 
 /* ---------- входящие от CEO ---------- */
 
-function inbox(d, reload) {
+// Приоритет словом: значок + название, как на листе P01
+const prioLabel = app => {
+  const mark = app && prioTag(app.priority);
+  return mark && h('span', { class: 'ib-prio' }, mark, (S.priorityOptions.find(o => o.id === app.priority) || {}).name);
+};
+// Вчерашний срок — словом, остальные датой
+const dueText = date => (date === new Date(Date.parse(todayStr()) - 864e5).toISOString().slice(0, 10) ? 'Вчера' : fmtDate(date));
+
+// Сколько входящих видно сразу; остальные — под «Показать больше»
+const INBOX_LIMIT = 2;
+let inboxAll = false;
+
+function inbox(d, reload, redraw) {
   if (!d.inbox.length) return null;
-  return h('section', null,
+  const rows = inboxAll ? d.inbox : d.inbox.slice(0, INBOX_LIMIT);
+  return h('section', { class: 'pm-inbox' },
     h('div', { class: 'section-head' }, h('h2', null, 'Входящие от CEO'), h('span', { class: 'sec-badge' }, d.inbox.length)),
-    h('div', { class: 'card-box att-list' }, d.inbox.map(r => h('div', { class: 'ib-row' },
+    h('div', { class: 'card-box att-list' }, rows.map(r => h('div', { class: 'ib-row' },
       r.app ? appIcon(r.app, 'md') : h('span'),
       h('button', { class: 'link-btn ib-title', onclick: () => peekTask(r.unitId, r.id) }, h('b', null, r.app ? r.app.name : ''), h('span', { class: 'muted' }, (r.app ? ' · ' : '') + shortTitle(r))),
-      (r.app && prioTag(r.app.priority)) || h('span'),
-      r.dueDate && h('span', { class: 'ib-due' + (r.dueDate < todayStr() ? ' late' : '') }, icon('calendar', 14), fmtDate(r.dueDate)),
+      prioLabel(r.app) || h('span'),
+      r.dueDate && h('span', { class: 'ib-due' + (r.dueDate < todayStr() ? ' late' : '') }, icon('calendar', 14), dueText(r.dueDate)),
       h('button', {
         class: 'btn soft sm', onclick: () => openDecomposeDialog({ id: r.id, unitId: r.unitId, type: r.type, title: r.title, dueDate: r.dueDate }).then(ok => ok && reload()),
-      }, icon('tree', 13), 'Разложить')))));
+      }, icon('tree', 13), 'Разложить')))),
+    d.inbox.length > INBOX_LIMIT && h('button', { class: 'pm-more', onclick: () => { inboxAll = !inboxAll; redraw(); } }, inboxAll ? 'Свернуть' : 'Показать больше'));
 }
 
 /* ---------- приложения по этапам ---------- */
@@ -132,7 +146,7 @@ const PROB = {
 
 function problems(d) {
   const rows = d.problems;
-  return h('section', null,
+  return h('section', { class: 'pm-problems' },
     h('div', { class: 'section-head' }, h('h2', null, 'Проблемы'), rows.length > 0 && h('span', { class: 'sec-badge' }, rows.length)),
     rows.length ? h('div', { class: 'card-box att-list' }, rows.slice(0, 14).map(x => {
       const a = PROB[x.type], t = x.task;

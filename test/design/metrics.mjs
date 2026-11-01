@@ -5,7 +5,6 @@ const shell = [
   { sel: '#sidebar .nav-item', prop: 'y', want: 172 },
 ];
 export const METRICS = [
-  { screen: 'P01', checks: [{ sel: '.pm-page .section-head h2', prop: 'fontSize', want: '16px' }, { sel: '.pm-page .section-head h2', prop: 'fontWeight', want: '600' }, { sel: '.pm-page section:has(.kpi-table) h2', prop: 'fontSize', want: '16px' }, { sel: '.pm-page section:has(.kpi-table) h2', prop: 'fontWeight', want: '600' }, { sel: '.pl-card', prop: 'marginBottom', want: '0px' }] },
   { screen: 'E02', checks: [{ sel: '.seg', prop: 'borderRadius', want: '999px' }, { sel: '.seg button', prop: 'borderRadius', want: '999px' }] },
   { screen: 'F01', checks: [{ sel: '.prefs-body .seg', prop: 'borderRadius', want: '999px' }] },
   { screen: 'U01', checks: [{ sel: '.apps-page > .ap-list', prop: 'backgroundColor', want: 'rgb(255, 255, 255)' }, { sel: '.apps-page > .ap-list .ap-row', prop: 'height', want: 58, tol: 2 }] },
@@ -24,4 +23,5 @@ export const METRICS = [
   { screen: 'D01', checks: [{ sel: '.panel-main .cl-item input', prop: 'width', want: 20 }, { sel: '.panel-main .cl-item input', prop: 'height', want: 20 }] },
   { screen: 'D05', checks: [{ sel: '.modal', prop: 'width', want: 480 }] },
   { screen: 'F03', checks: [{ sel: '.prefs-nav', prop: 'y', want: 96 }, { sel: '.prefs-nav', prop: 'x', want: 286 }, { sel: '.prefs-body', prop: 'y', want: 153, tol: 2 }] },
+  { screen: 'P01', checks: [{ sel: '.pm-page .section-head h2', prop: 'fontSize', want: '16px' }, { sel: '.pm-page .section-head h2', prop: 'fontWeight', want: '700' }, { sel: '.pm-problems h2', prop: 'fontWeight', want: '700' }, { sel: '.pm-page section:has(.kpi-table) h2', prop: 'fontWeight', want: '700' }, { sel: '.pl-card', prop: 'marginBottom', want: '0px' }, { sel: '.pm-inbox', prop: 'borderRadius', want: '28px' }, { sel: '.pm-page .sec-badge', prop: 'height', want: 28 }, { sel: '.ib-row .uc-icon, .ib-row .app-img', prop: 'width', want: 34 }, { sel: '.pm-more', prop: 'fontSize', want: '12px' }, { sel: '.ib-row', prop: 'height', want: 56 }, { sel: '.ib-row + .ib-row', prop: 'height', want: 57 }, { sel: '.pm-page .home-grid > .home-col', prop: 'width', want: 660, tol: 3 }] },
 ];

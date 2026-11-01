@@ -76,10 +76,19 @@ const go = async hash => {
 };
 
 // вход за роль листа: экраны без `as` — за CEO
-let role = 'ceo';
+let role = 'ceo', seeded = false;
 const loginAs = async as => {
   if (as === role) return;
   role = as;
+  // входящие от CEO: новые запросы в юнитах PM
+  if (as === 'pm' && !seeded) {
+    seeded = true;
+    await page.evaluate(async unitId => {
+      const { call } = await import('/src/api.js');
+      for (const [name, dueDate] of [['Tide', '2026-12-14'], ['Things Mini', '2026-10-29'], ['Forest Mini', '2026-11-20']]) await call('createApp', { name, unitId, requestTitle: 'New App', priority: 'o_high', dueDate });
+    }, ids.mvp);
+    await page.waitForTimeout(1500);
+  }
   await page.evaluate(id => localStorage.setItem('tm.localActor', id), ids[as]);
   await page.reload();
   await page.waitForFunction(() => document.querySelector('#sidebar .nav-item'), null, { timeout: 60000 });
@@ -87,8 +96,8 @@ const loginAs = async as => {
 };
 
 const results = [];
-for (const s of SCREENS) {
-  if (only.length && !only.includes(s.code)) continue;
+const snap = async s => {
+  if (only.length && !only.includes(s.code)) return;
   await loginAs(s.as || 'ceo');
   await page.setViewportSize({ width: 1440, height: s.height || 900 });
   await go(typeof s.route === 'function' ? s.route(ids) : s.route);
@@ -109,12 +118,12 @@ for (const s of SCREENS) {
   }
   results.push(r);
   console.log(s.code.padEnd(4), r.diff == null ? 'нет листа' : r.diff + '%');
-}
+};
 
 // размеры из макетов
 const checks = [];
-for (const m of METRICS) {
-  if (only.length && !only.includes(m.screen)) continue;
+const measure = async m => {
+  if (only.length && !only.includes(m.screen)) return;
   const s = SCREENS.find(x => x.code === m.screen);
   await loginAs(s.as || 'ceo');
   await page.setViewportSize({ width: 1440, height: s.height || 900 });
@@ -130,6 +139,13 @@ for (const m of METRICS) {
     const ok = got !== null && (typeof c.want === 'number' ? Math.abs(got - c.want) <= (c.tol ?? 1) : String(got) === String(c.want));
     checks.push({ screen: m.screen, ...c, got: typeof got === 'number' ? Math.round(got * 10) / 10 : got, ok });
   }
+};
+
+// сначала всё за CEO: данные для других ролей не должны попасть в его экраны
+const roleOf = code => SCREENS.find(x => x.code === code).as || 'ceo';
+for (const pass of [x => x === 'ceo', x => x !== 'ceo']) {
+  for (const s of SCREENS) if (pass(s.as || 'ceo')) await snap(s);
+  for (const m of METRICS) if (pass(roleOf(m.screen))) await measure(m);
 }
 await browser.close();
 if (server) process.kill(-server.pid);
