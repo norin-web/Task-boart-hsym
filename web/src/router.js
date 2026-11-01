@@ -24,6 +24,7 @@ import { renderDev } from './views/dev.js';
 import { renderPrefs } from './views/prefs.js';
 import { renderAnalytics } from './views/analytics.js';
 import { renderBoardView, loadBoard } from './views/board.js';
+import { renderTimeline } from './views/timeline.js';
 import { renderSettings } from './views/settings.js';
 import { renderUnitPage, renderUnitTeam } from './views/unitpage.js';
 import { openTask, closePanel, peekTask } from './views/task.js';
@@ -46,7 +47,7 @@ export function parseLocation() {
   if (path === '/settings' || path === '/admin') return { view: 'settings', tab: new URLSearchParams(query || '').get('tab') || '' };
   const t = /^\/u\/([\w-]+)\/t\/([\w-]+)$/.exec(path);
   if (t) return { unit: t[1], mode: 'board', team: t[2], task: task || null };
-  const m = /^\/u\/([\w-]+)(?:\/(list|settings|overview|apps|team))?$/.exec(path);
+  const m = /^\/u\/([\w-]+)(?:\/(list|settings|overview|apps|team|timeline))?$/.exec(path);
   if (m) return { unit: m[1], mode: m[2] || 'board', task: task || null };
   return { view: 'home' };
 }
@@ -173,9 +174,9 @@ export async function render() {
     rendered = key;
     document.title = S.board.unit.name + ' · Tasks';
     if (r.mode === 'settings') renderSettings(); else if (r.mode === 'overview') renderUnitPage();
-    else if (r.mode === 'apps') renderApps({ unitId: r.unit }); else if (r.mode === 'team') renderUnitTeam(); else renderBoardView();
+    else if (r.mode === 'apps') renderApps({ unitId: r.unit }); else if (r.mode === 'team') renderUnitTeam(); else if (r.mode === 'timeline') renderTimeline(); else renderBoardView();
   }
-  if (r.task && ['board', 'list'].includes(r.mode)) {
+  if (r.task && ['board', 'list', 'timeline'].includes(r.mode)) {
     if (S.panelTaskId !== r.task) openTask(r.task);
   } else {
     closePanel();

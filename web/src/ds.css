@@ -1307,3 +1307,32 @@ body.sb-collapsed .nav-unit-row .nav-abbr { display: inline; font-size: 12px; li
 .att-two .att-main small { font-size: 12px; line-height: 16px; font-weight: 500; }
 .att-two .att-open { height: 24px; padding: 0 12px; border-radius: 999px; background: var(--review, #6200FF); color: #fff; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; flex-shrink: 0; }
 .att-two .att-chip { height: 24px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-2, var(--text)); font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; flex-shrink: 0; }
+
+/* Таймлайн юнита (макет 27) и переключатель вида */
+.view-switch { display: inline-flex; gap: 2px; padding: 4px; border-radius: 999px; background: var(--surface); }
+.view-switch .vs-item { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border-radius: 999px; color: var(--muted); font-size: 13px; font-weight: 600; }
+.view-switch .vs-item.on { background: var(--surface-3); color: var(--text); }
+.vs-line { padding: 12px 16px 0 24px; }
+.tl-page { padding: 12px 16px 16px 24px; display: flex; flex-direction: column; gap: 12px; }
+.tl-bar-top { display: flex; align-items: center; gap: 12px; }
+.tl-nav { display: inline-flex; align-items: center; gap: 4px; background: var(--surface); border-radius: 999px; padding: 4px; }
+.tl-today-btn { border: 0; background: transparent; font: inherit; font-size: 13px; font-weight: 700; padding: 0 12px; height: 32px; }
+.tl-card { background: var(--surface); border-radius: var(--r-card, 28px); overflow: hidden; }
+.tl-head { display: grid; border-bottom: 1px solid var(--border); }
+.tl-day { display: flex; flex-direction: column; align-items: center; padding: 8px 0; gap: 2px; color: var(--muted); }
+.tl-day small { font-size: 12px; font-weight: 500; }
+.tl-day b { font-size: 13px; font-weight: 600; color: var(--text); min-width: 28px; height: 28px; line-height: 28px; text-align: center; border-radius: 999px; }
+.tl-day.today b { background: var(--text); color: #fff; }
+.tl-body { position: relative; min-height: 420px; padding: 8px 0 16px; }
+.tl-wk { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--surface-3) 45%, transparent); pointer-events: none; }
+.tl-today { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--ok, #5FCD74); pointer-events: none; }
+.tl-row { position: relative; height: 50px; }
+.tl-bar { position: absolute; top: 8px; height: 34px; min-width: 34px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border: 0; border-radius: 10px; background: var(--bc); color: #fff; font: inherit; font-size: 13px; font-weight: 600; text-align: left; overflow: hidden; }
+.tl-bar.done { opacity: .55; }
+.tl-bar.cut-l { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.tl-bar.cut-r { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.tl-bar .st-ic { color: #fff !important; display: inline-flex; flex-shrink: 0; }
+.tl-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tl-empty { padding: 40px 24px; text-align: center; }
+@media (max-width: 900px) { .tl-card { overflow-x: auto; } .tl-head, .tl-body { min-width: 840px; } }
+.view-switch .vs-item { text-decoration: none; }

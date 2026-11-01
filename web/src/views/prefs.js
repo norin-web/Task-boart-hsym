@@ -156,7 +156,7 @@ function boards() {
         act('Настроить', () => import('./myboard.js').then(m => m.editColumns(() => toast('Сохранено')))), 'board'),
       lead && row('Шаблоны чеклистов', 'Готовые пункты для подзадач и этапов — «Из шаблона» в чеклисте · у лидов, PM и CEO',
         act('Настроить', () => import('./cltemplates.js').then(m => m.openTemplatesEditor())), 'checklist'),
-      myAccess() === 'rm' && row('Карточка релиза', 'Какие блоки показывать в карточке релиза · у RM',
+      ['rm', 'superadmin'].includes(myAccess()) && row('Карточка релиза', 'Какие блоки показывать в карточке релиза · у RM',
         act('Настроить', () => import('./release.js').then(m => m.openReleaseCardSettings())), 'rocket')),
   ];
 }
@@ -194,6 +194,6 @@ function releasesSection() {
     head('Релизы', 'Один набор на студию · настраивают CEO и RM'),
     card(
       row('Релизные поля и чеклист', h('span', null, 'Что заполнить перед «Отправить в Apple»', fieldsN), act('Настроить', () => import('./release.js').then(m => m.openReleaseSettings())), 'checklist', fieldsBox),
-      myAccess() === 'rm' && row('Карточка релиза', 'Какие блоки показывать · у RM', act('Настроить', () => import('./release.js').then(m => m.openReleaseCardSettings())), 'board')),
+      ['rm', 'superadmin'].includes(myAccess()) && row('Карточка релиза', 'Какие блоки показывать · у RM', act('Настроить', () => import('./release.js').then(m => m.openReleaseCardSettings())), 'board')),
   ];
 }

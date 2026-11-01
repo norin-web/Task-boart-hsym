@@ -9,6 +9,7 @@ import { call, send } from '../api.js';
 import { navigate, link } from '../router.js';
 import { updateSidebarCounts, renderUnread } from './sidebar.js';
 import { unitHeader } from './unitnav.js';
+import { viewSwitch } from './timeline.js';
 import { openTask, closePanel, openCreateTask, duplicateTask, deleteTaskUndoable, refreshPanel } from './task.js';
 
 let sortables = [];
@@ -37,6 +38,7 @@ export function renderBoardView() {
       isStaff() && h('button', { class: 'btn primary', onclick: () => openCreateTask(), title: 'Новая задача (C)' }, h('span', { class: 'btn-label' }, 'Задача')),
     ], team),
     team && whoDoesWhat(team),
+    !team && h('div', { class: 'vs-line' }, viewSwitch(mode === 'list' ? 'list' : 'board')),
     filterBar(),
     h('div', { id: 'tasks', class: mode === 'list' ? 'view-body' : 'board' }));
   renderTasks();
