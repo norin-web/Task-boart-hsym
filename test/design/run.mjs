@@ -59,7 +59,8 @@ const ids = await page.evaluate(async () => {
   const release = carrot.requests[0].stages.find(s => /^Релиз/.test(s.title));
   const { people } = await call('bootstrap', { today: new Date().toISOString().slice(0, 10) });
   const pm = people.find(x => x.name === 'Екатерина Соколова'), pm2 = people.find(x => x.name === 'Олег Никитин');
-  return { carrot: carrot.id, streaks: streaks.id, mvp: streaks.unitId, rf: carrot.unitId, stage: stage.id, release: release.id, ceo: localStorage.getItem('tm.localActor'), pm: JSON.stringify(pm.id), pm2: JSON.stringify(pm2.id) };
+  const rm = people.find(x => x.access === 'rm');
+  return { carrot: carrot.id, streaks: streaks.id, mvp: streaks.unitId, rf: carrot.unitId, stage: stage.id, release: release.id, ceo: localStorage.getItem('tm.localActor'), pm: JSON.stringify(pm.id), pm2: JSON.stringify(pm2.id), rm: JSON.stringify(rm.id) };
 });
 
 // служебное режима разработчика в снимках не нужно: в макетах его нет
