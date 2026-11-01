@@ -1223,3 +1223,50 @@ section:has(> .section-head + .card-box) > .section-head h2 { font-size: 18px; l
 @media (max-width: 1100px) { .app-page { grid-template-columns: minmax(0, 1fr); } .app-page .app-side { position: static; } }
 .app-page .info-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 32px; }
 @media (max-width: 700px) { .app-page .info-list { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- настройка дашборда (макет 43): шапка, области, блоки-«скелеты», лоток скрытых ---------- */
+#main:has(.lz-mode) > .topbar { display: none; }
+.lz-mode { display: block; }
+.lz-head { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 8px; }
+.lz-titles { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.lz-crumb { font-size: 14px; line-height: 20px; font-weight: 500; }
+.lz-head h1 { margin: 0; font-size: 32px; line-height: 40px; font-weight: 600; letter-spacing: -.02em; }
+.lz-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.lz-actions .btn { height: 44px; padding: 0 20px; border-radius: 999px; }
+.lz-desc { margin: 0 0 20px; font-size: 14px; line-height: 20px; }
+.lz-mode .lz { border: 1.5px dashed var(--border-strong); border-radius: 28px; padding: 8px; margin-bottom: 20px; }
+.lz-mode .lz-label { text-transform: none; letter-spacing: 0; font-size: 13px; line-height: 16px; font-weight: 600; color: var(--text); margin: 0 0 8px; }
+.lz-mode .lz-label span { font-weight: 500; color: var(--muted); }
+.lz-mode .lz-label span::before { content: ' · '; }
+.lz-mode .lz-label { margin-left: 0; }
+.lz-mode .lz-list { gap: 8px; }
+.lz-mode .lb { border: 0; border-radius: 22px; box-shadow: none; padding: 14px 16px; }
+.lz-mode .lb-head { background: transparent; padding: 0; gap: 10px; min-height: 28px; }
+.lz-mode .lb-title { flex: none; font-size: 13px; line-height: 20px; font-weight: 600; }
+.lz-mode .lb-head .spacer { flex: 1; }
+.lz-mode .lb-tag { background: var(--surface-3); border-radius: 999px; padding: 2px 10px; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--text-2, var(--muted)); }
+.lz-mode .lb-head .icon-btn .i + .i { display: none; }
+.lz-mode .lb-skel { display: flex; gap: 8px; margin-top: 8px; }
+.lz-mode .lb-skel i { flex: 1; height: 10px; border-radius: 6px; background: var(--surface-3); }
+.lz-mode .lz-left .lb-skel i:nth-child(3), .lz-mode .lz-right .lb-skel i:nth-child(3) { display: none; }
+.lz-mode .lz-tray { display: flex; flex-wrap: wrap; gap: 10px; background: var(--surface-2); border-radius: 28px; padding: 12px; min-height: 64px; }
+.lz-mode .lz-hidden { border: 0; padding: 0; }
+.lz-mode .lz-tray .lb { border-radius: 999px; padding: 6px 12px; opacity: 1; }
+.lz-mode .lz-tray .lb-skel { display: none; }
+.lz-mode .lz-tray .lb-head .icon-btn .i:first-child { display: none; }
+.lz-mode .lz-tray .lb-head .icon-btn .i + .i { display: inline-block; }
+.lz-mode .lz-tray .lb-title { font-weight: 500; color: var(--text-2, var(--text)); }
+.lz-mode .lz-tray.empty::after { content: 'Скрытых блоков нет'; }
+.lz-mode .lb-ghost { opacity: 1; background: var(--ok-soft); border: 1.5px dashed var(--ok); }
+.lz-mode .lb-ghost > * { visibility: hidden; }
+.lz-mode .lb-drag { box-shadow: 0 12px 32px rgba(17, 19, 24, .16); transform: rotate(-1deg); }
+@media (max-width: 760px) { .lz-head { flex-direction: column; align-items: stretch; } .lz-actions { justify-content: flex-start; } }
+.lz-mode .lz-grid { grid-template-columns: minmax(0, 662fr) minmax(0, 454fr); gap: 16px; }
+.lz-mode .lz-grid .lz { margin-bottom: 0; }
+.lz-mode .lz-note { margin: 12px 4px 16px; }
+@media (max-width: 1000px) { .lz-mode .lz-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* свёрнутый сайдбар (макет 05б): у юнита точка и две буквы ключа */
+.nav-abbr { display: none; }
+body.sb-collapsed .nav-unit-row { gap: 6px; height: 36px; }
+body.sb-collapsed .nav-unit-row .nav-abbr { display: inline; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--sb-text, inherit); }

@@ -90,6 +90,7 @@ function unitItem(u, r) {
     },
     h('span', { class: 'unit-dot', style: { background: u.color } }),
     h('span', { class: 'nav-label' }, u.name),
+    h('span', { class: 'nav-abbr', 'aria-hidden': 'true' }, String(u.key || u.name || '').replace(/[^\p{L}\p{N}]/gu, '').slice(0, 2).toUpperCase()),  // в свёрнутом сайдбаре (макет 05б): точка + две буквы
     h('span', { class: 'nav-count' + (overdue ? ' warn' : ''), title: overdue ? 'Просрочено: ' + overdue : 'Открытых задач' }, n || ''),
     // стрелка есть у каждого юнита (макет 12): у текущего — разворачивает команды, у остальных — только указывает на вложенность
     h('span', { class: 'nav-chev', 'aria-hidden': 'true' }, icon('chevron', 14))),

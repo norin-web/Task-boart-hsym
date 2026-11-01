@@ -101,6 +101,8 @@ export function editLayout(key, defs, container, onDone, opts = {}) {
       h('div', { class: 'lb-head' },
         h('span', { class: 'lb-grip' }, icon('grip', 14)),
         h('span', { class: 'lb-title' }, d.title),
+        d.custom && h('span', { class: 'lb-tag' }, 'свой блок'),
+        h('span', { class: 'spacer' }),
         d.custom && opts.onEdit && h('button', { class: 'icon-btn sm', title: 'Изменить блок', onclick: () => opts.onEdit(id) }, icon('edit', 13)),
         d.custom && opts.onDelete && h('button', { class: 'icon-btn sm', title: 'Удалить блок', onclick: () => opts.onDelete(id) }, icon('trash', 13)),
         h('button', {
@@ -110,8 +112,9 @@ export function editLayout(key, defs, container, onDone, opts = {}) {
             else zones.hidden.append(el);
             collect();
           },
-        }, icon('eye', 14))),
-      h('div', { class: 'lb-preview', inert: true }, d.render() || h('p', { class: 'muted', style: { margin: '4px 0' } }, d.empty || 'Пока пусто')));
+        }, icon('eye', 14), icon('eyeOff', 14))),
+      // макет 43: вместо живого содержимого — серые полоски (по числу колонок области)
+      h('div', { class: 'lb-skel', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')));
     return el;
   };
 
@@ -124,13 +127,15 @@ export function editLayout(key, defs, container, onDone, opts = {}) {
 
   const zone = (z, title, hint) => h('div', { class: 'lz lz-' + z }, h('div', { class: 'lz-label' }, title, hint && h('span', null, hint)), zones[z]);
   const done = () => { sortables.forEach(x => x.destroy()); onDone(); };
+  container.classList.add('lz-mode');
   fill(container,
-    h('div', { class: 'lz-bar' },
-      icon('layers', 16),
-      h('div', { class: 'lz-bar-text' }, h('b', null, opts.title || 'Настройка главной'), h('span', null, 'Тяните блоки за шапку между областями. Глаз — убрать в скрытые или вернуть. Сохраняется сразу, только для вас.')),
-      opts.extra,
-      h('button', { class: 'btn ghost sm', onclick: () => { L = current('__none', defs); save(key, null); fillZones(); } }, 'По умолчанию'),
-      h('button', { class: 'btn primary sm', onclick: done }, 'Готово')),
+    h('header', { class: 'lz-head' },
+      h('div', { class: 'lz-titles' }, h('span', { class: 'lz-crumb muted' }, 'Дашборд'), h('h1', null, opts.title || 'Настройка главной')),
+      h('div', { class: 'lz-actions' },
+        opts.extra,
+        h('button', { class: 'btn ghost', onclick: () => { L = current('__none', defs); save(key, null); fillZones(); } }, 'По умолчанию'),
+        h('button', { class: 'btn primary', onclick: () => { container.classList.remove('lz-mode'); done(); } }, 'Готово'))),
+    h('p', { class: 'lz-desc muted' }, 'Тяните блоки за шапку между областями. Глаз — убрать в скрытые или вернуть. Сохраняется сразу и видно только вам.'),
     zone('full', 'Сверху, на всю ширину'),
     h('div', { class: 'lz-grid' }, zone('left', 'Левая колонка', 'широкая'), zone('right', 'Правая колонка', 'узкая')),
     h('div', { class: 'lz-note' }, icon('alert', 13), 'На узком экране и телефоне колонки встают друг под другом: сначала левая, потом правая.'),

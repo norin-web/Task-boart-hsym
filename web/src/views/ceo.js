@@ -61,7 +61,7 @@ export async function renderCeoHome() {
     const blocks = () => ceoBlocks(d, apps, load);
     const edit = () => editLayout('ceoHome', blocks(), page, draw, {
       title: 'Настройка дашборда',
-      extra: h('button', { class: 'btn sm', onclick: () => openBlockEditor(null, edit) }, icon('plus', 14), 'Свой блок'),
+      extra: h('button', { class: 'btn', onclick: () => openBlockEditor(null, edit) }, icon('plus', 14), 'Свой блок'),
       onEdit: id => openBlockEditor(customBlocks().find(b => 'c:' + b.id === id), edit),
       onDelete: id => { setCustomBlocks(customBlocks().filter(b => 'c:' + b.id !== id)); edit(); },
     });
