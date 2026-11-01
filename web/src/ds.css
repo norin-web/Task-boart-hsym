@@ -86,6 +86,9 @@ html[data-theme="dark"] .toast { background: #fff; color: #111318; }
 .topbar .tb-right .btn.sm { height: 44px; }
 .topbar .tb-right .icon-btn, .topbar .bell-btn { width: 44px; height: 44px; border-radius: 50%; background: var(--surface); color: var(--text); }
 .topbar .tb-right .icon-btn:hover { background: var(--surface-3); }
+/* «Назад» — на уровень выше по иерархии, слева от заголовка, как колокольчик справа */
+.topbar .back-btn { flex: none; width: 44px; height: 44px; border-radius: 50%; background: var(--surface); color: var(--text); }
+.topbar .back-btn:hover { background: var(--surface-3); }
 
 /* ---------- Карточка юнита ---------- */
 .unit-grid { gap: 20px; }

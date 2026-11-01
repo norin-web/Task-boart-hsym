@@ -16,7 +16,6 @@ import { openCreateUnit } from './units.js';
 
 const PERSONAL = [
   ['profile', 'Профиль', 'user'],
-  ['look', 'Внешний вид', 'sun'],
   ['notify', 'Уведомления', 'bell'],
   ['boards', 'Доски', 'board'],
 ];

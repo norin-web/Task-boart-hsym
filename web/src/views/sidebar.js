@@ -15,10 +15,8 @@ const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 
 const THEMES = { auto: ['Тема: как в системе', 'monitor'], light: ['Тема: светлая', 'sun'], dark: ['Тема: тёмная', 'moon'] };
 
-export function applyTheme(t) {
-  if (t === 'auto') delete document.documentElement.dataset.theme;
-  else document.documentElement.dataset.theme = t;
-}
+// Тёмная тема скрыта: любое значение превращается в светлую
+export function applyTheme() { document.documentElement.dataset.theme = 'light'; }
 
 export const THEME_LIST = THEMES;
 export function setTheme(t) {
@@ -26,14 +24,6 @@ export function setTheme(t) {
   applyTheme(t);
   renderSidebar();
 }
-function cycleTheme() {
-  const order = Object.keys(THEMES);
-  const next = order[(order.indexOf(LS.get('theme', 'auto')) + 1) % order.length];
-  LS.set('theme', next);
-  applyTheme(next);
-  renderSidebar();
-}
-
 /* ---------- сайдбар ---------- */
 
 /** Счётчик новых уведомлений — точкой на колокольчике в шапке, обновляется на месте. */
@@ -128,7 +118,6 @@ function drawSidebar() {
   const r = S.route;
   const units = S.units.filter(u => !u.archived).sort(byOrder);
   const person = me();
-  const [themeLabel, themeIcon] = THEMES[LS.get('theme', 'auto')] || THEMES.auto;
   const list = h('div', { class: 'nav-units' }, units.map(u => unitItem(u, r)));
   const staff = isStaff();
   const ceo = isSuper();
@@ -231,7 +220,6 @@ function meMenuPanel() {
         avatar(p), h('span', { class: 'me-card-text' }, h('b', null, email || p.name), h('small', { class: 'muted' }, ACCESS_LABELS[p.access]))),
       { sep: true },
       { label: 'Настройки', icon: 'settings', action: () => { closeMe(); navigate({ view: 'settings' }); } },
-      { label: (THEMES[LS.get('theme', 'auto')] || THEMES.auto)[0], icon: (THEMES[LS.get('theme', 'auto')] || THEMES.auto)[1], action: cycleTheme },
       mode === 'local' && { title: 'Локальный режим: данные только в этом браузере' },
       mode === 'local' && { label: 'Войти как…', icon: 'users', action: () => { closeMe(); openActAs(); } },
       mode === 'local' && { sep: true },

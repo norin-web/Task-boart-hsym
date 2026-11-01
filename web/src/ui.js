@@ -198,9 +198,14 @@ export const closeNav = () => document.body.classList.remove('nav-open');
 let bellFactory = null;
 export const setBell = fn => { bellFactory = fn; };
 
+/** Кнопка «Назад» (на уровень выше по иерархии экранов) — ставит router.js. */
+let backFactory = null;
+export const setBack = fn => { backFactory = fn; };
+
 export function topbar(left, right) {
   return h('header', { class: 'topbar' },
     h('button', { class: 'icon-btn hamburger', title: 'Меню', onclick: toggleNav }, icon('menu', 18)),
+    backFactory && backFactory(),
     h('div', { class: 'tb-left' }, left),
     h('div', { class: 'tb-right' }, bellFactory && bellFactory(), right));
 }

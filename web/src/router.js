@@ -10,7 +10,7 @@
  *   #/u/:unit/t/:team[?task=:id] — доска команды в юните и кто чем занят
  */
 import { S, isStaff, isSuper, myAccess, loadBoardView, ceoDefault, seesApps } from './state.js';
-import { $, h, fill, closeMenu, closeNav, showErr } from './ui.js';
+import { $, h, fill, icon, closeMenu, closeNav, showErr, setBack } from './ui.js';
 import { renderSidebar } from './views/sidebar.js';
 import { renderHome } from './views/home.js';
 import { renderMy } from './views/my.js';
@@ -60,6 +60,26 @@ export function navigate(r, { replace = false } = {}) {
   history[replace ? 'replaceState' : 'pushState'](null, '', routeUrl(r));
   render();
 }
+
+/**
+ * Иерархия экранов: Дашборд → (Приложения | Аналитика | Мои задачи | Моя доска | Настройки | Юнит) → раздел юнита / команда.
+ * Родитель — это «на уровень выше», а не прошлая страница из истории. null — корень.
+ */
+export function navParent(r = S.route) {
+  if (r.unit) {
+    const u = S.units.find(x => x.id === r.unit);
+    const root = seesApps() ? 'overview' : 'board';
+    if (r.team || r.mode !== root) return { route: { unit: r.unit, mode: root }, label: u ? u.name : 'Юнит' };
+    return { route: { view: 'home' }, label: 'Дашборд' };
+  }
+  if (r.view && r.view !== 'home') return { route: { view: 'home' }, label: 'Дашборд' };
+  return null;
+}
+
+setBack(() => {
+  const up = navParent();
+  return up && h('button', { class: 'icon-btn back-btn', title: 'Назад: ' + up.label, 'aria-label': 'Назад: ' + up.label, onclick: () => navigate(up.route) }, icon('back', 18));
+});
 
 /** Ссылка, которая работает и как обычная (новая вкладка по ⌘/Ctrl-клику), и как SPA-переход. */
 export function link(route, attrs, ...kids) {
