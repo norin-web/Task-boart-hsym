@@ -69,6 +69,19 @@ test('участник видит свои юниты и задачи своей
   });
 });
 
+test('PM: удаляет свой юнит, чужой не видит, новый не создаёт, общие поля не меняет', async () => {
+  const api = await setup();
+  const { mod, A, B } = await team(api);
+  await api.as(mod, async () => {
+    await assert.rejects(() => api('deleteUnit', { id: B.id }));
+    await assert.rejects(() => api('createUnit', { name: 'Gamma', key: 'GAM' }));
+    await assert.rejects(() => api('createField', { global: true, name: 'Общее', type: 'text' }));
+    await api('deleteUnit', { id: A.id });
+  });
+  const left = await api.pg.query('select id from units');
+  assert.deepEqual(left.rows.map(r => r.id), [B.id]);
+});
+
 test('участник: только свои задачи, обязательные поля перед переносом', async () => {
   const api = await setup();
   const { admin, designer, A, link, t1, t3 } = await team(api);

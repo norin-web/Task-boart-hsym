@@ -1,4 +1,4 @@
-import { S, greeting, me, personById, plural, emptyCounts, isStaff, deptById, todayStr, fmtDate, activeDepts, ACCESS_LABELS, relTime, dueInfo } from '../state.js';
+import { S, greeting, me, isSuper, personById, plural, emptyCounts, isStaff, deptById, todayStr, fmtDate, activeDepts, ACCESS_LABELS, relTime, dueInfo } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, toast, menu, closeMenu, modal, emptyBlock, skeleton } from '../ui.js';
 import { call } from '../api.js';
 import { currentView, link, navigate, taskLink, rerender } from '../router.js';
@@ -189,14 +189,14 @@ export async function renderHome() {
 
   const unitsBlock = () => h('section', null,
     h('div', { class: 'section-head' }, h('h2', null, 'Юниты'),
-      h('button', { class: 'btn ghost sm', onclick: openCreateUnit }, icon('plus', 14), 'Новый')),
+      isSuper() && h('button', { class: 'btn ghost sm', onclick: openCreateUnit }, icon('plus', 14), 'Новый')),
     units.length
-      ? h('div', { class: 'unit-grid' }, units.map(unitCard), h('button', { class: 'unit-card add', onclick: openCreateUnit }, icon('plus', 18), 'Новый юнит'))
+      ? h('div', { class: 'unit-grid' }, units.map(unitCard), isSuper() && h('button', { class: 'unit-card add', onclick: openCreateUnit }, icon('plus', 18), 'Новый юнит'))
       : h('div', { class: 'card-box empty-state' },
         h('h2', null, 'Создайте первый юнит'),
         h('p', null, 'Юнит — направление студии (Gold, RF, MVP…): его приложения, PM, RM, лиды и сотрудники.'),
         h('div', { class: 'row', style: { justifyContent: 'center' } },
-          h('button', { class: 'btn primary', onclick: openCreateUnit }, icon('plus', 15), 'Создать юнит'),
+          isSuper() && h('button', { class: 'btn primary', onclick: openCreateUnit }, icon('plus', 15), 'Создать юнит'),
           mode === 'local' && h('button', { class: 'btn', onclick: e => fillDemo(e.currentTarget) }, icon('layers', 15), 'Заполнить демо-данными'))));
 
   // Блоки главной: каждый может скрыть, переставить и поменять колонку (кнопка «Настроить»)

@@ -1144,7 +1144,7 @@ create trigger guard_people before insert or update on people for each row execu
 create or replace function delete_unit(p_unit text) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  if not app_system() and not is_superadmin() then raise exception 'Недостаточно прав' using errcode = '42501'; end if;
+  if not app_system() and not can_manage(p_unit) then raise exception 'Недостаточно прав' using errcode = '42501'; end if;
   delete from activity
    where task_id in (select id from tasks where unit_id = p_unit)
       or (unit_id = p_unit and task_id not in (select id from tasks));
@@ -1578,7 +1578,7 @@ create policy units_insert on units for insert to authenticated with check (is_s
 drop policy if exists units_update on units;
 create policy units_update on units for update to authenticated using (can_manage(id)) with check (can_manage(id));
 drop policy if exists units_delete on units;
-create policy units_delete on units for delete to authenticated using (is_superadmin());
+create policy units_delete on units for delete to authenticated using (can_manage(id));
 
 drop policy if exists fields_read on fields;
 create policy fields_read on fields for select to authenticated using (is_superadmin() or unit_id is null or is_unit_member(unit_id));

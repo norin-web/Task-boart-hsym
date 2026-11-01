@@ -227,8 +227,9 @@ function globalFieldsManager() {
     fields = fields.filter(x => x !== f);
     draw();
   };
+  const can = isSuper(); // общие поля меняет CEO, PM видит их только для чтения
   const row = f => h('div', { class: 'field-row', dataset: { id: f.id } },
-    h('span', { class: 'drag', title: 'Перетащите, чтобы изменить порядок' }, icon('grip', 16)),
+    can && h('span', { class: 'drag', title: 'Перетащите, чтобы изменить порядок' }, icon('grip', 16)),
     h('span', { class: 'name' }, f.name),
     h('span', { class: 'badge' }, f.role === 'priority' ? 'приоритет' : TYPE_LABELS[f.type] || f.type),
     f.showOnCard && h('span', { class: 'badge' }, 'на карточке'),
@@ -236,13 +237,13 @@ function globalFieldsManager() {
     f.staffOnly && h('span', { class: 'badge' }, 'меняют CEO и PM'),
     f.requiredOnCreate && h('span', { class: 'badge' }, 'при создании'),
     h('span', { class: 'spacer' }),
-    h('button', { class: 'btn sm', onclick: () => edit(f) }, icon('edit', 13), 'Изменить'),
-    f.role !== 'priority' && h('button', { class: 'btn ghost sm', title: 'Убрать с карточек всех юнитов (значения сохранятся)', onclick: () => setArchived(f, true) }, 'Убрать'));
+    can && h('button', { class: 'btn sm', onclick: () => edit(f) }, icon('edit', 13), 'Изменить'),
+    can && f.role !== 'priority' && h('button', { class: 'btn ghost sm', title: 'Убрать с карточек всех юнитов (значения сохранятся)', onclick: () => setArchived(f, true) }, 'Убрать'));
   const draw = () => {
     const active = fields.filter(f => !f.archived).sort(byOrder);
     const removed = fields.filter(f => f.archived);
     fill(list, active.map(row));
-    fill(removedBox, removed.length > 0 && [
+    fill(removedBox, can && removed.length > 0 && [
       h('div', { class: 'sub-title' }, 'Убранные'),
       h('div', { class: 'field-list' }, removed.map(f => h('div', { class: 'field-row' },
         h('span', { class: 'name muted' }, f.name),
@@ -250,7 +251,7 @@ function globalFieldsManager() {
         h('button', { class: 'btn sm', onclick: () => setArchived(f, false) }, 'Вернуть'),
         h('button', { class: 'btn ghost sm danger', onclick: () => remove(f).catch(showErr) }, 'Удалить навсегда'))))]);
   };
-  Sortable.create(list, {
+  if (can) Sortable.create(list, {
     handle: '.drag', animation: 150, forceFallback: true, fallbackTolerance: 4,
     onEnd: () => {
       const ids = [...list.children].map(el => el.dataset.id).filter(Boolean);
@@ -262,7 +263,7 @@ function globalFieldsManager() {
   return h('div', null,
     h('div', { class: 'section-head', style: { marginBottom: '4px' } },
       h('h2', { style: { margin: 0, fontSize: '16px' } }, 'Общие поля карточки'),
-      h('button', { class: 'btn primary sm', onclick: () => edit(null) }, icon('plus', 14), 'Поле')),
+      can && h('button', { class: 'btn primary sm', onclick: () => edit(null) }, icon('plus', 14), 'Поле')),
     h('p', { class: 'hint', style: { marginTop: 0 } }, 'Общие для всех юнитов — идут на карточке первыми. Обязательность — по типу колонки.'),
     list, removedBox);
 }

@@ -1,4 +1,4 @@
-import { S, isStaff } from '../state.js';
+import { S, LS, isStaff, isSuper } from '../state.js';
 import { $, h, icon, fill } from '../ui.js';
 import { call } from '../api.js';
 import { navigate } from '../router.js';
@@ -21,13 +21,13 @@ export function openPalette() {
   if (isPaletteOpen()) return;
   const actions = [
     isStaff() && { label: 'Создать задачу', icon: 'plus', hint: 'C', run: () => openCreateTask() },
-    isStaff() && { label: 'Новый юнит', icon: 'folder', run: openCreateUnit },
+    isSuper() && { label: 'Новый юнит', icon: 'folder', run: openCreateUnit },
     { label: 'Главная', icon: 'home', run: () => navigate({ view: 'home' }) },
     isStaff() && { label: 'Мои задачи', icon: 'user', run: () => navigate({ view: 'my' }) },
     { label: 'Настройки', icon: 'settings', run: () => navigate({ view: 'settings' }) },
     isStaff() && { label: 'Аналитика', icon: 'chart', run: () => navigate({ view: 'analytics' }) },
     isStaff() && { label: 'Люди и доступы', icon: 'users', run: () => navigate({ view: 'settings', tab: 'people' }) },
-    isStaff() && { label: 'Позиции', icon: 'layers', run: () => navigate({ view: 'settings', tab: 'positions' }) },
+    isStaff() && { label: 'Позиции', icon: 'layers', run: () => { LS.set('peopleSub', 'positions'); navigate({ view: 'settings', tab: 'people' }); } },
     isStaff() && { label: 'Журнал событий', icon: 'clock', run: () => navigate({ view: 'settings', tab: 'journal' }) },
     { label: 'Горячие клавиши', icon: 'keyboard', hint: '?', run: openShortcuts },
     mode === 'local' && isStaff() && !S.units.length && { label: 'Заполнить демо-данными', icon: 'layers', run: () => fillDemo() },
