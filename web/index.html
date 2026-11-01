@@ -10,12 +10,25 @@
     // Тёмная тема пока скрыта: всегда светлая (код тёмной оставлен в CSS)
     document.documentElement.dataset.theme = 'light';
   </script>
+  <style>
+    /* Первый экран до загрузки стилей и скриптов: сайдбар и серые блоки, как на остальных страницах */
+    html, body { margin: 0; background: #f2f3f6; }
+    #shell { display: grid; grid-template-columns: 256px minmax(0, 1fr); gap: 6px; height: 100vh; box-sizing: border-box; padding: 16px 0 16px 6px; }
+    #sidebar { background: #191d36; border-radius: 34px; }
+    .nav-scrim { display: none; }
+    .first-load { padding: 88px 16px 0 24px; }
+    .first-load .skel { display: flex; flex-direction: column; gap: 8px; }
+    .first-load .skel i { display: block; height: 44px; border-radius: 12px; background: #eceef2; }
+    .first-load .skel .skel-t { height: 16px; width: 200px; border-radius: 8px; }
+    .first-load .skel .skel-s { width: 70%; }
+    @media (max-width: 900px) { #shell { display: block; padding: 0; } #sidebar { display: none; } .first-load { padding: 72px 16px 0; } }
+  </style>
 </head>
 <body>
   <div id="shell">
     <aside id="sidebar"></aside>
     <div class="nav-scrim"></div>
-    <div id="main"><div class="boot"><span class="spinner"></span>Загрузка…</div></div>
+    <div id="main"><div class="first-load"><div class="skel" role="status" aria-label="Загрузка"><i class="skel-t"></i><i></i><i></i><i class="skel-s"></i></div></div></div>
   </div>
   <div id="panel-root"></div>
   <div id="modal-root"></div>
