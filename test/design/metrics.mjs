@@ -28,4 +28,8 @@ export const METRICS = [
   { screen: 'P03', checks: [{ sel: '#modal-root .modal-wrap:nth-child(2)', prop: 'display', want: null, absent: true }, { sel: '.dc-row.own .dc-title', prop: 'height', want: 40 }] },
   { screen: 'P05', checks: [{ sel: '.pm-pipeline', prop: 'height', want: 208 }, { sel: '.pm-problems', prop: 'height', want: 208 }, { sel: '.pm-pipeline', prop: 'borderRadius', want: '28px' }] },
   { screen: 'P06', checks: [{ sel: '.lz-head .back-btn', prop: 'width', want: 44 }] },
+  { screen: 'P10', checks: [{ sel: '#main', noText: 'Поставить задачи', prop: 'text', want: 'нет' }, { sel: '#main', noText: '+ Апдейт', prop: 'text', want: 'нет' }] },
+  { screen: 'P12', checks: [{ sel: '#main', noText: 'Релизы', prop: 'text', want: 'нет' }] },
+  { screen: 'P16', checks: [{ sel: '.topbar .btn.primary', prop: 'display', want: null, absent: true }] },
+  { screen: 'P18', checks: [{ sel: '.ct-modal', prop: 'width', want: 760 }, { sel: '.ct-side', prop: 'width', want: 220 }, { sel: '.ct-tab', prop: 'borderRadius', want: '14px' }] },
 ];

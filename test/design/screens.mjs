@@ -41,6 +41,18 @@ export const SCREENS = [
   { code: 'P03', name: 'Свой этап в списке', as: 'pm', route: '#/', act: async p => { await p.click('.ib-row .btn.soft'); await p.waitForTimeout(500); await p.click('.modal-foot .left .btn'); } },
   { code: 'P04', name: 'Этапы раскрыты', as: 'pm', route: '#/', act: click('.pl-toggle') },
   { code: 'P06', name: 'Настройка дашборда PM', as: 'pm', route: '#/', act: click('.topbar .btn:has-text("Настроить")') },
+  { code: 'P07', name: 'Обзор юнита, PM', as: 'pm', route: ids => `#/u/${ids.mvp}/overview` },
+  { code: 'P08', name: 'Приложения, PM', as: 'pm', route: '#/apps' },
+  { code: 'P09', name: 'Аналитика, PM', as: 'pm', route: '#/analytics' },
+  { code: 'P10', name: 'Приложение, PM', as: 'pm', route: ids => '#/app/' + ids.carrot, height: 1560 },
+  { code: 'P11', name: 'Панель приложения, PM', as: 'pm', route: '#/apps', act: async p => { await p.evaluate(async () => { const { LS } = await import('/src/state.js'); LS.set('appCardMode', 'side'); }); await p.click('.ap-row:has-text("CARROT")'); await p.waitForTimeout(600); await p.evaluate(async () => { const { LS } = await import('/src/state.js'); LS.set('appCardMode', 'full'); }); } },
+  { code: 'P12', name: 'Люди, PM', as: 'pm', route: prefs('people') },
+  { code: 'P13', name: 'Настройки юнита, PM', as: 'pm', route: ids => `#/u/${ids.mvp}/settings`, height: 1240 },
+  { code: 'P14', name: 'Флоу, PM', as: 'pm', route: ids => `#/u/${ids.mvp}/settings`, act: p => p.evaluate(() => document.querySelector('.fl-heads').scrollIntoView({ block: 'center' })) },
+  { code: 'P15', name: 'Доски, PM', as: 'pm', route: prefs('boards') },
+  { code: 'P16', name: 'Юниты, PM', as: 'pm', route: prefs('units') },
+  { code: 'P17', name: 'Автоматизации, PM', as: 'pm', route: prefs('automations') },
+  { code: 'P18', name: 'Шаблоны чеклистов (D06), PM', as: 'pm', route: prefs('boards'), act: async p => { await p.click('text=Шаблоны чеклистов'); await p.waitForTimeout(400); await p.click('.ct-add'); } },
   { code: 'P05', name: 'Дашборд PM, пусто', as: 'pm2', route: '#/' },
 ];
 

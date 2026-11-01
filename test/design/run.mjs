@@ -130,9 +130,10 @@ const measure = async m => {
   await go(typeof s.route === 'function' ? s.route(ids) : s.route);
   if (s.act) { await s.act(page, ids); await page.waitForTimeout(400); }
   for (const c of m.checks) {
-    const got = await page.evaluate(({ sel, prop }) => {
+    const got = await page.evaluate(({ sel, prop, noText }) => {
       const e = document.querySelector(sel);
       if (!e) return null;
+      if (noText) return e.innerText.includes(noText) ? 'есть' : 'нет';
       const r = e.getBoundingClientRect();
       return { x: r.x, y: r.y, width: r.width, height: r.height }[prop] ?? getComputedStyle(e)[prop];
     }, c);

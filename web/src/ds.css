@@ -1794,3 +1794,32 @@ body { letter-spacing: -.01em; }
 .dc-modal .modal-foot .left .btn { height: 40px; padding: 0 16px; background: var(--surface-3); }
 .lz-head .back-btn { flex: none; width: 44px; height: 44px; border-radius: 50%; background: var(--surface); color: var(--text); }
 .lz-head .back-btn:hover { background: var(--surface-3); }
+
+/* ---------- D06: шаблоны чеклистов ---------- */
+.modal.ct-modal { width: min(760px, calc(100vw - 32px)); max-width: none; }
+.ct-wrap { display: flex; gap: 20px; min-height: 340px; }
+.ct-side { display: flex; flex-direction: column; gap: 2px; width: 220px; flex: none; padding-right: 20px; border-right: 1px solid var(--border); }
+.ct-tab { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 0; border-radius: 14px; background: none; text-align: left; font: inherit; color: var(--text); cursor: pointer; }
+.ct-tab:hover, .ct-tab.on { background: var(--surface-3); }
+.ct-tab b { font-size: 13px; line-height: 20px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ct-tab span { font-size: 12px; line-height: 16px; font-weight: 500; }
+.ct-add { display: flex; align-items: center; gap: 8px; height: 40px; margin-top: 4px; padding: 0 12px; border: 0; border-radius: 14px; background: none; color: var(--border-strong); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.ct-add:hover { color: var(--text); }
+.ct-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px; align-items: stretch; }
+.ct-none { margin: auto; }
+.ct-group { display: flex; flex-direction: column; gap: 6px; }
+.ct-head { display: flex; justify-content: space-between; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); }
+.ct-box-list { padding: 0 12px; border-radius: 16px; background: var(--surface-2); }
+.ct-item { display: flex; align-items: center; gap: 8px; min-height: 44px; border-bottom: 1px solid var(--border); }
+.ct-drag { display: inline-flex; color: var(--border-strong); cursor: grab; }
+.ct-box { width: 18px; height: 18px; border: 1.5px solid var(--border-strong); border-radius: 5px; flex: none; }
+.ct-text, .ct-new { flex: 1; min-width: 0; padding: 0; border: 0; outline: 0; background: none; font: inherit; font-size: 13px; line-height: 20px; color: var(--text); }
+.ct-add-row { display: flex; align-items: center; gap: 8px; min-height: 44px; color: var(--muted); font-size: 12px; }
+.ct-del { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--danger); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.ct-foot { font-size: 12px; line-height: 16px; font-weight: 500; }
+@media (max-width: 720px) { .ct-wrap { flex-direction: column; } .ct-side { width: auto; padding: 0 0 12px; border-right: 0; border-bottom: 1px solid var(--border); } }
+
+/* ---------- F13: карточка человека ---------- */
+.menu.pc-menu { border-radius: 28px; overflow: hidden; }
+.pc-head .avatar { width: 64px; height: 64px; font-size: 22px; flex: none; }
+

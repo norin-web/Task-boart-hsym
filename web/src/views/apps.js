@@ -961,7 +961,7 @@ export async function openDecomposeDialog(req) {
       return h('div', { class: 'dc-row' + (st.on ? '' : ' off') + (st.custom ? ' own' : '') },
         h('label', { class: 'dc-on', title: st.on ? 'Убрать этап' : 'Вернуть этап' }, h('input', { type: 'checkbox', checked: st.on, 'aria-label': 'Этап «' + st.title + '»', onchange: e => { st.on = e.target.checked; draw(); } })),
         h('div', { class: 'dc-main' },
-          h('input', { class: 'dc-title' + (st.custom ? ' inp' : ''), value: st.title, maxlength: 120, disabled: !st.on, placeholder: 'Название этапа', 'aria-label': 'Название этапа', oninput: e => { st.title = e.target.value; } }),
+          h('input', { class: 'dc-title' + (st.custom ? ' inp' : ''), value: st.title, maxlength: 120, disabled: !st.on, placeholder: 'Название этапа', 'aria-label': 'Название этапа', oninput: e => { st.title = e.target.value; }, onkeydown: e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); } } }),
           st.custom ? customMeta(st) : h('span', { class: 'dc-meta muted', title: deps.join(', ') }, deptName(st.positionId), st.release ? ' · последним' : deps.length ? ' · после: ' + deps.join(', ') : ' · сразу')),
         st.release ? h('span', { class: 'dc-rm muted' }, 'RM, после передачи в релиз') : whoPick(st),
         datePick(st));
