@@ -57,7 +57,9 @@ const ids = await page.evaluate(async () => {
   const carrot = apps.find(a => /CARROT/.test(a.name)), streaks = apps.find(a => a.name === 'Streaks');
   const stage = streaks.requests[0].stages.find(s => /^Дизайн/.test(s.title));
   const release = carrot.requests[0].stages.find(s => /^Релиз/.test(s.title));
-  return { carrot: carrot.id, streaks: streaks.id, mvp: streaks.unitId, rf: carrot.unitId, stage: stage.id, release: release.id };
+  const { people } = await call('bootstrap', { today: new Date().toISOString().slice(0, 10) });
+  const pm = people.find(x => x.name === 'Екатерина Соколова');
+  return { carrot: carrot.id, streaks: streaks.id, mvp: streaks.unitId, rf: carrot.unitId, stage: stage.id, release: release.id, ceo: localStorage.getItem('tm.localActor'), pm: JSON.stringify(pm.id) };
 });
 
 // служебное режима разработчика в снимках не нужно: в макетах его нет
@@ -73,9 +75,21 @@ const go = async hash => {
   await page.waitForTimeout(900);
 };
 
+// вход за роль листа: экраны без `as` — за CEO
+let role = 'ceo';
+const loginAs = async as => {
+  if (as === role) return;
+  role = as;
+  await page.evaluate(id => localStorage.setItem('tm.localActor', id), ids[as]);
+  await page.reload();
+  await page.waitForFunction(() => document.querySelector('#sidebar .nav-item'), null, { timeout: 60000 });
+  await hideDev();
+};
+
 const results = [];
 for (const s of SCREENS) {
   if (only.length && !only.includes(s.code)) continue;
+  await loginAs(s.as || 'ceo');
   await page.setViewportSize({ width: 1440, height: s.height || 900 });
   await go(typeof s.route === 'function' ? s.route(ids) : s.route);
   if (s.act) { await s.act(page, ids); await page.waitForTimeout(500); }
@@ -102,6 +116,7 @@ const checks = [];
 for (const m of METRICS) {
   if (only.length && !only.includes(m.screen)) continue;
   const s = SCREENS.find(x => x.code === m.screen);
+  await loginAs(s.as || 'ceo');
   await page.setViewportSize({ width: 1440, height: s.height || 900 });
   await go(typeof s.route === 'function' ? s.route(ids) : s.route);
   if (s.act) { await s.act(page, ids); await page.waitForTimeout(400); }

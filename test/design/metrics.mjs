@@ -5,6 +5,7 @@ const shell = [
   { sel: '#sidebar .nav-item', prop: 'y', want: 172 },
 ];
 export const METRICS = [
+  { screen: 'P01', checks: [{ sel: '.pm-page .section-head h2', prop: 'fontSize', want: '16px' }, { sel: '.pm-page .section-head h2', prop: 'fontWeight', want: '600' }, { sel: '.pm-page section:has(.kpi-table) h2', prop: 'fontSize', want: '16px' }, { sel: '.pm-page section:has(.kpi-table) h2', prop: 'fontWeight', want: '600' }, { sel: '.pl-card', prop: 'marginBottom', want: '0px' }] },
   { screen: 'E02', checks: [{ sel: '.seg', prop: 'borderRadius', want: '999px' }, { sel: '.seg button', prop: 'borderRadius', want: '999px' }] },
   { screen: 'F01', checks: [{ sel: '.prefs-body .seg', prop: 'borderRadius', want: '999px' }] },
   { screen: 'U01', checks: [{ sel: '.apps-page > .ap-list', prop: 'backgroundColor', want: 'rgb(255, 255, 255)' }, { sel: '.apps-page > .ap-list .ap-row', prop: 'height', want: 58, tol: 2 }] },

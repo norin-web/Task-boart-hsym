@@ -36,6 +36,7 @@ export const SCREENS = [
   { code: 'F10', name: 'Журнал', route: prefs('journal') },
   { code: 'F11', name: 'Команды', route: prefs('people'), act: click('.prefs-body .seg button:has-text("Команды")') },
   { code: 'F12', name: 'Позиции', route: prefs('people'), act: click('.prefs-body .seg button:has-text("Позиции")') },
+  { code: 'P01', name: 'Дашборд PM', as: 'pm', route: '#/' },
 ];
 
 /** Намеренные отличия: чтобы процент не вводил в заблуждение. */
@@ -48,4 +49,5 @@ export const NOTES = {
   E01: 'В макете свои задачи Анны; в демо-данных у неё их нет.',
   E02: 'В макете свои задачи Анны; в демо-данных у неё их нет.',
   F01: 'В демо 10 человек с другими адресами.',
+  P01: 'В демо нет входящих от CEO и проблем; юниты и люди другие. Этапы: в коде список, на листе чипы — ждёт решения.',
 };

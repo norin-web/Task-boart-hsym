@@ -1725,3 +1725,8 @@ body { letter-spacing: -.01em; }
 .an-tools .seg { padding: 4px; background: var(--surface); }
 /* Списки — маленькая стрелка, как на макетах, а не системная */
 .access-row select, .prefs-body select.inp, .modal:has(.title-field) select.inp, .modal:has(.create-top) select.inp { appearance: none; -webkit-appearance: none; padding-right: 28px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23646975' d='M17 9.17a1 1 0 0 0-1.41 0L12 12.71 8.46 9.17a1 1 0 1 0-1.41 1.42l4.24 4.24a1 1 0 0 0 1.42 0l4.29-4.24a1 1 0 0 0 0-1.42Z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; background-size: 14px; }
+
+/* ---------- макет P01: дашборд PM ---------- */
+.pm-page section:has(> .section-head) > .section-head h2 { font-size: 16px; line-height: 24px; font-weight: 600; letter-spacing: -.02em; }
+.pm-page .pl-card { margin: 0; }
+.pm-page section:has(> .section-head + .pl-list) { padding: 20px; border-radius: 28px; }

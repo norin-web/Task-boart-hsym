@@ -23,7 +23,7 @@ const stateOf = s => (s.done ? 'done' : s.blocked ? 'blocked' : s.kind === 'todo
 
 let editHook = null;
 export async function renderPmHome() {
-  const page = h('div', { class: 'page ceo-page' }, skeleton());
+  const page = h('div', { class: 'page ceo-page pm-page' }, skeleton());
   fill($('#main'),
     topbar([h('div', { class: 'screen-head' }, h('div', { class: 'screen-date' }, (() => { const t = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }); return t.charAt(0).toUpperCase() + t.slice(1); })()),
       h('h1', { class: 'screen-title' }, 'Дашборд'))], [
