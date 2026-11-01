@@ -2,7 +2,7 @@
  * Таймлайн юнита (макет 27): задачи полосами по дням — от создания до срока. Четыре недели, шаг — неделя.
  * Вид доски юнита: переключатель «Доска / Список / Таймлайн» (#/u/:id/timeline).
  */
-import { S, personById, colById, colColor, todayStr, taskKey, taskDone } from '../state.js';
+import { S, personById, colById, deptById, colColor, todayStr, taskKey, taskDone, fmtDate } from '../state.js';
 import { $, h, icon, avatar, statusIcon, fill } from '../ui.js';
 import { link } from '../router.js';
 import { unitHeader } from './unitnav.js';
@@ -43,25 +43,41 @@ export function renderTimeline() {
       const a = due != null ? Math.min(created, due) : created;
       const b = due != null ? due : created;
       return { t, a, b, open: due == null };
-    }).filter(x => x.b >= s0 && x.a <= e0).sort((x, y) => x.a - y.a || x.b - y.b);
+    }).filter(x => x.b >= s0).sort((x, y) => x.a - y.a || x.b - y.b);
 
     const col = i => ((i - s0) / n) * 100;
+    // цвет полосы — позиция исполнителя; закрытая задача серая
+    const colorOf = t => (taskDone(t) ? '#787C87' : (deptById(t.departmentId) || {}).color || colColor(colById(t.status)));
+    const move = (e, weeks) => { e.stopPropagation(); shift += weeks; draw(); };
+    const open = t => peekTask(S.board.unit.id, t.id);
     const bar = ({ t, a, b }) => {
+      // задача позже видимых недель: подпись с датой и стрелка к ней
+      if (a > e0) return h('div', { class: 'tl-row tl-later' },
+        h('button', { class: 'tl-later-text', title: taskKey(t), onclick: () => open(t) }, t.title.split(' · ')[0] + ' · ' + fmtDate(t.dueDate || t.createdAt.slice(0, 10))),
+        h('button', { class: 'tl-go', title: 'Показать', style: { background: colorOf(t) }, onclick: e => move(e, Math.ceil((a - e0) / 7)) }, icon('chevron', 13)));
       const ca = Math.max(a, s0), cb = Math.min(b, e0);
       const kind = colById(t.status).kind;
       const p = personById(t.assigneeId);
       return h('div', { class: 'tl-row' },
         h('button', {
-          class: 'tl-bar' + (taskDone(t) ? ' done' : '') + (a < s0 ? ' cut-l' : '') + (b > e0 ? ' cut-r' : ''),
-          style: { left: col(ca) + '%', width: ((cb - ca + 1) / n) * 100 + '%', '--bc': colColor(colById(t.status)) },
+          class: 'tl-bar' + (a < s0 ? ' cut-l' : '') + (b > e0 ? ' cut-r' : ''),
+          style: { left: col(ca) + '%', width: ((cb - ca + 1) / n) * 100 + '%', '--bc': colorOf(t) },
           title: taskKey(t) + ' · ' + t.title,
-          onclick: () => peekTask(S.board.unit.id, t.id),
-        }, statusIcon(kind, 14), h('span', { class: 'tl-title' }, t.title), p && avatar(p, 'xs')));
+          onclick: () => open(t),
+        },
+        a < s0 && h('span', { class: 'tl-edge', role: 'button', title: 'Раньше', onclick: e => move(e, -1) }, icon('chevron', 13)),
+        kind !== 'todo' && statusIcon(kind, 14),
+        h('span', { class: 'tl-title' }, t.title),
+        b > e0 && p && avatar(p, 'xs'),
+        b > e0 && h('span', { class: 'tl-edge', role: 'button', title: 'Позже', onclick: e => move(e, 1) }, icon('chevron', 13))),
+        b <= e0 && p && h('span', { class: 'tl-who', style: { left: `calc(${col(cb + 1)}% + 8px)` } }, avatar(p, 'xs')));
     };
 
     const head = days.map((d, i) => h('div', { class: 'tl-day' + (dayIndex(d) === tIdx ? ' today' : '') + ([0, 6].includes(d.getDay()) ? ' wk' : '') },
       h('small', null, DOW[d.getDay()]), h('b', null, d.getDate())));
-    const weekend = days.map((d, i) => [0, 6].includes(d.getDay()) && h('i', { class: 'tl-wk', style: { left: col(s0 + i) + '%', width: 100 / n + '%' } }));
+    const weekend = days.map((d, i) => [
+      [0, 6].includes(d.getDay()) && h('i', { class: 'tl-wk', style: { left: col(s0 + i) + '%', width: 100 / n + '%' } }),
+      i > 0 && d.getDay() === 1 && h('i', { class: 'tl-week', style: { left: col(s0 + i) + '%' } })]).flat();
     const todayLine = tIdx >= s0 && tIdx <= e0 && h('i', { class: 'tl-today', style: { left: col(tIdx) + (50 / n) + '%' } });
 
     fill($('#main'),

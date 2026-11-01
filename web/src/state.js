@@ -1,6 +1,6 @@
 /** Общее состояние приложения и чистые хелперы над данными. */
 
-export const PALETTE = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6', '#14b8a6', '#64748b', '#84cc16'];
+export const PALETTE = ['#EC9900', '#BA3045', '#764BF2', '#0087EA', '#5FCD74', '#0F6E1F', '#787C87', '#111318'];
 export const TYPE_LABELS = {
   text: 'Текст', longtext: 'Длинный текст', number: 'Число', date: 'Дата', select: 'Список',
   multiselect: 'Мультисписок', person: 'Человек', checkbox: 'Флажок', url: 'Ссылка',

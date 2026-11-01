@@ -485,3 +485,8 @@ export function emptyBlock(text, { ok = false, ic = 'circle', sub = '' } = {}) {
   return h('div', { class: 'card-box empty-block' + (ok ? ' ok' : '') },
     h('span', { class: 'eb-ic' }, icon(ok ? 'check' : ic, 18)), h('b', null, text), sub && h('span', { class: 'eb-sub' }, sub));
 }
+
+/* Подложка шапки появляется при прокрутке страницы */
+document.addEventListener('scroll', e => {
+  if (e.target.classList && e.target.classList.contains('view-body')) e.target.classList.toggle('scrolled', e.target.scrollTop > 0);
+}, true);

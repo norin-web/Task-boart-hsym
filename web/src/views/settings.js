@@ -20,13 +20,10 @@ export function renderSettings() {
   const desc = h('textarea', { class: 'inp', rows: 2, value: u.description, maxlength: 1000 });
   const colEditor = columnsEditor(st.columns);
   const builtinRows = Object.entries(st.builtins).map(([k, bi]) => {
-    const label = h('input', { class: 'inp', value: bi.label, maxlength: 40 });
-    const hidden = bi.hideable ? h('input', { type: 'checkbox', checked: bi.hidden }) : null;
-    return {
-      k, label, hidden,
-      el: h('div', { class: 'row', style: { marginBottom: '8px', flexWrap: 'nowrap' } }, label,
-        hidden ? h('label', { class: 'chk', style: { minWidth: '92px' } }, hidden, 'Скрыть') : h('span', { class: 'hint', style: { minWidth: '92px' } }, 'всегда видно')),
-    };
+    const label = h('input', { class: 'inp', value: bi.label, maxlength: 40, 'aria-label': 'Название поля' });
+    // переключатель включён — поле показывается
+    const shown = bi.hideable ? h('input', { class: 'switch', type: 'checkbox', checked: !bi.hidden, 'aria-label': 'Показывать поле' }) : null;
+    return { k, label, shown, el: h('div', { class: 'us-std-row' }, label, shown || h('span', { class: 'muted' }, 'всегда видно')) };
   });
 
   const save = async btn => {
@@ -46,7 +43,7 @@ export function renderSettings() {
       }
       builtinRows.forEach(r => {
         st.builtins[r.k].label = r.label.value.trim() || st.builtins[r.k].label;
-        if (r.hidden) st.builtins[r.k].hidden = r.hidden.checked;
+        if (r.shown) st.builtins[r.k].hidden = !r.shown.checked;
       });
       st.flows = u.settings.flows; // флоу сохраняется отдельно (своя кнопка) — берём свежий
       const saved = await send('updateUnit', { id: u.id, name: name.value, key: key.value, color: color.value(), description: desc.value, settings: st, statusRemap: remap });
@@ -76,14 +73,11 @@ export function renderSettings() {
   const fieldList = h('div', { class: 'field-list' }, active.map(f => h('div', { class: 'field-row', dataset: { id: f.id } },
     h('span', { class: 'drag', title: 'Перетащите, чтобы изменить порядок' }, icon('grip', 16)),
     h('span', { class: 'name' }, f.name),
-    h('span', { class: 'badge' }, TYPE_LABELS[f.type] || f.type),
-    f.showOnCard && h('span', { class: 'badge' }, 'на карточке'),
-    f.required && h('span', { class: 'badge' }, requiredLabel(f)),
-    f.staffOnly && h('span', { class: 'badge' }, 'меняют CEO и PM'),
-    f.requiredOnCreate && h('span', { class: 'badge' }, 'при создании'),
     h('span', { class: 'spacer' }),
-    h('button', { class: 'btn sm', onclick: () => editField(f) }, icon('edit', 13), 'Изменить'),
-    h('button', { class: 'btn ghost sm', title: 'Убрать с карточек (значения сохранятся)', onclick: () => setFieldArchived(f, true) }, 'Убрать'))));
+    h('span', { class: 'fr-acts' },
+      h('button', { class: 'btn sm', onclick: () => editField(f) }, icon('edit', 13), 'Изменить'),
+      h('button', { class: 'btn ghost sm', title: 'Убрать с карточек (значения сохранятся)', onclick: () => setFieldArchived(f, true) }, 'Убрать')),
+    h('span', { class: 'muted fr-type' }, [TYPE_LABELS[f.type] || f.type, (f.options || []).length > 0 && `${f.options.length} ${plural(f.options.length, ['вариант', 'варианта', 'вариантов'])}`].filter(Boolean).join(' · ')))));
 
   fill($('#main'),
     ...unitHeader('settings', [h('button', { class: 'btn primary', onclick: e => save(e.currentTarget) }, 'Сохранить изменения')]),
@@ -91,31 +85,28 @@ export function renderSettings() {
       h('div', { class: 'us-col' },
       h('section', { class: 'card-box' },
         h('h2', null, 'Основное'),
-        h('p', { class: 'hint' }, 'Название, ключ и внешний вид юнита.'),
-        h('div', { class: 'grid2' }, field('Название', name), field('Ключ задач', key, 'Номера задач: ' + u.key + '-1, ' + u.key + '-2… При смене ключа номера обновятся.')),
+        h('div', { class: 'grid2' }, field('Название', name), field('Ключ задач', key, 'Номера задач: ' + u.key + '-1, ' + u.key + '-2…')),
         field('Цвет', color.el),
-        field('Описание', desc),
-        h('p', { class: 'hint rules-link' }, icon('progress', 13), 'Ревью, чеклист перед «готово», скрытие и архив выполненных — в ',
-          link({ view: 'settings', tab: 'automations' }, null, 'Настройках → Автоматизации'), '.'),
-
-        ),
+        field('Описание', desc)),
 
       h('section', { class: 'card-box' },
         h('h2', null, 'Колонки доски'),
         h('p', { class: 'hint' }, 'Тип колонки влияет на статистику: «Готово» — задача выполнена (не просрочена, считается в прогрессе).'),
-        colEditor.el,
+        colEditor.el),
 
-        h('div', { class: 'sub-title' }, 'Стандартные поля'),
-        builtinRows.map(r => r.el))),
+      h('section', { class: 'card-box' },
+        h('h2', null, 'Стандартные поля'),
+        h('p', { class: 'hint' }, 'Названия и показ полей карточки задачи этого юнита.'),
+        builtinRows.map(r => r.el)),
+
+      h('p', { class: 'rules-pill' }, 'Ревью, чеклист перед «Готово», скрытие и автоархив — в ',
+        link({ view: 'settings', tab: 'automations' }, null, 'Настройки → Автоматизации'))),
 
       h('div', { class: 'us-col' },
       h('section', { class: 'card-box' },
         h('div', { class: 'section-head', style: { marginBottom: '4px' } },
           h('h2', null, 'Поля карточки'),
-          h('button', { class: 'btn primary sm', onclick: () => editField(null) }, icon('plus', 14), 'Поле')),
-        globals.length > 0 && h('p', { class: 'hint global-fields-note' }, 'Общие для всех юнитов: ',
-          h('span', { class: 'gf-names' }, globals.map(f => f.name).join(', ')), ' — меняются в ',
-          link({ view: 'settings', tab: 'automations' }, null, 'Настройках → Автоматизации'), '.'),
+          h('button', { class: 'btn sm', onclick: () => editField(null) }, icon('plus', 14), 'Поле')),
         h('p', { class: 'hint' }, 'Свои поля для задач этого юнита: списки, даты, числа, ссылки. На карточке идут после общих. Порядок меняется перетаскиванием.'),
         active.length ? fieldList : h('p', { class: 'muted' }, 'Своих полей пока нет.'),
         archived.length > 0 && [
@@ -131,10 +122,10 @@ export function renderSettings() {
 
       h('section', { class: 'card-box danger-zone' },
         h('h2', null, 'Опасная зона'),
-        h('p', { class: 'hint' }, 'Архивный юнит скрывается из меню, но все задачи сохраняются. Удаление необратимо.'),
+        h('p', { class: 'hint' }, 'Архивный юнит скрывается из меню, задачи сохраняются. Удаление необратимо.'),
         h('div', { class: 'row' },
-          h('button', { class: 'btn', onclick: () => { archiveUnit(unitById(u.id) || u, !u.archived); renderSettings(); } }, icon('archive', 15), u.archived ? 'Вернуть из архива' : 'В архив'),
-          h('button', { class: 'btn danger', onclick: () => deleteUnit(unitById(u.id) || u) }, icon('trash', 15), 'Удалить юнит')))),
+          h('button', { class: 'btn', onclick: () => { archiveUnit(unitById(u.id) || u, !u.archived); renderSettings(); } }, u.archived ? 'Вернуть из архива' : 'В архив'),
+          h('button', { class: 'btn danger solid', onclick: () => deleteUnit(unitById(u.id) || u) }, 'Удалить юнит')))),
 
       h('div', { class: 'us-wide' }, teamSection(), flowSection(u)))));
 
