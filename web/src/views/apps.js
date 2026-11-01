@@ -552,7 +552,9 @@ export function openAppPanel(a, onChange, page = null) {
               return h('button', { class: 'ap-now-row', onclick: () => peekTask(r.unitId, cur ? cur.id : r.id) },
                 h('span', { class: 'ap-now-what' }, h('b', null, cur ? cur.title.split(' · ')[0] : r.stages.length ? 'Релиз' : 'Ждёт PM'),
                   h('span', { class: 'muted' }, ' · ' + r.title)),
-                r.stages.length > 0 && stageDots(r.stages),
+                r.stages.length > 0 && h('span', { class: 'ap-now-bar' },
+                  h('span', { class: 'progress' }, h('div', { style: { width: Math.round(r.stages.filter(s => s.done).length / r.stages.length * 100) + '%' } })),
+                  h('span', { class: 'muted' }, `${r.stages.filter(s => s.done).length} из ${r.stages.length}`)),
                 who ? avatar(who, 'sm') : h('span', { class: 'avatar-gap' }));
             })
             : h('p', { class: 'muted', style: { margin: 0 } }, 'Открытых работ нет'))),

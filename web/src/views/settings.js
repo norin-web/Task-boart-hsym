@@ -15,7 +15,7 @@ export function renderSettings() {
   const st = structuredClone(u.settings);
 
   const name = h('input', { class: 'inp', value: u.name, maxlength: 80 });
-  const key = h('input', { class: 'inp mono', value: u.key, maxlength: 10, oninput: e => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); } });
+  const key = h('input', { class: 'inp us-key', value: u.key, maxlength: 10, oninput: e => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); } });
   const color = colorPicker(u.color);
   const desc = h('textarea', { class: 'inp', rows: 2, value: u.description, maxlength: 1000 });
   const colEditor = columnsEditor(st.columns);
@@ -91,7 +91,7 @@ export function renderSettings() {
 
       h('section', { class: 'card-box' },
         h('h2', null, 'Колонки доски'),
-        h('p', { class: 'hint' }, 'Тип колонки влияет на статистику: «Готово» — задача выполнена (не просрочена, считается в прогрессе).'),
+        h('p', { class: 'hint' }, 'Тип колонки влияет на статистику: «Готово» — задача выполнена.'),
         colEditor.el),
 
       h('section', { class: 'card-box' },
@@ -107,7 +107,7 @@ export function renderSettings() {
         h('div', { class: 'section-head', style: { marginBottom: '4px' } },
           h('h2', null, 'Поля карточки'),
           h('button', { class: 'btn sm', onclick: () => editField(null) }, icon('plus', 14), 'Поле')),
-        h('p', { class: 'hint' }, 'Свои поля для задач этого юнита: списки, даты, числа, ссылки. На карточке идут после общих. Порядок меняется перетаскиванием.'),
+        h('p', { class: 'hint' }, 'Свои поля юнита идут на карточке после общих.'),
         active.length ? fieldList : h('p', { class: 'muted' }, 'Своих полей пока нет.'),
         archived.length > 0 && [
           h('div', { class: 'sub-title' }, 'Убранные поля'),

@@ -268,7 +268,7 @@ function globalFieldsManager() {
     h('div', { class: 'section-head', style: { marginBottom: '4px' } },
       h('h2', { style: { margin: 0, fontSize: '16px' } }, 'Общие поля карточки'),
       h('button', { class: 'btn primary sm', onclick: () => edit(null) }, icon('plus', 14), 'Поле')),
-    h('p', { class: 'hint', style: { marginTop: 0 } }, 'Есть у задач всех юнитов и идут на карточке первыми. Свои поля юнита — в его настройках. Обязательность задаётся типом колонки («В работе», «Готово»): колонки у юнитов разные.'),
+    h('p', { class: 'hint', style: { marginTop: 0 } }, 'Общие для всех юнитов — идут на карточке первыми. Обязательность — по типу колонки.'),
     list, removedBox);
 }
 
@@ -522,7 +522,7 @@ function automationsTab() {
   return h('div', { class: 'auto-page' },
     h('div', { class: 'card-box' }, unitRules()),
     h('div', { class: 'an-grid an-grid-32' }, h('div', { class: 'card-box' }, templatesManager()), h('div', { class: 'card-box' }, autoNotes())),
-    h('div', { class: 'an-grid auto-fields' }, h('div', { class: 'card-box' }, globalFieldsManager()),
+    h('div', { class: 'an-grid auto-fields' + (isSuper() ? '' : ' one') }, h('div', { class: 'card-box' }, globalFieldsManager()),
       isSuper() && h('div', { class: 'card-box' }, linkFieldsManager())));
 }
 

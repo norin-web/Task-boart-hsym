@@ -1773,7 +1773,6 @@ body { letter-spacing: -.01em; }
 .dc-on input:checked { border-color: var(--primary); background-color: var(--primary); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 13l4 4L19 7'/%3E%3C/svg%3E"); }
 .dc-modal .dc-main { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .dc-modal .dc-title:not(.inp) { width: 100%; padding: 0; border: 0; background: none; outline: 0; font: inherit; font-size: 13px; line-height: 20px; font-weight: 600; letter-spacing: -.01em; color: var(--text); text-overflow: ellipsis; }
-.dc-modal .dc-title:not(.inp):focus { box-shadow: 0 1px 0 var(--focus, var(--accent)); }
 .dc-modal .dc-title.inp { height: 40px; font-size: 13px; font-weight: 500; }
 .dc-modal .dc-row.own .dc-main { gap: 6px; }
 .dc-modal .dc-meta { font-size: 12px; line-height: 16px; font-weight: 500; }
@@ -1791,7 +1790,7 @@ body { letter-spacing: -.01em; }
 .dc-modal .dc-rm { width: 208px; padding: 0 12px; flex: none; font-size: 12px; line-height: 16px; font-weight: 500; white-space: nowrap; }
 .menu.dc-menu { max-height: 320px; overflow: auto; }
 @media (max-width: 720px) { .dc-modal .dc-row { flex-wrap: wrap; padding: 8px 0; } .dc-modal .dc-main { flex-basis: calc(100% - 32px); } .dc-pick { flex: 1; width: auto; } .dc-modal .dc-rm { flex: 1; width: auto; padding: 0; white-space: normal; } }
-.dc-modal .modal-foot .left .btn { height: 40px; padding: 0 16px; background: var(--surface-3); }
+.dc-modal .modal-foot .left .btn:not(.primary) { height: 40px; padding: 0 16px; background: var(--surface-3); }
 .lz-head .back-btn { flex: none; width: 44px; height: 44px; border-radius: 50%; background: var(--surface); color: var(--text); }
 .lz-head .back-btn:hover { background: var(--surface-3); }
 
@@ -1822,4 +1821,28 @@ body { letter-spacing: -.01em; }
 /* ---------- F13: карточка человека ---------- */
 .menu.pc-menu { border-radius: 28px; overflow: hidden; }
 .pc-head .avatar { width: 64px; height: 64px; font-size: 22px; flex: none; }
+
+/* ---------- сверка глазами: окна сплошные, как на листах ---------- */
+.modal, .panel { background: var(--surface); backdrop-filter: none; -webkit-backdrop-filter: none; }
+.unit-panel .ap-props .inp, .unit-panel .ap-props .prio-select { background-color: var(--surface-2); }
+
+/* B05, B04: сайдбар карточки и строка «Сейчас» */
+.app-page .app-side .ap-props .field > label { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); }
+.ap-now-bar { display: inline-flex; align-items: center; gap: 12px; width: 240px; flex: none; font-size: 12px; line-height: 16px; font-weight: 500; }
+.ap-now-bar .progress { flex: 1; }
+
+/* C06: ключ задач обычным шрифтом */
+.us-key { font-weight: 600; }
+
+/* C07: строки флоу — своя сетка, а не сетка колонок доски */
+.unit-set .col-edit-row.fl-row { grid-template-columns: 20px 24px minmax(0, 1fr) 200px 220px 90px 90px 28px; gap: 10px; min-height: 56px; border-bottom: 1px solid var(--border); }
+.unit-set .fl-row .inp { height: 36px; padding: 0 12px; border-radius: 12px; background: var(--surface-2); font-size: 13px; font-weight: 600; }
+.unit-set .fl-row select.inp { width: 100%; font-weight: 500; color: var(--text); text-align: left; }
+.unit-set .fl-row .icon-btn { opacity: 1; }
+
+/* A09: заголовки блоков 16/600 */
+.analytics-page section:has(> .section-head) > .section-head h2 { font-size: 16px; line-height: 24px; font-weight: 600; letter-spacing: -.02em; }
+
+/* P17: у PM поля карточки на всю ширину */
+.an-grid.auto-fields.one { grid-template-columns: minmax(0, 1fr); }
 

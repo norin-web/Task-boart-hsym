@@ -82,7 +82,7 @@ export async function renderAnalytics(tile) {
           class: unit === id ? 'on' : '', role: 'radio', 'aria-checked': String(unit === id), title: id ? 'Блоки по приложениям — только этот юнит' : '',
           onclick: () => { unit = id; LS.set('anUnit', id); draw(); },
         }, color && h('span', { class: 'dot', style: { background: color } }), name))),
-      h('button', { class: 'btn ghost sm', title: 'Какие блоки показывать и где', onclick: () => editLayout('analytics', blocks(), page, draw, { title: 'Настройка аналитики' }) }, icon('layers', 14), 'Настроить'));
+      h('button', { class: 'btn', title: 'Какие блоки показывать и где', onclick: () => editLayout('analytics', blocks(), page, draw, { title: 'Настройка аналитики' }) }, icon('layers', 14), 'Настроить'));
     fill(page, renderLayout('analytics', blocks()));
   }
 

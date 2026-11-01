@@ -32,4 +32,10 @@ export const METRICS = [
   { screen: 'P12', checks: [{ sel: '#main', noText: 'Релизы', prop: 'text', want: 'нет' }] },
   { screen: 'P16', checks: [{ sel: '.topbar .btn.primary', prop: 'display', want: null, absent: true }] },
   { screen: 'P18', checks: [{ sel: '.ct-modal', prop: 'width', want: 760 }, { sel: '.ct-side', prop: 'width', want: 220 }, { sel: '.ct-tab', prop: 'borderRadius', want: '14px' }] },
+  { screen: 'P02', checks: [{ sel: '.dc-modal', prop: 'backgroundColor', want: 'rgb(255, 255, 255)' }, { sel: '.dc-modal .modal-foot .left .btn', prop: 'height', want: 40 }, { sel: '.dc-title', prop: 'boxShadow', want: 'none' }] },
+  { screen: 'P10', checks: [{ sel: '.ap-now-bar .progress', prop: 'height', want: 6 }, { sel: '.app-side .ap-props .field > label', prop: 'fontWeight', want: '500' }] },
+  { screen: 'P11', checks: [{ sel: '.ap-now-bar .progress', prop: 'height', want: 6 }] },
+  { screen: 'C07', checks: [{ sel: '.fl-row', prop: 'height', want: 56 }, { sel: '.fl-row .inp', prop: 'height', want: 36 }, { sel: '.fl-row select.inp', prop: 'width', want: 200 }] },
+  { screen: 'P14', checks: [{ sel: '.fl-row', prop: 'height', want: 56 }, { sel: '.fl-row select.inp', prop: 'width', want: 200 }] },
+  { screen: 'P09', checks: [{ sel: '.analytics-page section:has(.kpi-table) h2', prop: 'fontSize', want: '16px' }, { sel: '.analytics-page section:has(.kpi-table) h2', prop: 'fontWeight', want: '600' }] },
 ];
