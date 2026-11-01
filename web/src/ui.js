@@ -180,7 +180,7 @@ export function linkify(text) {
 }
 
 /** Значок статуса: форма + цвет, подпись рядом всегда словом (цвет только помогает). */
-const ST_ICON = { todo: ['circle', 'var(--muted)'], progress: ['progress', 'var(--info-fill)'], review: ['eye', 'var(--review)'], done: ['done', 'var(--accent-text)'] };
+const ST_ICON = { todo: ['circle', 'var(--text-2)'], progress: ['progress', 'var(--info-fill)'], review: ['eye', 'var(--review)'], done: ['done', 'var(--accent-text)'] };
 export function statusIcon(kind, size = 16) {
   const [name, color] = ST_ICON[kind] || ST_ICON.todo;
   return h('span', { class: 'st-ic', style: { color } }, icon(name, size));

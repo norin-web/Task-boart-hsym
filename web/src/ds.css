@@ -559,8 +559,11 @@ section:has(> .section-head + .pl-list) > .section-head { margin-bottom: 12px; }
 .rq-stitle { flex: 1; min-width: 0; font-size: 13px; line-height: 20px; font-weight: 500; }
 .rq-stage.current .rq-stitle { font-weight: 600; }
 .rq-state { font-size: 12px; font-weight: 500; }
-.rq-more { cursor: pointer; }
+/* «Ещё N этапов» — не похож на строку чеклиста: стрелка вместо статус-иконки, подпись приглушена */
+.rq-more { cursor: pointer; margin-top: 2px; }
 .rq-more:hover { background: var(--surface-2); }
+.rq-more-chev { transform: rotate(-90deg); transition: transform .15s ease-out; }
+.rq-more[aria-expanded="true"] .rq-more-chev { transform: none; }
 .flow-block { background: var(--surface); border-radius: var(--r-xl); padding: 16px; }
 .flow-block .progress { height: 6px; }
 .modal-foot .btn:not(.primary):not(.danger):not(.success) { background: transparent; border-color: transparent; }

@@ -232,9 +232,9 @@ function flowBlock(t) {
         const vis = expanded ? stages.length : Math.min(stages.length, Math.max(3, cur + 3));
         const hidden = stages.length - vis;
         return [stages.slice(0, vis).map(n => stageRow(n, stages)),
-          (hidden > 0 || expanded) && stages.length > 3 && h('button', { class: 'rq-more', onclick: () => { expanded = !expanded; load(); } },
-            h('span', { class: 'rq-ic' }, statusIcon('todo', 16)),
-            h('span', { class: 'rq-stitle' }, expanded ? 'Свернуть' : `Ещё ${hidden} ${plural(hidden, ['этап', 'этапа', 'этапов'])}`),
+          (hidden > 0 || expanded) && stages.length > 3 && h('button', { class: 'rq-more', 'aria-expanded': String(expanded), onclick: () => { expanded = !expanded; load(); } },
+            h('span', { class: 'rq-ic rq-more-chev' }, icon('chevron', 16)),
+            h('span', { class: 'rq-stitle muted' }, expanded ? 'Свернуть' : `Ещё ${hidden} ${plural(hidden, ['этап', 'этапа', 'этапов'])}`),
             h('span', { class: 'muted rq-state' }, expanded ? '' : 'Показать'))];
       })()),
       t.kind === 'request' && !stages.length && h('div', { class: 'rq-empty' },

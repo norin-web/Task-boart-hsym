@@ -212,6 +212,7 @@ function meMenu() { meOpen = !meOpen; renderSidebar(); }
 
 function renderMenuItems(items) {
   return items.filter(Boolean).map(it => {
+    if (it instanceof Node) return it;
     if (it.sep) return h('div', { class: 'menu-sep' });
     if (it.title) return h('div', { class: 'menu-label' }, it.title);
     return h('button', {
