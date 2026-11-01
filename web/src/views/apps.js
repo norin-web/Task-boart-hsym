@@ -691,7 +691,7 @@ function saveAppCardLayout(L) {
  *  · Быстрый доступ — поля: для всех приложений (CEO) и только у этого (CEO и PM юнита);
  *  · Info — пункты: для всех (CEO) и только у этого. Поля и пункты сохраняются кнопкой «Сохранить».
  */
-function openCardSettings(a, { ceo, manage, save, redraw, tab: start = 'blocks' }) {
+export function openCardSettings(a, { ceo, manage, save, redraw, tab: start = 'blocks' }) {
   const L = appCardLayout();
   const name = Object.fromEntries(CARD_BLOCKS);
   const fieldsAll = S.appFields.map(x => ({ ...x }));
@@ -730,7 +730,7 @@ function openCardSettings(a, { ceo, manage, save, redraw, tab: start = 'blocks' 
   ], () => list.push({ id: '', name: '', done: false }), 'Пункт');
   const readOnly = list => h('p', { class: 'muted' }, (list.map(x => x.name).join(', ') || 'Пока нет') + ' · меняет CEO');
   const panes = {
-    blocks: [h('p', { class: 'hint', style: { margin: '0 0 10px' } }, 'Какие блоки показывать и в каком порядке — только у вас, во всех карточках приложений.'), blocks],
+    blocks: [h('p', { class: 'hint' }, 'Какие блоки показывать и в каком порядке — только у вас, во всех карточках приложений.'), blocks],
     quick: [h('h3', { class: 'qf-h' }, 'Для всех приложений'), ceo ? fieldEditor(fieldsAll) : readOnly(fieldsAll),
       h('h3', { class: 'qf-h' }, 'Только у «' + a.name + '»'), fieldEditor(fieldsOwn)],
     info: [h('h3', { class: 'qf-h' }, 'Для всех приложений'), ceo ? itemEditor(infoAll) : readOnly(infoAll),
@@ -746,7 +746,7 @@ function openCardSettings(a, { ceo, manage, save, redraw, tab: start = 'blocks' 
   show();
   modal({
     title: 'Настроить карточку',
-    wide: true,
+    cls: 'dlg cs-dlg',
     body: [TABS.length > 1 && seg, body],
     footLeft: h('button', { class: 'btn ghost sm', title: 'Блоки — как было по умолчанию', onclick: () => { L.order = CARD_BLOCKS.map(([id]) => id); L.hidden = []; drawBlocks(); applyBlocks(); } }, 'Блоки как было'),
     actions: manage

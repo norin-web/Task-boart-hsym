@@ -195,8 +195,8 @@ export function openFieldEditor(f, { global = !!(f && f.global), columns = [], o
       ...options.map((o, i) => h('div', { class: 'opt-row' },
         h('input', { type: 'color', value: o.color, title: 'Цвет', oninput: e => { o.color = e.target.value; } }),
         h('input', { class: 'inp', value: o.name, maxlength: 60, placeholder: 'Вариант ' + (i + 1), oninput: e => { o.name = e.target.value; } }),
-        h('button', { class: 'icon-btn sm', title: 'Выше', disabled: i === 0, onclick: () => { options.splice(i - 1, 0, options.splice(i, 1)[0]); drawOptions(); } }, '↑'),
-        h('button', { class: 'icon-btn sm', title: 'Ниже', disabled: i === options.length - 1, onclick: () => { options.splice(i + 1, 0, options.splice(i, 1)[0]); drawOptions(); } }, '↓'),
+        h('button', { class: 'icon-btn sm', title: 'Выше', disabled: i === 0, onclick: () => { options.splice(i - 1, 0, options.splice(i, 1)[0]); drawOptions(); } }, icon('arrowUp', 14)),
+        h('button', { class: 'icon-btn sm', title: 'Ниже', disabled: i === options.length - 1, onclick: () => { options.splice(i + 1, 0, options.splice(i, 1)[0]); drawOptions(); } }, icon('arrowDown', 14)),
         h('button', { class: 'icon-btn sm', title: 'Удалить вариант', onclick: () => { options.splice(i, 1); drawOptions(); } }, icon('x', 14)))),
       h('button', {
         class: 'btn sm', onclick: () => {
@@ -206,7 +206,7 @@ export function openFieldEditor(f, { global = !!(f && f.global), columns = [], o
       }, icon('plus', 13), 'Вариант'));
     if (focusLast) { const ins = optBox.querySelectorAll('.inp'); ins[ins.length - 1].focus(); }
   };
-  const typeNote = h('div', { class: 'hint' });
+  const typeNote = h('div', { class: 'hint warn-note' });
   const syncType = () => {
     optSection.hidden = !['select', 'multiselect'].includes(type.value);
     typeNote.textContent = !isNew && type.value !== f.type ? 'Тип меняется: уже заполненные значения могут отображаться некорректно.' : '';
@@ -221,13 +221,14 @@ export function openFieldEditor(f, { global = !!(f && f.global), columns = [], o
 
   modal({
     title: (isNew ? 'Новое поле' : `Поле «${f.name}»`) + (global ? ' · для всех юнитов' : ''),
+    cls: 'dlg dlg-w',
     body: [
-      isPriority && h('p', { class: 'hint', style: { marginTop: 0 } }, 'Приоритет — общий для всех юнитов: полоса на карточке и сортировка в колонке. Варианты сверху вниз — от низкого к высокому.'),
+      isPriority && h('p', { class: 'hint' }, 'Приоритет — общий для всех юнитов: полоса на карточке и сортировка в колонке. Варианты сверху вниз — от низкого к высокому.'),
       h('div', { class: 'grid2' }, field('Название', name), isPriority ? h('div') : field('Тип', type, typeNote)),
       optSection,
       h('div', { class: 'grid2', style: { alignItems: 'end' } },
         field('Обязательное для участников', required),
-        h('label', { class: 'chk', style: { marginBottom: '10px' } }, showOnCard, 'Показывать на карточке')),
+        h('label', { class: 'chk' }, showOnCard, 'Показывать на карточке')),
       h('label', { class: 'chk' }, onCreate, 'Нужно уже при создании задачи (без него задачу не создать)'),
       h('label', { class: 'chk' }, staffOnly, 'Меняют только CEO и PM (сотрудник видит, но не правит)'),
     ],

@@ -449,6 +449,7 @@ function editTemplate(t, onSaved) {
   const checklist = h('textarea', { class: 'inp', rows: 5, value: t ? t.checklist.map(i => i.text).join('\n') : '', placeholder: 'Пункты чеклиста — по одному на строку' });
   modal({
     title: t ? `Шаблон «${t.name}»` : 'Новый шаблон',
+    cls: 'dlg dlg-w',
     wide: true,
     body: [
       h('div', { class: 'grid2' }, field('Название шаблона', name), field('Название задачи', title)),
@@ -522,9 +523,10 @@ function automationsTab() {
 }
 
 /** Настройка ревью юнита окном (колонка, ревьюеры по позиции, по умолчанию). */
-function openReviewEditor(u, onDone) {
+export function openReviewEditor(u, onDone) {
   modal({
     title: `Ревью · ${u.name}`, wide: true,
+    cls: 'dlg dlg-w',
     body: [reviewSection(u, { bare: true })],
     actions: [{ label: 'Готово', primary: true, action: c => c() }],
     onClose: onDone,

@@ -570,14 +570,15 @@ export async function deleteColumn(col) {
   const rest = columns().filter(c => c.id !== col.id);
   const count = S.board.tasks.filter(t => colById(t.status).id === col.id).length;
   if (!count) {
-    if (await confirmDlg(`Удалить колонку «${col.name}»?`, { ok: 'Удалить', danger: true })) saveColumns(rest.map(c => ({ ...c }))).catch(showErr);
+    if (await confirmDlg('', { title: `Удалить колонку «${col.name}»?`, ok: 'Удалить', danger: true })) saveColumns(rest.map(c => ({ ...c }))).catch(showErr);
     return;
   }
   const target = h('select', { class: 'inp' }, rest.map(c => h('option', { value: c.id }, c.name)));
   modal({
     title: `Удалить колонку «${col.name}»`,
+    cls: 'dlg',
     body: [
-      h('p', { style: { marginTop: 0 } }, `В колонке ${count} ${count === 1 ? 'задача' : count < 5 ? 'задачи' : 'задач'}. Куда их перенести?`),
+      h('p', { class: 'hint' }, `В колонке ${count} ${count === 1 ? 'задача' : count < 5 ? 'задачи' : 'задач'}. Куда их перенести?`),
       field('Перенести в', target),
     ],
     actions: [
