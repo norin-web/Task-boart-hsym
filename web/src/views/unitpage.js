@@ -51,7 +51,7 @@ export async function renderUnitPage() {
         stat(open.length, 'открытых задач', 'list'),
         stat(late, 'просрочено', 'list', late ? 'danger' : '')),
       h('div', { class: 'home-grid' },
-        h('div', { class: 'home-col' }, inProgress(ud, load), appsBrief(u, apps, load), attention(ud, load)),
+        h('div', { class: 'home-col' }, inProgress(ud, load), appsBrief(u, apps, load), attention(ud, load, { two: true })),
         h('div', { class: 'home-col' }, tasksByColumn(u, open), teamBrief(u), owner(u, load), recent(ud, load, { empty: 'За 30 дней статусы приложений юнита не менялись' }))));
   }
 

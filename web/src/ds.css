@@ -1298,3 +1298,12 @@ body.sb-collapsed .nav-unit-row .nav-abbr { display: inline; font-size: 12px; li
 
 /* Моя доска: пустая подсказка не лезет под тулбар и выровнена по колонкам */
 .my-empty { margin: 4px 16px 0 24px; }
+
+/* Обзор юнита · «Требует внимания» (макет 14б) */
+.att-row.att-two { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 14px; text-align: left; }
+.att-row.att-two.hot { background: #F7F7F7; }
+.att-two .att-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.att-two .att-main b { font-size: 13px; line-height: 20px; font-weight: 700; }
+.att-two .att-main small { font-size: 12px; line-height: 16px; font-weight: 500; }
+.att-two .att-open { height: 24px; padding: 0 12px; border-radius: 999px; background: var(--review, #6200FF); color: #fff; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; flex-shrink: 0; }
+.att-two .att-chip { height: 24px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-2, var(--text)); font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; flex-shrink: 0; }

@@ -100,7 +100,8 @@ const ATT = {
   stale: { cls: 'muted', text: x => `стоит ${daysSince(x.task.updatedAt)} дн.` },
 };
 
-export function attention(d, reload) {
+/** two — вариант обзора юнита (макет 14б): две строки, справа «Открыть» у реджекта, у остальных — статус приложения. */
+export function attention(d, reload, { two = false } = {}) {
   const rows = d.attention;
   const what = x => (x.task && x.task.id !== x.request.id ? x.task.title.split(' · ')[0] : x.request ? x.request.title : '');
   const who = x => personById(x.task ? x.task.assigneeId : x.request ? x.request.assigneeId : '');
@@ -112,6 +113,13 @@ export function attention(d, reload) {
       ? h('div', { class: 'card-box att-list' }, rows.slice(0, 12).map(x => {
         const a = ATT[x.type];
         const p = who(x);
+        if (two) {
+          const st = appStatusById(x.app.status);
+          return h('button', { class: 'att-row att-two' + (x.type === 'reject' ? ' hot' : ''), onclick: () => open(x), title: p ? p.name : '' },
+            h('span', { class: 'att-main' }, h('b', null, x.app.name),
+              h('small', { class: a.cls === 'danger' ? 'danger-text' : 'muted' }, [what(x), a.text(x)].filter(Boolean).join(' · '))),
+            x.type === 'reject' ? h('span', { class: 'att-open' }, 'Открыть') : h('span', { class: 'att-chip' }, st ? st.name : ''));
+        }
         // как в макете 12: «Приложение · что случилось», справа — статус приложения пилюлей
         return h('button', { class: 'att-row', onclick: () => open(x), title: p ? p.name : '' },
           h('span', { class: 'att-main' }, h('b', null, x.app.name), ' · ', h('span', { class: a.cls === 'danger' ? 'danger-text' : '' }, [what(x), a.text(x)].filter(Boolean).join(', '))),
