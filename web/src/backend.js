@@ -966,6 +966,7 @@ export function createBackend(db, opts = {}) {
       let rows = await all(() => {
         let b = T('tasks').select('*').eq('archived', false);
         if (p.assigneeId) b = b.eq('assignee_id', String(p.assigneeId));
+        if (p.authorId) b = b.eq('created_by', String(p.authorId)).neq('kind', 'stage'); // «Поставил я»: этапы разбивки — не постановка
         if (ids) b = b.in('id', ids);
         return b.order('updated_at', { ascending: false }).order('id');
       });

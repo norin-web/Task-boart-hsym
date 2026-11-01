@@ -7,7 +7,7 @@ import Sortable from 'sortablejs';
 import { S, isSuper, isStaff, seesApps, me, personById, unitById, appStatusById, prioById, REQUEST_TYPES, LS, plural, fmtDate, PALETTE, between, todayStr, relTime } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, modal, field, toast, menu, closeMenu, confirmDlg, promptDlg, prioMark, prioSelect, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
-import { currentView, navigate } from '../router.js';
+import { currentView, navigate, navParent } from '../router.js';
 import { peekTask } from './task.js';
 import { unitHeader } from './unitnav.js';
 import { brandIcon, brandOf } from './brand.js';
@@ -450,7 +450,7 @@ export async function renderAppPage(id) {
 
 export function openAppPanel(a, onChange, page = null) {
   const root = $('#panel-root');
-  const close = () => { document.removeEventListener('keydown', onKey, true); if (page) navigate({ view: 'apps' }); else fill(root); };
+  const close = () => { document.removeEventListener('keydown', onKey, true); if (page) navigate(navParent().route); else fill(root); };
   const onKey = e => {
     if (e.key !== 'Escape' || document.querySelector('.modal') || document.querySelector('.menu')) return;
     // Esc в поле карточки — отменить правку (поле обработает само) или просто выйти из поля, а не закрывать карточку

@@ -9,7 +9,7 @@ export const AUTO_ARCHIVE = [0, 7, 14, 30, 60, 90];
 export const HIDE_DONE = [[0, 'Всегда показывать'], [1, 'Сутки'], [3, '3 дня'], [7, 'Неделю'], [14, '2 недели'], [30, 'Месяц']];
 /** Тип колонки: определяет цвет по умолчанию и смысл («готово» — для прогресса и просрочек). */
 export const KINDS = ['todo', 'progress', 'done'];
-export const KIND_LABELS = { todo: 'Не начато', progress: 'В работе', done: 'Готово' };
+export const KIND_LABELS = { todo: 'Ожидает', progress: 'В процессе', done: 'Готово' };
 export const KIND_COLORS = { todo: 'var(--st-todo)', progress: 'var(--st-progress)', done: 'var(--st-done)' };
 /** Тип карточки: запрос CEO по приложению (метка на доске); этапы и обычные задачи — без метки. */
 export const TASK_KINDS = {
@@ -109,7 +109,7 @@ export const columns = () => (S.board ? S.board.unit.settings.columns : []);
 /** Колонка по id; неизвестный статус = первая колонка (как на сервере). */
 export const colById = id => columns().find(c => c.id === id) || columns()[0];
 export const colName = s => { const c = colById(s); return c ? c.name : s; };
-export const colColor = c => (c ? c.color || KIND_COLORS[c.kind] : KIND_COLORS.todo);
+export const colColor = c => (c ? c.color || (c.id === 'review' ? '#764BF2' : KIND_COLORS[c.kind]) : KIND_COLORS.todo);
 export const taskDone = t => (t.statusKind ? t.statusKind === 'done' : (colById(t.status) || {}).kind === 'done');
 
 export const LINK_KINDS = { figma: 'Figma', github: 'GitHub', drive: 'Google Drive', meta: 'Metadata', link: 'Ссылка' };

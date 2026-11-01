@@ -61,27 +61,34 @@ export function routeUrl(r) {
   return r.view === 'my' ? '#/my' : r.view === 'myboard' ? '#/board' : r.view === 'apps' ? '#/apps' : r.view === 'dev' ? '#/dev' : r.view === 'analytics' ? '#/analytics' + (r.tile ? '/' + r.tile : '') : '#/';
 }
 
+// откуда открыли карточку приложения: «Назад» ведёт туда, а не всегда в список
+let appFrom = null;
+const LABELS = { home: 'Дашборд', apps: 'Приложения', analytics: 'Аналитика', my: 'Мои задачи', myboard: 'Моя доска', settings: 'Настройки' };
+
 export function navigate(r, { replace = false } = {}) {
   if (r.unit && !r.mode) r = { ...r, mode: 'board' };
+  if (r.view === 'app' && S.route && S.route.view !== 'app') appFrom = S.route;
   S.route = r;
   history[replace ? 'replaceState' : 'pushState'](null, '', routeUrl(r));
   render();
 }
 
 /**
- * Иерархия экранов: Дашборд → (Приложения | Аналитика | Мои задачи | Моя доска | Настройки | Юнит) → раздел юнита / команда.
- * Родитель — это «на уровень выше», а не прошлая страница из истории. null — корень.
+ * «Назад» — только с экрана, куда зашли внутрь раздела: приложение, плитка аналитики, команда юнита, настройки.
+ * Разделы сайдбара и вкладки юнита переключаются сами, кнопка там не нужна. Родитель — уровень выше, а не история. null — кнопки нет.
  */
 export function navParent(r = S.route) {
   if (r.unit) {
+    if (!r.team) return null;
     const u = S.units.find(x => x.id === r.unit);
-    const root = seesApps() ? 'overview' : 'board';
-    if (r.team || r.mode !== root) return { route: { unit: r.unit, mode: root }, label: u ? u.name : 'Юнит' };
-    return { route: { view: 'home' }, label: 'Дашборд' };
+    return { route: { unit: r.unit, mode: seesApps() ? 'overview' : 'board' }, label: u ? u.name : 'Юнит' };
   }
-  if (r.view === 'app') return { route: { view: 'apps' }, label: 'Приложения' };
+  if (r.view === 'app') {
+    const from = appFrom || { view: 'apps' };
+    return { route: from, label: from.unit ? (S.units.find(x => x.id === from.unit) || {}).name || 'Юнит' : LABELS[from.view] || 'Назад' };
+  }
   if (r.view === 'analytics' && r.tile) return { route: { view: 'analytics' }, label: 'Аналитика' };
-  if (r.view && r.view !== 'home') return { route: { view: 'home' }, label: 'Дашборд' };
+  if (r.view === 'settings') return { route: { view: 'home' }, label: 'Дашборд' };
   return null;
 }
 

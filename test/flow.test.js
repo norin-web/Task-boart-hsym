@@ -95,6 +95,9 @@ test('New App: CEO → PM юнита → этапы по флоу → блоки
   assert.equal(imported.request, null);
   await api.as(ceo, () => api('updateApp', { id: imported.app.id, archived: true }));
 
+  // «Поставил я»: CEO видит свой запрос, этапы разбивки сюда не попадают
+  assert.ok((await api.as(ceo, () => api('queryTasks', { authorId: ceo.id, limit: 500 }))).some(t => t.id === request.id));
+
   // неподходящий исполнитель: отказ до создания этапов, запрос не разложен наполовину
   const flow = (await api.as(pm, () => api('getFlows', { unitId: request.unitId }))).new_app;
   const wrong = flow.map(s => ({ ...s, assigneeId: s.release ? '' : lead.id, dueDate: '' }));

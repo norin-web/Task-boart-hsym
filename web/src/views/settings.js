@@ -274,7 +274,7 @@ export function columnsEditor(initial) {
         },
       }),
       h('input', { class: 'inp', value: c.name, maxlength: 40, placeholder: 'Название', oninput: e => { c.name = e.target.value; } }),
-      h('select', { class: 'inp', value: c.kind, onchange: e => { c.kind = e.target.value; draw(); } }, KINDS.map(k => h('option', { value: k }, KIND_LABELS[k]))),
+      h('select', { class: 'inp', value: c.kind, onchange: e => { c.kind = e.target.value; draw(); } }, KINDS.map(k => h('option', { value: k }, c.id === 'review' && k === 'progress' ? 'Ревью' : KIND_LABELS[k]))),
       h('button', { class: 'icon-btn sm', title: 'Удалить колонку', disabled: cols.length === 1, onclick: () => { cols.splice(i, 1); draw(); } }, icon('x', 14)))));
     if (sortable) sortable.destroy();
     // порядок — перетаскиванием за ручку

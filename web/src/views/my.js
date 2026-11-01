@@ -1,25 +1,36 @@
-import { S, todayStr, dueInfo, KIND_COLORS, deptById, ACCESS_LABELS, LS, plural, isStaff } from '../state.js';
-import { $, h, icon, topbar, showErr, fill, statusIcon, emptyBlock, skeleton } from '../ui.js';
+import { S, todayStr, dueInfo, KIND_COLORS, deptById, ACCESS_LABELS, LS, plural, isStaff, personById } from '../state.js';
+import { $, h, icon, avatar, topbar, showErr, fill, statusIcon, emptyBlock, skeleton } from '../ui.js';
 import { call } from '../api.js';
 import { currentView, taskLink, link } from '../router.js';
 
 let showDone = false;
 let query = '';
+// чьи задачи: «На мне» или «Поставил я» (следить за ходом поставленных)
+let whose = 'mine';
+const empty = () => (whose === 'set'
+  ? emptyBlock('Вы пока не ставили задач', { ic: 'list', sub: 'Здесь видно ход задач, которые вы поставили другим' })
+  : emptyBlock('На вас нет задач', { ic: 'list', sub: 'Когда вас назначат исполнителем, задачи появятся здесь' }));
 
 export async function renderMy() {
   const page = h('div', { class: 'page' }, skeleton());
   fill($('#main'), topbar([h('h1', null, 'Мои задачи')],
-    [isStaff() && h('button', { class: 'btn primary', onclick: () => import('./task.js').then(m => m.openCreateTask()) }, 'Задача')]),
+    [isStaff() && h('button', { class: 'btn primary', onclick: () => import('./task.js').then(m => m.openCreateTask({ onCreated: reload })) }, 'Задача')]),
   h('div', { class: 'view-body' }, page));
 
+  whose = isStaff() ? LS.get('myWhose', 'mine') : 'mine';
+  const fetchTasks = () => (whose === 'set' ? call('queryTasks', { authorId: S.meId, limit: 500 }) : loadMyTasks());
   let tasks;
   try {
-    tasks = await loadMyTasks();
+    tasks = await fetchTasks();
   } catch (e) {
     showErr(e);
     return;
   }
   if (currentView() !== 'my') return;
+  async function reload() {
+    try { tasks = await fetchTasks(); } catch (e) { return showErr(e); }
+    if (currentView() === 'my') drawList();
+  }
 
   // Вид (по юнитам / по статусу) и «показывать готовые» запоминаем
   let view = LS.get('myView', 'units');
@@ -30,14 +41,19 @@ export async function renderMy() {
     const shown = q ? tasks.filter(t => (t.title + ' ' + t.key).toLowerCase().includes(q)) : tasks;
     fill(list, view === 'units' ? unitGroups(shown) : taskGroups(shown));
   };
+  const whoseSeg = isStaff() && h('div', { class: 'seg my-whose' });
+  const drawWhose = () => whoseSeg && fill(whoseSeg, [['mine', 'На мне'], ['set', 'Поставил я']].map(([v, t]) =>
+    h('button', { class: whose === v ? 'on' : '', onclick: () => { whose = v; LS.set('myWhose', v); drawWhose(); reload(); } }, t)));
+  drawWhose();
   const controls = h('div', { class: 'my-controls' },
+    whoseSeg,
     h('label', { class: 'my-search' }, icon('search', 15),
       h('input', { type: 'search', placeholder: 'Поиск по задачам', value: query, oninput: e => { query = e.target.value; drawList(); } })),
-    h('div', { class: 'seg' }),
+    h('div', { class: 'seg my-view' }),
     h('button', { class: 'my-toggle', role: 'switch', 'aria-checked': String(showDone), onclick: e => {
       showDone = !showDone; LS.set('myShowDone', showDone); e.currentTarget.setAttribute('aria-checked', String(showDone)); drawList();
     } }, h('span', { class: 'sw' }), 'Показывать готовые'));
-  const drawSeg = () => fill(controls.querySelector('.seg'),
+  const drawSeg = () => fill(controls.querySelector('.my-view'),
     [['units', 'По юнитам', 'layers'], ['status', 'По статусу', 'progress']].map(([v, t, ic]) =>
       h('button', { class: view === v ? 'on' : '', onclick: () => { view = v; LS.set('myView', v); drawSeg(); drawList(); } }, icon(ic, 14), t)));
   drawSeg();
@@ -81,7 +97,7 @@ export function unitGroups(tasks) {
         h('span', { class: 'spacer' }),
         h('span', { class: 'count' }, items.length + ' ' + plural(items.length, ['задача', 'задачи', 'задач']))),
       h('div', { class: 'rows' }, items.map(t => row(t, { unit: false, done: t.statusKind === 'done' }))));
-  }) : emptyBlock('На вас нет задач', { ic: 'list', sub: 'Когда вас назначат исполнителем, задачи появятся здесь' }));
+  }) : empty());
   draw();
   return box;
 }
@@ -108,7 +124,7 @@ export function taskGroups(tasks) {
           h('span', { class: 'dot', style: { background: g.color } }), g.title, h('span', { class: 'count' }, g.items.length),
           g.collapsible && h('span', { class: 'muted', style: { fontWeight: 400 } }, showDone ? '— скрыть' : '— показать')),
         (!g.collapsible || showDone) && h('div', { class: 'rows' }, g.items.map(row))))
-      : emptyBlock('На вас нет задач', { ic: 'list', sub: 'Когда вас назначат исполнителем, задачи появятся здесь' }));
+      : empty());
   draw();
   return box;
 }
@@ -124,6 +140,7 @@ function row(t, { unit = true, done = false } = {}) {
     h('span', { class: 'trow-status' }, h('span', { class: 'trow-chip' }, t.statusName)),
     h('span', { class: 'trow-due' + (late ? ' danger-text' : due ? '' : ' muted'), title: due ? due.hint : '' },
       due ? [icon('calendar', 14), due.text] : 'Без срока'),
+    whose === 'set' && avatar(personById(t.assigneeId), 'sm'),
     unit && h('span', { class: 'muted trow-unit' }, t.unit.name));
 }
 

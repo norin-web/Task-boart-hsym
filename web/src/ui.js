@@ -401,7 +401,11 @@ export function colorPicker(initial, { auto = false, autoColor = '', onChange } 
     PALETTE.map(c => h('button', {
       type: 'button', class: 'swatch' + (c === value ? ' on' : ''), style: { background: c }, title: c,
       onclick: () => pick(c),
-    })));
+    })),
+    // свой цвет: кружок «+», выбранный показывается вместо плюса
+    h('label', { class: 'swatch add' + (value && !PALETTE.includes(value) ? ' on' : ''), title: 'Свой цвет', style: value && !PALETTE.includes(value) ? { background: value } : {} },
+      !(value && !PALETTE.includes(value)) && icon('plus', 14),
+      h('input', { type: 'color', value: /^#[0-9a-f]{6}$/i.test(value || '') ? value : '#764BF2', 'aria-label': 'Свой цвет', onchange: e => pick(e.target.value) })));
   draw();
   return { el, value: () => value };
 }

@@ -1846,3 +1846,15 @@ body { letter-spacing: -.01em; }
 /* P17: у PM поля карточки на всю ширину */
 .an-grid.auto-fields.one { grid-template-columns: minmax(0, 1fr); }
 
+/* свой цвет юнита: кружок «+» */
+.swatch.add { position: relative; display: inline-flex; align-items: center; justify-content: center; border: 1.5px dashed var(--border-strong); color: var(--muted); cursor: pointer; overflow: hidden; }
+.swatch.add.on { border-style: solid; }
+.swatch.add input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+
+/* исполнитель с аватаром в полях окна: имя не под аватаром */
+.modal .sel-av > .avatar { left: 12px; width: 24px; height: 24px; }
+.modal .sel-av > .avatar + select.inp { padding-left: 44px; }
+
+/* без «Назад» шапка раздела той же высоты */
+#main:has(.apps-page) .topbar { min-height: 44px; }
+

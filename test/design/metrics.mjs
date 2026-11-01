@@ -38,4 +38,10 @@ export const METRICS = [
   { screen: 'C07', checks: [{ sel: '.fl-row', prop: 'height', want: 56 }, { sel: '.fl-row .inp', prop: 'height', want: 36 }, { sel: '.fl-row select.inp', prop: 'width', want: 200 }] },
   { screen: 'P14', checks: [{ sel: '.fl-row', prop: 'height', want: 56 }, { sel: '.fl-row select.inp', prop: 'width', want: 200 }] },
   { screen: 'P09', checks: [{ sel: '.analytics-page section:has(.kpi-table) h2', prop: 'fontSize', want: '16px' }, { sel: '.analytics-page section:has(.kpi-table) h2', prop: 'fontWeight', want: '600' }] },
+  { screen: 'P13', checks: [{ sel: '.unit-set .colors .swatch.add', prop: 'width', want: 28 }, { sel: '#main', noText: 'Удалить юнит', prop: 'text', want: 'есть' }] },
+  { screen: 'B01', checks: [{ sel: '.topbar .back-btn', prop: 'display', want: null, absent: true }] },
+  { screen: 'A09', checks: [{ sel: '.topbar .back-btn', prop: 'display', want: null, absent: true }] },
+  { screen: 'C02', checks: [{ sel: '.topbar .back-btn', prop: 'display', want: null, absent: true }] },
+  { screen: 'E02', checks: [{ sel: '.topbar .back-btn', prop: 'display', want: null, absent: true }, { sel: '.my-whose button.on', prop: 'height', want: 32 }] },
+  { screen: 'B05', checks: [{ sel: '.topbar .back-btn', prop: 'width', want: 44 }] },
 ];
