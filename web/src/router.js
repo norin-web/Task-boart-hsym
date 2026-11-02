@@ -10,7 +10,7 @@
  *   #/u/:unit[/overview|/apps|/list|/team|/settings][?task=:id] — вкладки юнита; без режима — доска
  *   #/u/:unit/t/:team[?task=:id] — доска команды в юните и кто чем занят
  */
-import { S, me, isStaff, isSuper, myAccess, loadBoardView, ceoDefault, seesApps, ownTeamsOnly } from './state.js';
+import { S, me, isStaff, isSuper, myAccess, loadBoardView, freshFilters, ceoDefault, seesApps, ownTeamsOnly } from './state.js';
 import { $, h, fill, icon, closeMenu, closeNav, showErr, setBack, skeleton } from './ui.js';
 import { renderSidebar } from './views/sidebar.js';
 import { renderHome } from './views/home.js';
@@ -31,11 +31,13 @@ import { openTask, closePanel, peekTask } from './views/task.js';
 
 let rendered = null;
 export const currentView = () => rendered;
+let renderedF = '';
 
 export function parseLocation() {
   const [rawPath, query] = location.hash.replace(/^#/, '').split('?');
   const path = (rawPath || '/').replace(/\/+$/, '') || '/';
   const task = new URLSearchParams(query || '').get('task');
+  const f = new URLSearchParams(query || '').get('f');  // что хотели увидеть: late | open | working
   if (path === '/my') return { view: 'my' };
   if (path === '/board') return { view: 'myboard' };
   if (path === '/apps') return { view: 'apps' };
@@ -50,12 +52,15 @@ export function parseLocation() {
   const t = /^\/u\/([\w-]+)\/t\/([\w-]+)$/.exec(path);
   if (t) return { unit: t[1], mode: 'board', team: t[2], task: task || null };
   const m = /^\/u\/([\w-]+)(?:\/(list|settings|overview|apps|team|timeline))?$/.exec(path);
-  if (m) return { unit: m[1], mode: m[2] || 'board', task: task || null };
+  if (m) return { unit: m[1], mode: m[2] || 'board', task: task || null, f: f || null };
   return { view: 'home' };
 }
 
 export function routeUrl(r) {
-  if (r.unit) return '#/u/' + r.unit + (r.team ? '/t/' + r.team : r.mode && r.mode !== 'board' ? '/' + r.mode : '') + (r.task ? '?task=' + encodeURIComponent(r.task) : '');
+  if (r.unit) {
+    const q = [r.task && 'task=' + encodeURIComponent(r.task), r.f && 'f=' + encodeURIComponent(r.f)].filter(Boolean).join('&');
+    return '#/u/' + r.unit + (r.team ? '/t/' + r.team : r.mode && r.mode !== 'board' ? '/' + r.mode : '') + (q ? '?' + q : '');
+  }
   if (r.view === 'settings' || r.view === 'admin') return '#/settings' + (r.tab ? '?tab=' + r.tab : '');
   if (r.view === 'app') return '#/app/' + r.id;
   return r.view === 'my' ? '#/my' : r.view === 'myboard' ? '#/board' : r.view === 'apps' ? '#/apps' : r.view === 'dev' ? '#/dev' : r.view === 'analytics' ? '#/analytics' + (r.tile ? '/' + r.tile : '') : '#/';
@@ -177,8 +182,11 @@ export async function render() {
   if (['overview', 'apps'].includes(r.mode) && !seesApps()) return navigate({ unit: r.unit, mode: 'board' }, { replace: true });
   if (ownTeamsOnly() && (r.mode === 'team' || (r.team && !((me() || {}).teamIds || []).includes(r.team)))) return navigate({ unit: r.unit, mode: 'board' }, { replace: true });
   const key = r.mode + ':' + r.unit + (r.team ? ':' + r.team : '');
-  if (rendered !== key) {
+  const fkey = r.f || '';  // фильтр из адреса не входит в ключ экрана (по ключу экраны сверяют, что страница не устарела)
+  if (rendered !== key || renderedF !== fkey) {
     rendered = key;
+    renderedF = fkey;
+    if (r.f) applyRouteFilter(r);
     document.title = S.board.unit.name + ' · Tasks';
     if (r.mode === 'settings') renderSettings(); else if (r.mode === 'overview') renderUnitPage();
     else if (r.mode === 'apps') renderApps({ unitId: r.unit }); else if (r.mode === 'team') renderUnitTeam(); else if (r.mode === 'timeline') renderTimeline(); else renderBoardView();
@@ -188,6 +196,17 @@ export async function render() {
   } else {
     closePanel();
   }
+}
+
+/** Переход с плитки («Просрочено», «Открытых задач», «В работе») открывает экран уже с нужным фильтром. */
+function applyRouteFilter(r) {
+  if (r.mode === 'list' || r.mode === 'board') {
+    S.filters = freshFilters();
+    if (r.f === 'late') S.filters.overdue = true;
+    if (r.f === 'open') S.filters.open = true;
+    S.fbMore = true;  // фильтры спрятаны под «Ещё фильтры» — раскрываем, чтобы чип был виден
+  }
+  if (r.mode === 'apps') S.appsHint = r.f;
 }
 
 const onLocation = () => {

@@ -125,7 +125,10 @@ export async function renderApps({ unitId = '' } = {}) {
   const chips = h('div', { class: 'feed-filters apps-chips' });
   const filterBtn = h('button', { class: 'btn', 'aria-haspopup': 'dialog', onclick: e => { e.stopPropagation(); filterMenu(e.currentTarget); } });
   const groupBtn = h('button', { class: 'btn ap-group-btn', 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); groupMenu(e.currentTarget); } });
-  const passes = a => (!f.statuses.length || f.statuses.includes(a.status))
+  let onlyWork = S.appsHint === 'working';  // пришли с плитки «В работе»: показываем только приложения с открытой работой
+  S.appsHint = null;
+  const passes = a => (!onlyWork || a.active > 0)
+    && (!f.statuses.length || f.statuses.includes(a.status))
     && (!f.prios.length || f.prios.includes(a.priority || ''))
     && (!f.pms.length || f.pms.includes(appPm(a)))
     && (!f.units.length || f.units.includes(a.unitId))
@@ -226,6 +229,7 @@ export async function renderApps({ unitId = '' } = {}) {
     const label = (key, id) => ((sections().find(x => x[0] === key) || [, , []])[2].find(o => o.id === id) || { label: id || '—' }).label;
     fill(chips,
       ['statuses', 'prios', 'pms', 'units', 'store'].flatMap(key => f[key].map(id => chip(label(key, id), drop(key, id)))),
+      onlyWork && chip('В работе', () => { onlyWork = false; drawList(); }),
       f.age > 0 && chip(`не трогали > ${f.age} дн.`, () => { f.age = 0; saveF(); drawList(); }),
       active() > 1 && h('button', { class: 'link-btn', onclick: () => apply({}) }, 'Сбросить всё'));
   };

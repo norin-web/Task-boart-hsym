@@ -150,13 +150,13 @@ function filterRest() {
 
   const optFields = activeFields().filter(x => (x.type === 'select' || x.type === 'multiselect') && x.options.length);
   const optCount = f.opts.length;
-  const active = !!(f.q || f.assignees.length || f.depts.length || f.overdue || f.archived || optCount || f.app);
+  const active = !!(f.q || f.assignees.length || f.depts.length || f.overdue || f.open || f.archived || optCount || f.app);
   // приложения, по которым есть задачи на этой доске
   const apps = [...new Set(S.board.tasks.filter(t => t.appId && !t.archived).map(t => t.appId))].map(appById).filter(Boolean)
     .sort((a, b) => a.name.localeCompare(b.name));
   const appNow = appById(f.app);
 
-  const extraN = f.assignees.length + (f.overdue ? 1 : 0) + (f.archived ? 1 : 0) + optCount + (f.app ? 1 : 0) + (S.lanes ? 1 : 0);
+  const extraN = f.assignees.length + (f.overdue ? 1 : 0) + (f.open ? 1 : 0) + (f.archived ? 1 : 0) + optCount + (f.app ? 1 : 0) + (S.lanes ? 1 : 0);
   const moreOpen = !!S.fbMore;
   return [
     depts,
@@ -176,6 +176,7 @@ function filterRest() {
         ...apps.map(a => ({ label: a.name, icon: f.app === a.id ? 'check' : 'app', action: () => set('app', a.id) }))]); },
     }, icon('app', 13), appNow ? appNow.name : 'Приложение'),
     !B.dueDate.hidden && h('button', { class: 'fchip' + (f.overdue ? ' on' : ''), onclick: () => set('overdue', !f.overdue) }, icon('alert', 13), 'Просроченные'),
+    h('button', { class: 'fchip' + (f.open ? ' on' : ''), title: 'Скрыть выполненные', onclick: () => set('open', !f.open) }, icon('circle', 13), 'Открытые'),
     h('button', { class: 'fchip' + (f.archived ? ' on' : ''), onclick: () => set('archived', !f.archived) }, icon('archive', 13), 'Архив'),
     S.route.mode === 'board' && isStaff() && !B.department.hidden && h('button', {
       class: 'fchip' + (S.lanes === true ? ' on' : ''), title: 'Разложить задачи по позициям',
@@ -258,6 +259,7 @@ export function filterTasks(opts = {}) {
     if (f.assignees.length && !f.assignees.includes(t.assigneeId || NO_DEPT)) return false;
     if (f.depts.length && !f.depts.includes(t.departmentId)) return false;
     if (f.overdue && !isOverdue(t, today)) return false;
+    if (f.open && taskDone(t)) return false;
     if (f.app && t.appId !== f.app) return false;
     for (const fid in groups) {
       const v = t.fields[fid];

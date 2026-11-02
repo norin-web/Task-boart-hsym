@@ -35,7 +35,7 @@ export async function renderUnitPage() {
     const open = S.board.tasks.filter(t => !t.archived && !taskDone(t));
     const today = todayStr();
     const late = open.filter(t => t.dueDate && t.dueDate < today).length;
-    const stat = (n, label, mode, tone, spark) => link({ unit: u.id, mode }, { class: 'cs' + (tone ? ' ' + tone : '') }, h('div', { class: 'cs-n' }, n), h('div', { class: 'cs-label' }, label), spark);
+    const stat = (n, label, mode, tone, spark, f) => link({ unit: u.id, mode, f }, { class: 'cs' + (tone ? ' ' + tone : '') }, h('div', { class: 'cs-n' }, n), h('div', { class: 'cs-label' }, label), spark);
 
     fill(actions,
       isSuper() && h('button', {
@@ -47,9 +47,9 @@ export async function renderUnitPage() {
     fill(page,
       h('div', { class: 'cs-row unit-stats' },
         stat(apps.length, 'Приложения', 'apps', '', sparkline(openSeries(apps.map(a => ({ createdAt: a.createdAt }))))),
-        stat(apps.filter(a => a.active > 0).length, 'В работе', 'apps', '', sparkline(openSeries(apps.flatMap(a => a.requests)))),
-        stat(open.length, 'Открытых задач', 'list', '', sparkline(openSeries(S.board.tasks.filter(t => !t.archived).map(t => ({ createdAt: t.createdAt, doneAt: t.doneAt }))))),
-        stat(late, 'Просрочено', 'list', late ? 'danger' : '', sparkline(Array(14).fill(late)))),
+        stat(apps.filter(a => a.active > 0).length, 'В работе', 'apps', '', sparkline(openSeries(apps.flatMap(a => a.requests))), 'working'),
+        stat(open.length, 'Открытых задач', 'list', '', sparkline(openSeries(S.board.tasks.filter(t => !t.archived).map(t => ({ createdAt: t.createdAt, doneAt: t.doneAt })))), 'open'),
+        stat(late, 'Просрочено', 'list', late ? 'danger' : '', sparkline(Array(14).fill(late)), 'late')),
       h('div', { class: 'home-grid' },
         h('div', { class: 'home-col' }, inProgress(ud, load, { brief: true }), appsBrief(u, apps, load), attention(ud, load, { two: true })),
         h('div', { class: 'home-col' }, tasksByColumn(u, open), teamBrief(u), owner(u, load), recent(ud, load, { empty: 'За 30 дней статусы приложений юнита не менялись' }))));

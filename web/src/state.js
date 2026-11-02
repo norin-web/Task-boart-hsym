@@ -36,7 +36,7 @@ export function saveBoardView(unitId) {
   all[boardViewKey(unitId)] = { filters, lanes: S.lanes };
   LS.set('boardView', all);
 }
-export const freshFilters = () => ({ q: '', assignees: [], depts: [], overdue: false, archived: false, opts: [], app: '' });
+export const freshFilters = () => ({ q: '', assignees: [], depts: [], overdue: false, open: false, archived: false, opts: [], app: '' });
 
 export const S = {
   units: [],
