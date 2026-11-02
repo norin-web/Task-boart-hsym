@@ -2488,3 +2488,9 @@ table.tasks.unit-list .chips .chip::before { display: none; }
 .modal.rh-dlg .modal-foot .btn:not(.primary), .modal.rs-dlg .modal-foot .btn:not(.primary), .modal.rc-dlg .modal-foot .btn:not(.primary), .modal.wp-dlg .modal-foot .btn:not(.primary) { height: 40px; padding: 0 18px; background: var(--surface-3); }
 .modal.dlg.rs-dlg .col-edit-row.rs-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) 104px auto 14px; gap: 8px; }
 .modal.dlg.rs-dlg .rs-row input.inp { width: 100%; }
+
+/* «Загрузка позиции»: классы совпадают с таймлайном, его размеры здесь не действуют */
+.tl-list .tl-row { position: static; height: auto; }
+.tl-list .tl-row + .tl-row { border-top: 0; }
+.tl-list .tl-bar { position: static; top: auto; display: block; width: 100%; min-width: 0; height: 6px; padding: 0; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.tl-list .tl-bar > div { height: 100%; }
