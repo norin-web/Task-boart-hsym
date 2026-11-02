@@ -704,3 +704,14 @@ test('лид после «Раздать» видит розданное на с
   assert.equal(d2.lead.reviews.length, 1);
   assert.equal(d2.lead.split[0].parts.filter(c => c.inReview).length, 1);
 });
+
+
+test('юнит создаётся сразу с ревьюерами по позициям', async () => {
+  const api = await setup();
+  const { designer } = await team(api);
+  const u = await api('createUnit', { name: 'Новый', review: { byPosition: { d_design: designer.id }, default: designer.id } });
+  const st = (await api('getBoard', { unitId: u.id })).unit.settings;
+  assert.equal(st.review.byPosition.d_design, designer.id);
+  assert.equal(st.review.default, designer.id);
+  assert.ok(st.review.column);
+});

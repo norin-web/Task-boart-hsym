@@ -1,4 +1,4 @@
-import { S, PALETTE, suggestKey, isSuper } from '../state.js';
+import { S, PALETTE, suggestKey, isSuper, activeDepts } from '../state.js';
 import { h, field, menu, modal, confirmDlg, promptDlg, toast, showErr, colorPicker } from '../ui.js';
 import { send } from '../api.js';
 import { navigate, rerender } from '../router.js';
@@ -73,6 +73,14 @@ export function openCreateUnit(onCreated) {
   const copy = h('select', { class: 'inp' },
     h('option', { value: '' }, 'Стандартная схема (поле «Приоритет»)'),
     S.units.map(u => h('option', { value: u.id }, `Как в «${u.name}»`)));
+  // ревьюеры по позициям: дизайн — …, разработка — …; по умолчанию — для остальных
+  const people = S.people.filter(p => p.active).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  const who = empty => h('select', { class: 'inp' }, h('option', { value: '' }, empty), people.map(p => h('option', { value: p.id }, p.name)));
+  const byDept = activeDepts().map(d => ({ d, sel: who('— по умолчанию —') }));
+  const dflt = who('— без ревьюера —');
+  const reviewBox = h('div', { class: 'rv-list' },
+    byDept.map(({ d, sel }) => h('div', { class: 'rv-row' }, h('span', { class: 'rv-label' }, h('span', { class: 'dot', style: { background: d.color } }), d.name), sel)),
+    h('div', { class: 'rv-row rv-default' }, h('span', { class: 'rv-label' }, 'По умолчанию'), dflt));
 
   modal({
     title: 'Новый юнит',
@@ -81,6 +89,7 @@ export function openCreateUnit(onCreated) {
       field('Цвет', color.el),
       field('Описание', desc),
       field('Поля карточки', copy, 'Можно скопировать настройки полей и колонок из существующего юнита.'),
+      field('Ревьюеры по позициям', reviewBox, 'Задача, пришедшая в ревью, станет задачей этого человека. Можно изменить позже в настройках юнита.'),
     ],
     wide: true,
     actions: [
@@ -88,7 +97,8 @@ export function openCreateUnit(onCreated) {
       {
         label: 'Создать юнит', primary: true, action: async close => {
           if (!name.value.trim()) { name.focus(); return; }
-          const u = await send('createUnit', { name: name.value, key: key.value, color: color.value(), description: desc.value, copyFieldsFrom: copy.value });
+          const u = await send('createUnit', { name: name.value, key: key.value, color: color.value(), description: desc.value, copyFieldsFrom: copy.value,
+            review: { byPosition: Object.fromEntries(byDept.filter(x => x.sel.value).map(x => [x.d.id, x.sel.value])), default: dflt.value } });
           S.units.push(u);
           close();
           renderSidebar();

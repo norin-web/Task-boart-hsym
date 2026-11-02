@@ -1032,6 +1032,12 @@ export function createBackend(db, opts = {}) {
         settings = storedSettings(src.settings);
         fields = (await ownFields(src.id)).filter(f => !f.archived);
       }
+      // ревьюеры по позициям задаются сразу при создании: без них задачи не уходят на ревью конкретному человеку
+      if (p.review && typeof p.review === 'object') {
+        const old = settings.review || {};
+        const byPosition = { ...(old.byPosition || {}), ...(p.review.byPosition || {}) };
+        settings = { ...settings, review: reviewSettings({ column: old.column, byPosition, default: p.review.default || old.default }, settings.columns) };
+      }
       const ts = now();
       const unit = {
         id: uid('u'), name, key, color: color(p.color, PALETTE[count % PALETTE.length]),
