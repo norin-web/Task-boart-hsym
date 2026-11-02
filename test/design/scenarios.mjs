@@ -86,13 +86,13 @@ const go = async hash => {
 const reloadSafe = async () => {
   await page.evaluate(async () => { try { const { call } = await import('/src/api.js'); await call('whoami', {}); } catch { /* ещё не вошли */ } }).catch(() => {});
   await page.waitForTimeout(300);
-  for (let i = 0; i < 3; i++) {
-    await page.reload();
+  for (let i = 0; i < 4; i++) {
+    if (i < 2) await page.reload(); else await page.goto(URL_ + '#/settings');
     try { await page.waitForFunction(() => document.querySelector('#sidebar .nav-item'), null, { timeout: 25000 }); return; } catch {
       if (process.env.DIAG) { await page.screenshot({ path: process.env.DIAG + '/hang-' + i + '.png' }); console.log('ЗАВИСЛО', i, (await page.evaluate(() => document.body.innerText.slice(0, 300)).catch(() => '?')).replace(/\n/g, ' / '), '| консоль:', diag.slice(-8).join(' || ')); }
     }
   }
-  throw new Error('страница не загрузилась после трёх попыток');
+  throw new Error('страница не загрузилась после четырёх попыток');
 };
 
 // вход за роль листа: экраны без `as` — за CEO
@@ -163,7 +163,11 @@ const must = (ok, text) => { if (!ok) issues.push({ where: 'проверка', w
 
 /** Снимок экрана и автопроверка вёрстки: что видно человеку на этом шаге. */
 async function audit(name, { mobile = false } = {}) {
-  if (mobile) await page.setViewportSize({ width: 390, height: 844 });
+  if (mobile) {
+    await page.setViewportSize({ width: 390, height: 844 });
+    // как на телефоне: экран отрисован под узкую ширину, а не сжат после широкой (кроме открытых окон)
+    if (!(await page.locator('#panel-root > *, #modal-root > *').count())) await go(await page.evaluate(() => location.hash));
+  }
   await page.waitForTimeout(500);
   const file = `${String(++step).padStart(3, '0')}-${name.replace(/[^\p{L}\p{N}]+/gu, '-')}${mobile ? '-m' : ''}.png`;
   await page.screenshot({ path: path.join(SHOTS, file), fullPage: !mobile });
@@ -199,6 +203,12 @@ async function audit(name, { mobile = false } = {}) {
 const open = async hash => { await go(hash); await page.waitForTimeout(700); };
 const peek = async t => { await page.evaluate(async t => { const { peekTask } = await import('/src/views/task.js'); await peekTask(t.unitId, t.id); }, t); await page.waitForTimeout(900); };
 const closePanels = () => page.evaluate(() => { document.querySelectorAll('#panel-root > *, #modal-root > *, .menu').forEach(e => e.remove()); });
+/* ---- нажатия как у человека ---- */
+const ui = async (what, fn) => { try { await fn(); return true; } catch (e) { must(false, `не удалось нажать: ${what} — ${String(e.message).split('\n')[0].slice(0, 120)}`); return false; } };
+const statusUI = (colId, what) => ui(what, async () => { await page.selectOption('.panel-side .status-wrap select', colId, { timeout: 5000 }); await page.waitForTimeout(900); });
+const approveUI = what => ui(what, async () => { await page.click('.review-bar button.rv-ok, .review-bar button:has-text("Аппрув")', { timeout: 5000 }); await page.waitForTimeout(1200); });
+const commentUI = (text, what) => ui(what, async () => { await page.fill('.composer textarea', text, { timeout: 5000 }); await page.click('.composer button:has-text("Отправить")'); await page.waitForTimeout(800); });
+const statusOf = async id => (await api('queryTasks', { ids: [id] }))[0];
 const notes = async () => (await api('getNotifications', {})).map(n => n.kind + ':' + n.title);
 const units = await page.evaluate(async () => { const { S } = await import('/src/state.js'); return Object.fromEntries(S.units.map(u => [u.name, u])); });
 const MVP = units.MVP;
@@ -210,7 +220,7 @@ await page.setViewportSize({ width: 1440, height: 900 });
 // CEO работает в полном режиме — как владелец; в обзорном нет «Моих задач» и досок
 await page.evaluate(async id => { const { send } = await import('/src/api.js'); await send('setMyPrefs', { personId: id, prefs: { ceoMode: 'admin' } }); }, P('Анна Смирнова').id);
 /** Сценарий целиком: упал шаг — записываем и идём к следующему сценарию. */
-const scenario = async (title, fn) => { say(title); try { await fn(); } catch (e) { must(false, 'сценарий прерван: ' + String(e.message).split('\n')[0].slice(0, 160)); await closePanels().catch(() => {}); } };
+const scenario = async (title, fn) => { if (process.env.ONLY && !process.env.ONLY.split(',').some(n => title.startsWith(n + '.'))) return; say(title); try { await fn(); } catch (e) { must(false, 'сценарий прерван: ' + String(e.message).split('\n')[0].slice(0, 160)); await closePanels().catch(() => {}); } };
 
 /* ---------- 1. CEO поручает PM исследование ключей ---------- */
 await scenario('1. CEO поручает PM исследование ключей для приложения', async () => {
@@ -233,16 +243,19 @@ must((await notes()).some(n => /^assigned:Исследование ключей/
 await open('#/'); await audit('PM · дашборд с новой задачей');
 await open('#/my'); await audit('PM · Мои задачи');
 await peek(keys); await audit('PM · карточка задачи');
+await statusUI(col('progress'), 'PM: статус «В работе» в карточке');
+await commentUI('Взяла, к пятнице будет таблица.', 'PM: комментарий');
+must((await api('getTaskExtras', { taskId: keys.id })).comments.some(c => /к пятнице/.test(c.text)), 'комментарий сохранился');
+await statusUI(REVIEW, 'PM: статус «В ревью» в карточке');
+await audit('PM · карточка после отправки на ревью');
 await closePanels();
-await api('updateTask', { id: keys.id, patch: { status: col('progress') } });
-await api('addComment', { taskId: keys.id, text: 'Взяла, к пятнице будет таблица.' });
-await api('updateTask', { id: keys.id, patch: { status: REVIEW } });
+must((await statusOf(keys.id) || {}).statusKind !== 'todo', 'статус сменился из карточки');
 await as('Анна Смирнова');
 must((await notes()).some(n => /^review:Исследование ключей/.test(n)), 'CEO получил «на ревью»');
 await open('#/'); await audit('CEO · дашборд, задача на ревью');
 await peek(keys); await audit('CEO · карточка на ревью');
+await approveUI('CEO: «Аппрув» в карточке');
 await closePanels();
-await api('reviewDecision', { taskId: keys.id, approve: true });
 await as('Екатерина Соколова');
 must((await notes()).some(n => /^approved:Исследование ключей/.test(n)), 'PM получил «принято»');
 await as('Анна Смирнова');
@@ -295,7 +308,10 @@ async function finish(stage, who) {
   if (t.step === 'ios') await api('saveDevForm', { taskId: t.id, answers: DEV });
   if (t.statusKind === 'todo') await api('updateTask', { id: t.id, patch: { status: col('progress') } });
   await open('#/'); await audit(`${who} · дашборд с этапом «${t.title.split(' · ')[0]}»`);
-  await api('updateTask', { id: t.id, patch: { status: REVIEW } });
+  const hero = page.locator('.fc-hero', { hasText: t.title.split(' · ')[0] });
+  if (await hero.count()) await ui(`${who}: «Отдать на ревью» на дашборде`, async () => { await hero.locator('button:has-text("Отдать на ревью")').click({ timeout: 5000 }); await page.waitForTimeout(1200); });
+  else { await peek(t); await statusUI(REVIEW, `${who}: статус «В ревью» в карточке`); await closePanels(); }
+  if ((await statusOf(t.id) || {}).status !== REVIEW && !(await statusOf(t.id) || {}).reviewFrom) { must(false, `${who}: «${t.title.split(' · ')[0]}» не ушла на ревью через интерфейс`); await api('updateTask', { id: t.id, patch: { status: REVIEW } }); }
   const after = (await api('queryTasks', { ids: [t.id] }))[0];
   const reviewer = people.find(p => p.id === after.assigneeId);
   must(!!reviewer && reviewer.name !== who, `«${t.title.split(' · ')[0]}» ушёл на ревью к ${reviewer ? reviewer.name : '—'}`);
@@ -303,14 +319,26 @@ async function finish(stage, who) {
   await as(reviewer.name);
   must((await notes()).some(n => n.startsWith('review:')), `${reviewer.name} получил уведомление о ревью`);
   await open('#/'); await audit(`${reviewer.name} · ревью «${t.title.split(' · ')[0]}»`);
-  await api('reviewDecision', { taskId: t.id, approve: true });
+  await peek(t); await approveUI(`${reviewer.name}: «Аппрув» в карточке`); await closePanels();
+  if ((await statusOf(t.id) || {}).statusKind !== 'done' && (await statusOf(t.id))) { const x = await statusOf(t.id); if (x.status === REVIEW) { must(false, `${reviewer.name}: «Аппрув» не закрыл «${t.title.split(' · ')[0]}»`); await api('reviewDecision', { taskId: t.id, approve: true }); } }
 }
 
 // дизайн: лид раздаёт часть дизайнеру
 await as('Мария Иванова');
 await peek(by.design); await audit('Lead дизайна · этап Дизайн');
 await closePanels();
-const parts = await api('splitTask', { taskId: by.design.id, items: [{ title: 'Онбординг', assigneeId: P('Юлия Павлова').id, dueDate: await addDays(2) }] });
+await peek(by.design);
+await ui('Lead: «Раздать» в карточке', async () => {
+  await page.waitForSelector('.quick-chip.primary', { state: 'attached', timeout: 5000 });
+  await page.evaluate(() => document.querySelector('.quick-chip.primary').click()); await page.waitForTimeout(500);
+  await page.fill('.sp-dlg .split-row input.inp', 'Онбординг');
+  await page.selectOption('.sp-dlg .split-row select.inp >> nth=0', P('Юлия Павлова').id);
+  await audit('Lead · окно Раздать заполнено');
+  await page.locator('.sp-dlg .btn.primary', { hasText: 'Раздать' }).last().click({ timeout: 5000 }); await page.waitForTimeout(1500);
+});
+await closePanels();
+let parts = (await api('queryTasks', { q: 'Онбординг', limit: 5 })).filter(x => x.parentId === by.design.id);
+if (!parts.length) { must(false, 'подзадача не создана через окно «Раздать»'); parts = await api('splitTask', { taskId: by.design.id, items: [{ title: 'Онбординг', assigneeId: P('Юлия Павлова').id, dueDate: await addDays(2) }] }); }
 await open('#/'); await audit('Lead · дашборд после «Раздать»');
 for (const part of parts) await finish(part, 'Юлия Павлова');
 await finish(by.design, 'Мария Иванова');
@@ -347,9 +375,10 @@ await api('saveReleaseValues', { taskId: by.release.id, values });
 const relTask = (await api('queryTasks', { ids: [by.release.id] }))[0];
 if ((relTask.checklist || []).length) await api('updateTask', { id: relTask.id, patch: { checklist: relTask.checklist.map(i => ({ ...i, done: true })) } });
 await peek(relTask); await audit('RM · карточка релиза готова к отправке');
+await ui('RM: «Отправить в Apple» в карточке', async () => { await page.click('.rl-actions button:has-text("Отправить в Apple")', { timeout: 5000 }); await page.waitForTimeout(1500); });
 await closePanels();
-await api('releaseStep', { taskId: by.release.id, action: 'submit' });
 const phase = async () => ((await api('getRelease', { taskId: by.release.id })).task.release || {}).phase || '';
+if (await phase() === '') { must(false, 'кнопка «Отправить в Apple» не отправила релиз'); await api('releaseStep', { taskId: by.release.id, action: 'submit' }); }
 must(await phase() === 'submitted', 'после «Отправить в Apple» релиз на ревью Apple');
 await open('#/'); await audit('RM · на ревью Apple');
 await peek(relTask);
@@ -369,9 +398,14 @@ if (fix) { await api('updateTask', { id: fix.id, patch: { status: REVIEW } }).ca
 await as('Сергей Волков');
 must(await phase() === '', 'PM закрыл задачу по реджекту — релиз вернулся в очередь RM');
 await open('#/'); await audit('RM · реджект исправлен, в очереди');
-await api('releaseStep', { taskId: by.release.id, action: 'resubmit' }).catch(e => must(false, 'отправить снова: ' + e.message.slice(0, 80)));
+await ui('RM: «Отправил в Apple» на дашборде после исправления', async () => { await page.locator('.rm-row', { hasText: 'Pulse Timer' }).locator('button:has-text("Отправил в Apple")').click({ timeout: 5000 }); await page.waitForTimeout(1500); });
+if (await phase() !== 'submitted') await api('releaseStep', { taskId: by.release.id, action: 'resubmit' }).catch(e => must(false, 'отправить снова: ' + e.message.slice(0, 80)));
 must(await phase() === 'submitted', 'после «Отправить снова» релиз снова на ревью Apple');
-await api('releaseStep', { taskId: by.release.id, action: 'live' }).catch(e => must(false, 'вышло в стор: ' + e.message.slice(0, 80)));
+await open('#/');
+await peek(relTask);
+await ui('RM: «Вышло в стор» в карточке релиза', async () => { await page.click('.rl-live-btn', { timeout: 5000 }); await page.waitForTimeout(1500); });
+await closePanels();
+if (await phase() !== 'live') await api('releaseStep', { taskId: by.release.id, action: 'live' }).catch(e => must(false, 'вышло в стор: ' + e.message.slice(0, 80)));
 must(await phase() === 'live', 'после «Вышло в стор» релиз в App Store');
 await open('#/'); await audit('RM · вышло в App Store');
 await page.evaluate(async () => { const { openReleaseHistory } = await import('/src/views/release.js'); openReleaseHistory(); }); await page.waitForTimeout(800);
@@ -398,6 +432,98 @@ await open('#/'); await audit('Lead iOS · дашборд');
 await as('Павел Орлов');
 await open('#/board'); await audit('ASO · моя доска');
 
+});
+
+/* ---------- 4. Руками: доска, поиск, колокольчик, окна создания ---------- */
+await scenario('4. Доска, поиск, колокольчик, окна', async () => {
+await as('Екатерина Соколова');
+const from = col('todo'), to = col('progress');
+await api('createTask', { unitId: MVP.id, title: 'Проверка перетаскивания', assigneeId: P('Екатерина Соколова').id, status: from });
+await open(`#/u/${MVP.id}`);
+const card = page.locator(`.col-list[data-status="${from}"] .card:not(.locked):not(.temp)`, { hasText: 'Проверка перетаскивания' }).first();
+const target = page.locator(`.col-list[data-status="${to}"]`).first();
+if (await card.count() && await target.count()) {
+  await card.scrollIntoViewIfNeeded(); await page.waitForTimeout(300);
+  const title = (await card.locator('.card-title').textContent()).trim();
+  const a = await card.boundingBox(), b = await target.boundingBox();
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2); await page.mouse.down();
+  for (let i = 1; i <= 12; i++) { await page.mouse.move(a.x + a.width / 2 + (b.x + b.width / 2 - a.x - a.width / 2) * i / 12, a.y + 20 + (b.y + 40 - a.y - 20) * i / 12); await page.waitForTimeout(30); }
+  await page.mouse.up(); await page.waitForTimeout(1500);
+  const moved = (await api('queryTasks', { q: title.slice(0, 40), limit: 5 })).find(x => x.title === title);
+  must(moved && moved.status === to, `перетаскивание на доске меняет статус («${title.slice(0, 30)}»)`);
+  await audit('PM · доска после перетаскивания');
+} else must(false, 'на доске MVP нет карточки в «К работе» или колонки «В работе»');
+
+await page.keyboard.press('Meta+k'); await page.waitForTimeout(300);
+must(await page.locator('.palette-inp').count() > 0, '⌘K открывает поиск');
+await page.fill('.palette-inp', 'Streaks'); await page.waitForTimeout(900);
+await audit('PM · поиск ⌘K');
+must(await page.locator('.pal-item').count() > 0, 'поиск находит «Streaks»');
+await page.keyboard.press('Enter'); await page.waitForTimeout(1200);
+must(await page.locator('#panel-root > *, #modal-root > *').count() > 0, 'Enter в поиске открывает найденное');
+await closePanels();
+
+await open('#/');
+await ui('PM: колокольчик', async () => { await page.click('.icon-btn.bell', { timeout: 5000 }); await page.waitForTimeout(800); });
+must(await page.locator('.bell-menu').count() > 0, 'колокольчик открывает «Новое для вас»');
+await audit('PM · колокольчик');
+const row = page.locator('.bell-menu .news-row').first();
+if (await row.count()) { await row.click(); await page.waitForTimeout(1200); must(await page.locator('.bell-menu').count() === 0, 'клик по уведомлению закрывает колокольчик'); await audit('PM · открыто из колокольчика'); }
+await closePanels();
+
+await as('Алексей Морозов');
+await page.keyboard.press('Meta+k'); await page.waitForTimeout(300);
+await page.fill('.palette-inp', 'CARROT'); await page.waitForTimeout(900);
+must(!(await page.locator('.pal-group', { hasText: 'Приложения' }).count()), 'сотрудник не находит приложения в поиске');
+await audit('Сотрудник · поиск без приложений');
+await page.keyboard.press('Escape'); await closePanels();
+
+await as('Анна Смирнова');
+await open('#/');
+await page.evaluate(async () => { const { openCreateApp } = await import('/src/views/apps.js'); openCreateApp(); }); await page.waitForTimeout(600);
+await audit('CEO · окно Новое приложение');
+await ui('CEO: создать приложение окном', async () => {
+  await page.fill('#modal-root .modal-wrap:last-child input.inp >> nth=0', 'Night Owl');
+  await page.locator('#modal-root .btn.primary', { hasText: 'Создать' }).last().click({ timeout: 5000 }); await page.waitForTimeout(1500);
+});
+must((await api('listApps', {})).some(x => x.name === 'Night Owl'), 'приложение создано через окно');
+await closePanels();
+await page.evaluate(async () => { const { openCreateUnit } = await import('/src/views/units.js'); openCreateUnit(); }); await page.waitForTimeout(600);
+await audit('CEO · окно Новый юнит');
+await ui('CEO: создать юнит окном', async () => {
+  await page.fill('#modal-root input[placeholder="Например, Gold"]', 'Lab');
+  await page.locator('#modal-root .btn.primary').last().click({ timeout: 5000 }); await page.waitForTimeout(1500);
+});
+const lab = (await api('bootstrap', { today: '2026-10-30' })).units.find(u => u.name === 'Lab');
+must(!!lab, 'юнит создан через окно');
+await closePanels();
+if (lab) {
+  await page.evaluate(async u => { const { openTeamDialog } = await import('/src/views/people.js'); openTeamDialog(u); }, lab); await page.waitForTimeout(600);
+  await audit('CEO · окно Новая команда');
+  await closePanels();
+}
+await page.evaluate(async () => { const { addPersonDialog } = await import('/src/views/people.js'); addPersonDialog(); }); await page.waitForTimeout(600);
+await audit('CEO · окно Добавить человека');
+await ui('CEO: добавить человека окном', async () => {
+  await page.fill('#modal-root input[placeholder="Имя и фамилия"]', 'Тест Тестов');
+  await page.locator('#modal-root .btn.primary', { hasText: 'Добавить' }).last().click({ timeout: 5000 }); await page.waitForTimeout(1500);
+});
+must((await api('bootstrap', { today: '2026-10-30' })).people.some(p => p.name === 'Тест Тестов'), 'человек добавлен через окно');
+await closePanels();
+});
+
+/* ---------- 5. Телефон: главные экраны всех ролей ---------- */
+await scenario('5. Телефон', async () => {
+for (const [who, screens] of [
+  ['Анна Смирнова', ['#/', '#/apps', '#/analytics', '#/settings']],
+  ['Екатерина Соколова', ['#/', '#/my', `#/u/${MVP.id}`]],
+  ['Сергей Волков', ['#/', '#/my', '#/settings']],
+  ['Мария Иванова', ['#/', '#/board']],
+  ['Алексей Морозов', ['#/', '#/board', '#/my']],
+]) {
+  await as(who);
+  for (const hsh of screens) { await open(hsh); await audit(`${who.split(' ')[0]} · ${hsh}`, { mobile: true }); }
+}
 });
 
 /* ---------- итог ---------- */

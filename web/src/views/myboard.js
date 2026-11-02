@@ -142,7 +142,7 @@ function draw(page, data) {
       onEnd: evt => onMove(evt, data, cols, page),
     }));
     const color = c.color || FIXED.find(f => f.group === c.group).color;
-    return h('section', { class: 'col' + (c.fixed ? ' fixed' : ' own'), style: { '--cc': color } },
+    return h('section', { class: 'col' + (c.fixed ? ' fixed' : ' own'), dataset: { group: c.group }, style: { '--cc': color } },
       h('div', { class: 'col-head' }, c.fixed ? statusIcon(c.group, 16) : statusDot(color, 9),
         h('span', { class: 'col-name', title: c.fixed ? 'Обязательная колонка — по ней меняется статус в юните' : 'Ваша колонка · считается как «' + FIXED.find(f => f.group === c.group).name + '»' }, c.name),
         h('span', { class: 'col-count' }, mine.length)),
@@ -152,9 +152,13 @@ function draw(page, data) {
   fill(page,
     data.tasks.length ? null : h('p', { class: 'hint my-empty' }, 'На вас пока нет задач. Когда вас назначат исполнителем, они появятся здесь.'),
     h('div', { class: 'board my-board' }, columnEls));
-  // колонок больше экрана: первая задача не должна остаться за краем
-  const first = page.querySelector('.my-card');
-  if (first) first.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  // колонок больше экрана: первая незакрытая задача не должна остаться за краем; страницу по вертикали не трогаем
+  const first = page.querySelector('.col:not([data-group="done"]) .my-card') || page.querySelector('.my-card');
+  const board = page.querySelector('.my-board');
+  if (first && board) {
+    const col = first.closest('.col').getBoundingClientRect(), box = board.getBoundingClientRect();
+    if (col.right > box.right || col.left < box.left) board.scrollLeft += col.left - box.left - parseFloat(getComputedStyle(board).paddingLeft || 0);
+  }
 }
 
 /** Перенос: запоминаем колонку; если группа другая — меняем статус задачи в юните (не вышло — возвращаем). */

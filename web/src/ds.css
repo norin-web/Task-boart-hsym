@@ -2622,3 +2622,31 @@ body:has(#modal-root .modal-wrap) #panel-root { visibility: hidden; }
   .rm-grid .rm-row:not(.rm-live) .rm-main { flex: 1 1 calc(100% - 46px); padding-top: 12px; }
   .rm-grid .rm-row:not(.rm-live) .rm-actions { width: 100%; justify-content: flex-end; }
 }
+.fchip.more-filters { flex: none; white-space: nowrap; }
+
+/* Телефон: список приложений — две строки (название и стор; этап и PM), колонки стола не помещаются */
+@media (max-width: 900px) {
+  .ap-row { grid-template-columns: minmax(0, 1fr) auto 16px; gap: 6px 12px; }
+  .ap-row > :nth-child(1) { grid-column: 1; grid-row: 1; }
+  .ap-row > :nth-child(2) { grid-column: 2; grid-row: 1; }
+  .ap-row > :nth-child(3), .ap-row > :nth-child(5) { display: none; }
+  .ap-row > :nth-child(4) { grid-column: 1; grid-row: 2; display: inline-flex; }
+  .ap-row > :nth-child(6) { grid-column: 2; grid-row: 2; justify-self: end; }
+  .ap-row > :nth-child(7) { grid-column: 3; grid-row: 1; }
+  .ap-row > :nth-child(4) { padding-left: 46px; }
+  .ap-row .store-badge { font-size: 0; gap: 0; }
+  .ap-group .ap-row, .apps-page > .ap-list .ap-row { padding: 10px 12px; }
+}
+
+/* Телефон: строка фильтров доски — поиск на всю ширину, чипы позиций одной лентой с прокруткой */
+@media (max-width: 640px) {
+  .filterbar > .search-inp { flex: 1 1 100%; }
+  .filterbar > .row { flex: 1 1 100% !important; flex-wrap: nowrap !important; overflow-x: auto; scrollbar-width: none; }
+  .filterbar > .row::-webkit-scrollbar { display: none; }
+  .filterbar .dept-chips { flex-wrap: nowrap; flex: none; }
+  .filterbar .dept-chips > *, .filterbar > .row > .fchip { flex: none; white-space: nowrap; }
+  .filterbar > .row > .spacer { display: none; }
+}
+
+/* Телефон: вкладки настроек с прокруткой не сжимаются колонкой страницы */
+.prefs-nav { flex: none; }
