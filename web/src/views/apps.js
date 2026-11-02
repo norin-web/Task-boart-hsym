@@ -1032,7 +1032,7 @@ function pmPicker(unitId) {
     const pms = pmsOf(id);
     const u = unitById(id);
     hint.textContent = !u ? '' : pms.length > 1 ? `PM юнита «${u.name}»: задача уйдёт выбранному.` : pms.length ? `PM юнита «${u.name}» — задача уйдёт ему.` : '';
-    fill(sel, pms.length ? pms.map(p => h('option', { value: p.id }, p.name)) : h('option', { value: '' }, 'В юните нет PM — добавьте в Структуре'));
+    fill(sel, pms.length ? pms.map(p => h('option', { value: p.id }, p.name)) : h('option', { value: '' }, 'Нет PM — добавьте в «Команде»'));
   };
   draw(unitId);
   return { el: sel, hint, setUnit: draw };
