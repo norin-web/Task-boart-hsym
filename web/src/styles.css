@@ -260,7 +260,7 @@ table.tasks tr.archived td { opacity: .55; }
 .fchip.on { background: var(--selected); border-color: transparent; color: var(--text); }
 .fchip .n { background: var(--primary); color: var(--on-primary); border-radius: 999px; font-size: 12px; padding: 0 6px; }
 .board { flex: 1; display: flex; gap: 12px; padding: 16px 16px 20px; overflow-x: auto; align-items: flex-start; min-height: 0; }
-.col { flex: 1 1 0; min-width: 224px; background: var(--surface-2); border-radius: var(--r-lg); display: flex; flex-direction: column; max-height: 100%; }
+.col { flex: 1 1 0; min-width: 280px; background: var(--surface-2); border-radius: var(--r-lg); display: flex; flex-direction: column; max-height: 100%; }
 .col-head { display: flex; align-items: center; gap: 8px; padding: 12px 12px 8px 14px; }
 .col-name { font-weight: 600; font-size: 13px; }
 .col-count { font-size: 12px; color: var(--muted); background: var(--surface-3); border-radius: 999px; padding: 0 8px; font-variant-numeric: tabular-nums; }
