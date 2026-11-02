@@ -2494,3 +2494,25 @@ table.tasks.unit-list .chips .chip::before { display: none; }
 .tl-list .tl-row + .tl-row { border-top: 0; }
 .tl-list .tl-bar { position: static; top: auto; display: block; width: 100%; min-width: 0; height: 6px; padding: 0; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
 .tl-list .tl-bar > div { height: 100%; }
+.fc-row, .fc-row:hover { border-radius: 0; }
+
+/* ---------- дашборд Lead и сотрудника: лист с фокусом, ревью и загрузкой ---------- */
+#main:has(.fc-hint) .page .section-head h2, #main:has(.fc-hint) .page section:has(> .section-head + .card-box) > .section-head h2 { font-size: 16px; line-height: 24px; font-weight: 600; letter-spacing: -.02em; }
+#main:has(.fc-hint) .lz-grid { grid-template-columns: minmax(0, 1fr) 456px; gap: 12px; }
+.fc-hero { min-height: 100px; }
+.fc-hero .btn:not(.primary) { border-color: transparent; background: var(--surface); }
+.fc-hero-meta { gap: 6px; }
+.fc-due { display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; }
+.fc-row { gap: 10px; min-height: 58px; padding: 0; }
+.fc-row .fc-key { margin-right: 2px; }
+.fc-when { font-size: 12px; line-height: 16px; }
+@media (max-width: 900px) { #main:has(.fc-hint) .lz-grid { grid-template-columns: minmax(0, 1fr); } }
+#main:has(.fc-hint) .home-grid:not(.one) { grid-template-columns: minmax(0, 1fr) 456px; gap: 12px; }
+@media (max-width: 900px) { #main:has(.fc-hint) .home-grid:not(.one) { grid-template-columns: minmax(0, 1fr); } }
+.sp-dlg .split-head, .sp-dlg .split-row { display: grid; grid-template-columns: minmax(0, 1fr) 160px 148px 150px 14px; gap: 8px; align-items: center; margin: 0; }
+.sp-dlg .split-head { font-size: 12px; line-height: 16px; font-weight: 500; margin-bottom: -8px; }
+.sp-dlg .split-rows { display: flex; flex-direction: column; gap: 8px; }
+.sp-dlg .split-row .inp { width: 100%; min-width: 0; }
+.sp-dlg .split-row .icon-btn { width: 14px; height: 14px; min-width: 0; padding: 0; background: none; color: var(--muted); }
+.modal.dlg.sp-dlg .btn.sm { align-self: flex-start; width: auto; height: 32px; }
+.modal.dlg.sp-dlg .modal-body { display: flex; flex-direction: column; gap: 16px; }

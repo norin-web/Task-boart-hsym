@@ -27,25 +27,27 @@ export function focusBlock(d, reload) {
     const col = ((u.settings || {}).review || {}).column || 'review';
     try { await send('updateTask', { id: t.id, patch: { status: col } }); toast('Отдано на ревью'); if (reload) reload(); } catch (e) { showErr(e); }
   };
-  const when = t => {
-    const di = dueInfo(t.dueDate, false);
-    return [t.statusName, di && h('span', { class: di.cls === 'overdue' ? 'danger-text' : '' }, di.cls === 'overdue' ? 'срок ' + fmtDate(t.dueDate) : di.text)].filter(Boolean)
-      .flatMap((x, i) => (i ? [' · ', x] : [x]));
+  // карточка: статус, ход чеклиста и срок с календарём; строка: только срок (E8B)
+  const heroMeta = t => {
+    const di = dueInfo(t.dueDate, false), cl = t.checklist || [];
+    return [statusIcon(t.kind || 'progress', 14), [t.statusName, cl.length && `чеклист ${cl.filter(Boolean).length} из ${cl.length}`].filter(Boolean).join(' · '),
+      di && h('span', { class: 'fc-due' + (di.cls === 'overdue' ? ' danger-text' : '') }, icon('calendar', 14), di.text)];
   };
+  const when = t => { const di = dueInfo(t.dueDate, false); return di ? di.text : t.statusName; };
   return h('section', null,
     h('div', { class: 'section-head' }, h('h2', null, 'Фокус'), h('span', { class: 'muted fc-hint' }, 'Что делать сейчас')),
     rows.length ? h('div', { class: 'card-box fc-list' },
       h('div', { class: 'fc-hero' },
-        first.app ? appIcon(first.app, 'lg') : statusIcon(first.statusKind || 'progress', 24),
+        first.app ? appIcon(first.app, 'lg') : statusIcon(first.kind || 'progress', 24),
         h('div', { class: 'fc-hero-main' },
           h('div', { class: 'fc-hero-key' }, h('span', { class: 'dot', style: { background: (first.unit || {}).color || 'var(--info-fill)' } }), first.key, first.app ? ' · ' + first.title.split(' · ').slice(-1)[0] : ''),
           h('div', { class: 'fc-hero-title' }, first.title),
-          h('div', { class: 'fc-hero-meta' }, statusIcon(first.statusKind || 'progress', 14), when(first))),
+          h('div', { class: 'fc-hero-meta' }, heroMeta(first))),
         h('div', { class: 'fc-hero-actions' },
           h('button', { class: 'btn xl', onclick: () => peekTask(first.unitId, first.id) }, 'Открыть'),
           h('button', { class: 'btn primary xl', onclick: () => toReview(first) }, 'Отдать на ревью'))),
       rest.map(t => h('button', { class: 'fc-row', onclick: () => peekTask(t.unitId, t.id) },
-        statusIcon(t.statusKind || 'todo', 16),
+        statusIcon(t.kind || 'todo', 16),
         h('span', { class: 'fc-key' }, t.key),
         h('span', { class: 'fc-title' }, t.title),
         h('span', { class: 'fc-when ' + (REASON[t.reason] || REASON.progress).cls }, when(t)))))

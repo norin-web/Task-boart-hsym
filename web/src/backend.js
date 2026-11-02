@@ -2072,7 +2072,7 @@ export function createBackend(db, opts = {}) {
       const tomorrow = new Date(Date.parse(day) + 864e5).toISOString().slice(0, 10);
       const meId = str(p.personId, 40);
       const [tasks, units, apps, ppl, members] = await Promise.all([
-        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,due_date,archived,kind,step,app_id,depends_on,fields,review_from,department_id,updated_at,parent_id')
+        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,due_date,archived,kind,step,app_id,depends_on,fields,review_from,department_id,updated_at,parent_id,checklist')
           .eq('archived', false).order('id')),
         all(() => T('units').select('id,key,name,color,settings').eq('archived', false).order('ord').order('id')),
         all(() => T('apps').select('id,name,color,icon_url,priority').order('id')),
@@ -2086,7 +2086,8 @@ export function createBackend(db, opts = {}) {
       const done = t => kindOfRow(t) === 'done';
       const blocked = t => (json(t.depends_on, []) || []).some(id => byId[id] && !done(byId[id]));
       const col = t => columnOf(U[t.unit_id].st, t.status);
-      const brief = t => ({ id: t.id, unitId: t.unit_id, key: `${U[t.unit_id].key}-${t.num}`, title: t.title, dueDate: t.due_date, kind: kindOfRow(t),
+      const brief = t => ({ id: t.id, unitId: t.unit_id, unit: { color: U[t.unit_id].color }, key: `${U[t.unit_id].key}-${t.num}`, title: t.title, dueDate: t.due_date, kind: kindOfRow(t),
+        checklist: (json(t.checklist, []) || []).map(i => !!i.done),
         statusName: col(t).name, priority: (json(t.fields, {}) || {}).f_priority || (A[t.app_id] || {}).priority || '', app: A[t.app_id] || null, updatedAt: t.updated_at });
 
       const person = ppl.find(x => x.id === meId);

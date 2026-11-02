@@ -326,7 +326,7 @@ function openSplit(t, people) {
   add(false);
   modal({
     title: 'Раздать · ' + t.title,
-    wide: true,
+    cls: 'dlg dlg-w sp-dlg',
     body: [
       h('p', { class: 'hint', style: { margin: '0 0 10px' } }, 'Подзадачи получат ТЗ, описание и ссылки этого этапа. Вы — ревьюер; этап закроется сам, когда примете все подзадачи.'),
       h('div', { class: 'split-head muted' }, h('span', null, 'Что сделать'), h('span', null, 'Кому'), h('span', null, 'Срок'), h('span', null, 'Чеклист'), h('span')),

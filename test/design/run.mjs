@@ -60,8 +60,8 @@ const ids = await page.evaluate(async () => {
   const { people } = await call('bootstrap', { today: new Date().toISOString().slice(0, 10) });
   const pm = people.find(x => x.name === 'Екатерина Соколова'), pm2 = people.find(x => x.name === 'Олег Никитин');
   const rm = people.find(x => x.access === 'rm');
-  const lead = people.find(x => x.name === 'Мария Иванова'), member = people.find(x => x.name === 'Алексей Морозов');
-  return { carrot: carrot.id, streaks: streaks.id, mvp: streaks.unitId, rf: carrot.unitId, stage: stage.id, release: release.id, ceo: localStorage.getItem('tm.localActor'), pm: JSON.stringify(pm.id), pm2: JSON.stringify(pm2.id), rm: JSON.stringify(rm.id), lead: JSON.stringify(lead.id), member: JSON.stringify(member.id) };
+  const lead = people.find(x => x.name === 'Мария Иванова'), member = people.find(x => x.name === 'Алексей Морозов'), julia = people.find(x => x.name === 'Юлия Павлова');
+  return { carrot: carrot.id, streaks: streaks.id, mvp: streaks.unitId, rf: carrot.unitId, stage: stage.id, release: release.id, ceo: localStorage.getItem('tm.localActor'), pm: JSON.stringify(pm.id), pm2: JSON.stringify(pm2.id), rm: JSON.stringify(rm.id), lead: JSON.stringify(lead.id), member: JSON.stringify(member.id), julia: JSON.stringify(julia.id) };
 });
 
 // служебное режима разработчика в снимках не нужно: в макетах его нет
@@ -80,7 +80,7 @@ const go = async hash => {
 };
 
 // вход за роль листа: экраны без `as` — за CEO
-let role = 'ceo', seeded = false;
+let role = 'ceo', seeded = false, seededLead = false;
 const loginAs = async as => {
   if (as === role) return;
   role = as;
@@ -93,9 +93,38 @@ const loginAs = async as => {
     }, ids.mvp);
     await page.waitForTimeout(1500);
   }
-  await page.evaluate(id => localStorage.setItem('tm.localActor', id), ids[as]);
-  await page.reload();
-  await page.waitForFunction(() => document.querySelector('#sidebar .nav-item'), null, { timeout: 60000 });
+  const actor = async who => {
+    await page.evaluate(id => localStorage.setItem('tm.localActor', id), who);
+    await page.reload();
+    await page.waitForFunction(() => document.querySelector('#sidebar .nav-item'), null, { timeout: 60000 });
+  };
+  // задачи Lead и сотрудника: в демо их нет, а листы показывают фокус, ревью и «Раздано»
+  if (as === 'lead' && !seededLead) {
+    seededLead = true;
+    await actor(ids.ceo);
+    const made = await page.evaluate(async ({ unitId, lead, member, julia }) => {
+      const { call } = await import('/src/api.js');
+      const { S, todayStr, addDays } = await import('/src/state.js');
+      const st = S.units.find(u => u.id === unitId).settings, prog = st.columns.find(c => c.kind === 'progress').id;
+      const add = (title, assigneeId, dueDate, status) => call('createTask', { unitId, title, assigneeId, dueDate, status });
+      const t1 = await add('Экраны онбординга', lead, todayStr(), prog);
+      await add('Иконка приложения', lead, addDays(1), prog);
+      await add('Экран настроек', lead, addDays(-2), prog);
+      await add('Подключить покупки', member, todayStr(), prog);
+      await add('Исправить вход', member, addDays(1), prog);
+      return { t1: t1.id, review: st.review.column, julia };
+    }, { unitId: ids.mvp, lead: JSON.parse(ids.lead), member: JSON.parse(ids.member), julia: JSON.parse(ids.julia) });
+    await actor(ids.lead);
+    const parts = await page.evaluate(async ({ t1, julia }) => {
+      const { call } = await import('/src/api.js');
+      const { addDays } = await import('/src/state.js');
+      return (await call('splitTask', { taskId: t1, items: [{ title: 'Первый экран', assigneeId: julia, dueDate: addDays(1) }, { title: 'Экран выбора', assigneeId: julia, dueDate: addDays(3) }] })).map(x => x.id);
+    }, made);
+    await actor(ids.julia);
+    await page.evaluate(async ({ id, status }) => { const { call } = await import('/src/api.js'); await call('updateTask', { id, patch: { status } }); }, { id: parts[0], status: made.review });
+    await page.waitForTimeout(800);
+  }
+  await actor(ids[as]);
   await hideDev();
 };
 
