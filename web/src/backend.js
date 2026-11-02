@@ -1665,6 +1665,32 @@ export function createBackend(db, opts = {}) {
       return true;
     },
 
+    /** Список приложений каждого PM: { personId: [appId…] }. Видит и меняет только CEO. */
+    async getPmApps() {
+      const rows = await all(() => T('pm_apps').select('person_id,app_id').order('person_id').order('app_id'));
+      const out = {};
+      for (const r of rows) (out[r.person_id] ||= []).push(r.app_id);
+      return out;
+    },
+
+    /** Заменить список приложений PM (только CEO). */
+    async setPmApps(p) {
+      const pid = String(p.personId ?? '');
+      const rows = await rpc('whoami', {});
+      const who = Array.isArray(rows) ? rows[0] : rows;
+      if (!who || who.access !== 'superadmin') fail('Недостаточно прав: список приложений PM настраивает CEO', 'FORBIDDEN');
+      const person = await one('people', pid);
+      if (!person || person.access !== 'moderator') fail('Список приложений настраивается только для PM');
+      const ids = [...new Set((Array.isArray(p.appIds) ? p.appIds : []).map(String))];
+      if (ids.length) {
+        const found = await run(T('apps').select('id').in('id', ids));
+        if (found.length !== ids.length) fail('Какого-то приложения уже нет', 'NOT_FOUND');
+      }
+      await run(T('pm_apps').delete().eq('person_id', pid).select('app_id'));
+      if (ids.length) await run(T('pm_apps').insert(ids.map(app_id => ({ person_id: pid, app_id }))).select('app_id'));
+      return ids;
+    },
+
     async listApps(p) {
       let q = T('apps').select('*').eq('archived', !!p.archived);
       if (p.unitId) q = q.eq('unit_id', String(p.unitId));

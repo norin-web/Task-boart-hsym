@@ -464,6 +464,57 @@ create table if not exists apps (
   updated_at text not null
 );
 create index if not exists apps_unit on apps(unit_id);
+-- Какие приложения видит каждый PM: список настраивает CEO. Пустой список — PM не видит ни одного приложения.
+-- При первом создании таблицы PM получают все приложения своих юнитов (чтобы ничего не пропало), дальше список ведёт CEO.
+do $$ begin
+  if to_regclass('public.pm_apps') is null then
+    create table pm_apps (
+      person_id text not null references people(id) on delete cascade,
+      app_id    text not null references apps(id) on delete cascade,
+      primary key (person_id, app_id)
+    );
+    insert into pm_apps (person_id, app_id)
+      select p.id, a.id from people p
+        join unit_members m on m.person_id = p.id
+        join apps a on a.unit_id = m.unit_id
+       where p.access = 'moderator'
+      on conflict do nothing;
+  end if;
+end $$;
+create index if not exists pm_apps_app on pm_apps(app_id);
+alter table pm_apps enable row level security;
+drop policy if exists pm_apps_read on pm_apps;
+create policy pm_apps_read on pm_apps for select to authenticated using (is_superadmin() or person_id = my_person_id());
+drop policy if exists pm_apps_write on pm_apps;
+create policy pm_apps_write on pm_apps for all to authenticated using (is_superadmin()) with check (is_superadmin());
+create or replace function pm_sees_app(p_app text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from pm_apps where person_id = my_person_id() and app_id = p_app);
+$$;
+-- новое приложение сразу попадает в список PM своего юнита; CEO может убрать
+create or replace function grant_app_to_pms() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  insert into pm_apps (person_id, app_id)
+    select p.id, new.id from unit_members m join people p on p.id = m.person_id
+     where m.unit_id = new.unit_id and p.access = 'moderator' and p.active
+    on conflict do nothing;
+  return new;
+end $$;
+drop trigger if exists grant_app_to_pms on apps;
+create trigger grant_app_to_pms after insert on apps for each row execute function grant_app_to_pms();
+-- приложение переехало в другой юнит: список сбрасывается, доступ получают PM нового юнита
+create or replace function regrant_app_pms() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  delete from pm_apps where app_id = new.id;
+  insert into pm_apps (person_id, app_id)
+    select p.id, new.id from unit_members m join people p on p.id = m.person_id
+     where m.unit_id = new.unit_id and p.access = 'moderator' and p.active
+    on conflict do nothing;
+  return new;
+end $$;
+drop trigger if exists regrant_app_pms on apps;
+create trigger regrant_app_pms after update of unit_id on apps for each row when (new.unit_id is distinct from old.unit_id) execute function regrant_app_pms();
+
 -- Заметки к приложению (идеи на будущее, договорённости): видит тот, кто видит приложение; удаляет автор или CEO
 create table if not exists app_notes (
   id        text primary key,
@@ -1635,8 +1686,10 @@ create policy people_update on people for update to authenticated
 
 -- Задачи: администраторы — все; участник — задачи своей позиции в своих юнитах и свои задачи.
 drop policy if exists tasks_read on tasks;
--- PM — задачи своих юнитов; тестовые задачи видит только режим разработчика.
-create policy tasks_read on tasks for select to authenticated using ((not is_test or is_dev()) and (
+-- PM — задачи своих юнитов (и только по своим приложениям); тестовые задачи видит только режим разработчика.
+create policy tasks_read on tasks for select to authenticated using ((not is_test or is_dev())
+  -- PM не видит задачи по приложениям вне своего списка 
+  and (app_id = '' or my_access() <> 'moderator' or pm_sees_app(app_id)) and (
   can_manage(unit_id) or assignee_id = my_person_id() or review_from = my_person_id() or reviewer_id = my_person_id()
   or (is_unit_member(unit_id) and ((department_id <> '' and department_id = any(my_positions()))
                                      or (team_id <> '' and team_id = any(my_teams()))))));
@@ -1738,11 +1791,22 @@ create trigger log_app_status after update on apps for each row execute function
 alter table app_status_log enable row level security;
 drop policy if exists app_status_log_read on app_status_log;
 create policy app_status_log_read on app_status_log for select to authenticated using (exists (select 1 from apps a where a.id = app_id));
+-- запрос по приложению, поставленный на PM, открывает ему это приложение (иначе «Разложить» нечего раскладывать)
+create or replace function grant_app_on_request() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.kind = 'request' and new.app_id <> '' and new.assignee_id <> ''
+     and exists (select 1 from people where id = new.assignee_id and access = 'moderator') then
+    insert into pm_apps (person_id, app_id) values (new.assignee_id, new.app_id) on conflict do nothing;
+  end if;
+  return new;
+end $$;
+drop trigger if exists grant_app_on_request on tasks;
+create trigger grant_app_on_request after insert or update of assignee_id on tasks for each row execute function grant_app_on_request();
 drop policy if exists apps_read on apps;
--- приложения видят только CEO, PM и RM: Lead и сотрудник работают с задачами
+-- приложения видят CEO, RM своих юнитов и PM — только из своего списка (pm_apps): Lead и сотрудник работают с задачами
 create policy apps_read on apps for select to authenticated
-  using ((not is_test or is_dev()) and (is_superadmin() or (is_unit_member(unit_id) and exists (
-    select 1 from people where id = my_person_id() and access in ('moderator', 'rm')))));
+  using ((not is_test or is_dev()) and (is_superadmin() or (is_unit_member(unit_id) and (
+    my_access() = 'rm' or (my_access() = 'moderator' and pm_sees_app(id))))));
 drop policy if exists apps_insert on apps;
 create policy apps_insert on apps for insert to authenticated with check (is_superadmin());
 drop policy if exists apps_update on apps;

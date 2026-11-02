@@ -614,3 +614,35 @@ test('раздача: подзадача уходит на ревью к лид�
   assert.equal(st.columns.find(c => c.id === st2[0].status).kind, 'done'); // этап закрылся сам
 });
 
+
+test('PM видит только приложения из своего списка, CEO его настраивает', async () => {
+  const api = await setup();
+  const { admin, mod, designer, A } = await team(api);
+  const a1 = (await api.as(admin, () => api('createApp', { name: 'Первое', unitId: A.id, noRequest: true }))).app;
+  const a2 = (await api.as(admin, () => api('createApp', { name: 'Второе', unitId: A.id, noRequest: true }))).app;
+  const names = async () => (await api('listApps', {})).map(a => a.name).sort();
+  // новое приложение сразу попадает в список PM юнита
+  assert.deepEqual(await api.as(mod, names), ['Второе', 'Первое']);
+  // CEO оставляет PM одно приложение
+  await api.as(admin, () => api('setPmApps', { personId: mod.id, appIds: [a1.id] }));
+  assert.deepEqual(await api.as(mod, names), ['Первое']);
+  assert.deepEqual(await api.as(admin, names), ['Второе', 'Первое']);
+  // задача по скрытому приложению PM не видна
+  const hidden = await api.as(admin, () => api('createTask', { unitId: A.id, title: 'Скрытая', appId: a2.id }));
+  const shown = await api.as(admin, () => api('createTask', { unitId: A.id, title: 'Видимая', appId: a1.id }));
+  const titles = async () => (await api('getBoard', { unitId: A.id })).tasks.map(t => t.title);
+  const seen = await api.as(mod, titles);
+  assert.ok(seen.includes('Видимая') && !seen.includes('Скрытая'));
+  // менять список может только CEO; список видит только CEO
+  await assert.rejects(api.as(mod, () => api('setPmApps', { personId: mod.id, appIds: [a1.id, a2.id] })), forbidden);
+  await assert.rejects(api.as(designer, () => api('setPmApps', { personId: mod.id, appIds: [] })), forbidden);
+  assert.deepEqual((await api.as(admin, () => api('getPmApps', {})))[mod.id], [a1.id]);
+  // пустой список — PM не видит приложений; заметки и история статусов тоже закрыты
+  await api.as(admin, () => api('setPmApps', { personId: mod.id, appIds: [] }));
+  assert.deepEqual(await api.as(mod, names), []);
+  await assert.rejects(api.as(admin, () => api('setPmApps', { personId: designer.id, appIds: [] })));
+  // запрос CEO по новому приложению, поставленный на PM, открывает ему это приложение
+  const a3 = (await api.as(admin, () => api('createApp', { name: 'Третье', unitId: A.id, pmId: mod.id }))).app;
+  assert.ok((await api.as(mod, names)).includes('Третье'));
+  assert.ok(a3.id);
+});

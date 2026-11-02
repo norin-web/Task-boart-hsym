@@ -181,9 +181,43 @@ export function peopleManager({ search = false, bare = false } = {}) {
     mode === 'supabase' && !p.linked && { label: 'Создать вход (email + пароль)', icon: 'user', action: () => accountDialog(p) },
     mode === 'supabase' && p.linked && { label: 'Новый временный пароль', icon: 'edit', action: () => resetDialog(p) },
     { label: p.active ? 'Отключить доступ' : 'Вернуть доступ', icon: 'archive', danger: p.active, action: () => toggleActive(p) },
+    isSuper() && p.access === 'moderator' && { label: 'Приложения PM…', icon: 'layers', action: () => pmAppsDialog(p).catch(showErr) },
     isSuper() && { sep: true },
     isSuper() && { label: 'Удалить из системы', icon: 'trash', danger: true, action: () => removePerson(p).catch(showErr) },
   ]);
+
+  /** CEO выбирает, какие приложения видит PM (внутри его юнитов). Остальные для PM не существуют — проверка в базе. */
+  async function pmAppsDialog(p) {
+    const [apps, lists] = await Promise.all([call('listApps', {}), call('getPmApps', {})]);
+    const mine = new Set(lists[p.id] || []);
+    const units = S.units.filter(u => !u.archived && (u.members || []).includes(p.id));
+    const boxes = new Map();
+    const body = units.length ? units.map(u => {
+      const list = apps.filter(a => a.unitId === u.id);
+      const checks = list.map(a => {
+        const cb = h('input', { type: 'checkbox', checked: mine.has(a.id), onchange: () => (cb.checked ? mine.add(a.id) : mine.delete(a.id)) });
+        boxes.set(a.id, cb);
+        return h('label', { class: 'row', style: { gap: '8px', padding: '4px 0' } }, cb, h('span', null, a.name));
+      });
+      const all = h('button', { class: 'link-btn', type: 'button', onclick: () => {
+        const on = list.some(a => !mine.has(a.id));
+        list.forEach(a => { boxes.get(a.id).checked = on; on ? mine.add(a.id) : mine.delete(a.id); });
+      } }, 'Все / никакие');
+      return h('div', { style: { marginBottom: '12px' } },
+        h('div', { class: 'row', style: { justifyContent: 'space-between' } }, h('b', null, u.name), list.length > 1 && all),
+        list.length ? checks : h('p', { class: 'hint', style: { margin: 0 } }, 'В юните пока нет приложений'));
+    }) : [h('p', { class: 'hint' }, 'PM не состоит ни в одном юните — сначала добавьте его в юнит.')];
+    modal({
+      title: 'Приложения PM · ' + p.name,
+      cls: 'dlg',
+      body: [h('p', { class: 'hint', style: { marginTop: 0 } }, 'PM видит только отмеченные приложения и задачи по ним. Остальные скрыты от него полностью.'), ...body],
+      actions: [{ label: 'Отмена' }, { label: 'Сохранить', primary: true, action: async close => {
+        await send('setPmApps', { personId: p.id, appIds: [...mine] });
+        close();
+        toast('Список приложений PM сохранён');
+      } }],
+    });
+  }
 
   const removePerson = async p => {
     const n = (await call('queryTasks', { assigneeId: p.id }).catch(() => [])).length;
