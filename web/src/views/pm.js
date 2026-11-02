@@ -51,7 +51,6 @@ function pmBlocks(d, reload, redraw, period, setPeriod) {
     { id: 'inbox', title: 'Входящие от CEO', col: 'full', render: () => inbox(d, reload, redraw) },
     { id: 'pipeline', title: 'Приложения по этапам', col: 'left', render: () => pipeline(d, reload, redraw) },
     { id: 'problems', title: 'Проблемы', col: 'right', render: () => problems(d) },
-    { id: 'team', title: 'Команда и KPI', col: 'full', render: () => team(d, period, setPeriod) },
   ];
 }
 

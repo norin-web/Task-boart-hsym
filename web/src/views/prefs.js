@@ -22,7 +22,7 @@ const PERSONAL_ALL = [
   ['charts', 'Графики', 'chart'],
 ];
 /** Личные разделы: «Графики» — у тех, у кого есть аналитика (CEO и PM). */
-const personal = () => PERSONAL_ALL.filter(t => t[0] !== 'charts' || isStaff());
+const personal = () => PERSONAL_ALL.filter(t => t[0] !== 'charts' || isSuper());
 
 /** Разделы студии, доступные вошедшему. */
 const studio = () => [

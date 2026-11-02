@@ -165,7 +165,7 @@ function drawSidebar() {
       h('button', { class: 'search-btn', onclick: openPalette }, icon('search', 15), h('span', null, 'Поиск'), h('kbd', null, isMac ? '⌘K' : 'Ctrl K')),
       navLink({ view: 'home' }, person && person.access === 'rm' ? 'rocket' : 'home', staff ? 'Дашборд' : person && person.access === 'rm' ? 'Релизы' : 'Мой дашборд'),
       seesApps() && navLink({ view: 'apps' }, 'app', 'Приложения'),
-      staff && navLink({ view: 'analytics' }, 'chart', 'Аналитика'),
+      ceo && navLink({ view: 'analytics' }, 'chart', 'Аналитика'),
       !lite && navLink({ view: 'myboard' }, 'board', 'Моя доска', !staff && !(person && person.access === 'rm') && myCount()),
       !lite && (staff || (person && person.access === 'rm')) && navLink({ view: 'my' }, 'list', 'Мои задачи', !staff && myCount()),
       sec(staff || (person && person.access === 'rm') ? 'Юниты' : 'Мои юниты', ceo && h('button', { class: 'icon-btn sm', title: 'Новый юнит', onclick: openCreateUnit }, icon('plus', 14))),

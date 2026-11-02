@@ -171,7 +171,7 @@ export async function render() {
   if (!r.unit) {
     closePanel();
     S.board = null;
-    if (r.view === 'analytics' && !isStaff()) return navigate({ view: 'home' }, { replace: true });
+    if (r.view === 'analytics' && !isSuper()) return navigate({ view: 'home' }, { replace: true });
     if ((r.view === 'apps' || r.view === 'app') && !seesApps()) return navigate({ view: 'home' }, { replace: true });
     const view = r.view;
     const key = view === 'app' ? 'app:' + r.id : view === 'analytics' ? 'analytics:' + (r.tile || '') : ['my', 'myboard', 'apps', 'dev'].includes(view) ? view : view === 'settings' ? 'settings:' + (r.tab || '') : 'home';

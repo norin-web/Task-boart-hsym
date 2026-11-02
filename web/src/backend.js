@@ -1834,6 +1834,7 @@ export function createBackend(db, opts = {}) {
      * долго на ревью, готово к релизу) и команда с KPI за период (week / month / quarter).
      */
     async getPmDashboard(p) {
+      const isCeo = ((await rpc('whoami', {}))?.[0] || {}).access === 'superadmin';
       const day = today(p.today);
       const periodDays = { week: 7, month: 30, quarter: 90 }[p.period] || 30;
       const from = new Date(Date.now() - periodDays * 864e5).toISOString();
@@ -1898,7 +1899,7 @@ export function createBackend(db, opts = {}) {
           avgDays: spans.length ? Math.round(spans.reduce((a, b) => a + b, 0) / spans.length * 10) / 10 : null,
         };
       });
-      return { inbox, pipeline, problems, team, period: { days: periodDays, from } };
+      return { inbox, pipeline, problems, team: isCeo ? team : [], period: { days: periodDays, from } };  // KPI людей — только CEO
     },
 
     /** Поля приложения (быстрый доступ на карточке): ссылки и тексты. */
@@ -1966,6 +1967,7 @@ export function createBackend(db, opts = {}) {
      * Возвращает { x: [{ key, label, end }], series: [{ id, name, color, values }], total, unit }.
      */
     async getChartData(p) {
+      if (((await rpc('whoami', {}))?.[0] || {}).access !== 'superadmin') fail('Недостаточно прав: графики и аналитика — только для CEO', 'FORBIDDEN');
       const c = cleanChart(p.chart || {});
       const kind = METRIC_KIND[c.metric];
       const end = today(p.today);

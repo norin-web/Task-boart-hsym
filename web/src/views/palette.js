@@ -25,7 +25,7 @@ export function openPalette() {
     { label: 'Главная', icon: 'home', run: () => navigate({ view: 'home' }) },
     isStaff() && { label: 'Мои задачи', icon: 'user', run: () => navigate({ view: 'my' }) },
     { label: 'Настройки', icon: 'settings', run: () => navigate({ view: 'settings' }) },
-    isStaff() && { label: 'Аналитика', icon: 'chart', run: () => navigate({ view: 'analytics' }) },
+    isSuper() && { label: 'Аналитика', icon: 'chart', run: () => navigate({ view: 'analytics' }) },
     isStaff() && { label: 'Люди и доступы', icon: 'users', run: () => navigate({ view: 'settings', tab: 'people' }) },
     isStaff() && { label: 'Позиции', icon: 'layers', run: () => { LS.set('peopleSub', 'positions'); navigate({ view: 'settings', tab: 'people' }); } },
     isStaff() && { label: 'Журнал событий', icon: 'clock', run: () => navigate({ view: 'settings', tab: 'journal' }) },

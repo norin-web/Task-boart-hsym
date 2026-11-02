@@ -73,9 +73,8 @@ test('графики: приложения по юнитам и статусам
   assert.equal(st.x.length, 7);
   assert.equal(st.total, 3);
 
-  // PM юнита Gold не видит приложения RF
-  const pmUnits = await chart(api, pm, { metric: 'apps', split: 'unit', view: 'bars', step: 'total' });
-  assert.ok(pmUnits.series.every(s => s.id !== rf.id), 'PM видит чужой юнит');
+  // аналитика и графики — только у CEO, PM их не получает
+  await assert.rejects(chart(api, pm, { metric: 'apps', split: 'unit', view: 'bars', step: 'total' }), e => e.code === 'FORBIDDEN');
 
   // задачи: закрыта сегодня и 10 дней назад; просрочена одна
   const t1 = await api.as(ceo, () => api('createTask', { unitId: gold.id, title: 'A', assigneeId: dev.id }));

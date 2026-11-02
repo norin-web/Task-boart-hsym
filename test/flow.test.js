@@ -356,7 +356,9 @@ test('дашборд PM: входящие, этапы, проблемы, KPI к�
   assert.equal(w.releaseReady, false);
   assert.ok(d.problems.some(x => x.type === 'overdue' && x.task.id === late.id));
   assert.ok(d.problems.some(x => x.type === 'unassigned' && x.task.title === 'Ничья'));
-  const k = Object.fromEntries(d.team.map(x => [x.personId, x]));
+  assert.deepEqual(d.team, []); // KPI людей PM не отдаём — они только у CEO
+  const ceoD = await api.as(ceo, () => api('getPmDashboard', { today: day, period: 'week' }));
+  const k = Object.fromEntries(ceoD.team.map(x => [x.personId, x]));
   assert.equal(k[lead.id].done, 1);
   assert.equal(k[lead.id].onTime, 100);
   assert.equal(k[ios.id].done, 1);
