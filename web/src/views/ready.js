@@ -3,9 +3,10 @@
  * тексты, релиз), апдейт, ссылки этапов (Figma, Drive…), юнит и статус. Из неё видна очередь на разработку: дизайн закрыт, iOS не начат.
  * Колонки настраиваются у каждого свои (prefs.readyCols): системные, этапы, ссылки, поля приложения и пункты Info.
  */
-import { S, isStaff, ceoDefault, me, personById, unitById, plural } from '../state.js';
+import { S, isDev, isStaff, ceoDefault, me, personById, unitById, plural } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, skeleton, modal, toast } from '../ui.js';
 import { call, send } from '../api.js';
+import { navigate } from '../router.js';
 import { openAppById, appIcon } from './apps.js';
 
 const DAY = 86400000;
@@ -137,7 +138,8 @@ export async function renderReady() {
             h('span', { class: 'rd-app' }, appIcon({ name: r.appName, iconUrl: r.iconUrl, color: r.color }, 'xs'), h('span', { class: 'rd-app-name' }, r.appName)),
             shown.map(c => cell(c, r)))))
         : h('div', { class: 'card-box empty-state' }, h('h2', null, onlyReady ? 'Очередь пуста' : 'Приложений пока нет'),
-          h('p', { class: 'muted' }, onlyReady ? 'Здесь появятся приложения, у которых дизайн закрыт, а разработка ещё не началась.' : 'Они появятся здесь, как только вы создадите приложение.')));
+          h('p', { class: 'muted' }, onlyReady ? 'Здесь появятся приложения, у которых дизайн закрыт, а разработка ещё не началась.' : 'Они появятся здесь, как только вы создадите приложение.'),
+          !onlyReady && isDev() && h('button', { class: 'btn primary', onclick: () => navigate({ view: 'dev' }) }, icon('code', 14), 'Режим разработчика → Демо-процесс')));
   };
   async function load() {
     try {
