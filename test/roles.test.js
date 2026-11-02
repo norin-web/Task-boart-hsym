@@ -685,7 +685,7 @@ test('Lead: видит и ведёт только свою зону — пози
 
 test('лид после «Раздать» видит розданное на своём дашборде', async () => {
   const api = await setup();
-  const { mod, designer, A } = await team(api);
+  const { mod, designer, A, link } = await team(api);
   const lead = await api('createPerson', { name: 'Лид', email: 'u6@x.ru', access: 'lead', positionId: 'd_design' });
   await api.pg.query('update people set user_id = $1 where id = $2', [UID(6), lead.id]);
   await api('setMember', { unitId: A.id, personId: lead.id });
@@ -697,4 +697,10 @@ test('лид после «Раздать» видит розданное на с
   const d = await api.as(L, () => api('getMyDashboard', { personId: lead.id, today: '2026-11-02' }));
   assert.equal(d.lead.split.length, 1);
   assert.equal(d.lead.split[0].parts.length, 2);
+  // подзадача ушла на ревью — лид видит её в «Ждут вашего ревью», а в «Раздано» она помечена «на ревью у вас»
+  const part = d.lead.split[0].parts[0];
+  await api.as(designer, () => api('updateTask', { id: part.id, patch: { fields: { [link.id]: 'https://figma.com/x' }, status: st.review.column } }));
+  const d2 = await api.as(L, () => api('getMyDashboard', { personId: lead.id, today: '2026-11-02' }));
+  assert.equal(d2.lead.reviews.length, 1);
+  assert.equal(d2.lead.split[0].parts.filter(c => c.inReview).length, 1);
 });
