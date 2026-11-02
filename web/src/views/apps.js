@@ -454,7 +454,7 @@ export async function renderAppPage(id) {
 
 export function openAppPanel(a, onChange, page = null) {
   const root = $('#panel-root');
-  const close = () => { document.removeEventListener('keydown', onKey, true); if (page) navigate(navParent().route); else fill(root); };
+  const close = () => { document.removeEventListener('keydown', onKey, true); if (page) navigate(navParent().route, { back: true }); else fill(root); };
   const onKey = e => {
     if (e.key !== 'Escape' || document.querySelector('.modal') || document.querySelector('.menu')) return;
     // Esc в поле карточки — отменить правку (поле обработает само) или просто выйти из поля, а не закрывать карточку

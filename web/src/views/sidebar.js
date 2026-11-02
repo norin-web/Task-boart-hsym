@@ -2,7 +2,7 @@ import Sortable from 'sortablejs';
 import { S, LS, byOrder, openCount, me, unitById, personById, activeTeams, isStaff, isSuper, ceoMode, isDev, ACCESS_LABELS, seesApps, ownTeamsOnly } from '../state.js';
 import { $, h, icon, avatar, menu, closeMenu, showErr, fill, confirmDlg, setBell } from '../ui.js';
 import { call, send } from '../api.js';
-import { link, navigate, rerender } from '../router.js';
+import { link, navigate, rerender, sectionRoute } from '../router.js';
 import { openPalette } from './palette.js';
 import { unitMenu, openCreateUnit } from './units.js';
 import { openActAs, openMyProfile, openTeamDialog } from './people.js';
@@ -121,7 +121,7 @@ export function renderSidebar() {
 }
 
 function drawSidebar() {
-  const r = S.route;
+  const r = sectionRoute(S.route);  // внутренний экран подсвечивает раздел, откуда в него зашли
   const units = S.units.filter(u => !u.archived).sort(byOrder);
   const person = me();
   const list = h('div', { class: 'nav-units' }, units.map(u => unitItem(u, r)));
@@ -197,7 +197,7 @@ function drawSidebar() {
 }
 
 /** Активен ли пункт меню для маршрута (главная — только без юнита и других экранов). */
-const isHere = (r, route) => !r.unit && (route.view === 'home' ? !r.view || r.view === 'home' : r.view === route.view || (route.view === 'apps' && r.view === 'app'));
+const isHere = (r, route) => !r.unit && (route.view === 'home' ? !r.view || r.view === 'home' : r.view === route.view);
 
 /** CEO: Default — только приложения; Admin — всё. Сохраняется в профиле (на всех устройствах). */
 export async function setCeoMode(m) {

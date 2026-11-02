@@ -66,36 +66,57 @@ export function routeUrl(r) {
   return r.view === 'my' ? '#/my' : r.view === 'myboard' ? '#/board' : r.view === 'apps' ? '#/apps' : r.view === 'dev' ? '#/dev' : r.view === 'analytics' ? '#/analytics' + (r.tile ? '/' + r.tile : '') : '#/';
 }
 
-// откуда открыли карточку приложения: «Назад» ведёт туда, а не всегда в список
-let appFrom = null;
+// Внутренние экраны (карточка приложения, плитка аналитики, настройки): запоминаем, откуда в них зашли.
+// Откуда — в history.state, поэтому «Назад» работает и после перезагрузки; цепочка вложенная (плитка → приложение → …).
+let curFrom = (history.state && history.state.from) || null;
 const LABELS = { home: 'Дашборд', apps: 'Приложения', analytics: 'Аналитика', my: 'Мои задачи', myboard: 'Моя доска', settings: 'Настройки' };
+const isDetail = r => !r.unit && (r.view === 'app' || r.view === 'settings' || r.view === 'admin' || (r.view === 'analytics' && !!r.tile));
+const homeRoute = () => ({ view: 'home' });
 
-export function navigate(r, { replace = false } = {}) {
+export function navigate(r, { replace = false, back = false } = {}) {
   if (r.unit && !r.mode) r = { ...r, mode: 'board' };
-  if (r.view === 'app' && S.route && S.route.view !== 'app') appFrom = S.route;
+  let from = r.from || null;
+  if (r.from) { r = { ...r }; delete r.from; }
+  else if (isDetail(r) && !back) {
+    const cur = S.route;
+    if (cur && routeUrl(cur) !== routeUrl(r)) from = isDetail(cur) ? { ...cur, ...(curFrom ? { from: curFrom } : {}) } : { ...cur };
+    else from = curFrom;  // тот же экран (замена адреса) — «откуда» не меняется
+  }
+  curFrom = from;
   S.route = r;
-  history[replace ? 'replaceState' : 'pushState'](null, '', routeUrl(r));
+  history[replace ? 'replaceState' : 'pushState']({ from }, '', routeUrl(r));
   render();
 }
 
+/** Раздел сайдбара, к которому относится экран: внутренний экран остаётся в разделе, откуда в него зашли. */
+export function sectionRoute(r = S.route) {
+  if (r.unit) return r;
+  if (r.view === 'app') return curFrom ? sectionRoute(curFrom) : { view: 'apps' };
+  if (r.view === 'analytics' && r.tile) return { view: 'analytics' };
+  return r;
+}
+
+const routeLabel = f => {
+  if (f.unit) return (S.units.find(x => x.id === f.unit) || {}).name || 'Юнит';
+  if (f.view === 'app') { const a = (S.apps || []).find(x => x.id === f.id); return (a && a.name) || 'Приложение'; }
+  if (f.view === 'home' && myAccess() === 'rm') return 'Релизы';
+  if (f.view === 'analytics' && f.tile) return 'Аналитика';
+  return LABELS[f.view] || 'Назад';
+};
+
 /**
- * «Назад» — только с экрана, куда зашли внутрь раздела: приложение, плитка аналитики, настройки.
- * Разделы сайдбара, команды в нём и вкладки юнита переключаются сами, кнопка там не нужна. Родитель — уровень выше, а не история. null — кнопки нет.
+ * «Назад» — только с внутреннего экрана: приложение, плитка аналитики, настройки. Ведёт туда, откуда зашли (в том числе на нужную вкладку юнита, с фильтром).
+ * Разделы сайдбара и вкладки юнита переключаются сами, кнопка там не нужна. null — кнопки нет.
  */
 export function navParent(r = S.route) {
-  if (r.unit) return null;
-  if (r.view === 'app') {
-    const from = appFrom || { view: 'apps' };
-    return { route: from, label: from.unit ? (S.units.find(x => x.id === from.unit) || {}).name || 'Юнит' : LABELS[from.view] || 'Назад' };
-  }
-  if (r.view === 'analytics' && r.tile) return { route: { view: 'analytics' }, label: 'Аналитика' };
-  if (r.view === 'settings') return { route: { view: 'home' }, label: myAccess() === 'rm' ? 'Релизы' : 'Дашборд' };
-  return null;
+  if (r.unit || !isDetail(r)) return null;
+  const from = curFrom || (r.view === 'app' ? { view: 'apps' } : r.view === 'analytics' ? { view: 'analytics' } : homeRoute());
+  return { route: from, label: routeLabel(from) };
 }
 
 setBack(() => {
   const up = navParent();
-  return up && h('button', { class: 'icon-btn back-btn', title: 'Назад: ' + up.label, 'aria-label': 'Назад: ' + up.label, onclick: () => navigate(up.route) }, icon('back', 18));
+  return up && h('button', { class: 'icon-btn back-btn', title: 'Назад: ' + up.label, 'aria-label': 'Назад: ' + up.label, onclick: () => navigate(up.route, { back: true }) }, icon('back', 18));
 });
 
 /** Ссылка, которая работает и как обычная (новая вкладка по ⌘/Ctrl-клику), и как SPA-переход. */
@@ -212,6 +233,7 @@ function applyRouteFilter(r) {
 const onLocation = () => {
   if (!S.started) return; // приложение ещё загружается: первый показ сделает main.js по текущему адресу
   const next = parseLocation();
+  curFrom = (history.state && history.state.from) || null;
   if (routeUrl(next) === routeUrl(S.route)) return;
   S.route = next;
   render();
