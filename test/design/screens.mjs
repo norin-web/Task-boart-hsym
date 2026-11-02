@@ -130,6 +130,7 @@ export const SCREENS = [
   { code: 'M11', name: 'Моя доска, сотрудник', as: 'member', route: '#/board' },
   { code: 'M12', name: 'Мои задачи, сотрудник', as: 'member', route: '#/my' },
   { code: 'M13', name: 'Юнит, сотрудник', as: 'member', route: ids => `#/u/${ids.mvp}` },
+  { code: 'RM18', name: 'Отслеживаю, RM', as: 'rm', route: '#/', act: async (p, ids) => { await p.evaluate(async ({ a, b }) => { const m = await import('/src/views/watch.js'); const { call } = await import('/src/api.js'); const ap = await call('listApps', {}); m.toggleWatch('app', a, ap.find(x => x.id === a).unitId, 'x'); m.toggleWatch('app', b, ap.find(x => x.id === b).unitId, 'y'); const r = await call('queryTasks', { limit: 1 }); m.toggleWatch('task', r[0].id, r[0].unitId, r[0].title); }, { a: ids.carrot, b: ids.streaks }); await p.waitForSelector('.w-row'); await p.waitForTimeout(500); } },
 ];
 
 /** Намеренные отличия: чтобы процент не вводил в заблуждение. */

@@ -35,7 +35,7 @@ export async function renderRmHome() {
           h('span', { class: 'muted rq-line' }, 'отправлено ' + fmtShort(x.submittedAt) + ' · ждёт ' + (days(x.submittedAt) ? days(x.submittedAt) + ' дн.' : 'с сегодня')),
         ], x => [
           h('button', { class: 'btn danger solid', onclick: () => reject(x) }, 'Реджект'),
-          h('button', { class: 'btn success', onclick: () => step(x, 'live') }, 'Вышло в стор')], 3, true);
+          h('button', { class: 'btn success', onclick: () => step(x, 'live') }, 'Вышло в стор')], 1);
     fill(page,
       h('div', { class: 'rm-grid' },
         h('div', { class: 'rm-col' }, section('Очередь на релиз', 'Очередь пуста', 'Когда PM передаст релиз, он появится здесь', d.queue, x => {
@@ -49,14 +49,13 @@ export async function renderRmHome() {
           ? h('button', { class: 'btn primary', onclick: () => step(x, x.fixedAt ? 'resubmit' : 'submit') }, 'Отправил в Apple')
           : personById(x.pmId) && h('span', { class: 'muted rm-from' }, 'от ' + nameFrom(personById(x.pmId).name)))),
         section('Реджекты', 'Реджектов нет', 'Когда Apple вернёт релиз, PM получит задачу на исправление', d.rejected, x => {
-          const pm = personById(x.pmId);
           return [h('span', { class: 'rq-line' }, h('b', { class: 'danger-text' }, `№${x.rejectNo || ''} · ${x.reason}`),
-            h('span', { class: 'muted' }, ' · ' + (pm ? pm.name.split(' ')[0] : 'PM') + ' · ' + relTime(x.rejectedAt)))];
+            h('span', { class: 'muted' }, ' · ' + relTime(x.rejectedAt)))];
         }, x => [h('button', { class: 'btn', title: 'Задача по реджекту закроется, релиз вернётся в очередь', onclick: () => closeReject(x) }, 'Закрыть реджект'),
           h('button', { class: 'btn', onclick: () => step(x, 'resubmit') }, 'Отправил снова')], 0, true)),
         h('div', { class: 'rm-col' }, reviewBlock, storeBlock(live.rows))),
       // свои приложения и задачи «в фокусе» — статус обновляется сам; пустого блока нет
-      watchBlock([], { openApp: id => openAppById(id, load), openTask: peekTask, appIcon, appStatusCell, stageDots, release: true, prioTag }));
+      watchBlock([], { openApp: id => openAppById(id, load), openTask: peekTask, appIcon, appStatusCell, stageDots, release: true }));
   }
   async function step(x, action, reason) {
     try {
@@ -99,7 +98,7 @@ function section(title, hint, sub, rows, line, actions, limit = 0, below = false
 
 
 /**
- * «Релизы в App Store» — последние вышедшие: всегда не больше 3; «Показать ещё» раскрывает до 7;
+ * «Релизы в App Store» — последние вышедшие: сначала 2; «Показать ещё» раскрывает до 7;
  * дальше — «Вся история» (окно истории с фильтром «В сторе»).
  */
 function storeBlock(rows) {
@@ -114,9 +113,9 @@ function storeBlock(rows) {
     h('div', { class: 'section-head' }, h('h2', null, 'Релизы в App Store', rows.length > 0 && h('span', { class: 'muted sec-n' }, rows.length)),
       h('button', { class: 'link-btn', onclick: () => openReleaseHistory({ result: 'live' }) }, 'История')),
     rows.length
-      ? h('div', { class: 'card-box att-list' }, rows.slice(0, open ? 7 : 3).map(row),
-        rows.length > 3 && h('div', { class: 'rm-more' },
-          h('button', { class: 'link-btn', onclick: () => { open = !open; draw(); } }, open ? 'Свернуть' : `Показать ещё ${Math.min(rows.length, 7) - 3}`),
+      ? h('div', { class: 'card-box att-list' }, rows.slice(0, open ? 7 : 2).map(row),
+        rows.length > 2 && h('div', { class: 'rm-more' },
+          h('button', { class: 'link-btn', onclick: () => { open = !open; draw(); } }, open ? 'Свернуть' : `Показать ещё ${Math.min(rows.length, 7) - 2}`),
           open && rows.length > 7 && h('button', { class: 'link-btn', onclick: () => openReleaseHistory({ result: 'live' }) }, `Вся история · ${rows.length}`)))
       : emptyBlock('В стор пока ничего не выходило', { ic: 'app' }));
   draw();

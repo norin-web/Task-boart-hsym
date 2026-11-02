@@ -61,6 +61,8 @@ export const METRICS = [
   { screen: 'RM12', checks: [{ sel: '.modal', prop: 'width', want: 480 }, { sel: '.wp-dlg .inp', prop: 'height', want: 40 }, { sel: '.wp-dlg .w-pick-row', prop: 'minHeight', want: '44px' }, { sel: '.wp-dlg .aud-check', prop: 'width', want: 18 }] },
   { screen: 'L01', checks: [{ sel: '.section-head h2', prop: 'fontSize', want: '16px' }, { sel: '.fc-row', prop: 'minHeight', want: '58px' }, { sel: '.tl-list .tl-bar', prop: 'height', want: 6 }, { sel: '.tl-list .tl-bar', prop: 'position', want: 'static' }] },
   { screen: 'L08', checks: [{ sel: '.modal', prop: 'width', want: 760 }, { sel: '.sp-dlg .split-row select.inp', prop: 'height', want: 40 }] },
+  { screen: 'RM12', checks: [{ sel: '.wp-dlg .app-ic-slot', prop: 'width', want: 40 }] },
+  { screen: 'RM18', checks: [{ sel: '.rm-page .w-row', prop: 'borderTopLeftRadius', want: '0px' }, { sel: '.rm-page .w-row', prop: 'minHeight', want: '60px' }] },
   { screen: 'RM01', checks: [{ sel: '.rm-grid .rm-row', prop: 'minHeight', want: '60px' }, { sel: '.rm-grid .rm-row .app-img, .rm-grid .rm-row .uc-icon', prop: 'width', want: 34 }, { sel: '.rm-actions .btn', prop: 'height', want: 32 }, { sel: '#sidebar', noText: 'Мои задачи', prop: 'text', want: 'есть' }, { sel: '#sidebar', noText: 'Мои юниты', prop: 'text', want: 'нет' }] },
   { screen: 'D37', checks: [{ sel: '.modal.dq-dlg', prop: 'width', want: 760 }, { sel: '.dq-row.yn', prop: 'height', want: 56 }, { sel: '.dq-row .seg button', prop: 'height', want: 32 }] },
   { screen: 'B05', checks: [{ sel: '.topbar .back-btn', prop: 'width', want: 44 }] },

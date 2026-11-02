@@ -1,13 +1,15 @@
 import Sortable from 'sortablejs';
 import { S, LS, byOrder, openCount, me, unitById, personById, activeTeams, isStaff, isSuper, ceoMode, isDev, ACCESS_LABELS, seesApps } from '../state.js';
 import { $, h, icon, avatar, menu, closeMenu, showErr, fill, confirmDlg, setBell } from '../ui.js';
-import { send } from '../api.js';
+import { call, send } from '../api.js';
 import { link, navigate, rerender } from '../router.js';
 import { openPalette } from './palette.js';
 import { unitMenu, openCreateUnit } from './units.js';
 import { openActAs, openMyProfile } from './people.js';
 import { personCaption } from './my.js';
 import { mode, supabase, resetLocalData } from '../data.js';
+
+let myOpen = 0, myOpenAt = 0;
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 
@@ -128,6 +130,18 @@ function drawSidebar() {
   const lite = ceoMode() === 'default';
   const lens = S.realMeId && S.meId !== S.realMeId ? person : null;
   const navLink = (route, ic, label, extra) => link(route, { class: 'nav-item' + (isHere(r, route) ? ' active' : '') }, icon(ic), h('span', { class: 'nav-label' }, label), extra);
+  // сколько открытых задач на мне: число у «Мои задачи» (RM) и «Моя доска» (Lead, сотрудник)
+  const myCount = () => {
+    const el = h('span', { class: 'nav-count' }, myOpen || '');
+    if (Date.now() - myOpenAt > 30000) {
+      myOpenAt = Date.now();
+      call('queryTasks', { assigneeId: S.meId, limit: 500 }).then(r => {
+        myOpen = r.filter(t => t.statusKind !== 'done').length;
+        el.textContent = myOpen || '';
+      }).catch(() => {});
+    }
+    return el;
+  };
   const sec = (label, extra) => h('div', { class: 'nav-section' }, h('span', null, label), extra);
 
   const meBtn = h('button', { class: 'nav-item me', onclick: e => { e.stopPropagation(); meMenu(); }, title: 'Аккаунт', 'aria-haspopup': 'menu', 'aria-expanded': String(meOpen) },
@@ -151,8 +165,8 @@ function drawSidebar() {
       navLink({ view: 'home' }, person && person.access === 'rm' ? 'rocket' : 'home', staff ? 'Дашборд' : person && person.access === 'rm' ? 'Релизы' : 'Мой дашборд'),
       seesApps() && navLink({ view: 'apps' }, 'app', 'Приложения'),
       staff && navLink({ view: 'analytics' }, 'chart', 'Аналитика'),
-      !lite && navLink({ view: 'myboard' }, 'board', 'Моя доска'),
-      !lite && (staff || (person && person.access === 'rm')) && navLink({ view: 'my' }, 'list', 'Мои задачи'),
+      !lite && navLink({ view: 'myboard' }, 'board', 'Моя доска', !staff && !(person && person.access === 'rm') && myCount()),
+      !lite && (staff || (person && person.access === 'rm')) && navLink({ view: 'my' }, 'list', 'Мои задачи', !staff && myCount()),
       sec(staff || (person && person.access === 'rm') ? 'Юниты' : 'Мои юниты', ceo && h('button', { class: 'icon-btn sm', title: 'Новый юнит', onclick: openCreateUnit }, icon('plus', 14))),
       list,
       !units.length && h('div', { class: 'nav-empty' }, 'Юнитов пока нет'),

@@ -4,7 +4,7 @@
  * Добавить — кнопкой в блоке (поиск по приложениям и задачам) или «⋯» → «Отслеживать» в карточке приложения / задачи.
  */
 import { S, me, personById, appStatusById, relTime, fmtDate, todayStr } from '../state.js';
-import { h, icon, avatar, fill, modal, toast, showErr } from '../ui.js';
+import { h, icon, avatar, fill, modal, toast, showErr, statusIcon } from '../ui.js';
 import { call, send } from '../api.js';
 
 const REFRESH = 20e3;
@@ -68,7 +68,7 @@ export function watchBlock(apps, { openApp, openTask, appIcon, appStatusCell, st
     const days = iso => Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 864e5));
     const pm = r && personById(r.pmId);
     const line = !r ? h('span', { class: 'muted' }, 'релиза ещё не было')
-      : r.phase === 'waiting' ? h('span', { class: 'muted' }, 'идёт разработка — релиз ещё не передан')
+      : r.phase === 'waiting' ? h('span', { class: 'muted' }, 'идёт разработка, релиз ещё не передан')
         : r.phase === '' ? (r.fixedAt ? h('span', { class: 'ok-text' }, `реджект №${r.rejectNo} исправлен — отправьте снова`)
           : r.missing.length || r.checklist.done < r.checklist.total
             ? h('span', { class: 'warn-text' }, [r.missing.length && 'не заполнено: ' + r.missing.join(', '), r.checklist.total && `чеклист ${r.checklist.done}/${r.checklist.total}`].filter(Boolean).join(' · '))
@@ -82,7 +82,7 @@ export function watchBlock(apps, { openApp, openTask, appIcon, appStatusCell, st
       h('span', { class: 'w-main' }, h('span', { class: 'w-title' }, h('b', null, a.name), prioTag && prioTag(a.priority)), h('small', { class: 'w-line' }, line)),
       h('span', { class: 'w-phase' + (r ? ' ph-' + (r.phase || 'queue') : '') }, r ? PH[r.phase] : '—'),
       h('span', { class: 'w-now' }, r && r.version ? 'v' + r.version + (r.attempts > 1 ? ` · попытка ${r.attempts}` : '') : ''),
-      h('span', { class: 'muted w-at' }, r ? relTime(r.liveAt || r.rejectedAt || r.submittedAt || a.lastActivity || '') || '—' : '—'),
+      h('span', { class: 'muted w-at' }, r && r.phase === 'waiting' ? (rq => (rq ? `${rq.stages.filter(s => s.done).length}/${rq.stages.length}` : ''))((a.requests || []).find(x => !x.done)) : ''),
     ];
   }
 
@@ -100,6 +100,13 @@ export function watchBlock(apps, { openApp, openTask, appIcon, appStatusCell, st
   function rowTask(t) {
     const late = t.dueDate && t.dueDate < todayStr() && t.statusKind !== 'done';
     const who = personById(t.assigneeId);
+    // на дашборде RM: значок статуса, ключ и исполнитель строкой, справа статус и срок (R02)
+    if (release) return [
+      h('span', { class: 'w-st-ic' }, statusIcon(t.statusKind || 'todo', 16)),
+      h('span', { class: 'w-main' }, h('b', null, t.title), h('small', { class: 'muted' }, [t.key, who && who.name, t.dueDate && 'срок ' + (late ? 'вчера' : fmtDate(t.dueDate))].filter(Boolean).join(' · '))),
+      h('span', { class: 'w-phase' }, t.statusName),
+      h('span', { class: 'w-at' + (late ? ' danger-text' : '') }, t.dueDate ? fmtDate(t.dueDate) : ''),
+    ];
     return [
       h('span', { class: 'key-badge w-key' }, t.key),
       h('span', { class: 'w-main' }, h('b', null, t.title), h('small', { class: 'muted' }, t.unit ? t.unit.name : '')),
@@ -135,6 +142,8 @@ export function watchBlock(apps, { openApp, openTask, appIcon, appStatusCell, st
         ? h('div', { class: 'card-box w-list' }, items.map(it => {
           const changed = prev.has(it.key) && prev.get(it.key) !== it.snap;
           prev.set(it.key, it.snap);
+          const lineEl = changed && [].concat(it.cells).find(c => c && c.querySelector && c.querySelector('.w-line'));
+          if (lineEl) { const l = lineEl.querySelector('.w-line'); l.textContent = 'Только что изменилось · ' + l.textContent; }
           return h('div', { class: 'w-row' + (it.x.t === 'task' ? ' task' : '') + (changed ? ' changed' : ''), title: changed ? 'Только что изменилось' : '' },
             h('button', { class: 'w-open', onclick: it.open }, it.cells),
             h('button', { class: 'icon-btn sm w-x', title: 'Не отслеживать', onclick: () => toggleWatch(it.x.t, it.x.id, it.x.unitId, it.name) }, icon('x', 14)));
@@ -144,8 +153,9 @@ export function watchBlock(apps, { openApp, openTask, appIcon, appStatusCell, st
           h('button', { class: 'btn sm', onclick: () => openWatchPicker(appsNow, () => refresh(true)) }, icon('plus', 14), 'Добавить')));
   }
 
-  draw();
-  refresh(true);
+  // на дашборде RM приложений ещё нет: сначала загрузка, иначе все строки покажутся удалёнными
+  if (apps.length || !watchList().length) draw(); else box.hidden = true;
+  setTimeout(() => refresh(true)); // блок вставят на страницу после возврата: раньше refresh счёл бы его закрытым
   timer = setInterval(() => refresh(false), REFRESH);
   document.addEventListener('tasks:watch', onChange);
   document.addEventListener('visibilitychange', onVis);
