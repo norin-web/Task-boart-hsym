@@ -2566,3 +2566,10 @@ body:has(#modal-root .modal-wrap) #panel-root { visibility: hidden; }
 .td-dlg .aud-check svg { stroke: #fff; width: 12px; height: 12px; }
 .td-dlg .td-out { margin-left: auto; font-size: 12px; line-height: 16px; }
 .modal:has(.title-field) .create-props { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.panel:not(:has(.rl-card)) .panel-side .side-meta { padding-top: 0; border-top: 0; }
+/* что можно менять, видно сразу: стрелка у выпадающих списков панели */
+.panel-side .status-wrap::after { z-index: 1; border-color: var(--text); }
+.panel-side .prop select.inp:not(:disabled) { padding-right: 26px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23111318' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; }
+.panel-side .status-wrap::after { display: none; }
+.panel-side .prop select.inp:disabled { cursor: default; }
+.panel-side .status-wrap:has(select:disabled)::after { display: none; }
