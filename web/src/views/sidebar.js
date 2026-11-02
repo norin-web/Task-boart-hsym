@@ -76,8 +76,6 @@ export const unitTeams = u => {
 };
 
 function unitItem(u, r) {
-  const n = openCount(u);
-  const overdue = u.counts && u.counts.overdue;
   const inside = r.unit === u.id; // на странице юнита или его команды: список команд остаётся открытым
   const here = inside && !r.team;
   const teams = unitTeams(u);
@@ -97,7 +95,7 @@ function unitItem(u, r) {
     h('span', { class: 'unit-dot', style: { background: u.color } }),
     h('span', { class: 'nav-label' }, u.name),
     h('span', { class: 'nav-abbr', 'aria-hidden': 'true' }, String(u.key || u.name || '').replace(/[^\p{L}\p{N}]/gu, '').slice(0, 2).toUpperCase()),  // в свёрнутом сайдбаре (макет 05б): точка + две буквы
-    h('span', { class: 'nav-count' + (overdue ? ' warn' : ''), title: overdue ? 'Просрочено: ' + overdue : 'Открытых задач' }, n || ''),
+
     // стрелка есть у каждого юнита (макет 12): у текущего — разворачивает команды, у остальных — только указывает на вложенность
     h('span', { class: 'nav-chev', 'aria-hidden': 'true' }, icon('chevron', 14))),
     open && h('div', { class: 'nav-subs' },
@@ -112,7 +110,12 @@ export const applyCollapse = () => document.body.classList.toggle('sb-collapsed'
 function toggleCollapse() { LS.set('sbCollapsed', !collapsed()); applyCollapse(); renderSidebar(); }
 
 export function renderSidebar() {
+  // список в сайдбаре перерисовывается целиком — запоминаем прокрутку, иначе выбор команды в юните «прыгает»
+  const keep = document.querySelector('#sidebar .nav-scroll');
+  const top = keep ? keep.scrollTop : 0;
   drawSidebar();
+  const now = document.querySelector('#sidebar .nav-scroll');
+  if (now && top) now.scrollTop = top;
   // свёрнутый сайдбар: подпись и счётчик — в подсказке
   document.querySelectorAll('#sidebar .nav-item, #sidebar .nav-sub').forEach(el => {
     if (el.title) return;
