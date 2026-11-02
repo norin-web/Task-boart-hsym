@@ -269,7 +269,7 @@ export function menu(anchor, items, { cls = '', align = 'right' } = {}) {
     return h('button', {
       class: 'menu-item' + (it.danger ? ' danger' : ''), role: 'menuitem',
       onclick: e => { e.stopPropagation(); closeMenu(); it.action(); },
-    }, it.icon && icon(it.icon, 15), it.label);
+    }, it.icon === 'blank' ? h('span', { style: { width: '15px', flex: 'none' } }) : it.icon && icon(it.icon, 15), it.label);
   }));
   m.addEventListener('click', e => e.stopPropagation());
   // клавиатура: стрелки ходят по пунктам, Home/End — к крайним

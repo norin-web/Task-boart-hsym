@@ -61,7 +61,7 @@ export async function renderAnalytics(tile) {
     const list = unit ? apps.filter(a => a.unitId === unit) : apps;
     const defs = statBlocks(d, list, load, tile).filter(b => isSuper() || b.id !== 'pmload');
     const byId = Object.fromEntries(defs.map(b => [b.id, b]));
-    // свои графики по порядку из настроек; скрытые не рисуем; в конце — «Добавить график»
+    // свои графики по порядку из настроек; скрытые не рисуем; новый график добавляется в Настройки → Графики
     const charts = () => {
       const list = chartsOf((me() || {}).prefs);
       const setDays = (c, v) => {
@@ -70,9 +70,7 @@ export async function renderAnalytics(tile) {
         send('setMyPrefs', { personId: S.meId, prefs: { charts: next } }).catch(showErr);
         draw();
       };
-      return h('div', { class: 'an-grid' }, list.filter(c => !c.off).map(c => chartCard(c, unit, v => setDays(c, v))),
-        h('button', { class: 'an-chart-add', type: 'button', onclick: () => toChartSettings('new') },
-          h('span', { class: 'an-add-ic' }, icon('plus', 18)), h('b', null, 'Добавить график'), h('span', { class: 'muted' }, 'Откроется в Настройки → Графики')));
+      return h('div', { class: 'an-grid' }, list.filter(c => !c.off).map(c => chartCard(c, unit, v => setDays(c, v))));
     };
     const shipped = byId.shipped;
     // как в макете: два графика рядом, ниже — «Команда и KPI» и «Выпущено за 30 дней»

@@ -2764,3 +2764,4 @@ body:has(#modal-root .modal-wrap) #panel-root { visibility: hidden; }
 .modal-body { grid-auto-rows: max-content; }
 .inline-menu.me-menu .menu-item { white-space: nowrap; }
 .inline-menu.me-menu .me-card-text small { overflow: hidden; text-overflow: ellipsis; }
+.dev-people { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }

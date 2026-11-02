@@ -211,7 +211,7 @@ function figures(d, apps) {
     open: apps.flatMap(a => a.requests.filter(r => !r.done).map(r => ({ a, r }))),
     overdue: d.attention.filter(x => x.type === 'overdue' && (!x.app || apps.some(a => a.id === x.app.id))),
     live30,
-    done30: apps.flatMap(a => a.requests.filter(r => r.done && ago(r.doneAt) <= 30).map(r => ({ a, r }))),
+    done30: apps.flatMap(a => a.requests.filter(r => r.done && ago(r.doneAt) <= 30 && !/^Реджект №/.test(r.title)).map(r => ({ a, r }))),
     stale: apps.filter(a => ago(a.lastActivity) > d.staleDays).sort((x, y) => String(x.lastActivity).localeCompare(String(y.lastActivity))),
   };
 }
@@ -302,9 +302,15 @@ export function statBlocks(d, apps, reload, tile = '') {
         h('span', { class: 'muted' }, mine.length + ' в работе', late > 0 && h('span', { class: 'warn-text' }, ' · ' + late + ' просроч.')));
     }), 'PM нет')) },
     { id: 'stale', title: 'Без движения', col: 'right', render: () => section('Давно не трогали', list(stale.map(a => appRow(a, h('span', { class: 'muted rc-at' }, daysAgo(a.lastActivity)), 'stale-row')), 'Таких нет')) },
-    { id: 'shipped', title: 'Выпущено за 30 дней', col: 'right', render: () => section('Выпущено за 30 дней', list([
-      ...live30.map(a => appRow(a, h('span', { class: 'muted rc-at' }, 'App Store · ' + relTime(a.statusAt)))),
-      ...done30.map(({ a, r }) => appRow(a, h('span', { class: 'muted rc-at' }, r.title.slice(0, 40) + ' · ' + relTime(r.doneAt))))], 'Пока ничего')) },
+    { id: 'shipped', title: 'Выпущено за 30 дней', col: 'right', render: () => {
+      // название и подпись в две строки, время — справа: узкая колонка не ломает ряд
+      const row = (a, text, at) => h('button', { class: 'rc-row stale-row', onclick: () => openAppById(a.id, reload) },
+        appIcon(a, 'xs'), h('span', { class: 'rc-main' }, h('b', null, a.name), h('small', { class: 'muted', style: { display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, text)),
+        h('span', { class: 'muted rc-at' }, relTime(at)));
+      return section('Выпущено за 30 дней', list([
+        ...live30.map(a => row(a, 'Вышло в App Store', a.statusAt)),
+        ...done30.map(({ a, r }) => row(a, r.title, r.doneAt))], 'Пока ничего'));
+    } },
   ];
 }
 

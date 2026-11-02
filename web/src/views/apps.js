@@ -216,7 +216,7 @@ export async function renderApps({ unitId = '' } = {}) {
   function groupMenu(anchor) {
     menu(anchor, [{ title: 'Группировка' },
       ...[[true, 'В работе сверху, затем по юнитам'], [false, 'Только по юнитам']].map(([v, label]) => ({
-        label, icon: f.workFirst === v ? 'check' : null, action: () => { f.workFirst = v; saveF(); drawList(); },
+        label, icon: f.workFirst === v ? 'check' : 'blank', action: () => { f.workFirst = v; saveF(); drawList(); },
       }))]);
   }
   const drawFilters = () => {
