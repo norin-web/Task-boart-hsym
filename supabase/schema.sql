@@ -167,9 +167,9 @@ create table if not exists link_fields (
 );
 insert into link_fields (id, name, kind, ord) values
   ('lf_figma', 'Figma', 'figma', 1), ('lf_github', 'GitHub', 'github', 2),
-  ('lf_drive', 'Google Drive', 'drive', 3), ('lf_meta', 'Тексты и метаданные', 'meta', 4), ('lf_l10n', 'Локализации', 'drive', 5)
+  ('lf_drive', 'Google Drive', 'drive', 3), ('lf_texts', 'Тексты', 'meta', 3.5), ('lf_meta', 'Метаданные', 'meta', 4), ('lf_l10n', 'Локализации', 'drive', 5)
 on conflict (id) do nothing;
-update link_fields set name = 'Тексты и метаданные' where id = 'lf_meta' and name = 'Metadata';
+update link_fields set name = 'Метаданные' where id = 'lf_meta' and name in ('Metadata', 'Тексты и метаданные');
 
 -- Значения ссылок — отдельной таблицей, чтобы скрытое поле не уходило в браузер вместе с задачей.
 create table if not exists task_links (
@@ -712,7 +712,8 @@ begin
   col := coalesce(rv ->> 'column', '');
   if col = '' then return new; end if;
   if new.status = col then
-    who := coalesce(nullif(rv -> 'byPosition' ->> new.department_id, ''), rv ->> 'default', '');
+    -- ревьюер задачи важнее настроек юнита: по умолчанию это тот, кто её поставил
+    who := coalesce(nullif(new.reviewer_id, ''), nullif(rv -> 'byPosition' ->> new.department_id, ''), rv ->> 'default', '');
     if who <> '' and who <> new.assignee_id and new.assignee_id = old.assignee_id
        and exists (select 1 from people where id = who and active) then
       new.review_from := old.assignee_id;
@@ -890,6 +891,26 @@ begin
      and not exists (select 1 from notifications n where n.task_id = d.id and n.person_id = d.assignee_id and n.kind = 'unblocked');
   return new;
 end $$;
+-- Задача закрыта: сообщаем тому, кто её поставил, и ревьюеру (себе не пишем)
+create or replace function notify_done() returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_actor text := coalesce(my_person_id(), '');
+  v_who text;
+begin
+  if new.is_test or new.status is not distinct from old.status then return new; end if;
+  if not exists (select 1 from units u, jsonb_array_elements(u.settings -> 'columns') c
+                  where u.id = new.unit_id and c ->> 'id' = new.status and c ->> 'kind' = 'done') then return new; end if;
+  if exists (select 1 from units u, jsonb_array_elements(u.settings -> 'columns') c
+              where u.id = new.unit_id and c ->> 'id' = old.status and c ->> 'kind' = 'done') then return new; end if;
+  for v_who in select distinct x from unnest(array[new.created_by, new.reviewer_id]) x where x <> '' and x <> v_actor and exists (select 1 from people where id = x and active) loop
+    insert into notifications (id, person_id, task_id, kind, actor_id, at)
+    values ('n_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), v_who, new.id, 'task_done', v_actor,
+            to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'));
+  end loop;
+  return new;
+end $$;
+drop trigger if exists notify_done on tasks;
+create trigger notify_done after update of status on tasks for each row execute function notify_done();
 drop trigger if exists notify_unblocked on tasks;
 create trigger notify_unblocked after update of status on tasks for each row execute function notify_unblocked();
 

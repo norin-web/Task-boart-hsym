@@ -5,7 +5,7 @@ import { call, send } from '../api.js';
 import { link, navigate, rerender } from '../router.js';
 import { openPalette } from './palette.js';
 import { unitMenu, openCreateUnit } from './units.js';
-import { openActAs, openMyProfile } from './people.js';
+import { openActAs, openMyProfile, openTeamDialog } from './people.js';
 import { personCaption } from './my.js';
 import { mode, supabase, resetLocalData } from '../data.js';
 
@@ -99,7 +99,7 @@ function unitItem(u, r) {
     h('span', { class: 'nav-chev', 'aria-hidden': 'true' }, icon('chevron', 14))),
     open && h('div', { class: 'nav-subs' },
       teams.map(t => sub({ unit: u.id, mode: 'board', team: t.id }, t.name, r.unit === u.id && r.team === t.id)),
-      isSuper() && h('button', { class: 'nav-sub add', onclick: () => { LS.set('peopleSub', 'teams'); navigate({ view: 'settings', tab: 'people' }); } }, icon('plus', 14), h('span', { class: 'nav-label' }, 'Новая команда'))));
+      isSuper() && h('button', { class: 'nav-sub add', onclick: () => openTeamDialog(u) }, icon('plus', 14), h('span', { class: 'nav-label' }, 'Новая команда'))));
 }
 
 

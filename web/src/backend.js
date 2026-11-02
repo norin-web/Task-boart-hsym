@@ -1120,7 +1120,7 @@ export function createBackend(db, opts = {}) {
         id: uid('t'), unit_id: unit.id, num: (await rpc('next_task_num', { p_unit: unit.id })) ?? fail('Создавать задачи могут CEO и PM юнита', 'FORBIDDEN'),
         title: req(str(p.title, 500), 'Название задачи'), description: str(p.description, 20000), status,
         assignee_id: assignee, department_id: (await validDept(p.departmentId)) || (await memberDept(unit.id, assignee)),
-        team_id: await validTeam(p.teamId),
+        team_id: await validTeam(p.teamId), reviewer_id: str(p.reviewerId, 40) || actor(ctx),
         due_date: date(p.dueDate), ord: (await maxOrd('tasks', { unit_id: unit.id, status })) + 1,
         fields: cleanFieldValues(p.fields, false), checklist: cleanChecklist(p.checklist),
         archived: false, done_at: kindOf(st, status) === 'done' ? ts : '', created_by: actor(ctx), created_at: ts, updated_at: ts,
@@ -1194,6 +1194,7 @@ export function createBackend(db, opts = {}) {
         const v = await validDept(patch.departmentId);
         if (v !== t.department_id) { change('departmentId', t.department_id, v); t.department_id = v; }
       }
+      if ('reviewerId' in patch) { t.reviewer_id = str(patch.reviewerId, 40); dirty = true; }
       if ('assigneeId' in patch) {
         const v = str(patch.assigneeId, 40);
         if (v !== t.assignee_id) {
@@ -1257,7 +1258,7 @@ export function createBackend(db, opts = {}) {
         const saved = await run(T('tasks').update({
           title: t.title, description: t.description, status: t.status, assignee_id: t.assignee_id, department_id: t.department_id, team_id: t.team_id || '',
           due_date: t.due_date, ord: t.ord, fields: t.fields, checklist: t.checklist, archived: t.archived, spec_url: t.spec_url || '',
-          done_at: t.done_at, updated_at: t.updated_at, started_at: t.started_at || '',
+          done_at: t.done_at, updated_at: t.updated_at, started_at: t.started_at || '', reviewer_id: t.reviewer_id || '',
         }).eq('id', t.id).eq('updated_at', r.updated_at).select('*'));
         if (!saved.length) {
           const fresh = await one('tasks', t.id);
@@ -2439,7 +2440,7 @@ export function createBackend(db, opts = {}) {
       const TT = Object.fromEntries(tasks.map(t => [t.id, t])), U = Object.fromEntries(units.map(u => [u.id, u]));
       const A = Object.fromEntries(apps.map(a => [a.id, { id: a.id, name: a.name, color: a.color || '', iconUrl: a.icon_url || '' }]));
       // одно уведомление на задачу: все непрочитанные события по ней — пометками, самое важное первым (решение заказчика)
-      const RANK = ['store_reject', 'overdue', 'returned', 'review', 'mention', 'store_live', 'due_soon', 'unblocked', 'approved', 'assigned', 'handoff'];
+      const RANK = ['store_reject', 'overdue', 'returned', 'review', 'mention', 'store_live', 'due_soon', 'unblocked', 'task_done', 'approved', 'assigned', 'handoff'];
       const rank = k => { const i = RANK.indexOf(k); return i < 0 ? RANK.length : i; };
       const byTask = new Map();
       for (const r of rows) {

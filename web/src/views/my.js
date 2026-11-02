@@ -137,7 +137,7 @@ function row(t, { unit = true, done = false } = {}) {
     whose !== 'set' && statusIcon(t.statusKind === 'progress' && /ревью/i.test(t.statusName) ? 'review' : t.statusKind, 16),
     h('span', { class: 'trow-key' }, t.key),
     h('span', { class: 't-title' }, t.title),
-    whose === 'set' ? h('span', { class: 'trow-status ' + t.statusKind }, KIND_LABELS[t.statusKind]) : h('span', { class: 'trow-status' }, h('span', { class: 'trow-chip' }, t.statusName)),
+    whose === 'set' ? h('span', { class: 'trow-status st-' + t.statusKind }, KIND_LABELS[t.statusKind]) : h('span', { class: 'trow-status' }, h('span', { class: 'trow-chip' }, t.step === 'release' && (t.release || {}).phase === 'submitted' ? 'Ревью Apple' : t.statusName)),
     h('span', { class: 'trow-due' + (late ? ' danger-text' : due ? '' : ' muted'), title: due ? due.hint : '' },
       due ? [whose !== 'set' && icon('calendar', 14), due.text] : whose === 'set' ? '—' : 'Без срока'),
     whose === 'set' && avatar(personById(t.assigneeId), 'sm'),

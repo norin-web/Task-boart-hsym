@@ -2,7 +2,7 @@ import Sortable from 'sortablejs';
 import { S, colorFor, unitById, activeDepts, deptById, activeTeams, teamById, PALETTE, ACCESS_LABELS, isStaff, isSuper, byOrder } from '../state.js';
 import { h, icon, avatar, field, modal, confirmDlg, showErr, toast, fill, colorPicker, menu } from '../ui.js';
 import { send, call } from '../api.js';
-import { rerender } from '../router.js';
+import { rerender, navigate } from '../router.js';
 import { mode, supabase, localPeople, localLogin } from '../data.js';
 import { LS } from '../state.js';
 import { columnsEditor } from './settings.js';
@@ -586,10 +586,12 @@ function dictTable(cfg, { save, remove }) {
     if (!name.value.trim()) return name.focus();
     const d = await send(cfg.api.create, { name: name.value, color: PALETTE[cfg.items().length % PALETTE.length] });
     cfg.setItems([...cfg.items(), d]);
+    if (cfg.expand) opened.add(d.id); // сразу видно, кого добавить
     name.value = '';
     name.focus();
   };
   const list = h('div', { class: 'dt-list' });
+  const opened = new Set(); // раскрытые строки: состав команды
   const members = d => {
     const ps = cfg.people(d);
     return !ps.length ? 'Пока никого' : ps.length === 1 ? ps[0].name : ps.map(p => p.name.split(' ')[0]).join(', ');
@@ -612,7 +614,9 @@ function dictTable(cfg, { save, remove }) {
           onkeydown: e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') { e.target.value = d.name; e.target.blur(); } },
         }),
         h('span', { class: 'dt-sub' }, members(d))),
-      h('b', { class: 'dt-n' }, cfg.count(d)),
+      cfg.expand
+        ? h('button', { class: 'dt-n dt-open' + (opened.has(d.id) ? ' on' : ''), title: 'Кто в команде', 'aria-expanded': String(opened.has(d.id)), onclick: () => { if (opened.has(d.id)) opened.delete(d.id); else opened.add(d.id); draw(); } }, cfg.count(d), icon('chevron', 14))
+        : h('b', { class: 'dt-n' }, cfg.count(d)),
       cfg.third.edit
         ? h('button', { class: 'dt-third link-btn', title: cfg.third.editLabel, onclick: () => cfg.third.edit(d, draw) }, cfg.third.text(d))
         : h('span', { class: 'dt-third' }, cfg.third.text(d)),
@@ -621,12 +625,13 @@ function dictTable(cfg, { save, remove }) {
   let sortable = null;
   const draw = () => {
     const items = [...cfg.items()].sort(byOrder).filter(d => !q || d.name.toLowerCase().includes(q));
-    fill(list, items.length ? items.map(row) : h('p', { class: 'muted dt-empty' }, q ? 'Ничего не найдено' : cfg.emptyText));
+    fill(list, items.length ? items.flatMap(d => [row(d), cfg.expand && opened.has(d.id) && cfg.expand(d, draw)]).filter(Boolean) : h('p', { class: 'muted dt-empty' }, q ? 'Ничего не найдено' : cfg.emptyText));
     if (sortable) sortable.destroy();
     sortable = Sortable.create(list, {
-      handle: '.drag', animation: 150, ghostClass: 'sortable-ghost', forceFallback: true, fallbackTolerance: 4, disabled: !!q,
+      handle: '.drag', draggable: '.dt-row', animation: 150, ghostClass: 'sortable-ghost', forceFallback: true, fallbackTolerance: 4, disabled: !!q,
       onEnd: () => {
         const ids = [...list.children].map(el => el.dataset.id).filter(Boolean);
+        if (opened.size) setTimeout(draw);
         ids.forEach((id, i) => { const d = cfg.items().find(x => x.id === id); if (d) d.order = i + 1; });
         send(cfg.api.reorder, { ids }).catch(showErr);
       },
@@ -664,6 +669,62 @@ export const positionsManager = ({ bare = false } = {}) => dictionaryManager({
   placeholder: 'Например, Backend Dev', addTitle: 'Добавить позицию', emptyText: 'Позиций нет',
 });
 
+const setTeam = async (p, teamId, on) => {
+  const teamIds = on ? [...new Set([...(p.teamIds || []), teamId])] : (p.teamIds || []).filter(x => x !== teamId);
+  await send('updatePerson', { id: p.id, teamIds });
+  p.teamIds = teamIds;
+};
+
+/** Состав команды под строкой: кто в ней, убрать, добавить. */
+function teamPanel(d, redraw) {
+  const inTeam = S.people.filter(p => p.active && (p.teamIds || []).includes(d.id));
+  const rest = S.people.filter(p => p.active && !(p.teamIds || []).includes(d.id));
+  const change = (p, on) => setTeam(p, d.id, on).then(() => { renderSidebar(); redraw(); }).catch(showErr);
+  return h('div', { class: 'dt-team' },
+    inTeam.map(p => h('div', { class: 'dt-person' }, avatar(p, 'sm'), h('span', { class: 'dt-person-name' }, p.name),
+      h('button', { class: 'icon-btn sm', title: 'Убрать из команды', 'aria-label': 'Убрать ' + p.name, onclick: () => change(p, false) }, icon('x', 14)))),
+    rest.length > 0 && h('select', { class: 'inp dt-person-add', 'aria-label': 'Добавить в команду', onchange: e => { const p = S.people.find(x => x.id === e.target.value); if (p) change(p, true); } },
+      h('option', { value: '' }, 'Добавить человека…'), rest.map(p => h('option', { value: p.id }, p.name))));
+}
+
+/** Новая команда из юнита: название и участники; без участников в сайдбаре юнита её не будет. */
+export function openTeamDialog(unit) {
+  const name = h('input', { class: 'inp', maxlength: 40, placeholder: 'Например, Growth Team' });
+  const picked = new Set();
+  const people = S.people.filter(p => p.active).sort((a, b) => Number((unit.members || []).includes(b.id)) - Number((unit.members || []).includes(a.id)) || a.name.localeCompare(b.name));
+  const list = h('div', { class: 'td-list' });
+  const draw = () => fill(list, people.map(p => {
+    const on = picked.has(p.id);
+    return h('button', { class: 'menu-item aud-item td-row' + (on ? ' on' : ''), role: 'checkbox', 'aria-checked': String(on), onclick: () => { if (on) picked.delete(p.id); else picked.add(p.id); draw(); } },
+      h('span', { class: 'aud-check' }, on && icon('check', 13)), avatar(p, 'sm'), p.name, !(unit.members || []).includes(p.id) && h('span', { class: 'muted td-out' }, 'добавится в юнит'));
+  }));
+  draw();
+  modal({
+    title: 'Новая команда · ' + unit.name,
+    cls: 'dlg td-dlg',
+    body: [field('Название', name), field('Участники', list)],
+    actions: [{ label: 'Отмена' }, { label: 'Создать', primary: true, action: async close => {
+      if (!name.value.trim()) { name.focus(); return; }
+      if (!picked.size) { toast('Выберите хотя бы одного участника', { type: 'error' }); return; }
+      const team = await send('createTeam', { name: name.value, color: PALETTE[S.teams.length % PALETTE.length] });
+      S.teams = [...S.teams, team];
+      for (const id of picked) {
+        const p = S.people.find(x => x.id === id);
+        await setTeam(p, team.id, true);
+        if (!(unit.members || []).includes(id)) {
+          await send('setMember', { unitId: unit.id, personId: id, departmentId: p.positionId });
+          unit.members = [...(unit.members || []), id];
+        }
+      }
+      close();
+      renderSidebar();
+      navigate({ unit: unit.id, mode: 'board', team: team.id });
+      toast(`Команда «${team.name}» создана`);
+    } }],
+  });
+  setTimeout(() => name.focus(), 0);
+}
+
 /** Команды людей: у человека несколько, у задачи одна; участник видит задачи своих команд. */
 export const teamsManager = ({ bare = false } = {}) => dictionaryManager({
   bare, colTitle: 'Команда', searchText: 'Название команды',
@@ -677,6 +738,7 @@ export const teamsManager = ({ bare = false } = {}) => dictionaryManager({
   count: d => S.people.filter(p => (p.teamIds || []).includes(d.id)).length,
   removeText: (d, n) => `Удалить команду «${d.name}»?${n ? ` Она пропадёт у ${n} чел.` : ''} Задачи этой команды останутся без неё. Если команда может понадобиться — лучше скрыть.`,
   afterRemove: d => S.people.forEach(p => { if (p.teamIds) p.teamIds = p.teamIds.filter(x => x !== d.id); }),
+  expand: (d, redraw) => teamPanel(d, redraw),
   extra: (d, redraw) => h('button', { class: 'btn ghost sm', title: 'Стартовые этапы личной доски для людей этой команды', onclick: () => editTeamStages(d, redraw) },
     icon('board', 13), (d.boardTemplate || []).length + ' этап.'),
   hint: 'Команды людей: Product Team, UX/UI Designers… У человека может быть несколько. Сотрудник видит в своих юнитах задачи своих команд. «Этапы» — стартовая личная доска для людей команды.',

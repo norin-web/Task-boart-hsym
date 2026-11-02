@@ -655,6 +655,13 @@ function discussionBlock(t, editable) {
 /** Значение только для чтения в правой колонке. */
 const ro = node => h('div', { class: 'ro-value' }, node || h('span', { class: 'muted' }, '—'));
 
+/** Ревьюер: кто принимает работу; по умолчанию тот, кто поставил задачу. */
+function reviewerSelect(value, unit, onChange) {
+  const ids = [...new Set([value, S.meId, ...(unit.members || [])].filter(Boolean))];
+  return h('select', { class: 'inp', 'aria-label': 'Ревьюер', onchange: e => onChange(e.target.value) },
+    ids.map(personById).filter(p => p && (p.active || p.id === value)).map(p => h('option', { value: p.id, selected: p.id === value }, p.name)));
+}
+
 /** Приоритет в карточке релиза: значок и название (R04). */
 function prioRo(t, f) {
   const p = priorityOf(t, f);
@@ -707,6 +714,8 @@ function sideBlock(t, { staff, editable }) {
       }, icon('user', 12), 'Назначить на меня')),
     });
   }
+
+  if (staff && t.step !== 'release') prop('Ревьюер', reviewerSelect(t.reviewerId || t.createdBy, u, v => { patchTask(t, { reviewerId: v }); }));
 
   if (!B.dueDate.hidden && !staff) {
     const info = dueInfo(t.dueDate, taskDone(t));
@@ -886,8 +895,9 @@ export function openCreateTask(opts = {}) {
   // С дашборда для конкретного человека — его первый юнит, исполнитель и позиция подставлены
   const ownUnit = opts.assigneeId && units.find(u => (u.members || []).includes(opts.assigneeId));
   let unit = inBoard ? S.board.unit : unitById(opts.unitId) || ownUnit || units[0];
+  let here = inBoard; // юнит можно сменить: поля и люди берутся из выбранного
   const draft = {
-    status: opts.status || '', assigneeId: opts.assigneeId || '', dueDate: '', fields: {}, links: {}, teamId: '',
+    status: opts.status || '', assigneeId: opts.assigneeId || '', reviewerId: S.meId || '', dueDate: '', fields: {}, links: {}, teamId: '',
     departmentId: opts.departmentId || (S.filters.depts.length === 1 && inBoard ? S.filters.depts[0] : ''),
   };
 
@@ -930,7 +940,7 @@ export function openCreateTask(opts = {}) {
     if (tpl) applyTemplate(tpl); else if (used) applyTemplate(used);
   } }, h('option', { value: '' }, 'Без шаблона'), taskTpls.map(tpl => h('option', { value: tpl.id }, tpl.name)));
   const tplRow = h('div', { class: 'grid2 create-top' },
-    field('Юнит', h('select', { class: 'inp', value: unit.id, disabled: inBoard, onchange: e => { unit = unitById(e.target.value); drawProps(); } },
+    field('Юнит', h('select', { class: 'inp', value: unit.id, disabled: !!opts.parent, onchange: e => { unit = unitById(e.target.value); here = S.board && S.board.unit.id === unit.id; drawProps(); } },
       units.map(u => h('option', { value: u.id }, u.name)))),
     tplSel && field('Шаблон', tplSel),
     tplNote);
@@ -949,16 +959,17 @@ export function openCreateTask(opts = {}) {
         if (p && !draft.teamId && (p.teamIds || []).length) draft.teamId = p.teamIds[0];
         if (p && !(p.positionIds || [p.positionId]).includes(draft.departmentId)) draft.departmentId = p.positionId;
         drawProps();
-      }, inBoard ? {} : { ids: unit.members || [], unitId: unit.id }))),
+      }, here ? {} : { ids: unit.members || [], unitId: unit.id }))),
+      field('Ревьюер', reviewerSelect(draft.reviewerId, unit, v => { draft.reviewerId = v; })),
       // позицию не спрашиваем — её подставит исполнитель (или шаблон)
       // макет 34: срок — плашкой «📅 2 нояб.», календарь по клику; исполнитель — с аватаром
       !B.dueDate.hidden && field(B.dueDate.label, h('label', { class: 'inp date-pill' + (draft.dueDate ? '' : ' empty') }, icon('calendar', 14),
         h('span', null, draft.dueDate ? fmtDate(draft.dueDate) : 'Без срока'),
         h('input', { class: 'due-inp', type: 'date', value: draft.dueDate, 'aria-label': B.dueDate.label,
           onchange: e => { draft.dueDate = e.target.value; drawProps(); }, onclick: e => { try { e.target.showPicker(); } catch { /* старый браузер */ } } }))),
-      inBoard && [...activeFields()].sort((a, b) => (b.role === 'priority') - (a.role === 'priority')).map(f => field(f.name + (f.required || f.requiredOnCreate ? ' *' : ''),
+      here && [...activeFields()].sort((a, b) => (b.role === 'priority') - (a.role === 'priority')).map(f => field(f.name + (f.required || f.requiredOnCreate ? ' *' : ''),
         fieldInput(f, draft.fields[f.id], v => { if (isEmpty(v)) delete draft.fields[f.id]; else draft.fields[f.id] = v; }))),
-      !inBoard && h('div', { class: 'hint', style: { gridColumn: '1 / -1' } }, 'Дополнительные поля юнита можно заполнить в карточке после создания.'));
+      !here && h('div', { class: 'hint', style: { gridColumn: '1 / -1' } }, 'Дополнительные поля юнита можно заполнить в карточке после создания.'));
   };
   drawProps();
 

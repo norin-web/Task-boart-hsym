@@ -152,6 +152,9 @@ function draw(page, data) {
   fill(page,
     data.tasks.length ? null : h('p', { class: 'hint my-empty' }, 'На вас пока нет задач. Когда вас назначат исполнителем, они появятся здесь.'),
     h('div', { class: 'board my-board' }, columnEls));
+  // колонок больше экрана: первая задача не должна остаться за краем
+  const first = page.querySelector('.my-card');
+  if (first) first.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
 
 /** Перенос: запоминаем колонку; если группа другая — меняем статус задачи в юните (не вышло — возвращаем). */

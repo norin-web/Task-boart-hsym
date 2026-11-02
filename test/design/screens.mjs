@@ -131,6 +131,10 @@ export const SCREENS = [
   { code: 'M12', name: 'Мои задачи, сотрудник', as: 'member', route: '#/my' },
   { code: 'M13', name: 'Юнит, сотрудник', as: 'member', route: ids => `#/u/${ids.mvp}` },
   { code: 'RM18', name: 'Отслеживаю, RM', as: 'rm', route: '#/', act: async (p, ids) => { await p.evaluate(async ({ a, b }) => { const m = await import('/src/views/watch.js'); const { call } = await import('/src/api.js'); const ap = await call('listApps', {}); m.toggleWatch('app', a, ap.find(x => x.id === a).unitId, 'x'); m.toggleWatch('app', b, ap.find(x => x.id === b).unitId, 'y'); const r = await call('queryTasks', { limit: 1 }); m.toggleWatch('task', r[0].id, r[0].unitId, r[0].title); }, { a: ids.carrot, b: ids.streaks }); await p.waitForSelector('.w-row'); await p.waitForTimeout(500); } },
+  { code: 'A20', name: 'Войти как', route: '#/', act: dlg(`(async () => { const { openActAs } = await import('/src/views/people.js'); await openActAs(); })()`), height: 900 },
+  { code: 'A21', name: 'Новая команда', route: '#/', act: dlg(`(async () => { const { S } = await import('/src/state.js'); const { openTeamDialog } = await import('/src/views/people.js'); openTeamDialog(S.units[0]); })()`) },
+  { code: 'A22', name: 'Команды, состав', route: prefs('people'), act: async p => { await p.locator('button:has-text("Команды"), a:has-text("Команды")').first().click(); await p.waitForSelector('.dt-open'); await p.click('.dt-open'); await p.waitForTimeout(300); } },
+  { code: 'A23', name: 'Новая задача', route: '#/my', act: dlg(`(async () => { const { openCreateTask } = await import('/src/views/task.js'); openCreateTask(); })()`) },
 ];
 
 /** Намеренные отличия: чтобы процент не вводил в заблуждение. */

@@ -69,7 +69,7 @@ const NEWS_BLOCK = {
   render: () => newsBlock(),
 };
 
-const NEWS_WHAT = { assigned: 'новое', review: 'ревью', returned: 'вернули', approved: 'закрыта по ревью', unblocked: 'можно начинать', overdue: 'просрочено', due_soon: 'срок', handoff: 'новое приложение',
+const NEWS_WHAT = { assigned: 'новое', review: 'ревью', returned: 'вернули', approved: 'закрыта по ревью', task_done: 'выполнено', unblocked: 'можно начинать', overdue: 'просрочено', due_soon: 'срок', handoff: 'новое приложение',
   mention: 'вас отметили', store_live: 'вышло в App Store', store_reject: 'реджект Apple' };
 const NEWS_DANGER = ['overdue', 'returned', 'store_reject'];
 
@@ -87,6 +87,7 @@ export function newsBlock() {
       review: who ? [who, ' отдал(а) на ревью ', q] : ['На ревью: ', q],
       returned: who ? [who, ' вернул(а) на доработку ', q] : ['Вернули на доработку ', q],
       approved: who ? [who, ' принял(а) ', q] : ['Принято: ', q],
+      task_done: who ? [who, ' закрыл(а) ', q] : ['Закрыта задача ', q],
       mention: who ? [who, ' упомянул(а) вас в ', q] : ['Вас упомянули в ', q],
       unblocked: ['Можно начинать ', q],
       due_soon: ['Срок ' + (n.dueDate === todayStr() ? 'сегодня' : 'завтра') + ': ', q],

@@ -745,7 +745,6 @@ body.sb-collapsed .panel, body.sb-collapsed .panel.center { left: 102px; }
 @media (hover: none) { .rl-fields .af-row > .icon-btn { opacity: 1; } }
 
 /* Релиз: правая колонка без стрелок у выпадающих списков, как в макете */
-.panel:has(.rl-card) .props select.inp { appearance: none; -webkit-appearance: none; background-image: none; padding-left: 0; padding-right: 0; border-color: transparent; background-color: transparent; font-weight: 600; }
 
 /* ---------- первый вход (макет 44) ---------- */
 .nav-empty { height: 36px; display: flex; align-items: center; padding: 0 12px; font-size: 13px; line-height: 20px; font-weight: 500; color: var(--sidebar-text); opacity: .7; }
@@ -1939,7 +1938,7 @@ body { letter-spacing: -.01em; }
 .ugroup.set .trow:hover { background: transparent; }
 .ugroup.set .t-title { line-height: 16px; }
 .ugroup.set .trow-status { width: 130px; font-size: 12px; line-height: 16px; font-weight: 600; }
-.ugroup.set .trow-status.progress { color: var(--info); }
+.ugroup.set .trow-status.st-progress { color: var(--info); }
 .ugroup.set .trow-due { width: 90px; line-height: 16px; }
 .ugroup.set .avatar.sm { width: 24px; height: 24px; font-size: 11px; flex: none; }
 .ugroup.set .avatar.empty { background: transparent; border: 1.5px dashed var(--border-strong, #C9CCD3); color: transparent; }
@@ -2048,7 +2047,7 @@ table.tasks.unit-list tbody.grp:first-of-type tr.grp-head td { border-top: 0; }
 /* правки по сверке с P22, P23 */
 .ugroup.set .trow { border-bottom: 0; }
 .ugroup.set .rows > * + * { border-top: 1px solid var(--border); }
-.my-controls:has(.my-whose button:nth-child(2).on) .my-view, .my-controls:has(.my-whose button:nth-child(2).on) .my-toggle { display: none; }
+.my-controls:has(.my-whose button:nth-child(2).on) .my-view { display: none; }
 .my-controls:has(.my-whose button:nth-child(2).on) .my-search { flex: 1; max-width: none; height: 40px; }
 .who-strip { margin-left: 0; margin-right: 0; padding: 0; }
 #main:has(.who-strip) .col { padding: 14px; gap: 10px; background: var(--surface-3); border-radius: 28px; }
@@ -2389,11 +2388,6 @@ table.tasks.unit-list .chips .chip::before { display: none; }
 .rl-hist-row:first-child { border-top: 0; }
 .rl-hist-row > .danger-text, .rl-hist-row > .ok-text { font-weight: 600; }
 .panel:has(.rl-card) .panel-side .prop > label { margin-bottom: 6px; }
-.panel:has(.rl-card) .panel-side .prop:first-child { display: block; }
-.panel:has(.rl-card) .panel-side .prop:first-child > label { margin-bottom: 6px; }
-.panel:has(.rl-card) .panel-side .status-wrap { margin-left: 0; }
-.panel:has(.rl-card) .panel-side .status-wrap .dot, .panel:has(.rl-card) .panel-side .status-wrap::after { display: none; }
-.panel:has(.rl-card) .panel-side .status-wrap select.inp { height: 20px; padding: 0; border: 0; background: transparent; font-size: 13px; line-height: 20px; }
 .panel:has(.rl-card) .panel-side .assignee-wrap .avatar.md { width: 32px; height: 32px; }
 .panel:has(.rl-card) .panel-side .due-wrap { font-size: 13px; line-height: 20px; font-weight: 600; }
 .panel:has(.rl-card) .props { padding-bottom: 16px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
@@ -2403,7 +2397,6 @@ table.tasks.unit-list .chips .chip::before { display: none; }
 .rel-team .prop > label { margin-bottom: 2px !important; }
 .rel-team .prop:last-child { margin-bottom: 0; }
 .panel:has(.rl-card) .side-meta { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); font-weight: 500; }
-.panel-body:has(.rl-card) { grid-template-columns: minmax(0, 1fr) 364px; }
 .rl-now.bad .rl-line .muted:not(.rl-small) { flex: 1; }
 .rl-fields .af-name .req { color: inherit; }
 .panel:has(.rl-card) .ro-value { display: flex; align-items: center; gap: 8px; min-height: 0; padding: 0; font-size: 13px; line-height: 20px; font-weight: 600; }
@@ -2546,3 +2539,30 @@ table.tasks.unit-list .chips .chip::before { display: none; }
 @media (hover: none) { .rm-page .w-x { opacity: 1; } }
 .rm-page .watch.rel .w-open, .rm-page .watch .w-row.task .w-open { grid-template-columns: 34px minmax(0, 1fr) auto auto; gap: 12px; }
 .rm-page .watch.rel .w-row .w-open { grid-template-columns: 34px minmax(0, 1fr) auto auto; gap: 12px; }
+
+/* ---------- правки владельца: окна, карточка, команды ---------- */
+/* окно не лежит поверх окна: под открытым окном панель и прошлое окно скрыты, при закрытии возвращаются */
+body:has(#modal-root .modal-wrap) #panel-root { visibility: hidden; }
+#modal-root .modal-wrap:not(:last-child) { visibility: hidden; }
+.dq-dlg .dq-row { flex: none; }
+.panel-body { grid-template-columns: minmax(0, 1fr) 364px; }
+.panel-side .side-meta { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); font-weight: 500; }
+.link-row .link-name { white-space: nowrap; }
+.people-list .person-item, .people-list .person-item:hover { border-radius: 0; }
+.ugroup.set .trow-status.st-todo { color: var(--muted); }
+.ugroup.set .trow-status.st-done { color: var(--accent-text); }
+.dt-open { display: inline-flex; align-items: center; gap: 4px; width: fit-content; padding: 0; border: 0; background: none; font: inherit; font-weight: 600; color: var(--text); cursor: pointer; }
+.dt-open .i { color: var(--muted); transition: transform .15s; }
+.dt-open.on .i { transform: rotate(180deg); }
+.dt-team { display: grid; gap: 2px; padding: 8px 44px 12px 30px; border-top: 1px solid var(--border); }
+.dt-person { display: flex; align-items: center; gap: 10px; min-height: 40px; font-size: 13px; line-height: 20px; font-weight: 500; }
+.dt-person-name { flex: 1; min-width: 0; }
+.dt-person-add { max-width: 280px; height: 40px; margin-top: 6px; border: 0; border-radius: 16px; background: var(--surface-2); font-size: 13px; font-weight: 500; }
+.td-dlg .td-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }
+.td-dlg .td-row { display: flex; align-items: center; gap: 10px; width: 100%; height: 40px; padding: 0 8px; border-radius: 12px; font-size: 13px; line-height: 20px; font-weight: 500; color: var(--text); text-align: left; }
+.td-dlg .td-row.on { background: transparent; }
+.td-dlg .aud-check { flex: none; display: grid; place-items: center; width: 18px; height: 18px; border: 2px solid var(--border-strong); border-radius: 6px; color: #fff; }
+.td-dlg .td-row.on .aud-check { border-color: var(--primary); background: var(--primary); }
+.td-dlg .aud-check svg { stroke: #fff; width: 12px; height: 12px; }
+.td-dlg .td-out { margin-left: auto; font-size: 12px; line-height: 16px; }
+.modal:has(.title-field) .create-props { grid-template-columns: repeat(2, minmax(0, 1fr)); }
