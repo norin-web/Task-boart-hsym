@@ -730,7 +730,7 @@ function sideBlock(t, { staff, editable }) {
 
   // ревьюер задачи; у старых задач его нет — тогда показываем того, кому её отдаст настройка ревью юнита
   const rv = (u.settings || {}).review || {};
-  if ((staff || ((me() || {}).access === 'lead' && t.assigneeId === S.meId)) && t.step !== 'release') prop('Ревьюер', reviewerSelect(t.reviewerId || (rv.byPosition || {})[t.departmentId] || rv.default || '', u, v => { patchTask(t, { reviewerId: v }); }));
+  if ((staff || ((me() || {}).access === 'lead' && (t.assigneeId === S.meId || inMyZone(t)))) && t.step !== 'release') prop('Ревьюер', reviewerSelect(t.reviewerId || (rv.byPosition || {})[t.departmentId] || rv.default || '', u, v => { patchTask(t, { reviewerId: v }); }));
 
   if (!B.dueDate.hidden && !staff && !zone) {
     const info = dueInfo(t.dueDate, taskDone(t));
