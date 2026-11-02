@@ -169,9 +169,20 @@ async function runProcess(api, P, U, test) {
     const who = by || pm;
     const s = Object.fromEntries((await act(who, 'decomposeRequest', { taskId: a.request.id })).map(t => [t.step, t]));
     for (const [k, [fieldId, url]] of Object.entries(linksOf(name))) await act('anna', 'setTaskLink', { taskId: s[k].id, fieldId, url });
+    // дизайнер: у части приложений — Юлия, у остальных — Мария (для живой таблицы «Сводка»)
+    if (apps % 2 === 0 && P.julia) { await set(s.design.id, { assigneeId: P.julia.id }, who).catch(() => null); s.design.assigneeId = P.julia.id; }
     const dev = s.design;
     await set(dev.id, { checklist: dev.checklist.map((i, n) => ({ ...i, done: until !== 'design' ? true : n === 0 })) }, who).catch(() => null);
     if (until === 'design') { await move(dev.id, 'in_progress', worker(P, dev.assigneeId || P[pm].id)); return { app: a.app, request: a.request, s }; }
+    // промежуточные стадии: iOS на ревью / тесты в работе / тексты в работе
+    const STOP = { review: ['design'], qa: ['design', 'ios'], texts: ['design', 'ios', 'qa'] };
+    if (STOP[until]) {
+      for (const k of STOP[until]) await close(s[k], s[k].assigneeId ? worker(P, s[k].assigneeId) : pm, pm);
+      const cur = { review: 'ios', qa: 'qa', texts: 'meta' }[until];
+      const who2 = s[cur].assigneeId ? worker(P, s[cur].assigneeId) : pm;
+      await move(s[cur].id, until === 'review' ? 'review' : 'in_progress', who2).catch(() => null);
+      return { app: a.app, request: a.request, s };
+    }
     const keys = until === 'dev' || until === 'ready' ? ['design'] : ['design', 'ios', 'qa', 'meta', 'retext', 'l10n'];
     for (const k of keys) await close(s[k], s[k].assigneeId ? worker(P, s[k].assigneeId) : pm, pm);
     if (until === 'ready') return { app: a.app, request: a.request, s };  // дизайн закрыт, iOS ждёт разработчика
@@ -207,6 +218,10 @@ async function runProcess(api, P, U, test) {
   await ship('Ulysses Writing App', 'RF', '#06b6d4', 'ready', { priority: 'o_high', due: day(28), description: 'Очередь: дизайн готов, ждёт разработчика.' });
   await ship('Pixelmator Photo', 'RF', '#a855f7', 'ready', { description: 'Очередь: дизайн готов, ждёт разработчика.' });
   await ship('Carbon Notes', 'MVP', '#22c55e', 'ready', { due: day(40), description: 'Очередь: дизайн готов, ждёт разработчика.' });
+
+  await ship('Timery Time Tracker', 'GLD', '#ef4444', 'review', { description: 'Сводка: iOS на ревью у лида.' });
+  await ship('Fitbod Workouts', 'RF', '#14b8a6', 'qa', { description: 'Сводка: разработка закрыта, тесты в работе.' });
+  await ship('Reeder Feed Reader', 'MVP', '#3b82f6', 'texts', { description: 'Сводка: тексты в работе.' });
 
   // ── R. Релиз-менеджер: очередь / заполняет / Apple / реджект / в сторе ×3
   await ship('Things 3', 'MVP', '#3b82f6', 'queue', { description: 'Ветка RM: релиз передан, RM ещё не начал.' });
