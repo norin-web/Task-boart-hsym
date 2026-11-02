@@ -1,6 +1,7 @@
 import '@fontsource-variable/montserrat/wght.css';
 import './styles.css';
 import './ds.css';
+import './motion.css';
 import { S, setMe, todayStr } from './state.js';
 import { $, h, icon, fill, closeMenu, closeNav, isMenuOpen, isModalOpen, refreshPresence } from './ui.js';
 import { call } from './api.js';
