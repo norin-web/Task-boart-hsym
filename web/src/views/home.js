@@ -11,7 +11,7 @@ import { activityFeed } from './feed.js';
 import { appIcon } from './apps.js';
 import { renderLayout, editLayout } from './layout.js';
 import { openPeople } from './people.js';
-import { focusBlock, reviewsBlock, teamLoadBlock, splitBlock } from './employee.js';
+import { focusBlock, reviewsBlock, teamLoadBlock, splitBlock, sentBlock } from './employee.js';
 
 /* ---------- «Новое для вас»: задачи, которые на меня назначили ---------- */
 
@@ -530,6 +530,7 @@ async function renderMemberHome() {
   const BLOCKS = [
     { ...NEWS_BLOCK, off: true },
     { id: 'focus', title: 'Фокус', col: 'full', render: () => focusBlock(md, () => rerender()) },
+    (me() || {}).access === 'member' && { id: 'sent', title: 'Отправлено на ревью', col: 'left', render: () => sentBlock(md, () => rerender()) },
     md.lead && { id: 'reviews', title: 'Ждут вашего ревью', col: 'left', render: () => reviewsBlock(md, () => rerender()) },
     md.lead && { id: 'split', title: 'Раздано', col: 'left', off: true, render: () => splitBlock(md) },
     md.lead && { id: 'teamLoad', title: 'Загрузка позиции', col: 'right', render: () => teamLoadBlock(md) },

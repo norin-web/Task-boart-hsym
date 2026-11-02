@@ -8,6 +8,7 @@ import { send } from '../api.js';
 import { peekTask } from './task.js';
 import { appIcon, prioTag, isHighPrio } from './apps.js';
 import { reviewButtons } from './review.js';
+import { readNote } from './home.js';
 
 // Красным — только просрочка; остальное — серым
 const REASON = {
@@ -73,6 +74,41 @@ export function reviewsBlock(d, reload) {
           h('span', { class: 'muted fc-sub' }, [author && author.name, waited(t.updatedAt)].filter(Boolean).join(' · '))),
         h('div', { class: 'rv-actions' }, reviewButtons({ ...t, reviewFrom: t.authorId }, () => reload())));
     })) : emptyBlock('Ревью никто не ждёт', { ic: 'eye' }));
+}
+
+/** Отправлено мной на ревью: что и у кого сейчас; «Открыть» и «Забрать из ревью» (если ревьюер ещё не решил). */
+export function sentBlock(d, reload) {
+  const wait = d.sent || [];
+  // решённые ревьюером: остаются здесь с отметкой, пока автор не открыл задачу или не нажал «Ок» (читается уведомление)
+  const decided = (S.notes || []).filter(n => (n.kinds || [n.kind]).some(k => k === 'approved' || k === 'returned'))
+    .filter(n => !wait.some(t => t.id === n.taskId));
+  const recall = async t => {
+    try { await send('recallReview', { id: t.id }); toast('Задача снова у вас'); if (reload) reload(); } catch (e) { showErr(e); }
+  };
+  const total = wait.length + decided.length;
+  const decidedRow = n => {
+    const rv = personById(n.actorId);
+    const back = (n.kinds || [n.kind]).includes('returned');
+    return h('div', { class: 'sent-row decided ' + (back ? 'back' : 'ok'), dataset: { noteTask: n.taskId }, role: 'button', tabindex: 0, onclick: () => peekTask(n.unit.id, n.taskId) },
+      rv ? avatar(rv, 'md') : h('span'),
+      h('div', { class: 'sent-main' },
+        h('div', { class: 'sent-title' }, n.title.split(' · ')[0] + (n.app ? ' · ' + n.app.name : '')),
+        h('div', { class: 'sent-sub' }, (back ? 'Вернули на доработку' : 'Принято') + (rv ? ' · ' + rv.name : ''))),
+      h('div', { class: 'sent-actions' },
+        h('button', { class: 'btn sm', title: 'Убрать из списка', onclick: e => { e.stopPropagation(); readNote(n.taskId); } }, 'Ок')));
+  };
+  return h('section', null,
+    h('div', { class: 'section-head' }, h('h2', null, 'Отправлено на ревью'), total > 0 && h('span', { class: 'muted fc-hint' }, total)),
+    total ? h('div', { class: 'card-box sent-list' }, decided.map(decidedRow), wait.map(t => {
+      const rv = personById(t.reviewerId);
+      return h('div', { class: 'sent-row', role: 'button', tabindex: 0, onclick: () => peekTask(t.unitId, t.id) },
+        rv ? avatar(rv, 'md') : h('span'),
+        h('div', { class: 'sent-main' },
+          h('div', { class: 'sent-title' }, t.title.split(' · ')[0] + (t.app ? ' · ' + t.app.name : '')),
+          h('div', { class: 'muted sent-sub' }, [rv ? 'у ' + rv.name : 'ревьюер не назначен', waited(t.updatedAt)].filter(Boolean).join(' · '))),
+        h('div', { class: 'sent-actions' },
+          h('button', { class: 'btn sm', title: 'Вернуть задачу себе, если что-то забыли', onclick: e => { e.stopPropagation(); recall(t); } }, icon('back', 13), 'Забрать')));
+    })) : emptyBlock('Ничего не ждёт ревью', { ic: 'eye' }));
 }
 
 /** Загрузка людей позиции лида в его юнитах: задач на человеке и полоса; перегруз (много открытых или есть просрочка) — оранжевым и красным числом. */

@@ -1135,7 +1135,7 @@ export function createBackend(db, opts = {}) {
         id: uid('t'), unit_id: unit.id, num: (await rpc('next_task_num', { p_unit: unit.id })) ?? fail('Создавать задачи могут CEO и PM юнита', 'FORBIDDEN'),
         title: req(str(p.title, 500), 'Название задачи'), description: str(p.description, 20000), status,
         assignee_id: assignee, department_id: (await validDept(p.departmentId)) || (await memberDept(unit.id, assignee)),
-        team_id: await validTeam(p.teamId), reviewer_id: str(p.reviewerId, 40) || actor(ctx),
+        team_id: await validTeam(p.teamId), reviewer_id: str(p.reviewerId, 40),
         due_date: date(p.dueDate), ord: (await maxOrd('tasks', { unit_id: unit.id, status })) + 1,
         fields: cleanFieldValues(p.fields, false), checklist: cleanChecklist(p.checklist),
         archived: false, done_at: kindOf(st, status) === 'done' ? ts : '', created_by: actor(ctx), created_at: ts, updated_at: ts,
@@ -2349,7 +2349,10 @@ export function createBackend(db, opts = {}) {
       const focus = mine.map(t => ({ ...brief(t), reason: reason(t) })).filter(t => t.reason)
         .sort((a, b) => rankR[a.reason] - rankR[b.reason] || (a.dueDate || '9999').localeCompare(b.dueDate || '9999'));
 
-      if (!isLead) return { focus, lead: null };
+      // отправлено мной на ревью: задача лежит в колонке ревью, исполнитель сейчас — ревьюер
+      const sent = vis.filter(t => t.review_from === meId && reviewing(t) && t.assignee_id !== meId).map(t => ({ ...brief(t), reviewerId: t.assignee_id }))
+        .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+      if (!isLead) return { focus, sent, lead: null };
       // очередь ревью: на мне, отправлено на ревью, лежит в колонке ревью
       const reviews = vis.filter(t => t.assignee_id === meId && reviewing(t)).map(t => {
         const cols = U[t.unit_id].st.columns;
@@ -2373,7 +2376,7 @@ export function createBackend(db, opts = {}) {
         }));
         return { ...brief(t), parts, done: parts.filter(c => c.kind === 'done').length };
       });
-      return { focus, lead: { reviews, team, split } };
+      return { focus, sent, lead: { reviews, team, split } };
     },
 
     /**

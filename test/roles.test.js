@@ -253,6 +253,19 @@ test('несколько позиций, приоритет — только а�
   assert.ok(!b.members.some(m => m.personId === dev.id));
 });
 
+test('ревью: ревьюер по позиции из настроек юнита важнее того, кто поставил задачу (PM)', async () => {
+  const api = await setup();
+  const { mod, designer, dev, A } = await team(api);
+  const st = (await api('getBoard', { unitId: A.id })).unit.settings;
+  const prog = st.columns.find(c => c.kind === 'progress').id;
+  await api('updateUnit', { id: A.id, settings: { ...st, review: { column: st.review.column || 'review', byPosition: { d_ios: designer.id }, default: '' } } });
+  const board = (await api('getBoard', { unitId: A.id })).unit.settings;
+  const t = await api.as(mod, () => api('createTask', { unitId: A.id, title: 'От PM', assigneeId: dev.id, status: prog, departmentId: 'd_ios' }));
+  assert.equal(t.reviewerId, '');
+  const moved = await api.as(dev, () => api('updateTask', { id: t.id, patch: { status: board.review.column } }));
+  assert.equal(moved.assigneeId, designer.id);
+});
+
 test('ревью: автоназначение ревьюера по позиции и возврат исполнителю', async () => {
   const api = await setup();
   const { mod, designer, dev, A, link, t1, t2 } = await team(api);
@@ -303,6 +316,13 @@ test('ревью: автоназначение ревьюера по позиц�
   await api.as(designer, async () => {
     assert.equal((await api('getNotifications', {})).filter(n => n.taskId === t2.id).length, 0); // у ревьюера снялось
   });
+  // отправленное на ревью видно на дашборде автора
+  await api.as(dev, () => api('updateTask', { id: t2.id, patch: { status: 'review' } }));
+  await api.as(dev, async () => {
+    const d = await api('getMyDashboard', { personId: dev.id, today: '2026-11-02' });
+    assert.ok(d.sent.some(x => x.id === t2.id && x.reviewerId === designer.id));
+  });
+  await api.as(dev, () => api('recallReview', { id: t2.id }));
   // ревьюер вернул на доработку — «вернули»
   await api.as(dev, () => api('updateTask', { id: t2.id, patch: { status: 'review' } }));
   await api.as(designer, () => api('updateTask', { id: t2.id, patch: { status: 'in_progress' } }));

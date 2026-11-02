@@ -821,7 +821,8 @@ begin
   if col = '' then return new; end if;
   if new.status = col then
     -- ревьюер задачи важнее настроек юнита: по умолчанию это тот, кто её поставил
-    who := coalesce(nullif(new.reviewer_id, ''), nullif(rv -> 'byPosition' ->> new.department_id, ''), rv ->> 'default', '');
+    -- reviewer_id = тот, кто поставил задачу (старый автозаполнитель), настроек юнита не перебивает; выбранный вручную ревьюер — важнее
+    who := coalesce(nullif(case when new.reviewer_id = new.created_by and new.step <> 'part' then '' else new.reviewer_id end, ''), nullif(rv -> 'byPosition' ->> new.department_id, ''), rv ->> 'default', nullif(new.reviewer_id, ''), '');
     if who <> '' and who <> new.assignee_id and new.assignee_id = old.assignee_id
        and exists (select 1 from people where id = who and active) then
       new.review_from := old.assignee_id;

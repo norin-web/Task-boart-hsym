@@ -2945,3 +2945,28 @@ button.rd-check.on { background: var(--text); border-color: transparent; }
 .empty-state.sm { gap: 16px; flex-wrap: wrap; }
 .empty-state.sm .row { align-items: center; }
 .empty-state.sm .btn { margin-top: 0; height: 32px; padding: 0 14px; font-size: 13px; line-height: 20px; }
+
+/* «Отправлено на ревью» на дашборде сотрудника */
+.sent-list { padding: 4px 16px; }
+.sent-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 12px; align-items: center; min-height: 56px; border-bottom: 1px solid var(--border); }
+.sent-row:last-child { border-bottom: 0; }
+.sent-row .avatar.md { width: 28px; height: 28px; }
+.sent-title { font-size: 13px; line-height: 20px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sent-sub { font-size: 12px; line-height: 16px; }
+.sent-actions { display: flex; gap: 8px; }
+
+/* статус в карточке задачи — крупнее */
+.panel-side .status-wrap select.inp { height: 36px; padding: 0 32px 0 34px; font-size: 14px; line-height: 20px; font-weight: 600; }
+.panel-side .status-wrap .dot { left: 14px; width: 10px; height: 10px; }
+.panel-side .status-wrap::after { display: block; right: 14px; width: 7px; height: 7px; margin-top: -5px; }
+
+.sent-row.decided { margin: 0 -8px; padding: 0 8px; border-radius: 12px; }
+.sent-row.decided.ok { background: var(--ok-soft); }
+.sent-row.decided.back { background: #fdf1e3; }
+.sent-row.decided .sent-sub { font-weight: 600; }
+.sent-row.decided.ok .sent-sub { color: var(--ok); }
+.sent-row.decided.back .sent-sub { color: #b8660b; }
+.sent-row.gone { opacity: 0; transition: opacity .2s; }
+
+.sent-row { cursor: pointer; }
+.sent-row:not(.decided):hover { background: var(--surface-2); border-radius: 12px; margin: 0 -8px; padding: 0 8px; }
