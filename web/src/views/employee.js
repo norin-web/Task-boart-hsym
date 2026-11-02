@@ -96,7 +96,7 @@ export function teamLoadBlock(d) {
 export function splitBlock(d) {
   const rows = (d.lead && d.lead.split) || [];
   return h('section', null,
-    h('div', { class: 'section-head' }, h('h2', null, 'Раздано', rows.length > 0 && h('span', { class: 'news-count' }, rows.length))),
+    h('div', { class: 'section-head' }, h('h2', null, 'Раздано'), rows.length > 0 && h('span', { class: 'muted fc-hint' }, rows.length)),
     rows.length ? h('div', { class: 'card-box split-list' }, rows.map(s => h('div', { class: 'split-item' },
       h('button', { class: 'link-btn split-parent', onclick: () => peekTask(s.unitId, s.id) },
         s.app ? appIcon(s.app, 'xs') : null, h('b', null, s.title), h('span', { class: 'muted' }, ` · ${s.done} из ${s.parts.length}`)),

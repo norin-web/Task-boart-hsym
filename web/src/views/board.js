@@ -2,7 +2,7 @@ import Sortable from 'sortablejs';
 import {
   S, taskById, appById, personById, activeFields, missingFor, missingNext, priorityOf, priorityField, byPriority, visibleLinkFields, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder,
   between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, relTime, unitById, emptyCounts, freshFilters, saveBoardView,
-  activeDepts, deptById, teamById, KINDS, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS,
+  activeDepts, deptById, teamById, KINDS, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS, me, ownTeamsOnly
 } from '../state.js';
 import { $, h, icon, avatar, topbar, menu, closeMenu, modal, field, confirmDlg, promptDlg, toast, showErr, statusDot, statusIcon, fill, prioMark } from '../ui.js';
 import { call, send } from '../api.js';
@@ -129,7 +129,11 @@ function filterRest() {
   const set = (key, val) => { f[key] = val; renderTasks(); drawFilterRest(); };
 
   // Исполнители: команда + все, у кого есть задачи в юните
-  const ids = [...new Set(S.board.members.map(m => m.personId).concat(S.board.tasks.filter(t => !t.archived && t.assigneeId).map(t => t.assigneeId)))];
+  // Lead и сотрудник — только люди своих команд и исполнители видимых им задач: чужие команды не раскрываем
+  const mine = (me() || {}).teamIds || [];
+  const unitPeople = S.board.members.map(m => m.personId)
+    .filter(id => !ownTeamsOnly() || id === S.meId || ((personById(id) || {}).teamIds || []).some(t => mine.includes(t)));
+  const ids = [...new Set(unitPeople.concat(S.board.tasks.filter(t => !t.archived && t.assigneeId).map(t => t.assigneeId)))];
   const people = ids.map(personById).filter(Boolean).slice(0, 10);
   const onTeam = !!S.route.team; // на доске команды людей выбирают карточками «кто чем занят»
   const avatars = !onTeam && !B.assignee.hidden && people.length > 0 && h('div', { class: 'avatars', title: 'Фильтр по исполнителю' },

@@ -40,6 +40,8 @@ await page.addInitScript(fixed => {
 }, Date.parse('2026-10-30T18:00:00+03:00'));
 const logs = [];
 page.on('pageerror', e => logs.push(String(e.message || e)));
+const diag = [];
+page.on('console', m => diag.push(m.type() + ': ' + m.text().slice(0, 160)));
 
 // чистая база → демо-данные → вход как Анна
 await page.goto(URL_);
@@ -79,6 +81,20 @@ const go = async hash => {
   await page.waitForTimeout(low ? 2000 : 900);
 };
 
+// Перезагрузка посреди записи в локальную базу (IndexedDB) иногда вешает следующий запуск: сперва дожидаемся очереди
+// запросов (лёгкий запрос встаёт после всех записей), при зависании — ещё одна попытка
+const reloadSafe = async () => {
+  await page.evaluate(async () => { try { const { call } = await import('/src/api.js'); await call('whoami', {}); } catch { /* ещё не вошли */ } }).catch(() => {});
+  await page.waitForTimeout(300);
+  for (let i = 0; i < 3; i++) {
+    await page.reload();
+    try { await page.waitForFunction(() => document.querySelector('#sidebar .nav-item'), null, { timeout: 25000 }); return; } catch {
+      if (process.env.DIAG) { await page.screenshot({ path: process.env.DIAG + '/hang-' + i + '.png' }); console.log('ЗАВИСЛО', i, (await page.evaluate(() => document.body.innerText.slice(0, 300)).catch(() => '?')).replace(/\n/g, ' / '), '| консоль:', diag.slice(-8).join(' || ')); }
+    }
+  }
+  throw new Error('страница не загрузилась после трёх попыток');
+};
+
 // вход за роль листа: экраны без `as` — за CEO
 let role = 'ceo', seeded = false, seededLead = false;
 const loginAs = async as => {
@@ -95,8 +111,7 @@ const loginAs = async as => {
   }
   const actor = async who => {
     await page.evaluate(id => localStorage.setItem('tm.localActor', id), who);
-    await page.reload();
-    await page.waitForFunction(() => document.querySelector('#sidebar .nav-item'), null, { timeout: 60000 });
+    await reloadSafe();
   };
   // задачи Lead и сотрудника: в демо их нет, а листы показывают фокус, ревью и «Раздано»
   if (as === 'lead' && !seededLead) {
@@ -169,6 +184,8 @@ const measure = async m => {
   await go(typeof s.route === 'function' ? s.route(ids) : s.route);
   if (s.act) { await s.act(page, ids); await page.waitForTimeout(400); }
   for (const c of m.checks) {
+    // экран мог ещё грузиться (данные приходят после отрисовки шапки) — ждём элемент, кроме проверок «его нет»
+    if (!c.absent) await page.waitForSelector(c.sel, { state: 'attached', timeout: 8000 }).catch(() => {});
     const got = await page.evaluate(({ sel, prop, noText }) => {
       const e = document.querySelector(sel);
       if (!e) return null;

@@ -2,7 +2,7 @@
  * Дашборд RM (главная RM): очередь на релиз (переданные PM — чего не хватает до отправки), на ревью Apple (сколько ждут;
  * «Вышло в стор» / «Реджект» прямо здесь), реджекты (причина, кто исправляет; «Отправить снова»). Клик — карточка релиза.
  */
-import { me, personById, greeting, plural, relTime } from '../state.js';
+import { me, personById, greeting, plural, relTime, nameFrom } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, toast, confirmDlg, emptyBlock, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
@@ -13,10 +13,6 @@ import { newsBlock, loadNotes } from './home.js';
 import { openReleaseSettings, openReleaseHistory, openRejectForm } from './release.js';
 
 /** «от Екатерины»: имя в родительном падеже. */
-const nameFrom = full => {
-  const n = full.split(' ')[0];
-  return /[кгхжшчщ]а$/.test(n) ? n.slice(0, -1) + 'и' : /а$/.test(n) ? n.slice(0, -1) + 'ы' : /я$/.test(n) ? n.slice(0, -1) + 'и' : /й$/.test(n) ? n.slice(0, -1) + 'я' : n + 'а';
-};
 
 const days = iso => Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 864e5));
 
@@ -110,7 +106,7 @@ function storeBlock(rows) {
     h('span', { class: 'rm-main' }, h('span', { class: 'rm-title' }, h('b', null, x.app ? x.app.name : x.key, x.version ? ' · ' + x.version : ''))),
     h('span', { class: 'muted rm-live-at' }, fmt(x.at)));
   const draw = () => fill(box,
-    h('div', { class: 'section-head' }, h('h2', null, 'Релизы в App Store', rows.length > 0 && h('span', { class: 'muted sec-n' }, rows.length)),
+    h('div', { class: 'section-head' }, h('h2', null, 'Релизы в App Store'),
       h('button', { class: 'link-btn', onclick: () => openReleaseHistory({ result: 'live' }) }, 'История')),
     rows.length
       ? h('div', { class: 'card-box att-list' }, rows.slice(0, open ? 7 : 2).map(row),

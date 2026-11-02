@@ -201,7 +201,8 @@ function flowBlock(t) {
   };
   async function load() {
     let tree;
-    try { tree = await call('getTaskTree', { id: t.kind === 'stage' && t.parentId ? t.parentId : t.id }); } catch { return; }
+    // запрос может быть не виден (лиду, сотруднику) — тогда блока нет совсем, без пустой карточки
+    try { tree = await call('getTaskTree', { id: t.kind === 'stage' && t.parentId ? t.parentId : t.id }); } catch { box.remove(); return; }
     if (S.panelTaskId !== t.id) return;
     const req = tree.task;
     const stages = tree.descendants.filter(n => n.depth === 1 && n.kind === 'stage' && !n.archived);
@@ -659,6 +660,7 @@ const ro = node => h('div', { class: 'ro-value' }, node || h('span', { class: 'm
 function reviewerSelect(value, unit, onChange) {
   const ids = [...new Set([value, S.meId, ...(unit.members || [])].filter(Boolean))];
   return h('select', { class: 'inp', 'aria-label': 'Ревьюер', onchange: e => onChange(e.target.value) },
+    !value && h('option', { value: '', selected: true }, 'Без ревью'),
     ids.map(personById).filter(p => p && (p.active || p.id === value)).map(p => h('option', { value: p.id, selected: p.id === value }, p.name)));
 }
 
@@ -715,7 +717,9 @@ function sideBlock(t, { staff, editable }) {
     });
   }
 
-  if (staff && t.step !== 'release') prop('Ревьюер', reviewerSelect(t.reviewerId || t.createdBy, u, v => { patchTask(t, { reviewerId: v }); }));
+  // ревьюер задачи; у старых задач его нет — тогда показываем того, кому её отдаст настройка ревью юнита
+  const rv = (u.settings || {}).review || {};
+  if (staff && t.step !== 'release') prop('Ревьюер', reviewerSelect(t.reviewerId || (rv.byPosition || {})[t.departmentId] || rv.default || '', u, v => { patchTask(t, { reviewerId: v }); }));
 
   if (!B.dueDate.hidden && !staff) {
     const info = dueInfo(t.dueDate, taskDone(t));
@@ -815,7 +819,8 @@ export function assigneeSelect(value, onChange, { ids, unitId, teamId } = {}) {
   },
   h('option', { value: '' }, '— не назначен —'),
   people.map(p => h('option', { value: p.id }, p.name + (ofTeam(p) ? '' : ' (не из этой команды)'))),
-  outsider && h('option', { value: outsider.id }, outsider.name + ' (не в юните)'),
+  // CEO и RM работают во всех юнитах: пометка «не в юните» к ним не относится
+  outsider && h('option', { value: outsider.id }, outsider.name + (['superadmin', 'rm'].includes(outsider.access) ? '' : ' (не в юните)')),
   h('option', { value: '__add' }, '＋ Добавить в команду…'));
   return sel;
 }

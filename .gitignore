@@ -4,3 +4,4 @@ dist/
 .env
 .DS_Store
 design-report/
+scenario-report/

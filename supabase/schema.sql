@@ -975,12 +975,13 @@ begin
     end if;
     v_id := 't_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12);
     insert into tasks (id, unit_id, num, title, description, status, assignee_id, department_id, due_date, ord, fields, checklist,
-                       archived, done_at, created_by, created_at, updated_at, parent_id, kind, app_id, step, is_test, spec_url, started_at)
+                       archived, done_at, created_by, created_at, updated_at, parent_id, kind, app_id, step, is_test, spec_url, started_at, reviewer_id)
     values (v_id, t.unit_id, next_task_num(t.unit_id), left(btrim(it ->> 'title'), 500), t.description, coalesce(v_first, t.status), v_who,
             t.department_id, coalesce(nullif(it ->> 'dueDate', ''), t.due_date), v_n, t.fields - '__none',
             coalesce((select jsonb_agg(jsonb_build_object('id', 'k_' || substr(md5(random()::text || x), 1, 10), 'text', left(x, 300), 'done', false))
                         from jsonb_array_elements_text(coalesce(it -> 'checklist', '[]'::jsonb)) x where btrim(x) <> ''), '[]'::jsonb),
-            false, '', v_me, at_, at_, t.id, '', t.app_id, 'part', t.is_test, coalesce(t.spec_url, ''), '');
+            false, '', v_me, at_, at_, t.id, '', t.app_id, 'part', t.is_test, coalesce(t.spec_url, ''), '',
+            coalesce(nullif(t.assignee_id, ''), v_me)); -- ревьюер подзадачи — владелец этапа (лид), а не настройки юнита
     insert into task_links (task_id, field_id, unit_id, url, updated_at)
       select v_id, l.field_id, t.unit_id, l.url, at_ from task_links l where l.task_id = t.id;
     insert into activity (id, unit_id, task_id, action, field, from_val, to_val, actor_id, at)
@@ -1312,6 +1313,11 @@ declare
 begin
   select * into t from tasks where id = p_task;
   if t.id is null or t.is_test then return; end if;
+  -- вышло в стор: непрочитанный реджект по этому релизу устарел и не должен перекрывать «вышло»
+  if p_kind = 'store_live' then
+    delete from notifications n where n.kind = 'store_reject' and n.read_at = ''
+       and (n.task_id = t.id or (t.parent_id <> '' and n.task_id in (select id from tasks where parent_id = t.parent_id)));
+  end if;
   -- CEO и PM юнита — на сам релиз
   insert into notifications (id, person_id, task_id, kind, actor_id, at)
   select 'n_' || substr(md5(random()::text || clock_timestamp()::text || p.id), 1, 12), p.id, t.id, p_kind, v_me, at_

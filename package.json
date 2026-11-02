@@ -12,7 +12,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test test/*.test.js",
-    "design": "node test/design/run.mjs"
+    "design": "node test/design/run.mjs",
+    "scenarios": "node test/design/scenarios.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",

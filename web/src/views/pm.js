@@ -3,7 +3,7 @@
  * «Передать в релиз»), проблемы (просрочено, долго на ревью, без исполнителя, без движения, готово к релизу)
  * и команда с KPI за неделю / месяц / квартал. Только юниты PM (видимость решает база).
  */
-import { S, me, personById, deptById, REQUEST_TYPES, LS, greeting, plural, fmtDate, todayStr } from '../state.js';
+import { S, me, personById, deptById, REQUEST_TYPES, LS, greeting, plural, fmtDate, todayStr, nameFrom } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, emptyBlock, statusIcon, skeleton } from '../ui.js';
 import { call } from '../api.js';
 import { currentView } from '../router.js';
@@ -72,11 +72,15 @@ let inboxAll = false;
 function inbox(d, reload, redraw) {
   if (!d.inbox.length) return null;
   const rows = inboxAll ? d.inbox : d.inbox.slice(0, INBOX_LIMIT);
+  // входящие — запросы CEO и задачи по реджекту от RM: от кого — видно в строке, заголовок общий, если источники разные
+  const fromCeo = r => (personById(r.createdBy) || {}).access === 'superadmin';
+  const from = r => { const p = personById(r.createdBy); return p && !fromCeo(r) ? 'от ' + nameFrom(p.name) + (p.access === 'rm' ? ' · RM' : '') : ''; };
   return h('section', { class: 'pm-inbox' },
-    h('div', { class: 'section-head' }, h('h2', null, 'Входящие от CEO'), h('span', { class: 'sec-badge' }, d.inbox.length)),
+    h('div', { class: 'section-head' }, h('h2', null, d.inbox.every(fromCeo) ? 'Входящие от CEO' : 'Входящие'), h('span', { class: 'sec-badge' }, d.inbox.length)),
     h('div', { class: 'card-box att-list' }, rows.map(r => h('div', { class: 'ib-row', role: 'button', tabindex: '0', onclick: () => peekTask(r.unitId, r.id), onkeydown: e => { if (e.key === 'Enter') peekTask(r.unitId, r.id); } },
       r.app ? appIcon(r.app, 'md') : h('span'),
       h('span', { class: 'ib-title' }, h('b', null, r.app ? r.app.name : ''), h('span', { class: 'muted' }, (r.app ? ' · ' : '') + shortTitle(r))),
+      from(r) && h('span', { class: 'muted ib-from' }, from(r)),
       prioLabel(r.app) || h('span'),
       r.dueDate && h('span', { class: 'ib-due' + (r.dueDate < todayStr() ? ' late' : '') }, icon('calendar', 14), dueText(r.dueDate)),
       h('button', {

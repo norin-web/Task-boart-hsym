@@ -593,3 +593,24 @@ test('приложения видят только CEO, PM и RM: Lead и сот
   assert.equal((await api.as(dev, () => api('listApps', {}))).length, 0);
   assert.equal((await api.as({ ...lead, uid: UID(5) }, () => api('listApps', {}))).length, 0);
 });
+
+test('раздача: подзадача уходит на ревью к лиду, даже если в юните ревьюер не задан', async () => {
+  const api = await setup();
+  const { mod, designer, A, link } = await team(api);
+  const lead = await api('createPerson', { name: 'Лид', email: 'u6@x.ru', access: 'lead', positionId: 'd_design' });
+  await api.pg.query('update people set user_id = $1 where id = $2', [UID(6), lead.id]);
+  await api('setMember', { unitId: A.id, personId: lead.id });
+  const L = { ...lead, uid: UID(6) };
+  const st = (await api('getBoard', { unitId: A.id })).unit.settings;
+  const prog = st.columns.find(c => c.kind === 'progress').id;
+  const stage = await api.as(mod, () => api('createTask', { unitId: A.id, title: 'Дизайн', assigneeId: lead.id, status: prog }));
+  const [part] = await api.as(L, () => api('splitTask', { taskId: stage.id, items: [{ title: 'Онбординг', assigneeId: designer.id }] }));
+  assert.equal(part.reviewerId, lead.id);
+  await api.as(designer, () => api('updateTask', { id: part.id, patch: { fields: { [link.id]: 'https://figma.com/x' }, status: st.review.column } }));
+  const { rows } = await api.pg.query('select assignee_id from tasks where id = $1', [part.id]);
+  assert.equal(rows[0].assignee_id, lead.id); // на ревью у лида
+  await api.as(L, () => api('reviewDecision', { taskId: part.id, approve: true }));
+  const { rows: st2 } = await api.pg.query('select status from tasks where id = $1', [stage.id]);
+  assert.equal(st.columns.find(c => c.id === st2[0].status).kind, 'done'); // этап закрылся сам
+});
+

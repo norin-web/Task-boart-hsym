@@ -2579,3 +2579,46 @@ body:has(#modal-root .modal-wrap) #panel-root { visibility: hidden; }
 .ib-row + .ib-row { border-top: 0; }
 .ib-row + .ib-row::before { content: ''; position: absolute; top: 0; left: 8px; right: 8px; height: 1px; background: var(--border); }
 .ib-title, .ib-title:hover { text-decoration: none; }
+/* «Раздано» — как соседние блоки дашборда: заголовок этапа 13/600, строки по 44 без скругления у линий */
+.split-parent { display: flex; align-items: center; gap: 6px; padding: 0; font-size: 13px; line-height: 20px; text-decoration: none; }
+.split-parent b { font-weight: 600; }
+.split-parent:hover { text-decoration: none; }
+.split-part { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 0; border: 0; border-radius: 0; background: none; font: inherit; text-align: left; }
+.split-part .fc-title { flex: 1; min-width: 0; font-size: 13px; line-height: 20px; font-weight: 600; }
+.split-st, .split-due { font-size: 12px; line-height: 16px; font-weight: 500; }
+.split-st.accent { color: var(--info); font-weight: 600; }
+
+/* дашборд CEO: раскрытый «Нет в App Store» — под строкой на всю ширину, а не колонкой сбоку */
+.store-check.compact.has-gone { flex-direction: column; align-items: stretch; gap: 12px; }
+.store-check.compact.has-gone .sc-head { min-height: 44px; }
+.store-check.compact .sc-gone { width: 100%; margin: 0; padding: 4px 12px; border: 0; border-radius: 16px; background: var(--danger-soft); }
+.store-check .sc-row { border-radius: 0; min-height: 52px; }
+.store-check.compact .sc-row .ap-names b, .store-check.compact .sc-row .ap-names small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.store-check.compact .sc-row .sc-app { min-width: 0; }
+
+/* телефон: колонки дашборда друг под другом, кнопки шапки переносятся строкой ниже, а не сжимаются */
+@media (max-width: 900px) {
+  .home-grid, .home-grid:not(.one) { grid-template-columns: minmax(0, 1fr) !important; }
+}
+@media (max-width: 640px) {
+  .topbar { flex-wrap: wrap; row-gap: 12px; }
+  .topbar .tb-left { flex: 1 1 calc(100% - 120px); min-width: 0; }
+  .topbar .tb-right { flex: 1 1 100%; flex-wrap: wrap; justify-content: flex-start; order: 3; }
+  .topbar .tb-right .btn { flex: none; white-space: nowrap; }
+  .topbar .tb-right .bell-btn { order: -1; }
+  .store-check.compact .sc-head { flex-wrap: wrap; }
+  .store-check.compact .sc-title { flex: 1 1 calc(100% - 60px); }
+  .store-check.compact { height: auto; border-radius: var(--r-card); }
+}
+@media (max-width: 640px) {
+  .topbar .tb-right .btn-label { position: static; width: auto; height: auto; overflow: visible; clip-path: none; }
+}
+@media (min-width: 641px) { .store-check.compact .sc-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } }
+.flow-block:empty, .tree-block:empty { display: none; }
+.ib-from { flex: none; font-size: 12px; line-height: 16px; font-weight: 500; white-space: nowrap; }
+/* телефон: строка релиза RM — кнопки под названием, название в одну-две строки, а не столбиком */
+@media (max-width: 640px) {
+  .rm-grid .rm-row:not(.rm-live) { flex-wrap: wrap; padding-bottom: 12px; }
+  .rm-grid .rm-row:not(.rm-live) .rm-main { flex: 1 1 calc(100% - 46px); padding-top: 12px; }
+  .rm-grid .rm-row:not(.rm-live) .rm-actions { width: 100%; justify-content: flex-end; }
+}

@@ -286,3 +286,9 @@ export function greeting() {
   if (h < 18) return 'Добрый день';
   return 'Добрый вечер';
 }
+
+/** «от Екатерины», «от Сергея»: имя в родительном падеже — для подписей «от кого». */
+export const nameFrom = full => {
+  const n = String(full || '').split(' ')[0];
+  return /[кгхжшчщ]а$/.test(n) ? n.slice(0, -1) + 'и' : /а$/.test(n) ? n.slice(0, -1) + 'ы' : /я$/.test(n) ? n.slice(0, -1) + 'и' : /й$/.test(n) ? n.slice(0, -1) + 'я' : /ел$/.test(n) ? n.slice(0, -2) + 'ла' : n + 'а';
+};

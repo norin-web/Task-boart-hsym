@@ -715,11 +715,14 @@ export function createBackend(db, opts = {}) {
   }
 
   async function unitsWithCounts(day, weekAgo) {
-    const [units, tasks, members] = await Promise.all([
+    const [units, rows, members, staff] = await Promise.all([
       all(() => T('units').select('*').order('ord').order('id')),
-      all(() => T('tasks').select('unit_id,status,due_date,done_at').eq('archived', false).order('id')),
+      all(() => T('tasks').select('id,unit_id,status,due_date,done_at,depends_on').eq('archived', false).order('id')),
       all(() => T('unit_members').select('unit_id,person_id').order('created_at').order('person_id')),
+      rpc('is_staff', {}),
     ]);
+    // числа в сайдбаре — то, что человек видит на доске: ждущие этапы у участников скрыты и не считаются
+    const tasks = staff ? rows : await hideWaiting(rows);
     const counts = countTasks(units, tasks, day, weekAgo);
     const byUnit = {};
     for (const m of members) (byUnit[m.unit_id] = byUnit[m.unit_id] || []).push(m.person_id);
@@ -1809,7 +1812,7 @@ export function createBackend(db, opts = {}) {
       const from = new Date(Date.now() - periodDays * 864e5).toISOString();
       const [units, tasks, members, ppl, apps, staleRow] = await Promise.all([
         all(() => T('units').select('id,name,key,color,settings').eq('archived', false).order('ord').order('id')),
-        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,due_date,archived,kind,request_type,step,parent_id,app_id,depends_on,created_at,updated_at,done_at,started_at,department_id')
+        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,due_date,archived,kind,request_type,step,parent_id,app_id,depends_on,created_at,updated_at,done_at,started_at,department_id,created_by')
           .eq('archived', false).order('created_at').order('id')),
         all(() => T('unit_members').select('unit_id,person_id').order('unit_id')),
         people(),
@@ -1827,7 +1830,7 @@ export function createBackend(db, opts = {}) {
       const reviewBefore = new Date(Date.now() - 2 * 864e5).toISOString();
       const key = t => `${U[t.unit_id].key}-${t.num}`;
       const brief = t => ({ id: t.id, unitId: t.unit_id, key: key(t), title: t.title, assigneeId: t.assignee_id, dueDate: t.due_date,
-        updatedAt: t.updated_at, step: t.step || '', type: t.request_type || '', kind: kindOfRow(t), done: done(t), blocked: blocked(t), app: A[t.app_id] || null });
+        updatedAt: t.updated_at, step: t.step || '', type: t.request_type || '', kind: kindOfRow(t), done: done(t), blocked: blocked(t), app: A[t.app_id] || null, createdBy: t.created_by || '' });
       const kids = id => own.filter(t => t.parent_id === id && t.kind !== 'request');
 
       const requests = own.filter(t => t.kind === 'request' && !done(t));
