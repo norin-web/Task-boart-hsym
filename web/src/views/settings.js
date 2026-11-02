@@ -1,6 +1,6 @@
 import Sortable from 'sortablejs';
 import { S, TYPE_LABELS, PALETTE, unitById, byOrder, KINDS, KIND_LABELS, KIND_COLORS, colColor, personById, activeDepts, plural, isSuper } from '../state.js';
-import { $, h, icon, avatar, field, topbar, menu, closeMenu, modal, confirmDlg, toast, showErr, colorPicker, fill } from '../ui.js';
+import { $, h, icon, avatar, field, topbar, menu, closeMenu, modal, confirmDlg, toast, showErr, colorPicker, fill, personSelect } from '../ui.js';
 import { send } from '../api.js';
 import { link } from '../router.js';
 import { renderSidebar } from './sidebar.js';
@@ -312,10 +312,7 @@ export function reviewSection(u = S.board.unit, { bare = false } = {}) {
     draw();
     toast('Ревью: сохранено');
   };
-  const people = () => S.people.filter(p => p.active).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-  const personSelect = (value, onChange, empty) => h('select', { class: 'inp', value: value || '', onchange: e => onChange(e.target.value) },
-    h('option', { value: '' }, empty),
-    people().map(p => h('option', { value: p.id }, p.name)));
+  const pickPerson = (value, onChange, empty, dept) => personSelect(value, onChange, { empty, dept, label: 'Ревьюер' });
   const draw = () => {
     const r = u.settings.review || { column: '', byPosition: {}, default: '' };
     const on = !!r.column;
@@ -333,14 +330,14 @@ export function reviewSection(u = S.board.unit, { bare = false } = {}) {
         h('div', { class: 'rv-list' },
           activeDepts().map(d => h('div', { class: 'rv-row' },
             h('span', { class: 'rv-label' }, h('span', { class: 'dot', style: { background: d.color } }), d.name),
-            personSelect(r.byPosition[d.id], v => {
+            pickPerson(r.byPosition[d.id], v => {
               const byPosition = { ...r.byPosition };
               if (v) byPosition[d.id] = v; else delete byPosition[d.id];
               set({ byPosition });
-            }, '— по умолчанию —'))),
+            }, '— по умолчанию —', d.id))),
           h('div', { class: 'rv-row rv-default' },
             h('span', { class: 'rv-label' }, 'По умолчанию'),
-            personSelect(r.default, v => set({ default: v }), '— без ревьюера —'))),
+            pickPerson(r.default, v => set({ default: v }), '— без ревьюера —', ''))),
       ]);
   };
   draw();

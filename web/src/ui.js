@@ -1,7 +1,7 @@
 /** UI-примитивы: DOM-хелпер, иконки, модалки, меню, тосты. */
 import { avatarSrc } from './avatars.js';
 import { PACK } from './icons.js';
-import { PALETTE, colorFor, initials, safeUrl, isOnline, presenceText, personById } from './state.js';
+import { S, PALETTE, colorFor, initials, safeUrl, isOnline, presenceText, personById } from './state.js';
 
 export const $ = (sel, root) => (root || document).querySelector(sel);
 
@@ -481,6 +481,33 @@ export function prioSelect(options, value, onChange, { disabled = false, empty =
       h('button', { class: 'menu-item' + (!cur ? ' on' : ''), role: 'menuitemradio', 'aria-checked': String(!cur), onclick: () => { closeMenu(); pick(''); } },
         h('span', { class: 'prio-mark muted' }, icon('x', 14)), empty),
     ]);
+  });
+  Object.defineProperty(btn, 'value', { get: () => cur, set: v => { cur = v || ''; paint(); } });
+  paint();
+  return btn;
+}
+
+/**
+ * Выбор человека (вместо нативного select): кнопка «аватар + имя», по клику — меню людей, сгруппированных по позициям.
+ * dept — позиция строки: её люди идут первыми. У элемента есть .value, как у select.
+ */
+export function personSelect(value, onChange, { empty = 'Не выбран', dept = '', label = 'Человек' } = {}) {
+  let cur = value || '';
+  const btn = h('button', { type: 'button', class: 'inp prio-select', 'aria-haspopup': 'menu', 'aria-label': label });
+  const paint = () => {
+    const p = personById(cur);
+    fill(btn, p ? [avatar(p, 'sm'), h('span', null, p.name)] : h('span', { class: 'muted' }, empty), h('span', { class: 'prio-select-chev' }, icon('chevron', 14)));
+  };
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const pick = id => { cur = id; paint(); if (onChange) onChange(id); };
+    const row = (id, text, p) => h('button', { class: 'menu-item' + (id === cur ? ' on' : ''), role: 'menuitemradio', 'aria-checked': String(id === cur), onclick: () => { closeMenu(); pick(id); } },
+      p ? avatar(p, 'sm') : h('span', { style: { width: '20px', flex: 'none' } }), text, id === cur && h('span', { class: 'spacer' }), id === cur && icon('check', 14));
+    const depts = [...S.departments].filter(d => !d.archived).sort((a, b) => (b.id === dept) - (a.id === dept) || (a.order || 0) - (b.order || 0));
+    const first = p => (p.positionIds && p.positionIds[0]) || p.positionId || '';
+    const people = S.people.filter(p => p.active || p.id === cur).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+    const groups = [...depts.map(d => ({ name: d.name, ps: people.filter(p => first(p) === d.id) })), { name: 'Без позиции', ps: people.filter(p => !depts.some(d => d.id === first(p))) }].filter(g => g.ps.length);
+    menu(btn, [row('', empty), ...groups.flatMap(g => [{ sep: true }, { title: g.name }, ...g.ps.map(p => row(p.id, p.name, p))])], { align: 'left' });
   });
   Object.defineProperty(btn, 'value', { get: () => cur, set: v => { cur = v || ''; paint(); } });
   paint();

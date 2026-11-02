@@ -1,5 +1,5 @@
 import { S, PALETTE, suggestKey, isSuper, activeDepts } from '../state.js';
-import { h, field, menu, modal, confirmDlg, promptDlg, toast, showErr, colorPicker } from '../ui.js';
+import { h, field, menu, modal, confirmDlg, promptDlg, toast, showErr, colorPicker, personSelect } from '../ui.js';
 import { send } from '../api.js';
 import { navigate, rerender } from '../router.js';
 import { renderSidebar } from './sidebar.js';
@@ -74,9 +74,8 @@ export function openCreateUnit(onCreated) {
     h('option', { value: '' }, 'Стандартная схема (поле «Приоритет»)'),
     S.units.map(u => h('option', { value: u.id }, `Как в «${u.name}»`)));
   // ревьюеры по позициям: дизайн — …, разработка — …; по умолчанию — для остальных
-  const people = S.people.filter(p => p.active).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-  const who = empty => h('select', { class: 'inp' }, h('option', { value: '' }, empty), people.map(p => h('option', { value: p.id }, p.name)));
-  const byDept = activeDepts().map(d => ({ d, sel: who('— по умолчанию —') }));
+  const who = (empty, dept) => personSelect('', null, { empty, dept, label: 'Ревьюер' });
+  const byDept = activeDepts().map(d => ({ d, sel: who('— по умолчанию —', d.id) }));
   const dflt = who('— без ревьюера —');
   const reviewBox = h('div', { class: 'rv-list rv-plain' },
     byDept.map(({ d, sel }) => h('div', { class: 'rv-row' }, h('span', { class: 'rv-label' }, h('span', { class: 'dot', style: { background: d.color } }), d.name), sel)),
