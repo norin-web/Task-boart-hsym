@@ -1708,30 +1708,33 @@ export function createBackend(db, opts = {}) {
     },
 
     /**
-     * Очередь на разработку: запросы, где этап «Дизайн» закрыт, а «iOS» ещё не начат (дизайн делается быстрее разработки,
-     * очередь копится). Строки — приложение + запрос; ссылки этапов и поля приложения — для настраиваемых колонок.
+     * Сводка по приложениям: строка на приложение — этапы основного запроса (дизайн, iOS, тесты, тексты, релиз…), апдейт,
+     * ссылки этапов и поля приложения. ready — дизайн закрыт, а iOS ещё не начат (очередь на разработку).
      */
-    async getDevQueue() {
+    async getPipeline() {
       const apps = await methods.listApps({});
-      const rows = [];
-      for (const a of apps) for (const r of a.requests) {
-        if (r.done) continue;
-        const design = r.stages.find(s => s.step === 'design'), ios = r.stages.find(s => s.step === 'ios');
-        if (!design || !ios || !design.done || ios.done || ios.kind !== 'todo') continue;
-        rows.push({ app: a, request: r, design, ios });
-      }
-      const ids = rows.flatMap(x => x.request.stages.map(s => s.id));
+      const main = a => a.requests.filter(r => r.type === 'new_app').sort((x, y) => String(x.createdAt).localeCompare(String(y.createdAt)))[0]
+        || a.requests.filter(r => r.type !== 'update')[0] || null;
+      const upd = a => a.requests.filter(r => r.type === 'update').sort((x, y) => String(y.createdAt).localeCompare(String(x.createdAt)))[0] || null;
+      const ids = apps.flatMap(a => (main(a) ? main(a).stages.map(t => t.id) : []));
       const links = ids.length ? await all(() => T('task_links').select('task_id,field_id,url').in('task_id', ids)) : [];
-      return rows.map(({ app, request, design, ios }) => {
+      const brief = t => t && ({ id: t.id, kind: t.kind, done: t.done, blocked: t.blocked, assigneeId: t.assigneeId, updatedAt: t.updatedAt });
+      return apps.map(a => {
+        const m = main(a), u = upd(a);
+        const stages = {};
+        for (const t of (m ? m.stages : [])) if (t.step) stages[t.step] = brief(t);
         const mine = {};
-        for (const l of links) if (request.stages.some(s => s.id === l.task_id) && l.url) mine[l.field_id] = mine[l.field_id] || l.url;
+        if (m) for (const l of links) if (l.url && m.stages.some(t => t.id === l.task_id)) mine[l.field_id] = mine[l.field_id] || l.url;
+        const open = a.requests.filter(r => !r.done && r.stages.length);
+        const ready = open.some(r => { const d = r.stages.find(t => t.step === 'design'), i = r.stages.find(t => t.step === 'ios'); return d && i && d.done && !i.done && i.kind === 'todo'; });
+        const dd = stages.design;
         return {
-          appId: app.id, appName: app.name, iconUrl: app.iconUrl, color: app.color, unitId: app.unitId, status: app.status,
-          info: app.info, checks: app.checks, requestId: request.id, requestKey: request.key, requestTitle: request.title, type: request.type,
-          pmId: request.assigneeId, designerId: design.assigneeId, iosId: ios.assigneeId, iosStageId: ios.id, readySince: design.updatedAt,
-          dueDate: request.dueDate, priority: request.priority, links: mine,
+          appId: a.id, appName: a.name, iconUrl: a.iconUrl, color: a.color, unitId: a.unitId, status: a.status, info: a.info, checks: a.checks,
+          requestId: m ? m.id : '', pmId: m ? m.assigneeId : '', dueDate: m ? m.dueDate : '', priority: m ? m.priority : '',
+          stages, links: mine, ready, readySince: ready && dd ? dd.updatedAt : '',
+          update: u ? { id: u.id, done: u.done, progress: u.progress, title: u.title } : null,
         };
-      }).sort((x, y) => String(x.readySince).localeCompare(String(y.readySince)));
+      });
     },
 
     async listApps(p) {

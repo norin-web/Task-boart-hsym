@@ -1,6 +1,6 @@
 import Sortable from 'sortablejs';
 import { queueCount } from './ready.js';
-import { S, LS, byOrder, openCount, me, unitById, personById, activeTeams, isStaff, isSuper, ceoMode, isDev, ACCESS_LABELS, seesApps, ownTeamsOnly, myAccess } from '../state.js';
+import { S, LS, byOrder, openCount, me, unitById, personById, activeTeams, isStaff, isSuper, ceoMode, ceoDefault, isDev, ACCESS_LABELS, seesApps, ownTeamsOnly, myAccess } from '../state.js';
 import { $, h, icon, avatar, menu, closeMenu, showErr, fill, confirmDlg, setBell } from '../ui.js';
 import { call, send } from '../api.js';
 import { link, navigate, rerender, sectionRoute } from '../router.js';
@@ -176,7 +176,7 @@ function drawSidebar() {
       h('button', { class: 'search-btn', onclick: openPalette }, icon('search', 15), h('span', null, 'Поиск'), h('kbd', null, isMac ? '⌘K' : 'Ctrl K')),
       navLink({ view: 'home' }, person && person.access === 'rm' ? 'rocket' : 'home', staff ? 'Дашборд' : person && person.access === 'rm' ? 'Релизы' : 'Мой дашборд'),
       seesApps() && navLink({ view: 'apps' }, 'app', 'Приложения'),
-      staff && navLink({ view: 'ready' }, 'layers', 'Готовы к разработке', readyCount()),
+      staff && !ceoDefault() && navLink({ view: 'ready' }, 'rows', 'Сводка', readyCount()),
       ceo && navLink({ view: 'analytics' }, 'chart', 'Аналитика'),
       !lite && navLink({ view: 'myboard' }, 'board', 'Моя доска', !staff && !(person && person.access === 'rm') && myCount()),
       !lite && (staff || (person && person.access === 'rm')) && navLink({ view: 'my' }, 'list', 'Мои задачи', !staff && myCount()),
