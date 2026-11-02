@@ -78,7 +78,7 @@ export function openCreateUnit(onCreated) {
   const who = empty => h('select', { class: 'inp' }, h('option', { value: '' }, empty), people.map(p => h('option', { value: p.id }, p.name)));
   const byDept = activeDepts().map(d => ({ d, sel: who('— по умолчанию —') }));
   const dflt = who('— без ревьюера —');
-  const reviewBox = h('div', { class: 'rv-list' },
+  const reviewBox = h('div', { class: 'rv-list rv-plain' },
     byDept.map(({ d, sel }) => h('div', { class: 'rv-row' }, h('span', { class: 'rv-label' }, h('span', { class: 'dot', style: { background: d.color } }), d.name), sel)),
     h('div', { class: 'rv-row rv-default' }, h('span', { class: 'rv-label' }, 'По умолчанию'), dflt));
 
