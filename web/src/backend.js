@@ -1135,7 +1135,7 @@ export function createBackend(db, opts = {}) {
         id: uid('t'), unit_id: unit.id, num: (await rpc('next_task_num', { p_unit: unit.id })) ?? fail('Создавать задачи могут CEO и PM юнита', 'FORBIDDEN'),
         title: req(str(p.title, 500), 'Название задачи'), description: str(p.description, 20000), status,
         assignee_id: assignee, department_id: (await validDept(p.departmentId)) || (await memberDept(unit.id, assignee)),
-        team_id: await validTeam(p.teamId), reviewer_id: str(p.reviewerId, 40),
+        team_id: await validTeam(p.teamId), reviewer_id: '',
         due_date: date(p.dueDate), ord: (await maxOrd('tasks', { unit_id: unit.id, status })) + 1,
         fields: cleanFieldValues(p.fields, false), checklist: cleanChecklist(p.checklist),
         archived: false, done_at: kindOf(st, status) === 'done' ? ts : '', created_by: actor(ctx), created_at: ts, updated_at: ts,
@@ -1209,7 +1209,6 @@ export function createBackend(db, opts = {}) {
         const v = await validDept(patch.departmentId);
         if (v !== t.department_id) { change('departmentId', t.department_id, v); t.department_id = v; }
       }
-      if ('reviewerId' in patch) { t.reviewer_id = str(patch.reviewerId, 40); dirty = true; }
       if ('assigneeId' in patch) {
         const v = str(patch.assigneeId, 40);
         if (v !== t.assignee_id) {

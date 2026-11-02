@@ -665,7 +665,6 @@ function discussionBlock(t, editable) {
 /** Значение только для чтения в правой колонке. */
 const ro = node => h('div', { class: 'ro-value' }, node || h('span', { class: 'muted' }, '—'));
 
-/** Ревьюер: кто принимает работу; по умолчанию тот, кто поставил задачу. */
 function reviewerSelect(value, unit, onChange) {
   const ids = [...new Set([value, S.meId, ...(unit.members || [])].filter(Boolean))];
   return h('select', { class: 'inp', 'aria-label': 'Ревьюер', onchange: e => onChange(e.target.value) },
@@ -729,8 +728,6 @@ function sideBlock(t, { staff, editable }) {
   }
 
   // ревьюер задачи; у старых задач его нет — тогда показываем того, кому её отдаст настройка ревью юнита
-  const rv = (u.settings || {}).review || {};
-  if ((staff || ((me() || {}).access === 'lead' && (t.assigneeId === S.meId || inMyZone(t)))) && t.step !== 'release') prop('Ревьюер', reviewerSelect(t.reviewerId || (rv.byPosition || {})[t.departmentId] || rv.default || '', u, v => { patchTask(t, { reviewerId: v }); }));
 
   if (!B.dueDate.hidden && !staff && !zone) {
     const info = dueInfo(t.dueDate, taskDone(t));
@@ -913,7 +910,7 @@ export function openCreateTask(opts = {}) {
   let unit = inBoard ? S.board.unit : unitById(opts.unitId) || ownUnit || units[0];
   let here = inBoard; // юнит можно сменить: поля и люди берутся из выбранного
   const draft = {
-    status: opts.status || '', assigneeId: opts.assigneeId || '', reviewerId: S.meId || '', dueDate: '', fields: {}, links: {}, teamId: '',
+    status: opts.status || '', assigneeId: opts.assigneeId || '', dueDate: '', fields: {}, links: {}, teamId: '',
     departmentId: opts.departmentId || (S.filters.depts.length === 1 && inBoard ? S.filters.depts[0] : ''),
   };
 
@@ -976,7 +973,6 @@ export function openCreateTask(opts = {}) {
         if (p && !(p.positionIds || [p.positionId]).includes(draft.departmentId)) draft.departmentId = p.positionId;
         drawProps();
       }, here ? {} : { ids: unit.members || [], unitId: unit.id }))),
-      field('Ревьюер', reviewerSelect(draft.reviewerId, unit, v => { draft.reviewerId = v; })),
       // позицию не спрашиваем — её подставит исполнитель (или шаблон)
       // макет 34: срок — плашкой «📅 2 нояб.», календарь по клику; исполнитель — с аватаром
       !B.dueDate.hidden && field(B.dueDate.label, h('label', { class: 'inp date-pill' + (draft.dueDate ? '' : ' empty') }, icon('calendar', 14),

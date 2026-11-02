@@ -820,14 +820,8 @@ begin
   col := coalesce(rv ->> 'column', '');
   if col = '' then return new; end if;
   if new.status = col then
-    -- ревьюер задачи важнее настроек юнита: по умолчанию это тот, кто её поставил
-    -- reviewer_id = тот, кто поставил задачу (старый автозаполнитель), настроек юнита не перебивает; выбранный вручную ревьюер — важнее
-    if new.step = 'part' then
-      -- подзадача розданного этапа: ревьюер позиции из настроек юнита важнее лида (он — запасной вариант)
-      who := coalesce(nullif(rv -> 'byPosition' ->> new.department_id, ''), nullif(new.reviewer_id, ''), rv ->> 'default', '');
-    else
-      who := coalesce(nullif(case when new.reviewer_id = new.created_by then '' else new.reviewer_id end, ''), nullif(rv -> 'byPosition' ->> new.department_id, ''), rv ->> 'default', nullif(new.reviewer_id, ''), '');
-    end if;
+    -- ревьюер задаётся только в настройках юнита: по позиции задачи, иначе по умолчанию
+    who := coalesce(nullif(rv -> 'byPosition' ->> new.department_id, ''), nullif(rv ->> 'default', ''), '');
     if who <> '' and who <> new.assignee_id and new.assignee_id = old.assignee_id
        and exists (select 1 from people where id = who and active) then
       new.review_from := old.assignee_id;
@@ -1096,7 +1090,7 @@ begin
             coalesce((select jsonb_agg(jsonb_build_object('id', 'k_' || substr(md5(random()::text || x), 1, 10), 'text', left(x, 300), 'done', false))
                         from jsonb_array_elements_text(coalesce(it -> 'checklist', '[]'::jsonb)) x where btrim(x) <> ''), '[]'::jsonb),
             false, '', v_me, at_, at_, t.id, '', t.app_id, 'part', t.is_test, coalesce(t.spec_url, ''), '',
-            coalesce(nullif(t.assignee_id, ''), v_me)); -- ревьюер подзадачи по умолчанию — владелец этапа (лид); если в настройках юнита задан ревьюер позиции, берётся он
+            ''); -- ревьюер назначается только настройками юнита
     insert into task_links (task_id, field_id, unit_id, url, updated_at)
       select v_id, l.field_id, t.unit_id, l.url, at_ from task_links l where l.task_id = t.id;
     insert into activity (id, unit_id, task_id, action, field, from_val, to_val, actor_id, at)
