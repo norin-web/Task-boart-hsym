@@ -647,3 +647,37 @@ test('PM видит только приложения из своего спис
   assert.ok((await api.as(mod, names)).includes('Третье'));
   assert.ok(a3.id);
 });
+
+test('Lead: видит и ведёт только свою зону — позиции + выданные люди', async () => {
+  const api = await setup();
+  const { admin, mod, designer, dev, A, t1, t2, t3 } = await team(api);
+  const lead = await api('createPerson', { name: 'Лид дизайна', email: 'lead@x.ru', access: 'lead', positionId: 'd_design' });
+  await api.pg.query('update people set user_id = $1 where id = $2', [UID(7), lead.id]);
+  const L = { ...lead, uid: UID(7) };
+  await api('setMember', { unitId: A.id, personId: L.id });
+  const titles = async () => (await api('getBoard', { unitId: A.id })).tasks.map(t => t.title).sort();
+  // позиция: дизайн (t1 у дизайнера, t3 без исполнителя в отделе дизайна); задача разработчика — вне зоны
+  assert.deepEqual(await api.as(L, titles), ['Иконка', 'Макет экрана']);
+  // CEO выдаёт лиду конкретного человека — его задачи входят в зону
+  await api.as(admin, () => api('setLeadPeople', { leadId: L.id, personIds: [dev.id] }));
+  assert.deepEqual(await api.as(L, titles), ['Вёрстка', 'Иконка', 'Макет экрана']);
+  assert.deepEqual((await api.as(L, () => api('getLeadPeople', {})))[L.id], [dev.id]);
+  // лид ведёт задачи зоны: срок и исполнитель, но не название и не чужой юнит
+  await api.as(L, () => api('updateTask', { id: t3.id, patch: { dueDate: '2099-01-01', assigneeId: designer.id } }));
+  await assert.rejects(api.as(L, () => api('updateTask', { id: t3.id, patch: { title: 'Новое' } })), forbidden);
+  // передать нельзя тому, кто вне зоны (PM, не выданный лиду)
+  await assert.rejects(api.as(L, () => api('updateTask', { id: t3.id, patch: { assigneeId: mod.id } })), forbidden);
+  // задача вне зоны лиду не видна и не меняется
+  await api.as(admin, () => api('setLeadPeople', { leadId: L.id, personIds: [] }));
+  assert.ok(!(await api.as(L, titles)).includes('Вёрстка'));
+  await assert.rejects(api.as(L, () => api('updateTask', { id: t2.id, patch: { dueDate: '2099-01-01' } })));
+  // PM юнита выдаёт людей лиду своего юнита; сотрудник и чужой лид — нет; список не для не-лида
+  await api.as(mod, () => api('setLeadPeople', { leadId: L.id, personIds: [dev.id] }));
+  assert.ok((await api.as(L, titles)).includes('Вёрстка'));
+  await assert.rejects(api.as(designer, () => api('setLeadPeople', { leadId: L.id, personIds: [] })), forbidden);
+  await assert.rejects(api.as(admin, () => api('setLeadPeople', { leadId: designer.id, personIds: [] })));
+  // человек не из юнита лида в зону не попадает
+  const out = await api('createPerson', { name: 'Посторонний', positionId: 'd_ios' });
+  await api.as(admin, () => api('setLeadPeople', { leadId: L.id, personIds: [out.id, dev.id] }));
+  assert.deepEqual((await api.as(admin, () => api('getLeadPeople', {})))[L.id], [dev.id]);
+});

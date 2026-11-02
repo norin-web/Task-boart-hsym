@@ -1,6 +1,6 @@
 import {
   S, LS, todayStr, me, priorityOf, taskById, personById, activeFields, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDate, fmtDateTime, relTime, addDays,
-  unitById, safeUrl, visibleLinkFields, REQUEST_TYPES, plural, appById, isSuper, ceoDefault, KIND_COLORS, whoName, teamById, activeTeams, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, fmtValue,
+  unitById, safeUrl, visibleLinkFields, REQUEST_TYPES, plural, appById, isSuper, ceoDefault, KIND_COLORS, whoName, teamById, activeTeams, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, inMyZone, fmtValue,
 } from '../state.js';
 import { $, h, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, statusIcon, fill, prioMark, prioSelect } from '../ui.js';
 import { call, send } from '../api.js';
@@ -84,6 +84,7 @@ function buildPanel(t) {
 
   const staff = isStaff();
   const editable = canEditTask(t);
+
   const title = autosize(h('textarea', {
     class: 'title-inp', rows: 1, value: t.title, maxlength: 500, 'aria-label': B.title.label, readonly: !staff,
     onkeydown: e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } },
@@ -252,9 +253,16 @@ function flowBlock(t) {
 }
 
 /** Кому лид может передать задачу: люди юнита с позицией задачи (кроме него). */
+/** Кому лид может отдать задачу зоны: люди той же позиции и выданные ему лично. */
+function zonePeople(t) {
+  return (S.board.members || []).map(m => personById(m.personId))
+    .filter(p => p && p.active && (!t.departmentId || (p.positionIds || []).includes(t.departmentId) || (S.leadPeople || []).includes(p.id)))
+    .map(p => p.id);
+}
+
 function handoverPeople(t) {
   return (S.board.members || []).map(m => personById(m.personId))
-    .filter(p => p && p.active && p.id !== S.meId && (!t.departmentId || (p.positionIds || []).includes(t.departmentId)))
+    .filter(p => p && p.active && p.id !== S.meId && (!t.departmentId || (p.positionIds || []).includes(t.departmentId) || (S.leadPeople || []).includes(p.id)))
     .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 }
 
@@ -671,6 +679,8 @@ function prioRo(t, f) {
 }
 
 function sideBlock(t, { staff, editable }) {
+  // лид ведёт чужие задачи своей зоны: отдаёт людям зоны и двигает срок; свои задачи — как раньше (передать / раздать)
+  const zone = !staff && t.assigneeId !== S.meId && inMyZone(t) && !taskDone(t);
   const u = S.board.unit;
   const B = u.settings.builtins;
   const props = h('div', { class: 'props' });
@@ -689,7 +699,7 @@ function sideBlock(t, { staff, editable }) {
   // Порядок: Статус → Исполнитель → Срок → Приоритет и поля. «Команды» в карточке нет (не нужна — решение заказчика);
   // позиция не показывается — её ставит исполнитель (основная позиция), видимость считается по ней.
 
-  if (!B.assignee.hidden && !staff) {
+  if (!B.assignee.hidden && !staff && !zone) {
     const p = personById(t.assigneeId);
     // лид может отдать свою задачу сотруднику своей позиции в этом юните
     const handover = me() && me().access === 'lead' && t.assigneeId === S.meId && !taskDone(t) && handoverPeople(t);
@@ -710,8 +720,8 @@ function sideBlock(t, { staff, editable }) {
       const patch = { assigneeId: v };
       if (p && !t.teamId && (p.teamIds || []).length) patch.teamId = p.teamIds[0];
       patchTask(t, patch).then(() => refreshPanel(t));
-    })), {
-      after: S.meId && t.assigneeId !== S.meId && h('div', { class: 'quick-chips' }, h('button', {
+    }, zone ? { ids: zonePeople(t) } : undefined)), {
+      after: !zone && S.meId && t.assigneeId !== S.meId && h('div', { class: 'quick-chips' }, h('button', {
         class: 'quick-chip', onclick: () => { patchTask(t, { assigneeId: S.meId }); refreshPanel(t); },
       }, icon('user', 12), 'Назначить на меня')),
     });
@@ -721,7 +731,7 @@ function sideBlock(t, { staff, editable }) {
   const rv = (u.settings || {}).review || {};
   if (staff && t.step !== 'release') prop('Ревьюер', reviewerSelect(t.reviewerId || (rv.byPosition || {})[t.departmentId] || rv.default || '', u, v => { patchTask(t, { reviewerId: v }); }));
 
-  if (!B.dueDate.hidden && !staff) {
+  if (!B.dueDate.hidden && !staff && !zone) {
     const info = dueInfo(t.dueDate, taskDone(t));
     prop(B.dueDate.label, ro(info && h('span', { class: 'due ' + info.cls, title: info.hint }, icon('calendar', 12), info.text)));
   } else if (!B.dueDate.hidden) {
@@ -821,7 +831,7 @@ export function assigneeSelect(value, onChange, { ids, unitId, teamId } = {}) {
   people.map(p => h('option', { value: p.id }, p.name + (ofTeam(p) ? '' : ' (не из этой команды)'))),
   // CEO и RM работают во всех юнитах: пометка «не в юните» к ним не относится
   outsider && h('option', { value: outsider.id }, outsider.name + (['superadmin', 'rm'].includes(outsider.access) ? '' : ' (не в юните)')),
-  h('option', { value: '__add' }, '＋ Добавить в команду…'));
+  isSuper() && h('option', { value: '__add' }, '＋ Добавить в команду…'));
   return sel;
 }
 

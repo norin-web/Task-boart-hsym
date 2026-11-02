@@ -104,8 +104,13 @@ export const isDev = () => !!(personById(S.realMeId || S.meId) || {}).isDev;
 export const appById = id => (id ? S.apps.find(a => a.id === id) : null);
 export const appStatusById = id => S.appStatuses.find(x => x.id === id) || null;
 export const prioById = id => (id ? S.priorityOptions.find(o => o.id === id) : null);
-/** Может ли текущий человек работать с задачей (свои задачи у участника). */
-export const canEditTask = t => isStaff() || (!!S.meId && t.assigneeId === S.meId);
+/** Зона лида: его позиции + люди, которых выдали CEO или PM (S.leadPeople — только id этих людей). */
+export const inMyZone = t => {
+  const m = personById(S.meId);
+  return !!m && m.access === 'lead' && (((t.departmentId && (m.positionIds || []).includes(t.departmentId))) || (!!t.assigneeId && (S.leadPeople || []).includes(t.assigneeId)));
+};
+/** Может ли текущий человек работать с задачей (свои задачи у участника, зона у лида). */
+export const canEditTask = t => isStaff() || (!!S.meId && t.assigneeId === S.meId) || inMyZone(t);
 export const activeFields = () => (S.board ? S.board.fields.filter(f => !f.archived).sort(byOrder) : []);
 export const columns = () => (S.board ? S.board.unit.settings.columns : []);
 /** Колонка по id; неизвестный статус = первая колонка (как на сервере). */

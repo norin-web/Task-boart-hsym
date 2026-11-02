@@ -77,6 +77,7 @@ async function boot() {
     S.units = d.units;
     S.people = d.people;
     S.departments = d.departments;
+    S.leadPeople = (S.people.find(p => p.id === S.meId) || {}).access === 'lead' ? (await call('getLeadPeople', {}).catch(() => ({})))[S.meId] || [] : [];
     if (d.teams) S.teams = d.teams;
     S.linkFields = d.linkFields || [];
     S.templates = d.templates || [];

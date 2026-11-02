@@ -4,7 +4,7 @@
  * Команда: люди юнита — роль, позиция, открытые задачи в юните; добавить участника — руководителям.
  */
 import { S, isSuper, isStaff, todayStr, ACCESS_LABELS, personById, deptById, taskDone, plural, columns, colColor, appStatusById } from '../state.js';
-import { $, h, icon, avatar, showErr, fill, menu, toast, emptyBlock, skeleton } from '../ui.js';
+import { $, h, icon, avatar, showErr, fill, menu, toast, emptyBlock, skeleton, modal } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView, link } from '../router.js';
 import { openCreateApp, openNewAppTask, pmsOf, openAppCard, appStatusCell } from './apps.js';
@@ -108,6 +108,30 @@ export function renderUnitTeam() {
   const u = S.board.unit;
   const today = todayStr();
   const body = h('div', { class: 'page unit-page' });
+  let zones = {};  // зоны лидов: { leadId: [personId…] } — видят и меняют CEO и PM юнита
+  /** Зона лида = его позиции + люди, которых выдали отдельно. */
+  const zoneDialog = lead => {
+    const picked = new Set(zones[lead.id] || []);
+    const others = S.board.members.map(m => personById(m.personId)).filter(p => p && p.active && p.id !== lead.id)
+      .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+    modal({
+      title: 'Зона лида · ' + lead.name,
+      cls: 'dlg',
+      body: [
+        h('p', { class: 'hint', style: { marginTop: 0 } }, 'Лид видит и ведёт задачи своей позиции, плюс задачи отмеченных здесь людей. Остальное в юните для него скрыто.'),
+        ...others.map(p => {
+          const cb = h('input', { type: 'checkbox', checked: picked.has(p.id), onchange: () => (cb.checked ? picked.add(p.id) : picked.delete(p.id)) });
+          return h('label', { class: 'row', style: { gap: '8px', padding: '4px 0' } }, cb, avatar(p, 'sm'), h('span', null, p.name), h('span', { class: 'muted' }, (deptById(p.positionId) || {}).name || ''));
+        }),
+      ],
+      actions: [{ label: 'Отмена' }, { label: 'Сохранить', primary: true, action: async close => {
+        zones[lead.id] = await send('setLeadPeople', { leadId: lead.id, personIds: [...picked] });
+        close();
+        toast('Зона лида сохранена');
+        draw();
+      } }],
+    });
+  };
   const draw = () => {
     const rows = S.board.members.map(m => ({ m, p: personById(m.personId) })).filter(x => x.p)
       .sort((a, b) => a.p.name.localeCompare(b.p.name, 'ru'));
@@ -122,7 +146,9 @@ export function renderUnitTeam() {
           avatar(p, 'sm'),
           h('b', { class: 'team-who', 'data-pcard': p.id }, p.name),
           h('span', { class: 'muted team-pos' }, (deptById(m.departmentId) || deptById(p.positionId) || {}).name || '—'),
-          h('span', { class: 'muted team-role' }, ACCESS_LABELS[p.access] || ''),
+          h('span', { class: 'muted team-role' }, ACCESS_LABELS[p.access] || '',
+            p.access === 'lead' && isStaff() && h('button', { class: 'link-btn', style: { marginLeft: '8px' }, title: 'Позиции лида и выданные ему люди', onclick: () => zoneDialog(p) },
+              'зона' + ((zones[p.id] || []).length ? ' · +' + zones[p.id].length : ''))),
           h('span', { class: 'team-load' }, t.length ? `${t.length} ${plural(t.length, ['задача', 'задачи', 'задач'])}` : h('span', { class: 'muted' }, 'нет задач'),
             late > 0 && h('span', { class: 'warn-text' }, ` · просрочено ${late}`)));
       }))
@@ -130,6 +156,7 @@ export function renderUnitTeam() {
         isSuper() && h('button', { class: 'btn primary', onclick: async () => { if (await addMemberDialog(u.id)) draw(); } }, icon('plus', 15), 'Добавить участника')));
   };
   draw();
+  if (isStaff()) call('getLeadPeople', {}).then(z => { zones = z; if (currentView() === 'team:' + u.id) draw(); }).catch(() => {});
 }
 
 /** Ответственный за юнит (PM) и «Сменить» — только CEO. */

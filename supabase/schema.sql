@@ -515,6 +515,52 @@ end $$;
 drop trigger if exists regrant_app_pms on apps;
 create trigger regrant_app_pms after update of unit_id on apps for each row when (new.unit_id is distinct from old.unit_id) execute function regrant_app_pms();
 
+-- Зона лида = его позиции + конкретные люди, которых ему выдали CEO или PM юнита.
+-- Лид видит и ведёт задачи своей зоны (и свои), остальное в юните для него закрыто.
+create table if not exists lead_people (
+  lead_id   text not null references people(id) on delete cascade,
+  person_id text not null references people(id) on delete cascade,
+  primary key (lead_id, person_id)
+);
+create index if not exists lead_people_person on lead_people(person_id);
+alter table lead_people enable row level security;
+drop policy if exists lead_people_read on lead_people;
+create policy lead_people_read on lead_people for select to authenticated
+  using (is_superadmin() or lead_id = my_person_id()
+         or (my_access() = 'moderator' and exists (select 1 from unit_members a join unit_members b on b.unit_id = a.unit_id
+                                                    where a.person_id = my_person_id() and b.person_id = lead_people.lead_id)));
+-- записывает только функция set_lead_people (проверяет, что PM трогает лидов своих юнитов)
+drop policy if exists lead_people_write on lead_people;
+create policy lead_people_write on lead_people for all to authenticated using (is_superadmin()) with check (is_superadmin());
+create or replace function in_lead_zone(p_unit text, p_dept text, p_assignee text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select my_access() = 'lead' and is_unit_member(p_unit)
+     and ((p_dept <> '' and p_dept = any(my_positions()))
+          or (p_assignee <> '' and exists (select 1 from lead_people where lead_id = my_person_id() and person_id = p_assignee)));
+$$;
+-- Выдать лиду людей (замена списка): CEO — любому лиду, PM — лиду своего юнита и людям из этого юнита
+create or replace function set_lead_people(p_lead text, p_people jsonb) returns void
+language plpgsql security definer set search_path = public as $$
+declare v_id text;
+begin
+  if not app_system() and not is_superadmin() then
+    if my_access() <> 'moderator' then raise exception 'Недостаточно прав' using errcode = '42501'; end if;
+    if not exists (select 1 from unit_members a join unit_members b on b.unit_id = a.unit_id
+                    where a.person_id = my_person_id() and b.person_id = p_lead) then
+      raise exception 'Недостаточно прав: лид не из вашего юнита' using errcode = '42501';
+    end if;
+  end if;
+  if not exists (select 1 from people where id = p_lead and access = 'lead') then
+    raise exception 'Зона настраивается только для лида' using errcode = 'P0001';
+  end if;
+  delete from lead_people where lead_id = p_lead;
+  for v_id in select distinct x from jsonb_array_elements_text(coalesce(p_people, '[]'::jsonb)) x loop
+    if v_id = p_lead or not exists (select 1 from unit_members a join unit_members b on b.unit_id = a.unit_id
+                                     where a.person_id = p_lead and b.person_id = v_id) then continue; end if;
+    insert into lead_people (lead_id, person_id) values (p_lead, v_id) on conflict do nothing;
+  end loop;
+end $$;
+
 -- Заметки к приложению (идеи на будущее, договорённости): видит тот, кто видит приложение; удаляет автор или CEO
 create table if not exists app_notes (
   id        text primary key,
@@ -676,9 +722,20 @@ begin
       raise exception 'Этап заблокирован: сначала закройте «%»', missing using errcode = 'P0001';
     end if;
   end if;
+  -- лид ведёт задачи своей зоны: срок и исполнитель (из своей же зоны); название и остальное — как у сотрудника
+  if not can_manage(new.unit_id) and my_access() = 'lead' and in_lead_zone(old.unit_id, old.department_id, old.assignee_id) then
+    if new.assignee_id is distinct from old.assignee_id and new.assignee_id <> ''
+       and not exists (select 1 from people p where p.id = new.assignee_id and p.active and exists (select 1 from unit_members um where um.unit_id = new.unit_id and um.person_id = p.id)
+                         and (new.department_id = '' or new.department_id = p.position_id or p.extra_positions ? new.department_id
+                              or exists (select 1 from lead_people lp where lp.lead_id = my_person_id() and lp.person_id = p.id))) then
+      raise exception 'Недостаточно прав: передать можно только человеку из вашей зоны' using errcode = '42501';
+    end if;
+  end if;
   if not can_manage(new.unit_id) then
-    if new.title is distinct from old.title or new.assignee_id is distinct from old.assignee_id
-       or new.due_date is distinct from old.due_date or new.unit_id is distinct from old.unit_id
+    if new.title is distinct from old.title
+       or (new.assignee_id is distinct from old.assignee_id and not (my_access() = 'lead' and in_lead_zone(old.unit_id, old.department_id, old.assignee_id)))
+       or (new.due_date is distinct from old.due_date and not (my_access() = 'lead' and in_lead_zone(old.unit_id, old.department_id, old.assignee_id)))
+       or new.unit_id is distinct from old.unit_id
        or new.department_id is distinct from old.department_id or new.archived is distinct from old.archived
        or new.num is distinct from old.num or new.created_by is distinct from old.created_by
        or new.team_id is distinct from old.team_id
@@ -981,8 +1038,9 @@ begin
   if task_done(t.id) then raise exception 'Задача уже готова' using errcode = 'P0001'; end if;
   if not exists (select 1 from people p join unit_members m on m.person_id = p.id and m.unit_id = t.unit_id
                   where p.id = p_person and p.active and p.id <> v_me
-                    and (t.department_id = '' or t.department_id = p.position_id or p.extra_positions ? t.department_id)) then
-    raise exception 'Передать можно сотруднику этой позиции в юните' using errcode = 'P0001';
+                    and (t.department_id = '' or t.department_id = p.position_id or p.extra_positions ? t.department_id
+                         or exists (select 1 from lead_people lp where lp.lead_id = v_me and lp.person_id = p.id))) then
+    raise exception 'Передать можно сотруднику этой позиции или из вашей зоны' using errcode = 'P0001';
   end if;
   perform set_config('app.system', 'on', true);
   update tasks set assignee_id = p_person, updated_at = at_ where id = t.id;
@@ -1686,12 +1744,13 @@ create policy people_update on people for update to authenticated
 
 -- Задачи: администраторы — все; участник — задачи своей позиции в своих юнитах и свои задачи.
 drop policy if exists tasks_read on tasks;
--- PM — задачи своих юнитов (и только по своим приложениям); тестовые задачи видит только режим разработчика.
+-- Lead — задачи своей зоны (позиции + выданные люди); PM — задачи своих юнитов (и только по своим приложениям); тестовые задачи видит только режим разработчика.
 create policy tasks_read on tasks for select to authenticated using ((not is_test or is_dev())
   -- PM не видит задачи по приложениям вне своего списка 
   and (app_id = '' or my_access() <> 'moderator' or pm_sees_app(app_id)) and (
   can_manage(unit_id) or assignee_id = my_person_id() or review_from = my_person_id() or reviewer_id = my_person_id()
-  or (is_unit_member(unit_id) and ((department_id <> '' and department_id = any(my_positions()))
+  or (my_access() = 'lead' and in_lead_zone(unit_id, department_id, assignee_id))
+  or (my_access() <> 'lead' and is_unit_member(unit_id) and ((department_id <> '' and department_id = any(my_positions()))
                                      or (team_id <> '' and team_id = any(my_teams()))))));
 drop policy if exists tasks_insert on tasks;
 create policy tasks_insert on tasks for insert to authenticated with check (can_manage(unit_id));
@@ -1700,8 +1759,9 @@ create policy tasks_delete on tasks for delete to authenticated using (can_manag
 drop policy if exists tasks_update on tasks;
 -- После переноса в ревью/из ревью исполнитель меняется триггером — строка остаётся «своей» через review_from / reviewer_id
 create policy tasks_update on tasks for update to authenticated
-  using (can_manage(unit_id) or assignee_id = my_person_id())
-  with check (can_manage(unit_id) or assignee_id = my_person_id() or review_from = my_person_id() or reviewer_id = my_person_id());
+  using (can_manage(unit_id) or assignee_id = my_person_id() or in_lead_zone(unit_id, department_id, assignee_id))
+  with check (can_manage(unit_id) or assignee_id = my_person_id() or review_from = my_person_id() or reviewer_id = my_person_id()
+              or in_lead_zone(unit_id, department_id, assignee_id));
 
 -- Поля-ссылки: названия видны всем (без значений), меняет набор только супер-админ.
 drop policy if exists link_fields_read on link_fields;
@@ -1819,7 +1879,8 @@ drop policy if exists comments_read on comments;
 create policy comments_read on comments for select to authenticated using (exists (select 1 from tasks t where t.id = task_id));
 drop policy if exists comments_insert on comments;
 create policy comments_insert on comments for insert to authenticated
-  with check (exists (select 1 from tasks t where t.id = task_id and (can_manage(t.unit_id) or t.assignee_id = my_person_id())));
+  with check (exists (select 1 from tasks t where t.id = task_id and (can_manage(t.unit_id) or t.assignee_id = my_person_id()
+                                                                     or in_lead_zone(t.unit_id, t.department_id, t.assignee_id))));
 drop policy if exists comments_change on comments;
 create policy comments_change on comments for update to authenticated
   using (author_id = my_person_id() or exists (select 1 from tasks t where t.id = task_id and can_manage(t.unit_id)))
@@ -1838,7 +1899,8 @@ drop policy if exists activity_insert on activity;
 create policy activity_insert on activity for insert to authenticated with check (
   is_superadmin() or (task_id = '' and can_manage(unit_id))
   or (task_id <> '' and exists (select 1 from tasks t where t.id = task_id and t.unit_id = activity.unit_id
-    and (can_manage(t.unit_id) or my_person_id() in (t.assignee_id, t.review_from, t.reviewer_id)))));
+    and (can_manage(t.unit_id) or my_person_id() in (t.assignee_id, t.review_from, t.reviewer_id)
+         or in_lead_zone(t.unit_id, t.department_id, t.assignee_id)))));
 
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
