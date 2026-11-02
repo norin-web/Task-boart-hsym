@@ -136,10 +136,6 @@ function filterRest() {
   const ids = [...new Set(unitPeople.concat(S.board.tasks.filter(t => !t.archived && t.assigneeId).map(t => t.assigneeId)))];
   const people = ids.map(personById).filter(Boolean).slice(0, 10);
   const onTeam = !!S.route.team; // на доске команды людей выбирают карточками «кто чем занят»
-  const avatars = !onTeam && !B.assignee.hidden && people.length > 0 && h('div', { class: 'avatars', title: 'Фильтр по исполнителю' },
-    people.map(p => h('button', { class: 'av-btn' + (f.assignees.includes(p.id) ? ' on' : ''), title: p.name, onclick: () => set('assignees', toggleIn(f.assignees, p.id)) }, avatar(p))),
-    h('button', { class: 'av-btn' + (f.assignees.includes(NO_DEPT) ? ' on' : ''), title: 'Без исполнителя', onclick: () => set('assignees', toggleIn(f.assignees, NO_DEPT)) }, avatar(null)));
-
   const hasDepts = !onTeam && isStaff() && !B.department.hidden && activeDepts().length > 0;
   const depts = hasDepts && h('div', { class: 'row dept-chips' },
     h('button', { class: 'fchip' + (f.depts.length ? '' : ' on'), onclick: () => set('depts', []) }, 'Все'),
@@ -156,41 +152,49 @@ function filterRest() {
     .sort((a, b) => a.name.localeCompare(b.name));
   const appNow = appById(f.app);
 
-  const extraN = f.assignees.length + (f.overdue ? 1 : 0) + (f.open ? 1 : 0) + (f.archived ? 1 : 0) + optCount + (f.app ? 1 : 0) + (S.lanes ? 1 : 0);
-  const moreOpen = !!S.fbMore;
+  const filterN = f.assignees.length + (f.overdue ? 1 : 0) + (f.open ? 1 : 0) + (f.archived ? 1 : 0) + optCount + (f.app ? 1 : 0);
+  const canLanes = S.route.mode === 'board' && isStaff();
+  const laneOpts = canLanes && [
+    [false, 'Без группировки', 'columns'],
+    !B.department.hidden && [true, 'По позициям', 'rows'],
+    S.board.tasks.some(t => t.kind === 'request') && ['kind', 'По типу', 'zap'],
+    apps.length > 0 && ['app', 'По приложениям', 'rows'],
+  ].filter(Boolean);
+  const chk = (label, on, onchange, lead) => h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: on, onchange: e => onchange(e.target.checked) }), lead, label);
+  const filtersMenu = anchor => {
+    const items = [];
+    const group = (title, nodes) => { if (!nodes.length) return; if (items.length) items.push({ sep: true }); items.push({ title }, ...nodes); };
+    group('Исполнитель', !onTeam && !B.assignee.hidden ? [
+      ...people.map(p => chk(p.name, f.assignees.includes(p.id), () => set('assignees', toggleIn(f.assignees, p.id)), avatar(p, 'sm'))),
+      chk('Без исполнителя', f.assignees.includes(NO_DEPT), () => set('assignees', toggleIn(f.assignees, NO_DEPT))),
+    ] : []);
+    group('Приложение', apps.length ? [
+      { label: appNow ? appNow.name + ' · сменить' : 'Все приложения', icon: 'app', action: () => setTimeout(() => menu(anchor, [{ title: 'Приложение' },
+        { label: 'Все приложения', icon: appNow ? null : 'check', action: () => set('app', '') },
+        ...apps.map(a => ({ label: a.name, icon: f.app === a.id ? 'check' : 'app', action: () => set('app', a.id) }))]), 0) },
+    ] : []);
+    optFields.forEach(fld => group(fld.name, fld.options.map(o => chk(o.name, f.opts.includes(o.id),
+      on => { f.opts = on ? f.opts.concat(o.id) : f.opts.filter(x => x !== o.id); renderTasks(); drawFilterRest(); },
+      h('span', { class: 'dot', style: { background: o.color } })))));
+    group('Показывать', [
+      !B.dueDate.hidden && chk('Только просроченные', !!f.overdue, v => set('overdue', v)),
+      chk('Скрыть выполненные', !!f.open, v => set('open', v)),
+      chk('Архив', !!f.archived, v => set('archived', v)),
+    ].filter(Boolean));
+    menu(anchor, items, { cls: 'fb-menu' });
+  };
+  const lanesMenu = anchor => menu(anchor, [{ title: 'Группировка' }, ...laneOpts.map(([v, label, ic]) => ({
+    label, icon: S.lanes === v || (!S.lanes && v === false) ? 'check' : 'blank',
+    action: () => { S.lanes = v; renderTasks(); drawFilterRest(); },
+  }))]);
   return [
     depts,
     h('span', { class: 'spacer' }),
-    h('button', { class: 'fchip more-filters' + (moreOpen ? ' open' : ''), 'aria-expanded': String(moreOpen), onclick: () => { S.fbMore = !S.fbMore; drawFilterRest(); } },
-      icon('filter', 14), 'Ещё фильтры', extraN > 0 && h('span', { class: 'n' }, extraN)),
-    moreOpen && h('div', { class: 'row fb-more' },
-      avatars,
-    optFields.length > 0 && h('button', {
-      class: 'fchip' + (optCount ? ' on' : ''),
-      onclick: e => { e.stopPropagation(); fieldFilterMenu(e.currentTarget, optFields); },
-    }, icon('filter', 13), 'Поля', optCount > 0 && h('span', { class: 'n' }, optCount)),
-    apps.length > 0 && h('button', {
-      class: 'fchip' + (appNow ? ' on' : ''), title: 'Показать задачи одного приложения',
-      onclick: e => { e.stopPropagation(); menu(e.currentTarget, [{ title: 'Приложение' },
-        { label: 'Все приложения', icon: appNow ? null : 'check', action: () => set('app', '') },
-        ...apps.map(a => ({ label: a.name, icon: f.app === a.id ? 'check' : 'app', action: () => set('app', a.id) }))]); },
-    }, icon('app', 13), appNow ? appNow.name : 'Приложение'),
-    !B.dueDate.hidden && h('button', { class: 'fchip' + (f.overdue ? ' on' : ''), onclick: () => set('overdue', !f.overdue) }, icon('alert', 13), 'Просроченные'),
-    h('button', { class: 'fchip' + (f.open ? ' on' : ''), title: 'Скрыть выполненные', onclick: () => set('open', !f.open) }, icon('circle', 13), 'Открытые'),
-    h('button', { class: 'fchip' + (f.archived ? ' on' : ''), onclick: () => set('archived', !f.archived) }, icon('archive', 13), 'Архив'),
-    S.route.mode === 'board' && isStaff() && !B.department.hidden && h('button', {
-      class: 'fchip' + (S.lanes === true ? ' on' : ''), title: 'Разложить задачи по позициям',
-      onclick: () => { S.lanes = S.lanes === true ? false : true; renderTasks(); drawFilterRest(); },
-    }, icon('rows', 13), 'По позициям'),
-    S.route.mode === 'board' && isStaff() && S.board.tasks.some(t => t.kind === 'request') && h('button', {
-      class: 'fchip' + (S.lanes === 'kind' ? ' on' : ''), title: 'Запросы CEO — отдельной дорожкой над задачами',
-      onclick: () => { S.lanes = S.lanes === 'kind' ? false : 'kind'; renderTasks(); drawFilterRest(); },
-    }, icon('zap', 13), 'По типу'),
-    S.route.mode === 'board' && isStaff() && apps.length > 0 && h('button', {
-      class: 'fchip' + (S.lanes === 'app' ? ' on' : ''), title: 'Каждое приложение — своя дорожка с его задачами по колонкам',
-      onclick: () => { S.lanes = S.lanes === 'app' ? false : 'app'; renderTasks(); drawFilterRest(); },
-    }, icon('rows', 13), 'По приложениям'),
-    ),
+    h('div', { class: 'row fb-tools' },
+    h('button', { class: 'fchip' + (filterN ? ' on' : ''), onclick: e => { e.stopPropagation(); filtersMenu(e.currentTarget); } },
+      icon('filter', 14), 'Фильтры', filterN > 0 && h('span', { class: 'n' }, filterN)),
+    canLanes && laneOpts.length > 1 && h('button', { class: 'fchip' + (S.lanes ? ' on' : ''), title: 'Как разложить задачи на доске', onclick: e => { e.stopPropagation(); lanesMenu(e.currentTarget); } },
+      icon('rows', 14), S.lanes ? (laneOpts.find(([v]) => v === S.lanes) || [])[1] || 'Группировка' : 'Группировка')),
     active && h('button', {
       class: 'link-btn', onclick: () => {
         S.filters = freshFilters();
@@ -199,25 +203,6 @@ function filterRest() {
       },
     }, 'Сбросить'),
   ];
-}
-
-function fieldFilterMenu(anchor, fields) {
-  const f = S.filters;
-  const items = [];
-  fields.forEach((fld, i) => {
-    if (i) items.push({ sep: true });
-    items.push({ title: fld.name });
-    fld.options.forEach(o => items.push(h('label', { class: 'chk' },
-      h('input', {
-        type: 'checkbox', checked: f.opts.includes(o.id),
-        onchange: e => {
-          f.opts = e.target.checked ? f.opts.concat(o.id) : f.opts.filter(x => x !== o.id);
-          renderTasks(); drawFilterRest();
-        },
-      }),
-      h('span', { class: 'dot', style: { background: o.color } }), o.name)));
-  });
-  menu(anchor, items);
 }
 
 /** Выполнена давно — дольше, чем юнит держит выполненные на доске. */

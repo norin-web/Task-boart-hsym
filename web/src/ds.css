@@ -2931,6 +2931,9 @@ button.rd-check.on { background: var(--text); border-color: transparent; }
 .rv-flat .rv-row .inp { flex: none; width: 260px; max-width: 100%; }
 .rv-flat .sub-title { margin-top: 12px; }
 
-/* колонки доски: карточки не обрезаются жёстко, а мягко уходят под край */
-.col-list { padding: 8px 8px 16px; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 8px, #000 calc(100% - 16px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 8px, #000 calc(100% - 16px), transparent 100%); }
-.lane-cell .col-list { -webkit-mask-image: none; mask-image: none; padding: 2px 8px 4px; }
+/* колонки доски — монолит: карточки идут вниз, колонка растёт, прокручивается вся доска */
+.col { max-height: none; }
+.col-list { overflow: visible; -webkit-mask-image: none; mask-image: none; padding: 2px 8px 8px; }
+.board:not(.lanes) { overflow-y: auto; }
+
+.fb-tools { flex: none; gap: 8px; flex-wrap: nowrap; }

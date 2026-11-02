@@ -10,6 +10,7 @@ import { peekTask } from './task.js';
 import { appIcon, prioTag, isHighPrio, appStatusCell, stageDots, openAppById } from './apps.js';
 import { watchBlock } from './watch.js';
 import { newsBlock, loadNotes } from './home.js';
+import { renderLayout, editLayout } from './layout.js';
 import { openReleaseSettings, openReleaseHistory, openRejectForm } from './release.js';
 
 /** «от Екатерины»: имя в родительном падеже. */
@@ -20,39 +21,42 @@ export async function renderRmHome() {
   const page = h('div', { class: 'page ceo-page rm-page' }, skeleton());
   const date = (() => { const t = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }); return t.charAt(0).toUpperCase() + t.slice(1); })();
   fill($('#main'),
-    topbar([h('div', { class: 'screen-head' }, h('div', { class: 'screen-date' }, date), h('h1', { class: 'screen-title' }, 'Релизы'))], []),
+    topbar([h('div', { class: 'screen-head' }, h('div', { class: 'screen-date' }, date), h('h1', { class: 'screen-title' }, 'Релизы'))], [
+      h('button', { class: 'btn', title: 'Блоки и порядок дашборда', onclick: () => edit() }, icon('layers', 14), 'Настроить')]),
     h('div', { class: 'view-body' }, page));
   async function load() {
-    let d;
-    let live;
     try { [d, live] = await Promise.all([call('getRmDashboard', {}), call('getReleaseHistory', { result: 'live' }), loadNotes()]); } catch (e) { return showErr(e); }
     if (currentView() !== 'home') return;
-    const reviewBlock = section('На ревью Apple', 'На ревью ничего', 'Отправленные в Apple релизы появятся здесь', d.review, x => [
-          h('span', { class: 'muted rq-line' }, 'отправлено ' + fmtShort(x.submittedAt) + ' · ждёт ' + (days(x.submittedAt) ? days(x.submittedAt) + ' дн.' : 'с сегодня')),
-        ], x => [
-          h('button', { class: 'btn danger solid', onclick: () => reject(x) }, 'Реджект'),
-          h('button', { class: 'btn success', onclick: () => step(x, 'live') }, 'Вышло в стор')], 1);
-    fill(page,
-      h('div', { class: 'rm-grid' },
-        h('div', { class: 'rm-col' }, section('Очередь на релиз', 'Очередь пуста', 'Когда PM передаст релиз, он появится здесь', d.queue, x => {
-          const ready = !x.missing.length && x.checklist.done >= x.checklist.total;
-          return [
-            ready
-              ? h('span', { class: 'ok-text rq-line' }, x.fixedAt ? `Реджект №${x.rejectNo || ''} исправлен, отправьте снова` : 'Готово к отправке')
-              : h('span', { class: 'warn-text rq-line' }, ['Не заполнено: ' + x.missing.join(', '), x.checklist.total && x.checklist.done < x.checklist.total && `чеклист ${x.checklist.done}/${x.checklist.total}`].filter(Boolean).join(' · ')),
-          ];
-        }, x => ((!x.missing.length && x.checklist.done >= x.checklist.total)
-          ? h('button', { class: 'btn primary', onclick: () => step(x, x.fixedAt ? 'resubmit' : 'submit') }, 'Отправил в Apple')
-          : personById(x.pmId) && h('span', { class: 'muted rm-from' }, 'от ' + nameFrom(personById(x.pmId).name)))),
-        section('Реджекты', 'Реджектов нет', 'Когда Apple вернёт релиз, PM получит задачу на исправление', d.rejected, x => {
-          return [h('span', { class: 'rq-line' }, h('b', { class: 'danger-text' }, `№${x.rejectNo || ''} · ${x.reason}`),
-            h('span', { class: 'muted' }, ' · ' + relTime(x.rejectedAt)))];
-        }, x => [h('button', { class: 'btn', title: 'Задача по реджекту закроется, релиз вернётся в очередь', onclick: () => closeReject(x) }, 'Закрыть реджект'),
-          h('button', { class: 'btn', onclick: () => step(x, 'resubmit') }, 'Отправил снова')], 0, true)),
-        h('div', { class: 'rm-col' }, reviewBlock, storeBlock(live.rows))),
-      // свои приложения и задачи «в фокусе» — статус обновляется сам; пустого блока нет
-      watchBlock([], { openApp: id => openAppById(id, load), openTask: peekTask, appIcon, appStatusCell, stageDots, release: true }));
+    draw();
   }
+  let d;
+  let live;
+  const blocks = () => [
+    { id: 'queue', title: 'Очередь на релиз', col: 'left', render: () => section('Очередь на релиз', 'Очередь пуста', 'Когда PM передаст релиз, он появится здесь', d.queue, x => {
+      const ready = !x.missing.length && x.checklist.done >= x.checklist.total;
+      return [
+        ready
+          ? h('span', { class: 'ok-text rq-line' }, x.fixedAt ? `Реджект №${x.rejectNo || ''} исправлен, отправьте снова` : 'Готово к отправке')
+          : h('span', { class: 'warn-text rq-line' }, ['Не заполнено: ' + x.missing.join(', '), x.checklist.total && x.checklist.done < x.checklist.total && `чеклист ${x.checklist.done}/${x.checklist.total}`].filter(Boolean).join(' · ')),
+      ];
+    }, x => ((!x.missing.length && x.checklist.done >= x.checklist.total)
+      ? h('button', { class: 'btn primary', onclick: () => step(x, x.fixedAt ? 'resubmit' : 'submit') }, 'Отправил в Apple')
+      : personById(x.pmId) && h('span', { class: 'muted rm-from' }, 'от ' + nameFrom(personById(x.pmId).name)))) },
+    { id: 'rejected', title: 'Реджекты', col: 'left', render: () => section('Реджекты', 'Реджектов нет', 'Когда Apple вернёт релиз, PM получит задачу на исправление', d.rejected, x => [
+      h('span', { class: 'rq-line' }, h('b', { class: 'danger-text' }, `№${x.rejectNo || ''} · ${x.reason}`), h('span', { class: 'muted' }, ' · ' + relTime(x.rejectedAt)))],
+    x => [h('button', { class: 'btn', title: 'Задача по реджекту закроется, релиз вернётся в очередь', onclick: () => closeReject(x) }, 'Закрыть реджект'),
+      h('button', { class: 'btn', onclick: () => step(x, 'resubmit') }, 'Отправил снова')], 0, true) },
+    { id: 'review', title: 'На ревью Apple', col: 'right', render: () => section('На ревью Apple', 'На ревью ничего', 'Отправленные в Apple релизы появятся здесь', d.review, x => [
+      h('span', { class: 'muted rq-line' }, 'отправлено ' + fmtShort(x.submittedAt) + ' · ждёт ' + (days(x.submittedAt) ? days(x.submittedAt) + ' дн.' : 'с сегодня'))],
+    x => [
+      h('button', { class: 'btn danger solid', onclick: () => reject(x) }, 'Реджект'),
+      h('button', { class: 'btn success', onclick: () => step(x, 'live') }, 'Вышло в стор')], 1) },
+    { id: 'store', title: 'Релизы в App Store', col: 'right', render: () => storeBlock(live.rows) },
+    // свои приложения и задачи «в фокусе» — статус обновляется сам; пустого блока нет
+    { id: 'watch', title: 'Мои приложения и задачи', col: 'full', render: () => watchBlock([], { openApp: id => openAppById(id, load), openTask: peekTask, appIcon, appStatusCell, stageDots, release: true }) },
+  ];
+  const draw = () => fill(page, renderLayout('rmHome', blocks()));
+  const edit = () => editLayout('rmHome', blocks(), page, draw, { title: 'Настройка дашборда' });
   async function step(x, action, reason) {
     try {
       await send('releaseStep', { taskId: x.id, action, reason });
