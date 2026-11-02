@@ -202,7 +202,7 @@ export async function render() {
 
   if (r.mode === 'settings' && !isStaff()) return navigate({ unit: r.unit, mode: 'board' }, { replace: true });
   if (['overview', 'apps'].includes(r.mode) && !seesApps()) return navigate({ unit: r.unit, mode: 'board' }, { replace: true });
-  if (ownTeamsOnly() && (r.mode === 'team' || (r.team && !((me() || {}).teamIds || []).includes(r.team)))) return navigate({ unit: r.unit, mode: 'board' }, { replace: true });
+  if (ownTeamsOnly() && (r.mode === 'team' || (r.team && myAccess() === 'member') || (r.team && !((me() || {}).teamIds || []).includes(r.team)))) return navigate({ unit: r.unit, mode: 'board' }, { replace: true });
   const key = r.mode + ':' + r.unit + (r.team ? ':' + r.team : '');
   const fkey = r.f || '';  // фильтр из адреса не входит в ключ экрана (по ключу экраны сверяют, что страница не устарела)
   if (rendered !== key || renderedF !== fkey) {

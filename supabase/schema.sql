@@ -1744,13 +1744,13 @@ create policy people_update on people for update to authenticated
 
 -- Задачи: администраторы — все; участник — задачи своей позиции в своих юнитах и свои задачи.
 drop policy if exists tasks_read on tasks;
--- Lead — задачи своей зоны (позиции + выданные люди); PM — задачи своих юнитов (и только по своим приложениям); тестовые задачи видит только режим разработчика.
+-- Сотрудник — только свои задачи (исполнитель, ревью); Lead — задачи своей зоны (позиции + выданные люди); RM — задачи своей позиции и команд; PM — задачи своих юнитов (и только по своим приложениям); тестовые задачи видит только режим разработчика.
 create policy tasks_read on tasks for select to authenticated using ((not is_test or is_dev())
   -- PM не видит задачи по приложениям вне своего списка 
   and (app_id = '' or my_access() <> 'moderator' or pm_sees_app(app_id)) and (
   can_manage(unit_id) or assignee_id = my_person_id() or review_from = my_person_id() or reviewer_id = my_person_id()
   or (my_access() = 'lead' and in_lead_zone(unit_id, department_id, assignee_id))
-  or (my_access() <> 'lead' and is_unit_member(unit_id) and ((department_id <> '' and department_id = any(my_positions()))
+  or (my_access() = 'rm' and is_unit_member(unit_id) and ((department_id <> '' and department_id = any(my_positions()))
                                      or (team_id <> '' and team_id = any(my_teams()))))));
 drop policy if exists tasks_insert on tasks;
 create policy tasks_insert on tasks for insert to authenticated with check (can_manage(unit_id));

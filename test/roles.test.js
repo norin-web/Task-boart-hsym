@@ -52,7 +52,7 @@ async function team(api) {
 
 const forbidden = e => e.code === 'FORBIDDEN';
 
-test('участник видит свои юниты и задачи своей позиции', async () => {
+test('участник видит свои юниты и только свои задачи', async () => {
   const api = await setup();
   const { designer, A, B, t1, t2, t3 } = await team(api);
   assert.equal(t1.departmentId, 'd_design'); // отдел подставлен из позиции исполнителя
@@ -62,8 +62,8 @@ test('участник видит свои юниты и задачи своей
     assert.equal(me.access, 'member');
     assert.deepEqual((await api('bootstrap', {})).units.map(u => u.key), ['ALP']);
     const board = await api('getBoard', { unitId: A.id });
-    assert.deepEqual(board.tasks.map(t => t.id).sort(), [t1.id, t3.id].sort());
-    assert.ok(!board.tasks.some(t => t.id === t2.id));
+    assert.deepEqual(board.tasks.map(t => t.id), [t1.id]);  // t3 — той же позиции, но без исполнителя: чужая, t2 — чужая
+    assert.ok(!board.tasks.some(t => t.id === t2.id || t.id === t3.id));
     await assert.rejects(() => api('getBoard', { unitId: B.id }), e => e.code === 'NOT_FOUND');
     assert.deepEqual((await api('queryTasks', { q: 'вёрстка' })).length, 0);
   });
@@ -93,14 +93,14 @@ test('участник: только свои задачи, обязательн
     await api('updateTask', { id: t1.id, patch: { fields: { [link.id]: 'https://figma.com/x' }, checklist: [{ text: 'a' }] } });
     const moved = await api('updateTask', { id: t1.id, patch: { status: 'in_progress', order: 5 } });
     assert.equal(moved.status, 'in_progress');
-    await assert.rejects(() => api('updateTask', { id: t3.id, patch: { status: 'done' } }), forbidden); // не своя
+    await assert.rejects(() => api('updateTask', { id: t3.id, patch: { status: 'done' } }), e => forbidden(e) || e.code === 'NOT_FOUND'); // не своя — её даже не видно
     await assert.rejects(() => api('deleteTask', { id: t1.id }), forbidden);
     await assert.rejects(() => api('deleteUnit', { id: A.id }), forbidden);
 
     // автора подставляет база, даже если браузер прислал чужой id
     const c = await api('addComment', { taskId: t1.id, text: 'готово' }, { actorId: admin.id });
     assert.equal(c.text, 'готово');
-    await assert.rejects(() => api('addComment', { taskId: t3.id, text: 'x' }), forbidden);
+    await assert.rejects(() => api('addComment', { taskId: t3.id, text: 'x' }), e => forbidden(e) || e.code === 'NOT_FOUND');
   });
   const extras = await api('getTaskExtras', { taskId: t1.id });
   assert.equal(extras.comments[0].authorId, designer.id);
@@ -204,14 +204,14 @@ test('уведомления о назначении и онлайн-метка'
 test('несколько позиций, приоритет — только админы, удаление человека', async () => {
   const api = await setup();
   const { admin, mod, designer, dev, A, t1, t2, link } = await team(api);
-  // Product owner + дизайнер видит задачи обеих позиций
+  // дополнительная позиция задачи другой позиции не открывает: сотрудник видит только свои
   const po = await api('createTask', { unitId: A.id, title: 'Roadmap', departmentId: 'd_po' });
   await api.as(designer, async () => {
     assert.ok(!(await api('getBoard', { unitId: A.id })).tasks.some(t => t.id === po.id));
   });
   await api('updatePerson', { id: designer.id, extraPositionIds: ['d_po'] });
   await api.as(designer, async () => {
-    assert.ok((await api('getBoard', { unitId: A.id })).tasks.some(t => t.id === po.id));
+    assert.ok(!(await api('getBoard', { unitId: A.id })).tasks.some(t => t.id === po.id));
     await assert.rejects(() => api('updatePerson', { id: designer.id, extraPositionIds: [] }), forbidden);
   });
 
@@ -423,7 +423,7 @@ test('команды: у человека несколько, видимость
   assert.deepEqual((await api('bootstrap', {})).teams.map(t => t.name),
     ['Product Team', 'UX/UI Designers', 'iOS Development', 'QA Team', 'Release Managers', 'ASO', 'Other']);
   assert.deepEqual(designer.teamIds, ['t_other']); // по умолчанию — Other
-  // задача iOS-команды с позицией QA: дизайнер её не видит, пока не в iOS Development
+  // задача iOS-команды с позицией QA: дизайнер её не видит — ни до, ни после вступления в команду
   const t = await api('createTask', { unitId: A.id, title: 'Сборка', departmentId: 'd_qa', teamId: 't_ios' });
   assert.equal(t.teamId, 't_ios');
   await api.as(designer, async () => {
@@ -433,7 +433,7 @@ test('команды: у человека несколько, видимость
   const p = await api('updatePerson', { id: designer.id, teamIds: ['t_design', 't_ios', 'нет'] });
   assert.deepEqual(p.teamIds, ['t_design', 't_ios']);
   await api.as(designer, async () => {
-    assert.ok((await api('getBoard', { unitId: A.id })).tasks.some(x => x.id === t.id));
+    assert.ok(!(await api('getBoard', { unitId: A.id })).tasks.some(x => x.id === t.id));  // команда видимости сотруднику не добавляет
   });
   // команду задачи меняет администратор, участник — нет
   await api.as(dev, async () => {
