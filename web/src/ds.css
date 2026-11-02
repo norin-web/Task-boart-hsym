@@ -2650,3 +2650,6 @@ body:has(#modal-root .modal-wrap) #panel-root { visibility: hidden; }
 
 /* Телефон: вкладки настроек с прокруткой не сжимаются колонкой страницы */
 .prefs-nav { flex: none; }
+
+/* Перетаскивание: «Пусто» и подсказка колонки уходят, как только над ней карточка — иначе карта встаёт под надпись и прыгает при отпускании */
+.col-list:has(> .sortable-ghost) > .col-empty { display: none; }

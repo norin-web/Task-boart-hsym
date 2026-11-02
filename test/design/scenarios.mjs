@@ -426,6 +426,18 @@ await open('#/'); await audit('Сотрудник · дашборд');
 await open(`#/u/${MVP.id}`); await audit('Сотрудник · доска юнита');
 await audit('Сотрудник · доска юнита', { mobile: true });
 must(!(await page.evaluate(() => [...document.querySelectorAll('.nav-sub')].some(e => /UX\/UI/.test(e.textContent)))), 'сотрудник не видит чужие команды в сайдбаре');
+// кто не создаёт задачи (Lead, RM, сотрудник) — ни одной кнопки создания ни на одном экране
+for (const who of ['Алексей Морозов', 'Дмитрий Козлов', 'Сергей Волков']) {
+  await as(who);
+  const routes = ['#/', '#/board', '#/my', ...(await api('bootstrap', { today: '2026-10-30' })).units.flatMap(u => [`#/u/${u.id}`, `#/u/${u.id}/list`, `#/u/${u.id}/board`])];
+  const seen = [];
+  for (const r of routes) {
+    await open(r);
+    seen.push(...(await page.evaluate(() => [...document.querySelectorAll('#main button, #main a')].filter(b => b.offsetParent)
+      .map(b => (b.innerText.trim() || b.title || '').replace(/\s+/g, ' ')).filter(t => /Созда|^Задача$|Новая задача|Новое прил|Новый юнит|Добавить задачу|Добавить списком/.test(t)))).map(t => `${r}: ${t}`));
+  }
+  must(!seen.length, `${who.split(' ')[0]}: нет кнопок создания` + (seen.length ? ' — ' + seen.slice(0, 3).join('; ') : ''));
+}
 await as('Дмитрий Козлов');
 must((await api('listApps', {})).length === 0, 'Lead не получает приложения');
 await open('#/'); await audit('Lead iOS · дашборд');

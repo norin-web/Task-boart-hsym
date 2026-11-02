@@ -139,7 +139,12 @@ function draw(page, data) {
       !mine.length && h('div', { class: 'col-empty' }, c.group === 'review' && c.fixed ? 'Перетащите сюда — уйдёт на ревью' : 'Пусто'));
     sortables.push(Sortable.create(list, {
       group: 'myboard', animation: 150, draggable: '.card', ghostClass: 'sortable-ghost', fallbackClass: 'sortable-drag', forceFallback: true, fallbackTolerance: 4,
-      onEnd: evt => onMove(evt, data, cols, page),
+      onEnd: evt => {
+        // «Пусто» — не карточка: убираем сразу, иначе брошенная карта на миг встаёт под надпись и прыгает при перерисовке
+        const ph = evt.to.querySelector(':scope > .col-empty');
+        if (ph && evt.to.querySelector('.my-card')) ph.remove();
+        onMove(evt, data, cols, page);
+      },
     }));
     const color = c.color || FIXED.find(f => f.group === c.group).color;
     return h('section', { class: 'col' + (c.fixed ? ' fixed' : ' own'), dataset: { group: c.group }, style: { '--cc': color } },

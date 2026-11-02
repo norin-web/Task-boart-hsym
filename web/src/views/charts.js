@@ -8,12 +8,20 @@ const NS = 'http://www.w3.org/2000/svg';
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888';
 
-/** «Красивый» верх оси: 3, 6, 9, 12 … */
+/** Шаг оси: мелкие числа — 1, 3, 5; дальше «круглый» шаг на ~5 делений (10, 20, 25, 50, 100 …), подписи не налезают. */
+function niceStep(v) {
+  if (v <= 6) return 1;
+  if (v <= 12) return 3;
+  if (v <= 30) return 5;
+  const raw = v / 5, mag = 10 ** Math.floor(Math.log10(raw));
+  return [1, 2, 2.5, 5, 10].map(k => k * mag).find(x => x >= raw);
+}
+/** «Красивый» верх оси: кратен шагу. */
 function niceMax(v) {
-  const step = v <= 6 ? 1 : v <= 12 ? 3 : v <= 30 ? 5 : 10;
+  const step = niceStep(v);
   return Math.max(step * 2, Math.ceil(v / step) * step);
 }
-const ticksFor = max => { const step = max <= 6 ? 1 : max <= 12 ? 3 : max <= 30 ? 5 : 10; return Array.from({ length: Math.floor(max / step) + 1 }, (_, i) => i * step); };
+const ticksFor = max => { const step = niceStep(max); return Array.from({ length: Math.floor(max / step + 1e-9) + 1 }, (_, i) => i * step); };
 const fmtDay = iso => new Date(iso + 'T00:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
 const fmtTick = iso => new Date(iso + 'T00:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }).replace('.', '');
 

@@ -86,13 +86,13 @@ const go = async hash => {
 const reloadSafe = async () => {
   await page.evaluate(async () => { try { const { call } = await import('/src/api.js'); await call('whoami', {}); } catch { /* ещё не вошли */ } }).catch(() => {});
   await page.waitForTimeout(300);
-  for (let i = 0; i < 3; i++) {
-    await page.reload();
+  for (let i = 0; i < 4; i++) {
+    if (i < 2) await page.reload(); else await page.goto(URL_ + '#/settings');
     try { await page.waitForFunction(() => document.querySelector('#sidebar .nav-item'), null, { timeout: 25000 }); return; } catch {
       if (process.env.DIAG) { await page.screenshot({ path: process.env.DIAG + '/hang-' + i + '.png' }); console.log('ЗАВИСЛО', i, (await page.evaluate(() => document.body.innerText.slice(0, 300)).catch(() => '?')).replace(/\n/g, ' / '), '| консоль:', diag.slice(-8).join(' || ')); }
     }
   }
-  throw new Error('страница не загрузилась после трёх попыток');
+  throw new Error('страница не загрузилась после четырёх попыток');
 };
 
 // вход за роль листа: экраны без `as` — за CEO

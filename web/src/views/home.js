@@ -194,7 +194,7 @@ export async function renderHome() {
     units.length
       ? h('div', { class: 'unit-grid' }, units.map(unitCard), isSuper() && h('button', { class: 'unit-card add', onclick: openCreateUnit }, icon('plus', 18), 'Новый юнит'))
       : h('div', { class: 'card-box empty-state' },
-        h('h2', null, 'Создайте первый юнит'),
+        h('h2', null, isSuper() ? 'Создайте первый юнит' : 'Юнитов пока нет'),
         h('p', null, 'Юнит — направление студии (Gold, RF, MVP…): его приложения, PM, RM, лиды и сотрудники.'),
         h('div', { class: 'row', style: { justifyContent: 'center' } },
           isSuper() && h('button', { class: 'btn primary', onclick: openCreateUnit }, icon('plus', 15), 'Создать юнит'),

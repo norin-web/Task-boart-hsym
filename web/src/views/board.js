@@ -699,8 +699,8 @@ function renderList(container) {
           more && h('tr', { class: 'grp-more' }, h('td', { colspan: cols.length }, more))))))
       : h('div', { class: 'card-box empty-state' },
         h('h2', null, S.board.tasks.length ? 'Ничего не найдено' : 'Задач пока нет'),
-        h('p', null, S.board.tasks.length ? 'Попробуйте изменить фильтры.' : 'Создайте первую задачу в этом юните.'),
-        !S.board.tasks.length && h('button', { class: 'btn primary', onclick: () => openCreateTask() }, icon('plus', 15), 'Создать задачу'))));
+        h('p', null, S.board.tasks.length ? 'Попробуйте изменить фильтры.' : isStaff() ? 'Создайте первую задачу в этом юните.' : 'Здесь появятся задачи юнита, когда вас назначат.'),
+        !S.board.tasks.length && isStaff() && h('button', { class: 'btn primary', onclick: () => openCreateTask() }, icon('plus', 15), 'Создать задачу'))));
 }
 
 /* ================= Изменение задач ================= */
