@@ -296,6 +296,39 @@ export function menu(anchor, items, { cls = '', align = 'right' } = {}) {
   return m;
 }
 
+/* ---------- выпадающие списки по дизайну ----------
+ * Все нативные <select> открываются нашим меню (то же, что у остальных меню), а не системным окном. Значение и событие change
+ * — те же, поэтому код форм не меняется. Список из одного пункта не раскрывается. На телефоне остаётся системный выбор. */
+const coarse = () => window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+function selectable(sel) {
+  const out = [];
+  for (const n of sel.children) {
+    if (n.tagName === 'OPTGROUP') { if (!n.disabled) { out.push({ group: n.label }); out.push(...[...n.children].filter(o => !o.disabled).map(o => ({ o }))); } } else if (n.tagName === 'OPTION' && !n.disabled) out.push({ o: n });
+  }
+  return out;
+}
+function openSelect(sel) {
+  const list = selectable(sel);
+  if (list.filter(x => x.o).length <= 1) return; // один вариант — выбирать нечего
+  const items = list.map(x => (x.group != null ? { title: x.group } : { label: x.o.textContent, icon: x.o.value === sel.value ? 'check' : 'blank', action: () => {
+    if (sel.value !== x.o.value) { sel.value = x.o.value; sel.dispatchEvent(new Event('input', { bubbles: true })); sel.dispatchEvent(new Event('change', { bubbles: true })); }
+    sel.focus();
+  } })).filter(Boolean);
+  const m = menu(sel, items, { align: 'left', cls: 'sel-menu' });
+  m.style.minWidth = sel.offsetWidth + 'px';
+  const r = sel.getBoundingClientRect();
+  m.style.left = Math.max(8, Math.min(window.innerWidth - m.offsetWidth - 8, r.left)) + 'px';
+  const cur = [...m.querySelectorAll('.menu-item')].find(b => b.querySelector('.i'));
+  if (cur) cur.scrollIntoView({ block: 'nearest' });
+}
+const nativeSel = e => { const s = e.target && e.target.closest ? e.target.closest('select') : null; return s && !s.disabled && !s.multiple && !(s.size > 1) && !s.closest('.menu') && !coarse() ? s : null; };
+document.addEventListener('mousedown', e => { if (nativeSel(e)) e.preventDefault(); }, true);
+document.addEventListener('click', e => { const s = nativeSel(e); if (s) { e.preventDefault(); s.focus(); openSelect(s); } }, true);
+document.addEventListener('keydown', e => {
+  const s = e.target instanceof HTMLSelectElement && !e.target.disabled && !e.target.multiple && !coarse() && !e.target.closest('.menu') ? e.target : null;
+  if (s && ['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(e.key) && !e.altKey && !e.metaKey && !e.ctrlKey) { e.preventDefault(); openSelect(s); }
+}, true);
+
 /* ---------- модалки ---------- */
 
 export const isModalOpen = () => $('#modal-root').children.length > 0;
