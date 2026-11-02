@@ -503,22 +503,39 @@ export function addMemberDialog(unitId) {
       toast(isStaff() ? 'Все участники уже в команде. Новых людей добавляют в «Люди и доступы».' : 'Нет доступных людей');
       return resolve(null);
     }
-    const person = h('select', { class: 'inp' }, candidates.map(p => h('option', { value: p.id },
-      p.name + ' · ' + p.positionIds.map(id => (deptById(id) || {}).name).filter(Boolean).join(', '))));
+    // группой: люди по позициям с галочками, «все» — по позиции целиком
+    const picked = new Set();
+    const list = h('div', { class: 'am-list' });
+    const count = h('span', { class: 'muted' });
+    const posOf = p => ((p.positionIds && p.positionIds[0]) || p.positionId || '');
+    const groups = [...new Set(candidates.map(posOf))].map(id => ({ name: (deptById(id) || {}).name || 'Без позиции', ps: candidates.filter(p => posOf(p) === id) }));
+    const draw = () => {
+      count.textContent = picked.size ? `Выбрано: ${picked.size}` : 'Отметьте людей';
+      fill(list, groups.map(g => h('div', { class: 'am-group' },
+        h('div', { class: 'am-head' }, h('span', null, g.name),
+          h('button', { class: 'link-btn', type: 'button', onclick: () => { const all = g.ps.every(p => picked.has(p.id)); g.ps.forEach(p => (all ? picked.delete(p.id) : picked.add(p.id))); draw(); } }, g.ps.every(p => picked.has(p.id)) ? 'снять' : 'все')),
+        g.ps.map(p => h('label', { class: 'am-row' },
+          h('input', { type: 'checkbox', checked: picked.has(p.id), onchange: e => { if (e.target.checked) picked.add(p.id); else picked.delete(p.id); draw(); } }),
+          avatar(p, 'sm'), h('span', { class: 'am-name' }, p.name), p.access !== 'member' && h('span', { class: 'muted' }, ACCESS_LABELS[p.access] || ''))))));
+    };
+    draw();
     let result = null;
     modal({
       title: 'Добавить в команду' + (unit ? ' «' + unit.name + '»' : ''),
       cls: 'dlg',
-      body: [field('Участник', person, 'Позиции — из профиля человека («Люди и доступы»).')],
+      body: [list, h('p', { class: 'hint', style: { margin: '8px 0 0' } }, count, ' · позиции берутся из профиля человека («Люди и доступы»).')],
       onClose: () => resolve(result),
       actions: [
         { label: 'Отмена' },
         {
           label: 'Добавить', primary: true, action: async close => {
-            const p = S.people.find(x => x.id === person.value);
-            const members = await send('setMember', { unitId, personId: p.id, departmentId: p.positionId });
-            applyMembers(unitId, members);
-            result = p.id;
+            if (!picked.size) { toast('Отметьте хотя бы одного человека'); return; }
+            for (const id of picked) {
+              const p = S.people.find(x => x.id === id);
+              applyMembers(unitId, await send('setMember', { unitId, personId: id, departmentId: p.positionId }));
+              result = result || id;
+            }
+            toast(`Добавлено: ${picked.size}`);
             close();
           },
         },

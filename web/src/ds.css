@@ -2911,3 +2911,10 @@ button.rd-check.on { background: var(--text); border-color: transparent; }
 .rv-plain .rv-default .rv-label { font-weight: 600; }
 .rv-plain .rv-row .inp { flex: none; width: 260px; max-width: 100%; }
 @media (max-width: 560px) { .rv-plain .rv-row .inp { width: 180px; } }
+/* «Добавить в команду»: люди по позициям с галочками */
+.am-list { display: grid; gap: 4px; max-height: min(55vh, 420px); overflow-y: auto; }
+.am-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 0 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.am-row { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 4px; border-radius: 12px; cursor: pointer; font-size: 13px; }
+.am-row:hover { background: var(--surface-2); }
+.am-name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.am-row input { width: 18px; height: 18px; flex: none; accent-color: var(--text); }
