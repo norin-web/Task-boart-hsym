@@ -35,7 +35,7 @@ export function unitHeader(active, right = [], team = null) {
           team ? link({ unit: u.id, mode: seesApps() ? 'overview' : 'board' }, { class: 'crumb' }, u.name) : h('span', { class: 'crumb' }, u.name),
           u.archived && h('span', { class: 'badge' }, 'в архиве')),
         h('h1', null, team ? team.name : TITLES[active] || u.name)),
-    ], right),
+    ], [...right, isStaff() && active !== 'settings' && link({ unit: u.id, mode: 'settings' }, { class: 'icon-btn', title: 'Настройки юнита', 'aria-label': 'Настройки юнита' }, icon('settings', 17))]),
     h('nav', { class: 'unit-tabs', role: 'tablist', 'aria-label': 'Разделы юнита' },
       tabs(u).map(([mode, label, ic, n]) => link({ unit: u.id, mode }, {
         class: 'unit-tab' + (active === mode ? ' on' : ''), role: 'tab', 'aria-selected': String(active === mode),
