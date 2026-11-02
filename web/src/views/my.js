@@ -87,7 +87,7 @@ export function unitGroups(tasks) {
   }
   const groups = [...units.values()].map(g => ({ ...g, open: g.items.filter(t => t.statusKind !== 'done'), done: g.items.filter(t => t.statusKind === 'done') }))
     .sort((a, b) => b.open.filter(late).length - a.open.filter(late).length || b.open.length - a.open.length || a.unit.name.localeCompare(b.unit.name));
-  const draw = () => fill(box, groups.length ? groups.map(g => {
+  const draw = () => fill(box, groups.some(g => g.open.length || showDone) ? groups.map(g => {
     const items = [...g.open.sort(byDue), ...(showDone ? g.done : [])];
     if (!items.length) return null;
     return h('section', { class: 'ugroup' + (whose === 'set' ? ' set' : '') },

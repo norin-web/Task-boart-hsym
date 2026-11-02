@@ -69,13 +69,14 @@ const hideDev = () => page.addStyleTag({ content: '.dev-item, .view-as, .lens-ba
 await hideDev();
 
 const go = async hash => {
-  await page.evaluate(h => {
+  const low = role === 'lead' || role === 'member'; // аналитика им закрыта: прыжок через неё увёл бы на главную
+  await page.evaluate(([h, bounce]) => {
     document.body.click(); // закрывает меню аккаунта в сайдбаре
     document.querySelectorAll('#palette-root > *, #modal-root > *, #panel-root > *, .menu').forEach(e => e.remove()); // окна прошлого экрана
-    location.hash = '#/analytics';
+    location.hash = bounce;
     setTimeout(() => { location.hash = h; }, 50);
-  }, hash);
-  await page.waitForTimeout(900);
+  }, [hash, low ? '#/settings' : '#/analytics']);
+  await page.waitForTimeout(low ? 2000 : 900);
 };
 
 // вход за роль листа: экраны без `as` — за CEO
