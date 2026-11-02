@@ -1665,6 +1665,22 @@ export function createBackend(db, opts = {}) {
       return true;
     },
 
+    /** Зоны лидов: { leadId: [personId…] } — CEO и PM видят лидов своих юнитов, лид — свою. */
+    async getLeadPeople() {
+      const rows = await all(() => T('lead_people').select('lead_id,person_id').order('lead_id').order('person_id'));
+      const out = {};
+      for (const r of rows) (out[r.lead_id] ||= []).push(r.person_id);
+      return out;
+    },
+
+    /** Выдать лиду конкретных людей (кроме его позиций). CEO — любому, PM — лиду своего юнита. */
+    async setLeadPeople(p) {
+      const lead = (await one('people', p.leadId)) || fail('Человек не найден', 'NOT_FOUND');
+      if (lead.access !== 'lead') fail('Зона настраивается только для лида');
+      await rpc('set_lead_people', { p_lead: lead.id, p_people: (Array.isArray(p.personIds) ? p.personIds : []).map(String) });
+      return (await methods.getLeadPeople({}))[lead.id] || [];
+    },
+
     /** Список приложений каждого PM: { personId: [appId…] }. Видит и меняет только CEO. */
     async getPmApps() {
       const rows = await all(() => T('pm_apps').select('person_id,app_id').order('person_id').order('app_id'));
