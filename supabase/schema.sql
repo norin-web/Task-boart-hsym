@@ -1194,7 +1194,7 @@ begin
   if new.access is distinct from old.access and not is_superadmin() then
     raise exception 'Роли меняет только CEO' using errcode = '42501';
   end if;
-  if not is_staff() and (new.email is distinct from old.email or new.position_id is distinct from old.position_id
+  if not is_superadmin() and (new.email is distinct from old.email or new.position_id is distinct from old.position_id
                          or new.extra_positions is distinct from old.extra_positions or new.team_ids is distinct from old.team_ids
                          or new.active is distinct from old.active) then
     raise exception 'Email, позицию и доступ меняет администратор' using errcode = '42501';
@@ -1283,7 +1283,7 @@ end $$;
 create or replace function delete_department(p_dept text) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  if not app_system() and not is_staff() then raise exception 'Недостаточно прав' using errcode = '42501'; end if;
+  if not app_system() and not is_superadmin() then raise exception 'Недостаточно прав' using errcode = '42501'; end if;
   perform set_config('app.system', 'on', true);
   update tasks set department_id = '' where department_id = p_dept;
   update unit_members set department_id = '' where department_id = p_dept;
@@ -1668,21 +1668,21 @@ create policy fields_write on fields for all to authenticated
 drop policy if exists members_read on unit_members;
 create policy members_read on unit_members for select to authenticated using (is_superadmin() or is_unit_member(unit_id));
 drop policy if exists members_write on unit_members;
-create policy members_write on unit_members for all to authenticated using (can_manage(unit_id)) with check (can_manage(unit_id));
+create policy members_write on unit_members for all to authenticated using (is_superadmin()) with check (is_superadmin());
 
 -- Позиции и люди видны всем вошедшим (имена исполнителей, авторов); меняют администраторы, свой профиль — сам человек.
 drop policy if exists departments_read on departments;
 create policy departments_read on departments for select to authenticated using (true);
 drop policy if exists departments_write on departments;
-create policy departments_write on departments for all to authenticated using (is_staff()) with check (is_staff());
+create policy departments_write on departments for all to authenticated using (is_superadmin()) with check (is_superadmin());
 
 drop policy if exists people_read on people;
 create policy people_read on people for select to authenticated using (true);
 drop policy if exists people_insert on people;
-create policy people_insert on people for insert to authenticated with check (is_staff());
+create policy people_insert on people for insert to authenticated with check (is_superadmin());
 drop policy if exists people_update on people;
 create policy people_update on people for update to authenticated
-  using (is_staff() or user_id = auth.uid()) with check (is_staff() or user_id = auth.uid());
+  using (is_superadmin() or user_id = auth.uid()) with check (is_superadmin() or user_id = auth.uid());
 
 -- Задачи: администраторы — все; участник — задачи своей позиции в своих юнитах и свои задачи.
 drop policy if exists tasks_read on tasks;
@@ -1723,7 +1723,7 @@ create policy task_links_write on task_links for all to authenticated
 drop policy if exists teams_read on teams;
 create policy teams_read on teams for select to authenticated using (true);
 drop policy if exists teams_write on teams;
-create policy teams_write on teams for all to authenticated using (is_staff()) with check (is_staff());
+create policy teams_write on teams for all to authenticated using (is_superadmin()) with check (is_superadmin());
 
 -- Удалить команду: у людей и задач она просто пропадает.
 create or replace function delete_team(p_team text) returns void

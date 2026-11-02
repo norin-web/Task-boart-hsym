@@ -1,5 +1,5 @@
 import Sortable from 'sortablejs';
-import { S, TYPE_LABELS, PALETTE, unitById, byOrder, KINDS, KIND_LABELS, KIND_COLORS, colColor, personById, activeDepts, plural } from '../state.js';
+import { S, TYPE_LABELS, PALETTE, unitById, byOrder, KINDS, KIND_LABELS, KIND_COLORS, colColor, personById, activeDepts, plural, isSuper } from '../state.js';
 import { $, h, icon, avatar, field, topbar, menu, closeMenu, modal, confirmDlg, toast, showErr, colorPicker, fill } from '../ui.js';
 import { send } from '../api.js';
 import { link } from '../router.js';
@@ -127,7 +127,7 @@ export function renderSettings() {
           h('button', { class: 'btn', onclick: () => { archiveUnit(unitById(u.id) || u, !u.archived); renderSettings(); } }, u.archived ? 'Вернуть из архива' : 'В архив'),
           h('button', { class: 'btn danger solid', onclick: () => deleteUnit(unitById(u.id) || u) }, 'Удалить юнит')))),
 
-      h('div', { class: 'us-wide' }, teamSection(), flowSection(u)))));
+      h('div', { class: 'us-wide' }, isSuper() && teamSection(), flowSection(u)))));
 
   if (active.length > 1) {
     Sortable.create(fieldList, {

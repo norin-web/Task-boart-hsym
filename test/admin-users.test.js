@@ -93,12 +93,11 @@ test('admin-users: модератор не может сменить парол�
   assert.deepEqual(fake.changes, []);
 });
 
-test('admin-users: модератор создаёт аккаунт участнику, супер-админ — привязывает супер-админа', async () => {
+test('admin-users: PM входы не создаёт, супер-админ — создаёт и привязывает супер-админа', async () => {
   const fake = world();
   const call = await loadFunction(fake);
   let r = await call('MOD', { action: 'create', email: 'new@x.ru', password: '12345678', name: 'Новый' });
-  assert.equal(r.status, 200);
-  assert.equal(r.body.person.access, 'member');
+  assert.equal(r.status, 403);
   r = await call('BOSS', { action: 'create', email: 'boss2@x.ru', password: '12345678' });
   assert.equal(r.status, 200);
   assert.equal(r.body.person.id, 'p_super2');

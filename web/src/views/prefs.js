@@ -7,7 +7,7 @@
 import { S, LS, me, isStaff, isSuper, myAccess, ACCESS_LABELS, deptById, plural } from '../state.js';
 import { $, h, icon, avatar, topbar, fill, showErr, toast } from '../ui.js';
 import { send, call } from '../api.js';
-import { link, currentView, rerender } from '../router.js';
+import { link, currentView, rerender, navigate } from '../router.js';
 import { mode, supabase } from '../data.js';
 import { THEME_LIST, setTheme, resetLocal } from './sidebar.js';
 import { openMyProfile, openActAs, addPersonDialog } from './people.js';
@@ -26,7 +26,8 @@ const personal = () => PERSONAL_ALL.filter(t => t[0] !== 'charts' || isSuper());
 
 /** Разделы студии, доступные вошедшему. */
 const studio = () => [
-  ...(isStaff() ? STUDIO_TABS : []),
+  // люди, юниты и журнал — только CEO; PM остаются автоматизации (его флоу и шаблоны)
+  ...(isSuper() ? STUDIO_TABS : isStaff() ? STUDIO_TABS.filter(t => t[0] === 'automations') : []),
   isSuper() && ['apps', 'Приложения', 'app'],
   (isSuper() || myAccess() === 'rm') && ['releases', 'Релизы', 'rocket'],
 ].filter(Boolean);
@@ -45,7 +46,10 @@ const NOTIFY = [
 export function renderPrefs(tab) {
   const PERSONAL = personal();
   const all = [...PERSONAL, ...studio()];
-  if (!all.some(t => t[0] === tab) && tab !== 'trash') tab = 'profile';
+  if (!all.some(t => t[0] === tab) && tab !== 'trash') {
+    if (tab) return navigate({ view: 'settings' }, { replace: true });  // закрытый раздел (например, «Люди» у PM) — не оставляем его адрес
+    tab = 'profile';
+  }
   const navTab = tab === 'trash' ? 'units' : tab;
   const key = currentView();
   const body = h('div', { class: 'prefs-body' + (PERSONAL.some(t => t[0] === tab) && !['look', 'notify', 'boards', 'charts'].includes(tab) ? ' narrow' : '') });

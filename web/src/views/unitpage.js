@@ -113,7 +113,7 @@ export function renderUnitTeam() {
       .sort((a, b) => a.p.name.localeCompare(b.p.name, 'ru'));
     const mine = id => S.board.tasks.filter(t => !t.archived && !taskDone(t) && t.assigneeId === id);
     fill($('#main'), ...unitHeader('team', [
-      isStaff() && h('button', { class: 'btn primary', onclick: async () => { if (await addMemberDialog(u.id)) draw(); } }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Участник')),
+      isSuper() && h('button', { class: 'btn primary', onclick: async () => { if (await addMemberDialog(u.id)) draw(); } }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Участник')),
     ]), h('div', { class: 'view-body' }, body));
     fill(body, rows.length
       ? h('div', { class: 'card-box team-list team-table' }, h('div', { class: 'team-head' }, h('span', null, 'Человек'), h('span', null, 'Позиция'), h('span', null, 'Роль'), h('span', null, 'Задачи в юните')), rows.map(({ m, p }) => {
@@ -127,7 +127,7 @@ export function renderUnitTeam() {
             late > 0 && h('span', { class: 'warn-text' }, ` · просрочено ${late}`)));
       }))
       : h('div', { class: 'card-box empty-state' }, h('h2', null, 'Команда не собрана'),
-        isStaff() && h('button', { class: 'btn primary', onclick: async () => { if (await addMemberDialog(u.id)) draw(); } }, icon('plus', 15), 'Добавить участника')));
+        isSuper() && h('button', { class: 'btn primary', onclick: async () => { if (await addMemberDialog(u.id)) draw(); } }, icon('plus', 15), 'Добавить участника')));
   };
   draw();
 }

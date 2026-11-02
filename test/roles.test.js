@@ -456,7 +456,7 @@ test('команды: у человека несколько, видимость
 
 test('личная доска: шаблоны этапов команд, только свои задачи и своё положение', async () => {
   const api = await setup();
-  const { mod, designer, dev, A, t1, t2 } = await team(api);
+  const { admin, mod, designer, dev, A, t1, t2 } = await team(api);
   const teams = (await api('bootstrap', {})).teams;
   assert.deepEqual(teams.find(t => t.id === 't_design').boardTemplate.map(c => c.name),
     ['To do', 'Design in Progress', 'Review', 'Text', 'Google Drive', 'Done']);
@@ -466,7 +466,8 @@ test('личная доска: шаблоны этапов команд, тол�
     await assert.rejects(() => api('updateTeam', { id: 't_design', boardTemplate: [{ name: 'x', kind: 'todo' }] }), forbidden);
   });
   await assert.rejects(() => api('updateTeam', { id: 't_design', boardTemplate: [] }), /хотя бы один/);
-  const upd = await api.as(mod, () => api('updateTeam', { id: 't_qa', boardTemplate: [{ name: 'Очередь', kind: 'todo' }, { name: 'Ок', kind: 'done', id: 'BAD id' }] }));
+  await api.as(mod, async () => { await assert.rejects(() => api('updateTeam', { id: 't_qa', boardTemplate: [{ name: 'x', kind: 'todo' }] }), forbidden); }); // команды меняет только CEO
+  const upd = await api.as(admin, () => api('updateTeam', { id: 't_qa', boardTemplate: [{ name: 'Очередь', kind: 'todo' }, { name: 'Ок', kind: 'done', id: 'BAD id' }] }));
   assert.deepEqual(upd.boardTemplate.map(c => c.id), ['s1', 's2']);
 
   await api.as(designer, async () => {
@@ -513,15 +514,15 @@ test('профили: свой профиль, роли меняет тольк�
     await assert.rejects(() => api('setMyPrefs', { personId: dev.id, prefs: { x: 1 } }), forbidden);
   });
   await api.as(mod, async () => {
-    await api('updatePerson', { id: designer.id, positionId: 'd_qa' });
-    const p = await api('createPerson', { name: 'Новичок', positionId: 'd_aso' });
-    assert.equal(p.access, 'member');
+    // людей, позиции и доступы PM не меняет — только CEO
+    await assert.rejects(() => api('updatePerson', { id: designer.id, positionId: 'd_qa' }), forbidden);
+    await assert.rejects(() => api('createPerson', { name: 'Новичок', positionId: 'd_aso' }), forbidden);
+    await assert.rejects(() => api('setMember', { unitId: A.id, personId: designer.id }), forbidden);
     await assert.rejects(() => api('updatePerson', { id: designer.id, access: 'moderator' }), forbidden);
     await assert.rejects(() => api('createPerson', { name: 'x', access: 'moderator' }), forbidden);
     await assert.rejects(() => api('updatePerson', { id: admin.id, name: 'x' }), forbidden);
     // PM управляет своими юнитами, но не создаёт новые и не трогает чужие
     await assert.rejects(() => api('createUnit', { name: 'Charlie', key: 'CHR' }), forbidden);
-    await api('setMember', { unitId: A.id, personId: designer.id });
     await assert.rejects(() => api('setMember', { unitId: B.id, personId: dev.id }), e => e.code === 'NOT_FOUND' || forbidden(e));
   });
   await api.as(admin, async () => {

@@ -26,9 +26,9 @@ export function openPalette() {
     isStaff() && { label: 'Мои задачи', icon: 'user', run: () => navigate({ view: 'my' }) },
     { label: 'Настройки', icon: 'settings', run: () => navigate({ view: 'settings' }) },
     isSuper() && { label: 'Аналитика', icon: 'chart', run: () => navigate({ view: 'analytics' }) },
-    isStaff() && { label: 'Люди и доступы', icon: 'users', run: () => navigate({ view: 'settings', tab: 'people' }) },
-    isStaff() && { label: 'Позиции', icon: 'layers', run: () => { LS.set('peopleSub', 'positions'); navigate({ view: 'settings', tab: 'people' }); } },
-    isStaff() && { label: 'Журнал событий', icon: 'clock', run: () => navigate({ view: 'settings', tab: 'journal' }) },
+    isSuper() && { label: 'Люди и доступы', icon: 'users', run: () => navigate({ view: 'settings', tab: 'people' }) },
+    isSuper() && { label: 'Позиции', icon: 'layers', run: () => { LS.set('peopleSub', 'positions'); navigate({ view: 'settings', tab: 'people' }); } },
+    isSuper() && { label: 'Журнал событий', icon: 'clock', run: () => navigate({ view: 'settings', tab: 'journal' }) },
     { label: 'Горячие клавиши', icon: 'keyboard', hint: '?', run: openShortcuts },
     mode === 'local' && isStaff() && !S.units.length && { label: 'Заполнить демо-данными', icon: 'layers', run: () => fillDemo() },
   ].filter(Boolean);
@@ -55,7 +55,7 @@ export function openPalette() {
     const q = inp.value.trim().toLowerCase();
     const foundApps = (q ? apps.filter(a => a.name.toLowerCase().includes(q)) : []).slice(0, 6)
       .map(a => ({ group: 'Приложения', label: a.name, icon: 'app', run: () => import('./apps.js').then(m => m.openAppById(a.id)) }));
-    const people = (q ? S.people.filter(p => p.active && p.name.toLowerCase().includes(q)) : []).slice(0, 6)
+    const people = (q && isSuper() ? S.people.filter(p => p.active && p.name.toLowerCase().includes(q)) : []).slice(0, 6)
       .map(p => ({ group: 'Люди', label: p.name, icon: 'user', run: () => navigate({ view: 'settings', tab: 'people' }) }));
     const acts = actions.filter(a => !q || a.label.toLowerCase().includes(q)).map(a => ({ ...a, group: 'Действия' }));
     const found = tasks.map(t => ({ group: 'Задачи', label: t.title, hint: t.key, dot: t.unit.color, run: () => peekTask(t.unit.id, t.id) }));

@@ -31,7 +31,7 @@ Deno.serve(async req => {
     const { data: auth, error: authError } = await admin.auth.getUser(token);
     if (authError || !auth.user) return json({ error: 'Нужно войти заново' }, 401);
     const { data: caller } = await admin.from('people').select('id, access').eq('user_id', auth.user.id).eq('active', true).maybeSingle();
-    if (!caller || !['superadmin', 'moderator'].includes(caller.access)) return json({ error: 'Недостаточно прав' }, 403);
+    if (!caller || caller.access !== 'superadmin') return json({ error: 'Недостаточно прав: входы и пароли настраивает только CEO' }, 403);
     const isSuper = caller.access === 'superadmin';
 
     const body = await req.json();
