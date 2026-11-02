@@ -1,6 +1,6 @@
 /**
  * Настройки (#/settings?tab=…) — всё в одном месте. Слева разделы:
- *   Личное (у всех): профиль, внешний вид, уведомления, доски;
+ *   Личное (у всех): профиль, внешний вид, уведомления, доски; CEO и PM — свои графики аналитики;
  *   Студия: CEO и PM — люди и доступы, юниты, автоматизации, журнал; CEO — приложения; CEO и RM — релизы.
  * Раздел студии рисует admin.js (renderStudio), редакторы приложений и релизов открываются своими окнами.
  */
@@ -13,12 +13,16 @@ import { THEME_LIST, setTheme, resetLocal } from './sidebar.js';
 import { openMyProfile, openActAs, addPersonDialog } from './people.js';
 import { renderStudio, STUDIO_TABS } from './admin.js';
 import { openCreateUnit } from './units.js';
+import { chartsSection, editChart } from './chartsettings.js';
 
-const PERSONAL = [
+const PERSONAL_ALL = [
   ['profile', 'Профиль', 'user'],
   ['notify', 'Уведомления', 'bell'],
   ['boards', 'Доски', 'board'],
+  ['charts', 'Графики', 'chart'],
 ];
+/** Личные разделы: «Графики» — у тех, у кого есть аналитика (CEO и PM). */
+const personal = () => PERSONAL_ALL.filter(t => t[0] !== 'charts' || isStaff());
 
 /** Разделы студии, доступные вошедшему. */
 const studio = () => [
@@ -39,16 +43,18 @@ const NOTIFY = [
 ];
 
 export function renderPrefs(tab) {
+  const PERSONAL = personal();
   const all = [...PERSONAL, ...studio()];
   if (!all.some(t => t[0] === tab) && tab !== 'trash') tab = 'profile';
   const navTab = tab === 'trash' ? 'units' : tab;
   const key = currentView();
-  const body = h('div', { class: 'prefs-body' + (PERSONAL.some(t => t[0] === tab) && !['look', 'notify', 'boards'].includes(tab) ? ' narrow' : '') });
+  const body = h('div', { class: 'prefs-body' + (PERSONAL.some(t => t[0] === tab) && !['look', 'notify', 'boards', 'charts'].includes(tab) ? ' narrow' : '') });
   const item = ([id, label, ic]) => link({ view: 'settings', tab: id }, { class: 'prefs-tab' + (id === navTab ? ' on' : '') }, icon(ic, 15), label);
   fill($('#main'),
     topbar([h('h1', { class: 'screen-title' }, 'Настройки')],
       [isSuper() && (tab === 'units' || tab === 'trash') && h('button', { class: 'btn primary', onclick: openCreateUnit }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Юнит')),
         tab === 'automations' && h('button', { class: 'btn primary tpl-add' }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Шаблон')),
+        tab === 'charts' && h('button', { class: 'btn primary', onclick: () => { editChart('new'); rerender(); } }, icon('plus', 15), h('span', { class: 'btn-label' }, 'График')),
         tab === 'people' && h('button', { class: 'btn primary people-add', onclick: () => addPersonDialog(() => rerender()) }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Человек'))]),
     h('div', { class: 'view-body prefs-page' },
       h('nav', { class: 'prefs-nav', 'aria-label': 'Разделы настроек' },
@@ -56,7 +62,7 @@ export function renderPrefs(tab) {
         studio().length > 0 && [h('div', { class: 'prefs-sec' }, 'Студия'), studio().map(item)]),
       body));
 
-  const SECTIONS = { profile, look, notify, boards, apps: appsSection, releases: releasesSection };
+  const SECTIONS = { profile, look, notify, boards, charts: chartsSection, apps: appsSection, releases: releasesSection };
   if (SECTIONS[tab]) fill(body, SECTIONS[tab]());
   else renderStudio(body, tab, key);
 }

@@ -159,3 +159,96 @@ export function sparkline(values, { width = 96, height = 28 } = {}) {
   box.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}"><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   return box;
 }
+
+/**
+ * Столбцы (свои графики, A11): по оси — шаги или категории, ряды складываются стопкой; у каждого куска свой цвет.
+ * labels — подписи оси X, series: [{ name, color, values[] }]; xColors — цвет столбца, когда ряд один (категории со своим цветом).
+ */
+export function barChart({ labels, series, xColors = [], height = 220, aria = '' }) {
+  const n = labels.length;
+  const totals = labels.map((_, i) => series.reduce((a, s) => a + (s.values[i] || 0), 0));
+  const maxV = niceMax(Math.max(1, ...totals));
+  return responsive(height, (svg, w, H, tip) => {
+    const L = 30, R = 8, T = 14, B = 30;
+    const iw = w - L - R, ih = H - T - B;
+    const slot = iw / Math.max(1, n);
+    const bw = Math.max(4, Math.min(40, slot * 0.62));
+    const x = i => L + slot * i + slot / 2;
+    const y = v => T + ih - (v / maxV) * ih;
+    const grid = css('--border'), muted = css('--muted');
+    let g = '';
+    for (const t of ticksFor(maxV)) g += `<line x1="${L}" x2="${L + iw}" y1="${y(t)}" y2="${y(t)}" stroke="${grid}" stroke-dasharray="3 4"/><text x="${L - 10}" y="${y(t) + 4}" text-anchor="end" font-size="12" fill="${muted}">${t}</text>`;
+    // подписи: не больше ~6, крайние — всегда
+    const every = Math.max(1, Math.ceil(n / Math.max(1, Math.floor(iw / 72))));
+    labels.forEach((lb, i) => { if (i % every === 0 || i === n - 1) g += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle" font-size="12" fill="${muted}">${esc(lb)}</text>`; });
+    labels.forEach((_, i) => {
+      let base = 0;
+      for (const s of series) {
+        const v = s.values[i] || 0;
+        if (!v) continue;
+        const top = y(base + v), bottom = y(base);
+        const hh = Math.max(2, bottom - top - (base ? 2 : 0));
+        g += `<rect x="${x(i) - bw / 2}" y="${top}" width="${bw}" height="${hh}" rx="${Math.min(6, bw / 2, hh / 2)}" fill="${(series.length === 1 && xColors[i]) || s.color}"/>`;
+        base += v;
+      }
+    });
+    g += '<g class="hv"></g>';
+    svg.innerHTML = g;
+    svg.setAttribute('aria-label', aria);
+    const hv = svg.querySelector('.hv');
+    const move = ev => {
+      const r = svg.getBoundingClientRect();
+      const i = Math.max(0, Math.min(n - 1, Math.floor((ev.clientX - r.left - L) / slot)));
+      hv.innerHTML = `<rect x="${x(i) - slot / 2 + 2}" y="${T}" width="${slot - 4}" height="${ih}" rx="8" fill="${css('--surface-3')}" opacity=".45"/>`;
+      svg.insertBefore(hv, svg.firstChild);
+      tip.hidden = false;
+      tip.replaceChildren(h('b', null, labels[i]), ...series.filter(s => s.values[i]).map(s => h('span', { class: 'chart-row' }, h('i', { style: { background: (series.length === 1 && xColors[i]) || s.color } }), h('em', null, s.values[i]), s.name)));
+      const tw = tip.offsetWidth;
+      tip.style.left = Math.max(4, Math.min(w - tw - 4, x(i) + bw / 2 + 8)) + 'px';
+      tip.style.top = '8px';
+    };
+    svg.addEventListener('pointermove', move);
+    svg.addEventListener('pointerleave', () => { hv.innerHTML = ''; tip.hidden = true; });
+  });
+}
+
+const PAL = ['#0087EA', '#EC9900', '#5FCD74', '#764BF2', '#C53B4C', '#0EC2B5', '#E05FA0', '#7F5500'];
+const MONTH = iso => new Date(iso + 'T00:00:00').toLocaleDateString('ru-RU', { month: 'short' }).replace('.', '');
+
+/** Подпись шага по оси: день и неделя — дата конца, месяц — название месяца, «Итогом» — период, категория — как есть. */
+const xLabel = (x, step, days) => (!x.end ? x.label : step === 'total' ? (days === 365 ? 'За год' : `За ${days} дней`) : step === 'month' ? MONTH(x.end) : fmtTick(x.end));
+
+/** Ряды графика с цветами; скрытые в настройке (hide) убраны. «По статусам» — как в макете: «В сторе» акцентом, остальные серые. */
+export function chartSeries(data, c) {
+  const accent = css('--accent');
+  const grays = ['#787c87', '#9aa0ad', '#b6bbc6', '#5d6270'];
+  const asStatuses = c.metric === 'apps' && c.split === 'status' && c.view === 'lines';
+  return data.series.filter(s => !(c.hide || []).includes(s.id)).map((s, i) => ({
+    ...s, label: s.name,
+    color: asStatuses ? (s.id === 'live' ? accent : grays[i % grays.length]) : s.color || (c.split === 'none' ? accent : PAL[i % PAL.length]),
+    strong: asStatuses && s.id === 'live',
+  }));
+}
+
+/** Нарисовать свой график по данным getChartData и настройке c (вид — c.view). */
+export function renderChart(data, c, { height = 220 } = {}) {
+  const series = chartSeries(data, c);
+  const aria = c.title;
+  if (c.view === 'number') {
+    return h('div', { class: 'chart-number', style: { height: height + 'px' } },
+      h('b', null, String(data.total).replace('.', ',') + (data.unit ? ' ' + data.unit : '')),
+      h('span', { class: 'muted' }, c.step === 'total' || c.metric === 'apps' || c.metric === 'overdue' ? `за ${c.days === 365 ? 'год' : c.days + ' дней'}` : 'итого за период'));
+  }
+  if (!series.length) return h('div', { class: 'chart-empty muted', style: { height: height + 'px' } }, 'Нет данных за период');
+  const labels = data.x.map(x => xLabel(x, c.step, c.days));
+  if (c.view === 'lines') return statusLines({ days: data.x.map(x => x.end), series, height, aria });
+  if (c.view === 'curves') return unitCurves({ categories: labels, units: series.map(s => ({ name: s.name, color: s.color, values: s.values })), height, aria });
+  return barChart({ labels, series, xColors: c.step === 'total' && c.split !== 'none' && c.metric !== 'apps' ? data.x.map((x, i) => x.color || PAL[i % PAL.length]) : [], height, aria });
+}
+
+/** Легенда графика: точка и имя ряда (одиночный ряд, линии и «Число» — без легенды). */
+export function chartLegend(data, c) {
+  const series = chartSeries(data, c);
+  if (c.view === 'number' || c.view === 'lines' || series.length < 2) return null; // у линий подпись — на конце линии
+  return h('div', { class: 'chart-legend' }, series.map(s => h('span', null, h('i', { style: { background: s.color } }), s.name)));
+}

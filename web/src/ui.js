@@ -86,6 +86,7 @@ const ICONS = {
   keyboard: 'M3 6h18v12H3z M7 10h.01 M11 10h.01 M15 10h.01 M7 14h10',
   rows: 'M3 4h18v6H3z M3 14h18v6H3z',
   chevron: 'M6 9l6 6 6-6',
+  sliders: 'M4 7h10 M18 7h2 M4 17h4 M12 17h8 M14 7a2 2 0 1 0 4 0 2 2 0 1 0-4 0z M8 17a2 2 0 1 0 4 0 2 2 0 1 0-4 0z',
   prio: 'M7 11l5-5 5 5 M7 17l5-5 5 5',
   arrowUpRight: 'M7 17 17 7 M8 7h9v9',
   arrowUp: 'M12 19V5 M6 11l6-6 6 6',

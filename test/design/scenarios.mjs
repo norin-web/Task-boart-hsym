@@ -538,6 +538,42 @@ for (const [who, screens] of [
 }
 });
 
+/* ---------- 6. Свои графики: аналитика → Настройки → Графики → обратно ---------- */
+await scenario('6. Свои графики', async () => {
+await as('Анна Смирнова');
+await open('#/analytics');
+must(await page.locator('.an-chart').count() >= 2, 'на аналитике графики по умолчанию');
+await audit('CEO · аналитика с графиками');
+await ui('CEO: кнопка настройки у графика', async () => { await page.locator('.an-gear').first().click({ timeout: 5000 }); await page.waitForSelector('.ch-editor', { timeout: 5000 }); });
+must(/tab=charts/.test(await page.evaluate(() => location.hash)), 'кнопка у графика ведёт в Настройки → Графики');
+await audit('CEO · Настройки → Графики');
+await ui('CEO: новый график из готового', async () => {
+  await page.click('.ch-add'); await page.waitForSelector('.ch-presets');
+  await audit('CEO · новый график');
+  await page.locator('.ch-preset', { hasText: 'Реджекты за месяц' }).click(); await page.waitForTimeout(800);
+  await page.locator('.ch-actions .btn.primary', { hasText: 'Добавить' }).click(); await page.waitForTimeout(800);
+});
+must(await page.locator('.ch-row b', { hasText: 'Реджекты за месяц' }).count() === 1, 'новый график в списке');
+await ui('CEO: смена вида на столбцы', async () => { await page.locator('.ch-view', { hasText: 'Столбцы' }).click(); await page.waitForTimeout(1200); });
+must((await page.locator('.ch-row.on small').textContent()).includes('столбцы'), 'вид сохранился в списке');
+await audit('CEO · график отредактирован');
+await audit('CEO · Настройки → Графики', { mobile: true });
+await page.waitForTimeout(800);
+await reloadSafe();
+await open('#/analytics');
+must(await page.locator('.an-chart h2', { hasText: 'Реджекты за месяц' }).count() === 1, 'график на аналитике после перезагрузки');
+await audit('CEO · аналитика со своим графиком');
+await as('Екатерина Соколова');
+await open('#/settings?tab=charts');
+must(await page.locator('.ch-editor').count() === 1, 'у PM есть «Графики»');
+must(!(await page.locator('.ch-row b', { hasText: 'Реджекты за месяц' }).count()), 'графики CEO не видны PM');
+for (const who of ['Алексей Морозов', 'Мария Иванова']) {
+  await as(who);
+  await open('#/settings?tab=charts');
+  must(!(await page.locator('.prefs-tab', { hasText: 'Графики' }).count()) && !(await page.locator('.ch-editor').count()), `${who.split(' ')[0]}: «Графиков» нет`);
+}
+});
+
 /* ---------- итог ---------- */
 const byWhat = {};
 for (const i of issues) (byWhat[i.what] = byWhat[i.what] || []).push(i.where);

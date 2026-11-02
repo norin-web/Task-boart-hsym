@@ -1,17 +1,41 @@
 /**
  * Аналитика (#/analytics, CEO и PM): вся статистика в одном месте — цифры, приложения по статусам, юниты × статусы,
  * загрузка PM, давно не трогали, выпущено за 30 дней, команда и KPI за период, загрузка команды. Сверху — юнит (для блоков по приложениям) и период KPI.
- * Раскладка блоков — своя у каждого (prefs.analytics).
+ * Раскладка блоков — своя у каждого (prefs.analytics). Графики — свои (prefs.charts): что в них, настраивается в «Настройки → Графики».
  */
-import { S, LS, isSuper, todayStr } from '../state.js';
+import { S, LS, isSuper, todayStr, me } from '../state.js';
 import { $, h, icon, topbar, showErr, fill, skeleton } from '../ui.js';
-import { call } from '../api.js';
-import { currentView } from '../router.js';
+import { call, send } from '../api.js';
+import { currentView, navigate } from '../router.js';
 import { statBlocks, tileTable } from './ceo.js';
 import { team, PERIODS } from './pm.js';
 import { workloadBlock } from './home.js';
 import { renderLayout, editLayout } from './layout.js';
-import { statusLines, unitCurves } from './charts.js';
+import { renderChart, chartLegend } from './charts.js';
+import { chartsOf, PERIODS as CHART_PERIODS, cleanChart } from '../chartdefs.js';
+import { editChart } from './chartsettings.js';
+
+/** Открыть график (или новый) в «Настройки → Графики». */
+const toChartSettings = id => { editChart(id); navigate({ view: 'settings', tab: 'charts' }); };
+
+/** Карточка своего графика: название, легенда, период (если по времени) и кнопка в настройки; данные — по запросу. */
+function chartCard(c, unit, onDays) {
+  const legend = h('span', { class: 'chart-legend-slot' });
+  const body = h('div', { class: 'chart-skel' });
+  const timed = !(c.metric === 'apps' && c.step === 'total');
+  const days = timed && h('label', { class: 'an-days' }, h('select', { 'aria-label': 'Период', onchange: e => onDays(Number(e.target.value)) },
+    CHART_PERIODS.map(([v, t]) => h('option', { value: v, selected: v === c.days }, t))), icon('chevron', 14));
+  const card = h('section', { class: 'an-chart' },
+    h('div', { class: 'section-head' }, h('h2', null, c.title), legend, days,
+      h('button', { class: 'icon-btn sm an-gear', type: 'button', title: 'Настроить график', 'aria-label': 'Настроить график «' + c.title + '»', onclick: () => toChartSettings(c.id) }, icon('sliders', 14))),
+    h('div', { class: 'card-box' }, body));
+  call('getChartData', { chart: c, today: todayStr(), unitId: unit }).then(data => {
+    fill(body, renderChart(data, c));
+    body.className = '';
+    fill(legend, chartLegend(data, c));
+  }).catch(showErr);
+  return card;
+}
 
 const TILE_TITLES = { apps: 'Приложения', work: 'Задачи в работе', late: 'Просрочено', shipped: 'Выпущено', stale: 'Давно не трогали' };
 
@@ -21,12 +45,11 @@ export async function renderAnalytics(tile) {
   fill($('#main'), topbar([h('h1', null, TILE_TITLES[tile] || 'Аналитика')], [tools]), h('div', { class: 'view-body' }, page));
   let unit = LS.get('anUnit', '');
   let period = PERIODS.some(([k]) => k === LS.get('kpiPeriod', '')) ? LS.get('kpiPeriod', '') : 'month';
-  let d, apps, kpi, ov, ser;
-  let days = Number(LS.get('anDays', 30)) || 30;
+  let d, apps, kpi, ov;
 
   async function load() {
     try {
-      [d, apps, kpi, ov, ser] = await Promise.all([call('getCeoDashboard', { today: todayStr() }), call('listApps', {}), call('getPmDashboard', { today: todayStr(), period }), call('getOverview', { today: todayStr() }), call('getStatusSeries', { today: todayStr(), days, unitId: unit })]);
+      [d, apps, kpi, ov] = await Promise.all([call('getCeoDashboard', { today: todayStr() }), call('listApps', {}), call('getPmDashboard', { today: todayStr(), period }), call('getOverview', { today: todayStr() })]);
     } catch (e) { return showErr(e); }
     if (currentView() !== 'analytics:' + (tile || '')) return;
     S.apps = apps.map(({ requests, active, ...a }) => a);
@@ -37,21 +60,20 @@ export async function renderAnalytics(tile) {
   const blocks = () => {
     const list = unit ? apps.filter(a => a.unitId === unit) : apps;
     const defs = statBlocks(d, list, load, tile).filter(b => isSuper() || b.id !== 'pmload');
-    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
-    const grays = ['#787c87', '#9aa0ad', '#b6bbc6', '#5d6270'];
-    const cardOf = (title, control, body) => h('section', null,
-      h('div', { class: 'section-head' }, h('h2', null, title), control), h('div', { class: 'card-box' }, body));
-    const daysSel = h('div', { class: 'an-period', role: 'group', 'aria-label': 'Период' },
-      [[7, '7 дней'], [30, '30 дней'], [90, '90 дней']].map(([v, t]) => h('button', { class: v === days ? 'on' : '', onclick: () => { days = v; LS.set('anDays', days); load(); } }, t)));
     const byId = Object.fromEntries(defs.map(b => [b.id, b]));
-    const chartStatuses = () => cardOf('По статусам', daysSel,
-      statusLines({ days: ser.days, aria: 'Приложения по статусам за период',
-        series: ser.statuses.map((st, i) => ({ id: st.id, label: st.name, values: ser.counts[st.id], strong: st.kind === 'live', color: st.kind === 'live' ? accent : grays[i % grays.length] })) }));
-    const curveUnits = S.units.filter(u => !u.archived && (!unit || u.id === unit));
-    const chartUnits = () => cardOf('Юниты × статусы',
-      h('div', { class: 'chart-legend' }, curveUnits.map(u => h('span', null, h('i', { style: { background: u.color } }), u.name))),
-      unitCurves({ categories: S.appStatuses.map(st => st.name), aria: 'Приложения юнитов по статусам',
-        units: curveUnits.map(u => ({ name: u.name, color: u.color, values: S.appStatuses.map(st => list.filter(a => a.unitId === u.id && a.status === st.id).length) })) }));
+    // свои графики по порядку из настроек; скрытые не рисуем; в конце — «Добавить график»
+    const charts = () => {
+      const list = chartsOf((me() || {}).prefs);
+      const setDays = (c, v) => {
+        const next = list.map(x => (x.id === c.id ? cleanChart({ ...x, days: v }) : x));
+        const p = me(); if (p) p.prefs = { ...(p.prefs || {}), charts: next };
+        send('setMyPrefs', { personId: S.meId, prefs: { charts: next } }).catch(showErr);
+        draw();
+      };
+      return h('div', { class: 'an-grid' }, list.filter(c => !c.off).map(c => chartCard(c, unit, v => setDays(c, v))),
+        h('button', { class: 'an-chart-add', type: 'button', onclick: () => toChartSettings('new') },
+          h('span', { class: 'an-add-ic' }, icon('plus', 18)), h('b', null, 'Добавить график'), h('span', { class: 'muted' }, 'Откроется в Настройки → Графики')));
+    };
     const shipped = byId.shipped;
     // как в макете: два графика рядом, ниже — «Команда и KPI» и «Выпущено за 30 дней»
     const idx = defs.findIndex(b => b.id === 'statuses');
@@ -59,7 +81,7 @@ export async function renderAnalytics(tile) {
     const out = [];
     for (const b of rest) {
       out.push(b);
-      if (b.id === 'kpi') out.push({ id: 'charts', title: 'Графики', col: 'full', render: () => h('div', { class: 'an-grid' }, chartStatuses(), chartUnits()) });
+      if (b.id === 'kpi') out.push({ id: 'charts', title: 'Графики', col: 'full', render: charts });
     }
     for (const b of out) if (['pmload', 'stale'].includes(b.id)) b.off = true;
     defs.length = 0; defs.push(...out);

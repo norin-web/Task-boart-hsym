@@ -6,6 +6,7 @@
 
 /** Тип колонки: не начато / в работе / готово. Свои колонки встают между ними. */
 import { DEV_QUESTIONS } from './devform.js';
+import { cleanChart, METRIC_KIND } from './chartdefs.js';
 
 export const KINDS = ['todo', 'progress', 'done'];
 const KIND_COUNT_KEY = { todo: 'todo', progress: 'in_progress', done: 'done' };
@@ -1930,6 +1931,161 @@ export function createBackend(db, opts = {}) {
         }
       }
       return { days, statuses: statuses.map(x => ({ id: x.id, name: x.name, kind: x.kind, color: x.color })), counts };
+    },
+
+    /**
+     * Данные своего графика (Настройки → Графики): chart — { metric, split, step, days }, unitId — только этот юнит.
+     * Ось X — шаги до сегодня (день, неделя, месяц) или «Итогом» (категории разбивки; у приложений — статусы, ряды — разбивка).
+     * Ряды — по разбивке, не больше 8: остальное — в «Остальные». Видно только то, что человек видит по правилам базы.
+     * Возвращает { x: [{ key, label, end }], series: [{ id, name, color, values }], total, unit }.
+     */
+    async getChartData(p) {
+      const c = cleanChart(p.chart || {});
+      const kind = METRIC_KIND[c.metric];
+      const end = today(p.today);
+      const dayMs = 864e5, endMs = Date.parse(end + 'T00:00:00Z');
+      const iso = ms => new Date(ms).toISOString().slice(0, 10);
+      // шаги: последний кончается сегодня; «Итогом» — один шаг на весь период
+      const size = { day: 1, week: 7, month: 30, total: c.days }[c.step];
+      const n = Math.max(1, Math.ceil(c.days / size));
+      const buckets = Array.from({ length: n }, (_, i) => {
+        const e = endMs - (n - 1 - i) * size * dayMs;
+        return { from: iso(e - (size - 1) * dayMs), to: iso(e) };
+      });
+      const inBucket = d => buckets.findIndex(b => d >= b.from && d <= b.to);
+      const day = v => String(v || '').slice(0, 10);
+
+      const [units, statuses, people, depts] = await Promise.all([
+        all(() => T('units').select('id,name,color,ord').eq('archived', false).order('ord').order('id')), appStatuses(),
+        all(() => T('people').select('id,name,color').order('name').order('id')),
+        all(() => T('departments').select('id,name,color').order('ord').order('id')),
+      ]);
+      const unitOk = id => units.some(u => u.id === id) && (!p.unitId || id === String(p.unitId));
+      const kindOf = id => (statuses.find(x => x.id === id) || {}).kind || '';
+      const PAL = ['#0087EA', '#EC9900', '#5FCD74', '#764BF2', '#C53B4C', '#0EC2B5', '#E05FA0', '#7F5500'];
+      const named = (list, id) => list.find(x => x.id === id);
+      const meta = (dim, id, i) => {
+        if (dim === 'none') return { name: { apps: 'Приложения', tasks: 'Задачи', releases: 'Релизы', rejects: 'Реджекты', overdue: 'Просрочки', cycle: 'Время в работе' }[c.metric], color: '' };
+        if (dim === 'unit') { const u = named(units, id); return { name: u ? u.name : '—', color: u && u.color }; }
+        if (dim === 'status') { const st = named(statuses, id); return { name: st ? st.name : '—', color: st && st.color }; }
+        if (dim === 'position') { const d = named(depts, id); return { name: d ? d.name : 'Без позиции', color: d && d.color }; }
+        const who = named(people, id);
+        return { name: who ? who.name : dim === 'pm' ? 'Без PM' : 'Без исполнителя', color: PAL[i % PAL.length] };
+      };
+
+      // PM приложения — исполнитель последнего запроса CEO по нему
+      const pmOfApp = async () => {
+        const reqs = await all(() => T('tasks').select('app_id,assignee_id,created_at').eq('kind', 'request').order('created_at').order('id'));
+        const m = {};
+        for (const r of reqs) if (r.app_id) m[r.app_id] = r.assignee_id || m[r.app_id] || '';
+        return m;
+      };
+
+      // ряды: rows — [{ dims, at | state(endDay) }]; потом раскладываем по шагам
+      const add = (acc, key, bi, v = 1) => { (acc[key] || (acc[key] = buckets.map(() => 0)))[bi] += v; };
+      const acc = {}, cnt = {}; // cnt — для средних (время в работе)
+      let xs = null; // «Итогом» у приложений: ось — статусы
+      const dimOf = (row, dim) => (dim === 'none' ? 'all' : row[dim] || '');
+
+      if (c.metric === 'apps') {
+        const apps = (await all(() => T('apps').select('id,unit_id,status,created_at').eq('archived', false).order('id'))).filter(a => unitOk(a.unit_id));
+        const log = apps.length ? await all(() => T('app_status_log').select('app_id,from_status,to_status,at').in('app_id', apps.map(a => a.id)).order('at').order('id')) : [];
+        const pm = c.split === 'pm' ? await pmOfApp() : {};
+        const by = {};
+        for (const r of log) (by[r.app_id] || (by[r.app_id] = [])).push(r);
+        const statusAt = (a, t) => {
+          const ev = by[a.id] || [];
+          const first = ev.length ? ev[0].from_status : a.status;
+          const existed = !!first && kindOf(first) !== 'dev';
+          if (!existed && a.created_at && a.created_at > t) return null; // приложения ещё не было
+          let st = ev.length ? ev[0].from_status || (ev[0].at <= t ? '' : a.status) : a.status;
+          for (const e of ev) { if (e.at <= t) st = e.to_status; else break; }
+          if (!st && ev.length) st = ev[0].to_status;
+          return st;
+        };
+        if (c.step === 'total') {
+          // сейчас: ось — статусы, ряды — разбивка (как «Юниты × статусы»)
+          xs = statuses.map(st => ({ key: st.id, label: st.name }));
+          for (const a of apps) {
+            const row = { unit: a.unit_id, status: a.status, pm: pm[a.id] || '' };
+            const xi = statuses.findIndex(st => st.id === a.status);
+            if (xi < 0) continue;
+            const key = c.split === 'status' || c.split === 'none' ? 'all' : dimOf(row, c.split);
+            (acc[key] || (acc[key] = statuses.map(() => 0)))[xi]++;
+          }
+        } else {
+          buckets.forEach((b, bi) => {
+            const t = b.to + 'T23:59:59.999Z';
+            for (const a of apps) {
+              const st = statusAt(a, t);
+              if (!st || !statuses.some(x => x.id === st)) continue;
+              add(acc, dimOf({ unit: a.unit_id, status: st, pm: pm[a.id] || '' }, c.split), bi);
+            }
+          });
+        }
+      } else if (c.metric === 'releases' || c.metric === 'rejects') {
+        const rows = (await all(() => T('tasks').select('id,unit_id,app_id,release').eq('step', 'release').order('created_at').order('id'))).filter(t => unitOk(t.unit_id));
+        const pm = c.split === 'pm' ? await pmOfApp() : {};
+        const want = c.metric === 'releases' ? 'live' : 'reject';
+        for (const t of rows) {
+          const rel = json(t.release, {}) || {};
+          let hist = Array.isArray(rel.history) ? rel.history : [];
+          if (!hist.length && rel.submittedAt) hist = [{ result: rel.phase === 'live' ? 'live' : rel.phase === 'rejected' ? 'reject' : '', at: rel.liveAt || rel.rejectedAt || '' }];
+          for (const x of hist) {
+            if (x.result !== want) continue;
+            const bi = inBucket(day(x.at));
+            if (bi >= 0) add(acc, dimOf({ unit: t.unit_id, pm: rel.pmId || pm[t.app_id] || '' }, c.split), bi);
+          }
+        }
+      } else {
+        const tasks = (await all(() => T('tasks').select('id,unit_id,assignee_id,department_id,done_at,started_at,created_at,due_date').eq('archived', false).order('id'))).filter(t => unitOk(t.unit_id));
+        for (const t of tasks) {
+          const row = { unit: t.unit_id, position: t.department_id, person: t.assignee_id };
+          const key = dimOf(row, c.split);
+          if (c.metric === 'tasks' || c.metric === 'cycle') {
+            const bi = t.done_at ? inBucket(day(t.done_at)) : -1;
+            if (bi < 0) continue;
+            if (c.metric === 'tasks') { add(acc, key, bi); continue; }
+            const from = Date.parse(t.started_at || t.created_at);
+            if (!from) continue;
+            add(acc, key, bi, Math.max(0, (Date.parse(t.done_at) - from) / dayMs));
+            add(cnt, key, bi);
+          } else {
+            // просрочена на конец шага: срок прошёл, а задача ещё не закрыта
+            if (!t.due_date) continue;
+            buckets.forEach((b, bi) => {
+              if (day(t.created_at) > b.to || t.due_date >= b.to) return;
+              if (t.done_at && day(t.done_at) <= b.to) return;
+              add(acc, key, bi);
+            });
+          }
+        }
+        if (c.metric === 'cycle') for (const k of Object.keys(acc)) acc[k] = acc[k].map((v, i) => (cnt[k][i] ? Math.round(v / cnt[k][i] * 10) / 10 : 0));
+      }
+
+      // «Итогом» по шагу: одна точка на ряд → ось — категории разбивки
+      let series = Object.entries(acc).map(([id, values], i) => ({ id, ...meta(id === 'all' ? 'none' : c.split, id, i), values }));
+      const sum = s => s.values.reduce((a, b) => a + b, 0);
+      // юниты — в своём порядке, статусы — как в настройках; люди, позиции и PM — больше сверху
+      if (c.split === 'unit') series.sort((a, b) => units.findIndex(u => u.id === a.id) - units.findIndex(u => u.id === b.id));
+      else if (c.split !== 'none' && c.split !== 'status' && !xs) series.sort((a, b) => sum(b) - sum(a));
+      if (c.split === 'status' && !xs) series.sort((a, b) => statuses.findIndex(x => x.id === a.id) - statuses.findIndex(x => x.id === b.id));
+      if (series.length > 8) {
+        const rest = series.slice(7);
+        series = [...series.slice(0, 7), { id: 'rest', name: 'Остальные', color: '#9AA0AD', values: rest[0].values.map((_, i) => rest.reduce((a, s) => a + s.values[i], 0)) }];
+      }
+      if (c.split === 'none' && !series.length) series = [{ id: 'all', ...meta('none'), values: (xs || buckets).map(() => 0) }];
+      let x = xs || buckets.map(b => ({ key: b.to, label: b.to, end: b.to }));
+      if (!xs && c.step === 'total' && c.split !== 'none') {
+        // ось — сами категории, один ряд
+        x = series.map(s => ({ key: s.id, label: s.name, color: s.color }));
+        series = [{ id: 'all', ...meta('none'), values: series.map(s => s.values[0]) }];
+      }
+      const allVals = series.flatMap(s => s.values);
+      const total = kind === 'avg'
+        ? (allVals.filter(Boolean).length ? Math.round(allVals.filter(Boolean).reduce((a, b) => a + b, 0) / allVals.filter(Boolean).length * 10) / 10 : 0)
+        : kind === 'state' && !xs && c.step !== 'total' ? series.reduce((a, s) => a + s.values[s.values.length - 1], 0) : allVals.reduce((a, b) => a + b, 0);
+      return { x, series, total, unit: kind === 'avg' ? 'дн.' : '', chart: c };
     },
 
     async getCeoDashboard(p) {
