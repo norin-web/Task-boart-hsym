@@ -4,13 +4,13 @@
  * Команда: люди юнита — роль, позиция, открытые задачи в юните; добавить участника — руководителям.
  */
 import { S, isSuper, isStaff, todayStr, ACCESS_LABELS, personById, deptById, taskDone, plural, columns, colColor, appStatusById } from '../state.js';
-import { $, h, icon, avatar, showErr, fill, menu, toast, emptyBlock, skeleton, modal } from '../ui.js';
+import { $, h, icon, avatar, showErr, fill, menu, toast, emptyBlock, skeleton, modal, confirmDlg } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView, link } from '../router.js';
 import { openCreateApp, openNewAppTask, pmsOf, openAppCard, appStatusCell } from './apps.js';
 import { attention, inProgress, recent } from './ceo.js';
 import { unitHeader } from './unitnav.js';
-import { addMemberDialog } from './people.js';
+import { addMemberDialog, applyMembers } from './people.js';
 import { sparkline, openSeries } from './charts.js';
 
 export async function renderUnitPage() {
@@ -132,12 +132,19 @@ export function renderUnitTeam() {
       } }],
     });
   };
+  // состав собирает CEO или PM этого юнита (PM и CEO из состава не убираем)
+  const canEdit = isSuper() || (isStaff() && (u.members || []).includes(S.meId));
+  const removeMember = async p => {
+    if (!(await confirmDlg(`Убрать ${p.name} из команды? Задачи, где он исполнитель, останутся за ним.`, { ok: 'Убрать', danger: true }))) return;
+    try { applyMembers(u.id, await send('removeMember', { unitId: u.id, personId: p.id })); } catch (e) { showErr(e); }
+    draw();
+  };
   const draw = () => {
     const rows = S.board.members.map(m => ({ m, p: personById(m.personId) })).filter(x => x.p)
       .sort((a, b) => a.p.name.localeCompare(b.p.name, 'ru'));
     const mine = id => S.board.tasks.filter(t => !t.archived && !taskDone(t) && t.assigneeId === id);
     fill($('#main'), ...unitHeader('team', [
-      isSuper() && h('button', { class: 'btn primary', onclick: async () => { if (await addMemberDialog(u.id)) draw(); } }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Участник')),
+      canEdit && h('button', { class: 'btn primary', onclick: async () => { if (await addMemberDialog(u.id)) draw(); } }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Участник')),
     ]), h('div', { class: 'view-body' }, body));
     fill(body, rows.length
       ? h('div', { class: 'card-box team-list team-table' }, h('div', { class: 'team-head' }, h('span', null, 'Человек'), h('span', null, 'Позиция'), h('span', null, 'Роль'), h('span', null, 'Задачи в юните')), rows.map(({ m, p }) => {
@@ -150,10 +157,11 @@ export function renderUnitTeam() {
             p.access === 'lead' && isStaff() && h('button', { class: 'link-btn', style: { marginLeft: '8px' }, title: 'Позиции лида и выданные ему люди', onclick: () => zoneDialog(p) },
               'зона' + ((zones[p.id] || []).length ? ' · +' + zones[p.id].length : ''))),
           h('span', { class: 'team-load' }, t.length ? `${t.length} ${plural(t.length, ['задача', 'задачи', 'задач'])}` : h('span', { class: 'muted' }, 'нет задач'),
-            late > 0 && h('span', { class: 'warn-text' }, ` · просрочено ${late}`)));
+            late > 0 && h('span', { class: 'warn-text' }, ` · просрочено ${late}`),
+            canEdit && !['moderator', 'superadmin'].includes(p.access) && h('button', { class: 'icon-btn sm', type: 'button', title: 'Убрать из команды', 'aria-label': 'Убрать ' + p.name + ' из команды', onclick: () => removeMember(p) }, icon('x', 14))));
       }))
       : h('div', { class: 'card-box empty-state' }, h('h2', null, 'Команда не собрана'),
-        isSuper() && h('button', { class: 'btn primary', onclick: async () => { if (await addMemberDialog(u.id)) draw(); } }, icon('plus', 15), 'Добавить участника')));
+        canEdit && h('button', { class: 'btn primary', onclick: async () => { if (await addMemberDialog(u.id)) draw(); } }, icon('plus', 15), 'Добавить участника')));
   };
   draw();
   if (isStaff()) call('getLeadPeople', {}).then(z => { zones = z; if (currentView() === 'team:' + u.id) draw(); }).catch(() => {});

@@ -498,7 +498,7 @@ export function addMemberDialog(unitId) {
   return new Promise(resolve => {
     const unit = unitById(unitId) || (S.board && S.board.unit);
     const inTeam = new Set(S.board && S.board.unit.id === unitId ? S.board.members.map(m => m.personId) : (unit && unit.members) || []);
-    const candidates = S.people.filter(p => p.active && !inTeam.has(p.id) && p.access === 'member');
+    const candidates = S.people.filter(p => p.active && !inTeam.has(p.id) && ['member', 'lead', 'rm'].includes(p.access));
     if (!candidates.length) {
       toast(isStaff() ? 'Все участники уже в команде. Новых людей добавляют в «Люди и доступы».' : 'Нет доступных людей');
       return resolve(null);

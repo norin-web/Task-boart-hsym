@@ -517,7 +517,6 @@ test('профили: свой профиль, роли меняет тольк�
     // людей, позиции и доступы PM не меняет — только CEO
     await assert.rejects(() => api('updatePerson', { id: designer.id, positionId: 'd_qa' }), forbidden);
     await assert.rejects(() => api('createPerson', { name: 'Новичок', positionId: 'd_aso' }), forbidden);
-    await assert.rejects(() => api('setMember', { unitId: A.id, personId: designer.id }), forbidden);
     await assert.rejects(() => api('updatePerson', { id: designer.id, access: 'moderator' }), forbidden);
     await assert.rejects(() => api('createPerson', { name: 'x', access: 'moderator' }), forbidden);
     await assert.rejects(() => api('updatePerson', { id: admin.id, name: 'x' }), forbidden);
@@ -714,4 +713,24 @@ test('юнит создаётся сразу с ревьюерами по поз
   assert.equal(st.review.byPosition.d_design, designer.id);
   assert.equal(st.review.default, designer.id);
   assert.ok(st.review.column);
+});
+
+
+test('PM собирает команду своего юнита: добавляет и убирает сотрудников, но не чужого юнита и не PM', async () => {
+  const api = await setup();
+  const { mod, designer, A, B } = await team(api);
+  const extra = await api('createPerson', { name: 'Новый', email: 'u7@x.ru', access: 'member', positionId: 'd_design' });
+  await api.as(mod, () => api('setMember', { unitId: A.id, personId: extra.id }));
+  let m = await api('getBoard', { unitId: A.id });
+  assert.ok(m.members.some(x => x.personId === extra.id));
+  await api.as(mod, () => api('removeMember', { unitId: A.id, personId: extra.id }));
+  m = await api('getBoard', { unitId: A.id });
+  assert.ok(!m.members.some(x => x.personId === extra.id));
+  // чужой юнит и PM — нельзя
+  await api.as(mod, () => assert.rejects(() => api('setMember', { unitId: B.id, personId: extra.id })));
+  await api.as(mod, () => api('removeMember', { unitId: A.id, personId: mod.id }));
+  m = await api('getBoard', { unitId: A.id });
+  assert.ok(m.members.some(x => x.personId === mod.id), 'PM из состава убрать нельзя');
+  // сотрудник состав не меняет
+  await api.as(designer, () => assert.rejects(() => api('setMember', { unitId: A.id, personId: extra.id })));
 });

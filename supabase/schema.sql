@@ -1726,7 +1726,10 @@ create policy fields_write on fields for all to authenticated
 drop policy if exists members_read on unit_members;
 create policy members_read on unit_members for select to authenticated using (is_superadmin() or is_unit_member(unit_id));
 drop policy if exists members_write on unit_members;
-create policy members_write on unit_members for all to authenticated using (is_superadmin()) with check (is_superadmin());
+-- Состав юнита: CEO — любой; PM — своего юнита (добавляет и убирает сотрудников, лидов, RM), но не PM и не CEO.
+create policy members_write on unit_members for all to authenticated
+  using (is_superadmin() or (can_manage(unit_id) and not exists (select 1 from people p where p.id = unit_members.person_id and p.access in ('moderator', 'superadmin'))))
+  with check (is_superadmin() or (can_manage(unit_id) and not exists (select 1 from people p where p.id = unit_members.person_id and p.access in ('moderator', 'superadmin'))));
 
 -- Позиции и люди видны всем вошедшим (имена исполнителей, авторов); меняют администраторы, свой профиль — сам человек.
 drop policy if exists departments_read on departments;
