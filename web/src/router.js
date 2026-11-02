@@ -79,7 +79,8 @@ export function navigate(r, { replace = false, back = false } = {}) {
   if (r.from) { r = { ...r }; delete r.from; }
   else if (isDetail(r) && !back) {
     const cur = S.route;
-    if (cur && routeUrl(cur) !== routeUrl(r)) from = isDetail(cur) ? { ...cur, ...(curFrom ? { from: curFrom } : {}) } : { ...cur };
+    if (cur && cur.view === r.view && r.view !== 'app') from = curFrom;  // вкладки настроек и плитки аналитики — один уровень, «откуда» не копится
+    else if (cur && routeUrl(cur) !== routeUrl(r)) from = isDetail(cur) ? { ...cur, ...(curFrom ? { from: curFrom } : {}) } : { ...cur };
     else from = curFrom;  // тот же экран (замена адреса) — «откуда» не меняется
   }
   curFrom = from;

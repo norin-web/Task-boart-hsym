@@ -86,7 +86,7 @@ function unitItem(u, r) {
   return h('div', { class: 'nav-unit' + (open ? ' open' : ''), dataset: { id: u.id } },
     link({ unit: u.id, mode: seesApps() ? 'overview' : 'board' }, {
       // клик по юниту — его обзор; по уже открытому юниту — ещё и сворачивает/разворачивает список команд, без отдельной стрелки
-      class: 'nav-item unit nav-unit-row' + (here && (!seesApps() || !['board', 'list', 'timeline'].includes(r.mode)) ? ' active' : '') + (u.archived ? ' archived' : ''),
+      class: 'nav-item unit nav-unit-row' + (here ? ' active' : '') + (u.archived ? ' archived' : ''),
       dataset: { id: u.id },
       onclick: canExpand && here ? () => toggleUnit(u.id) : null,
       // правый клик — меню юнита
