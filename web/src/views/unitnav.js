@@ -3,7 +3,7 @@
  * Обзор · Приложения · Задачи · Доска · Команда (· Настройки у руководителей). Каждая вкладка — свой адрес #/u/:id/<mode>,
  * поэтому «назад» браузера и крошки возвращают туда, откуда пришли.
  */
-import { S, isStaff, seesApps, ceoDefault } from '../state.js';
+import { S, me, isStaff, seesApps, ceoDefault } from '../state.js';
 import { h, icon, topbar } from '../ui.js';
 import { link } from '../router.js';
 
@@ -30,7 +30,7 @@ export function unitHeader(active, right = [], team = null) {
     topbar([
       h('div', { class: 'unit-head' },
         h('nav', { class: 'crumbs unit-crumbs', 'aria-label': 'Навигация' },
-          link({ view: 'home' }, { class: 'crumb' }, 'Дашборд'),
+          link({ view: 'home' }, { class: 'crumb' }, (me() || {}).access === 'rm' ? 'Релизы' : 'Дашборд'),
           sep(),
           team ? link({ unit: u.id, mode: seesApps() ? 'overview' : 'board' }, { class: 'crumb' }, u.name) : h('span', { class: 'crumb' }, u.name),
           u.archived && h('span', { class: 'badge' }, 'в архиве')),

@@ -84,7 +84,7 @@ export function navParent(r = S.route) {
     return { route: from, label: from.unit ? (S.units.find(x => x.id === from.unit) || {}).name || 'Юнит' : LABELS[from.view] || 'Назад' };
   }
   if (r.view === 'analytics' && r.tile) return { route: { view: 'analytics' }, label: 'Аналитика' };
-  if (r.view === 'settings') return { route: { view: 'home' }, label: 'Дашборд' };
+  if (r.view === 'settings') return { route: { view: 'home' }, label: myAccess() === 'rm' ? 'Релизы' : 'Дашборд' };
   return null;
 }
 
