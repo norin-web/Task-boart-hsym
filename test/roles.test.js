@@ -703,6 +703,23 @@ test('Lead: видит и ведёт только свою зону — пози
 });
 
 
+test('раздача: ревьюер позиции из настроек юнита (например QA) важнее лида', async () => {
+  const api = await setup();
+  const { mod, designer, A, link, dev } = await team(api);
+  const lead = await api('createPerson', { name: 'Лид', email: 'u6@x.ru', access: 'lead', positionId: 'd_design' });
+  await api.pg.query('update people set user_id = $1 where id = $2', [UID(6), lead.id]);
+  await api('setMember', { unitId: A.id, personId: lead.id });
+  const L = { ...lead, uid: UID(6) };
+  const st = (await api('getBoard', { unitId: A.id })).unit.settings;
+  await api('updateUnit', { id: A.id, settings: { ...st, review: { ...st.review, byPosition: { d_design: dev.id }, default: '' } } });
+  const prog = st.columns.find(c => c.kind === 'progress').id;
+  const stage = await api.as(mod, () => api('createTask', { unitId: A.id, title: 'Дизайн', assigneeId: lead.id, status: prog, departmentId: 'd_design' }));
+  const [part] = await api.as(L, () => api('splitTask', { taskId: stage.id, items: [{ title: 'Онбординг', assigneeId: designer.id }] }));
+  await api.as(designer, () => api('updateTask', { id: part.id, patch: { fields: { [link.id]: 'https://figma.com/x' }, status: st.review.column } }));
+  const { rows } = await api.pg.query('select assignee_id from tasks where id = $1', [part.id]);
+  assert.equal(rows[0].assignee_id, dev.id);
+});
+
 test('лид после «Раздать» видит розданное на своём дашборде', async () => {
   const api = await setup();
   const { mod, designer, A, link } = await team(api);
