@@ -1707,6 +1707,33 @@ export function createBackend(db, opts = {}) {
       return ids;
     },
 
+    /**
+     * Очередь на разработку: запросы, где этап «Дизайн» закрыт, а «iOS» ещё не начат (дизайн делается быстрее разработки,
+     * очередь копится). Строки — приложение + запрос; ссылки этапов и поля приложения — для настраиваемых колонок.
+     */
+    async getDevQueue() {
+      const apps = await methods.listApps({});
+      const rows = [];
+      for (const a of apps) for (const r of a.requests) {
+        if (r.done) continue;
+        const design = r.stages.find(s => s.step === 'design'), ios = r.stages.find(s => s.step === 'ios');
+        if (!design || !ios || !design.done || ios.done || ios.kind !== 'todo') continue;
+        rows.push({ app: a, request: r, design, ios });
+      }
+      const ids = rows.flatMap(x => x.request.stages.map(s => s.id));
+      const links = ids.length ? await all(() => T('task_links').select('task_id,field_id,url').in('task_id', ids)) : [];
+      return rows.map(({ app, request, design, ios }) => {
+        const mine = {};
+        for (const l of links) if (request.stages.some(s => s.id === l.task_id) && l.url) mine[l.field_id] = mine[l.field_id] || l.url;
+        return {
+          appId: app.id, appName: app.name, iconUrl: app.iconUrl, color: app.color, unitId: app.unitId, status: app.status,
+          info: app.info, checks: app.checks, requestId: request.id, requestKey: request.key, requestTitle: request.title, type: request.type,
+          pmId: request.assigneeId, designerId: design.assigneeId, iosId: ios.assigneeId, iosStageId: ios.id, readySince: design.updatedAt,
+          dueDate: request.dueDate, priority: request.priority, links: mine,
+        };
+      }).sort((x, y) => String(x.readySince).localeCompare(String(y.readySince)));
+    },
+
     async listApps(p) {
       let q = T('apps').select('*').eq('archived', !!p.archived);
       if (p.unitId) q = q.eq('unit_id', String(p.unitId));

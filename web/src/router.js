@@ -23,6 +23,7 @@ import { renderRmHome } from './views/rm.js';
 import { renderDev } from './views/dev.js';
 import { renderPrefs } from './views/prefs.js';
 import { renderAnalytics } from './views/analytics.js';
+import { renderReady } from './views/ready.js';
 import { renderBoardView, loadBoard } from './views/board.js';
 import { renderTimeline } from './views/timeline.js';
 import { renderSettings } from './views/settings.js';
@@ -44,6 +45,7 @@ export function parseLocation() {
   const ap = /^\/app\/([\w-]+)$/.exec(path);
   if (ap) return { view: 'app', id: ap[1] };
   if (path === '/dev') return { view: 'dev' };
+  if (path === '/ready') return { view: 'ready' };
   if (path === '/analytics') return { view: 'analytics' };
   const an = /^\/analytics\/(apps|work|late|shipped|stale)$/.exec(path);
   if (an) return { view: 'analytics', tile: an[1] };
@@ -63,13 +65,13 @@ export function routeUrl(r) {
   }
   if (r.view === 'settings' || r.view === 'admin') return '#/settings' + (r.tab ? '?tab=' + r.tab : '');
   if (r.view === 'app') return '#/app/' + r.id;
-  return r.view === 'my' ? '#/my' : r.view === 'myboard' ? '#/board' : r.view === 'apps' ? '#/apps' : r.view === 'dev' ? '#/dev' : r.view === 'analytics' ? '#/analytics' + (r.tile ? '/' + r.tile : '') : '#/';
+  return r.view === 'my' ? '#/my' : r.view === 'myboard' ? '#/board' : r.view === 'apps' ? '#/apps' : r.view === 'dev' ? '#/dev' : r.view === 'ready' ? '#/ready' : r.view === 'analytics' ? '#/analytics' + (r.tile ? '/' + r.tile : '') : '#/';
 }
 
 // Внутренние экраны (карточка приложения, плитка аналитики, настройки): запоминаем, откуда в них зашли.
 // Откуда — в history.state, поэтому «Назад» работает и после перезагрузки; цепочка вложенная (плитка → приложение → …).
 let curFrom = (history.state && history.state.from) || null;
-const LABELS = { home: 'Дашборд', apps: 'Приложения', analytics: 'Аналитика', my: 'Мои задачи', myboard: 'Моя доска', settings: 'Настройки' };
+const LABELS = { home: 'Дашборд', apps: 'Приложения', analytics: 'Аналитика', ready: 'Готовы к разработке', my: 'Мои задачи', myboard: 'Моя доска', settings: 'Настройки' };
 const isDetail = r => !r.unit && (r.view === 'app' || r.view === 'settings' || r.view === 'admin' || (r.view === 'analytics' && !!r.tile));
 const homeRoute = () => ({ view: 'home' });
 
@@ -172,13 +174,14 @@ export async function render() {
     closePanel();
     S.board = null;
     if (r.view === 'analytics' && !isSuper()) return navigate({ view: 'home' }, { replace: true });
+    if (r.view === 'ready' && !isStaff()) return navigate({ view: 'home' }, { replace: true });
     if ((r.view === 'apps' || r.view === 'app') && !seesApps()) return navigate({ view: 'home' }, { replace: true });
     const view = r.view;
-    const key = view === 'app' ? 'app:' + r.id : view === 'analytics' ? 'analytics:' + (r.tile || '') : ['my', 'myboard', 'apps', 'dev'].includes(view) ? view : view === 'settings' ? 'settings:' + (r.tab || '') : 'home';
+    const key = view === 'app' ? 'app:' + r.id : view === 'analytics' ? 'analytics:' + (r.tile || '') : ['my', 'myboard', 'apps', 'dev', 'ready'].includes(view) ? view : view === 'settings' ? 'settings:' + (r.tab || '') : 'home';
     if (rendered !== key) {
       rendered = key;
-      document.title = ({ my: 'Мои задачи', myboard: 'Моя доска', settings: 'Настройки', analytics: 'Аналитика', apps: 'Приложения', dev: 'Режим разработчика' }[view] || (isStaff() ? 'Дашборд' : myAccess() === 'rm' ? 'Релизы' : 'Главная')) + ' · Tasks';
-      if (view === 'my') renderMy(); else if (view === 'myboard') renderMyBoard(); else if (view === 'apps') renderApps(); else if (view === 'app') renderAppPage(r.id); else if (view === 'dev') renderDev();
+      document.title = ({ my: 'Мои задачи', myboard: 'Моя доска', settings: 'Настройки', analytics: 'Аналитика', apps: 'Приложения', ready: 'Готовы к разработке', dev: 'Режим разработчика' }[view] || (isStaff() ? 'Дашборд' : myAccess() === 'rm' ? 'Релизы' : 'Главная')) + ' · Tasks';
+      if (view === 'my') renderMy(); else if (view === 'myboard') renderMyBoard(); else if (view === 'apps') renderApps(); else if (view === 'app') renderAppPage(r.id); else if (view === 'dev') renderDev(); else if (view === 'ready') renderReady();
       else if (view === 'settings') renderPrefs(r.tab || ''); else if (view === 'analytics') renderAnalytics(r.tile);
       else if (isSuper()) renderCeoHome(); else if (myAccess() === 'moderator') renderPmHome(); else if (myAccess() === 'rm') renderRmHome(); else renderHome();
     }

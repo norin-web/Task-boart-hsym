@@ -1,4 +1,5 @@
 import Sortable from 'sortablejs';
+import { queueCount } from './ready.js';
 import { S, LS, byOrder, openCount, me, unitById, personById, activeTeams, isStaff, isSuper, ceoMode, isDev, ACCESS_LABELS, seesApps, ownTeamsOnly, myAccess } from '../state.js';
 import { $, h, icon, avatar, menu, closeMenu, showErr, fill, confirmDlg, setBell } from '../ui.js';
 import { call, send } from '../api.js';
@@ -9,7 +10,7 @@ import { openActAs, openMyProfile, openTeamDialog } from './people.js';
 import { personCaption } from './my.js';
 import { mode, supabase, resetLocalData } from '../data.js';
 
-let myOpen = 0, myOpenAt = 0;
+let myOpen = 0, myOpenAt = 0, readyN = 0, readyAt = 0;
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 
@@ -133,6 +134,15 @@ function drawSidebar() {
   const lens = S.realMeId && S.meId !== S.realMeId ? person : null;
   const navLink = (route, ic, label, extra) => link(route, { class: 'nav-item' + (isHere(r, route) ? ' active' : '') }, icon(ic), h('span', { class: 'nav-label' }, label), extra);
   // сколько открытых задач на мне: число у «Мои задачи» (RM) и «Моя доска» (Lead, сотрудник)
+  // сколько приложений ждут разработки (дизайн закрыт, iOS не начат) — число у «Готовы к разработке»
+  const readyCount = () => {
+    const el = h('span', { class: 'nav-count' }, readyN || '');
+    if (Date.now() - readyAt > 30000) {
+      readyAt = Date.now();
+      queueCount().then(n => { readyN = n; el.textContent = n || ''; });
+    }
+    return el;
+  };
   const myCount = () => {
     const el = h('span', { class: 'nav-count' }, myOpen || '');
     if (Date.now() - myOpenAt > 30000) {
@@ -166,6 +176,7 @@ function drawSidebar() {
       h('button', { class: 'search-btn', onclick: openPalette }, icon('search', 15), h('span', null, 'Поиск'), h('kbd', null, isMac ? '⌘K' : 'Ctrl K')),
       navLink({ view: 'home' }, person && person.access === 'rm' ? 'rocket' : 'home', staff ? 'Дашборд' : person && person.access === 'rm' ? 'Релизы' : 'Мой дашборд'),
       seesApps() && navLink({ view: 'apps' }, 'app', 'Приложения'),
+      staff && navLink({ view: 'ready' }, 'layers', 'Готовы к разработке', readyCount()),
       ceo && navLink({ view: 'analytics' }, 'chart', 'Аналитика'),
       !lite && navLink({ view: 'myboard' }, 'board', 'Моя доска', !staff && !(person && person.access === 'rm') && myCount()),
       !lite && (staff || (person && person.access === 'rm')) && navLink({ view: 'my' }, 'list', 'Мои задачи', !staff && myCount()),

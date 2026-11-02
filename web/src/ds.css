@@ -2765,3 +2765,33 @@ body:has(#modal-root .modal-wrap) #panel-root { visibility: hidden; }
 .inline-menu.me-menu .menu-item { white-space: nowrap; }
 .inline-menu.me-menu .me-card-text small { overflow: hidden; text-overflow: ellipsis; }
 .dev-people { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+
+/* Готовы к разработке: таблица с настраиваемыми колонками */
+.rd-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rd-sum { margin: 0 0 12px; font-size: 14px; color: var(--text-2); }
+.rd-sum b { color: var(--text); font-size: 16px; }
+.rd-late { color: var(--danger); }
+.rd-table { overflow-x: auto; }
+.rd-row { display: grid; align-items: center; gap: 12px; width: 100%; min-width: max-content; box-sizing: border-box; padding: 0 16px; min-height: 52px; border: 0; border-bottom: 1px solid var(--border); background: none; font: inherit; font-size: 13px; color: var(--text); text-align: left; cursor: pointer; }
+.rd-row:last-child { border-bottom: 0; }
+button.rd-row:hover { background: var(--surface-2); }
+.rd-head { min-height: 40px; cursor: default; color: var(--muted); font-size: 12px; }
+.rd-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rd-row > * { min-width: 0; }
+.rd-app { display: flex; align-items: center; gap: 10px; }
+.rd-app-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rd-person { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.rd-link { color: var(--accent-text, var(--accent)); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.rd-link:hover { text-decoration: underline; }
+.rd-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.rd-badge { display: inline-block; padding: 2px 10px; border-radius: 999px; background: var(--surface-3); font-size: 12px; white-space: nowrap; }
+.rd-check { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 6px; border: 1.5px solid var(--border-strong); color: #fff; }
+.rd-check.on { background: var(--accent, #1f9d55); border-color: transparent; }
+.rd-wait.late { color: var(--danger); font-weight: 600; }
+.rd-cols { display: grid; gap: 2px; }
+.rd-col-group { font-size: 12px; font-weight: 600; color: var(--muted); padding: 10px 0 4px; }
+.rd-col-row { display: flex; align-items: center; gap: 10px; min-height: 36px; }
+.rd-col-name { flex: 1; min-width: 0; }
+.rd-col-move { display: inline-flex; gap: 2px; }
+.rd-col-move .i { transform: rotate(180deg); }
+.rd-col-move .rd-down .i { transform: none; }

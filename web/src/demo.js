@@ -2,6 +2,7 @@
  * Тестовый процесс: ветки по ролям, у каждой — задачи на трёх стадиях (бэклог / в работе / на выходе).
  *   A  CEO ставит и сам раскладывает         (3 приложения: запрос → разработка → очередь релиза)
  *   B  CEO ставит на PM, PM раскладывает     (3 приложения: входящее → разработка → отправлено в Apple)
+ *   Q  очередь на разработку                  (4 приложения: дизайн закрыт, iOS не начат — дашборд «Готовы к разработке»)
  *   C  PM получил устно, ставит на команду   (3 задачи на доске: к выполнению / в работе / в ревью)
  *   D  задача у лида                          (3 задачи: у лида; одна раздана сотрудникам)
  *   E  задачи сотрудников                     (3 задачи на доске)
@@ -171,8 +172,9 @@ async function runProcess(api, P, U, test) {
     const dev = s.design;
     await set(dev.id, { checklist: dev.checklist.map((i, n) => ({ ...i, done: until !== 'design' ? true : n === 0 })) }, who).catch(() => null);
     if (until === 'design') { await move(dev.id, 'in_progress', worker(P, dev.assigneeId || P[pm].id)); return { app: a.app, request: a.request, s }; }
-    const keys = until === 'dev' ? ['design'] : ['design', 'ios', 'qa', 'meta', 'retext', 'l10n'];
+    const keys = until === 'dev' || until === 'ready' ? ['design'] : ['design', 'ios', 'qa', 'meta', 'retext', 'l10n'];
     for (const k of keys) await close(s[k], s[k].assigneeId ? worker(P, s[k].assigneeId) : pm, pm);
+    if (until === 'ready') return { app: a.app, request: a.request, s };  // дизайн закрыт, iOS ждёт разработчика
     if (until === 'dev') { await move(s.ios.id, 'in_progress', worker(P, s.ios.assigneeId || P[pm].id)); return { app: a.app, request: a.request, s }; }
     await act(who, 'sendToRelease', { taskId: s.release.id });
     if (until === 'queue') return { app: a.app, request: a.request, s };
@@ -199,6 +201,12 @@ async function runProcess(api, P, U, test) {
   await ship('Forest: Focus for Productivity', 'RF', '#10b981', 'inbox', { description: 'Ветка B: запрос во входящих PM, не разложен.' });
   await ship('Overcast Podcast App', 'RF', '#ef4444', 'dev', { priority: 'o_high', due: day(21), description: 'Ветка B: PM разложил по этапам; дизайн готов, iOS в работе.' });
   await ship('Fantastical Calendar', 'RF', '#0ea5e9', 'apple', { description: 'Ветка B: PM передал в релиз, сборка в ревью Apple.' });
+
+  // ── Очередь на разработку: дизайн закрыт, iOS ещё не начат (дашборд «Готовы к разработке»)
+  await ship('Halide Mark II', 'GLD', '#f97316', 'ready', { due: day(35), description: 'Очередь: дизайн готов, ждёт разработчика.' });
+  await ship('Ulysses Writing App', 'RF', '#06b6d4', 'ready', { priority: 'o_high', due: day(28), description: 'Очередь: дизайн готов, ждёт разработчика.' });
+  await ship('Pixelmator Photo', 'RF', '#a855f7', 'ready', { description: 'Очередь: дизайн готов, ждёт разработчика.' });
+  await ship('Carbon Notes', 'MVP', '#22c55e', 'ready', { due: day(40), description: 'Очередь: дизайн готов, ждёт разработчика.' });
 
   // ── R. Релиз-менеджер: очередь / заполняет / Apple / реджект / в сторе ×3
   await ship('Things 3', 'MVP', '#3b82f6', 'queue', { description: 'Ветка RM: релиз передан, RM ещё не начал.' });
