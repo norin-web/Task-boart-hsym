@@ -3,7 +3,7 @@
  * Обзор: описание, цифры, что в работе и что требует внимания, ответственный и команда коротко.
  * Команда: люди юнита — роль, позиция, открытые задачи в юните; добавить участника — руководителям.
  */
-import { S, isSuper, isStaff, todayStr, ACCESS_LABELS, personById, deptById, taskDone, plural, columns, colColor, appStatusById } from '../state.js';
+import { S, me, isSuper, isStaff, todayStr, ACCESS_LABELS, personById, deptById, taskDone, plural, columns, colColor, appStatusById } from '../state.js';
 import { $, h, icon, avatar, showErr, fill, menu, toast, emptyBlock, skeleton, modal, confirmDlg } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView, link } from '../router.js';
@@ -22,14 +22,28 @@ export async function renderUnitPage() {
   draw();
 
   async function load() {
-    let apps, d;
+    const rm = ((me() || {}).access) === 'rm';
+    let apps, d, rd, lv;
     try {
-      [apps, d] = await Promise.all([call('listApps', { unitId: u.id }), call('getCeoDashboard', { today: todayStr() })]);
+      [apps, d, rd, lv] = await Promise.all([call('listApps', { unitId: u.id }), rm ? null : call('getCeoDashboard', { today: todayStr() }),
+        rm ? call('getRmDashboard', {}) : null, rm ? call('getReleaseHistory', { result: 'live' }) : null]);
     } catch (e) { return showErr(e); }
     if (currentView() !== key) return;
     // приложения юнита — в общий список (их ищут формы «Новая задача» и счётчик вкладки)
     S.apps = [...S.apps.filter(a => a.unitId !== u.id), ...apps.map(({ requests, active, ...a }) => a)];
     draw();
+    if (rm) {
+      // релиз-менеджеру в юните нужно только своё: сколько в очереди, на ревью, в реджекте и в сторе; приложения и команда
+      const n = list => (list || []).filter(x => x.unitId === u.id).length;
+      const rel = (label, count, tone) => h('div', { class: 'cs' + (tone && count ? ' ' + tone : '') }, h('div', { class: 'cs-n' }, count), h('div', { class: 'cs-label' }, label));
+      fill(page,
+        h('div', { class: 'cs-row unit-stats' },
+          rel('В очереди на релиз', n(rd.queue)), rel('На ревью Apple', n(rd.review)), rel('Реджекты', n(rd.rejected), 'danger'), rel('В App Store', n(lv.rows))),
+        h('div', { class: 'home-grid' },
+          h('div', { class: 'home-col' }, appsBrief(u, apps, load)),
+          h('div', { class: 'home-col' }, teamBrief(u))));
+      return;
+    }
     const mine = x => x.app && x.app.unitId === u.id;
     const ud = { ...d, attention: d.attention.filter(mine), inProgress: d.inProgress.filter(mine), recent: d.recent.filter(mine) };
     const open = S.board.tasks.filter(t => !t.archived && !taskDone(t));

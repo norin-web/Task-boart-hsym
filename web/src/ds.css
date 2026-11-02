@@ -2145,7 +2145,7 @@ table.tasks.unit-list .chips .chip::before { display: none; }
 .modal.dlg .opt-row input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
 .modal.dlg .opt-row input[type=color]::-webkit-color-swatch { border: 0; border-radius: 50%; }
 .modal.dlg .opt-row .icon-btn { width: 14px; height: 14px; min-width: 0; padding: 0; background: none; color: var(--muted); }
-.modal.dlg .opt-row .icon-btn:disabled { opacity: .4; }
+
 .modal.dlg .opt-row .inp { flex: 1; }
 .cs-dlg .cs-tabs { align-self: start; width: max-content; margin: 0; gap: 2px; padding: 4px; border: 0; border-radius: 999px; background: var(--surface-2); }
 .cs-dlg .cs-tabs button { height: 32px; padding: 0 14px; border-radius: 999px; background: transparent; box-shadow: none; font-size: 13px; line-height: 16px; font-weight: 500; color: var(--muted); }
@@ -2937,3 +2937,6 @@ button.rd-check.on { background: var(--text); border-color: transparent; }
 .board:not(.lanes) { overflow-y: auto; }
 
 .fb-tools { flex: none; gap: 8px; flex-wrap: nowrap; }
+
+.opt-grip { display: inline-flex; flex: none; color: var(--border-strong); cursor: grab; }
+.modal.dlg .opt-row .icon-btn { width: 24px; height: 24px; }

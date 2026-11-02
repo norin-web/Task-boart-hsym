@@ -191,13 +191,14 @@ export function openFieldEditor(f, { global = !!(f && f.global), columns = [], o
   const optBox = h('div');
   const optSection = h('div', { class: 'field' }, h('label', null, 'Варианты'), optBox);
   const drawOptions = focusLast => {
-    fill(optBox, 
-      ...options.map((o, i) => h('div', { class: 'opt-row' },
-        h('input', { type: 'color', value: o.color, title: 'Цвет', oninput: e => { o.color = e.target.value; } }),
-        h('input', { class: 'inp', value: o.name, maxlength: 60, placeholder: 'Вариант ' + (i + 1), oninput: e => { o.name = e.target.value; } }),
-        h('button', { class: 'icon-btn sm', title: 'Выше', disabled: i === 0, onclick: () => { options.splice(i - 1, 0, options.splice(i, 1)[0]); drawOptions(); } }, icon('arrowUp', 14)),
-        h('button', { class: 'icon-btn sm', title: 'Ниже', disabled: i === options.length - 1, onclick: () => { options.splice(i + 1, 0, options.splice(i, 1)[0]); drawOptions(); } }, icon('arrowDown', 14)),
-        h('button', { class: 'icon-btn sm', title: 'Удалить вариант', onclick: () => { options.splice(i, 1); drawOptions(); } }, icon('x', 14)))),
+    const rows = h('div', { class: 'opt-rows' }, ...options.map((o, i) => h('div', { class: 'opt-row' },
+      h('span', { class: 'opt-grip', 'aria-hidden': 'true', title: 'Перетащить' }, icon('grip', 14)),
+      h('input', { type: 'color', value: o.color, title: 'Цвет', oninput: e => { o.color = e.target.value; } }),
+      h('input', { class: 'inp', value: o.name, maxlength: 60, placeholder: 'Вариант ' + (i + 1), oninput: e => { o.name = e.target.value; } }),
+      h('button', { class: 'icon-btn sm', title: 'Удалить вариант', onclick: () => { options.splice(i, 1); drawOptions(); } }, icon('x', 14)))));
+    Sortable.create(rows, { handle: '.opt-grip', animation: 150, forceFallback: true, onEnd: e => { options.splice(e.newIndex, 0, options.splice(e.oldIndex, 1)[0]); drawOptions(); } });
+    fill(optBox,
+      rows,
       h('button', {
         class: 'btn sm', onclick: () => {
           options.push({ id: 'o_' + Math.random().toString(36).slice(2, 10), name: '', color: PALETTE[options.length % PALETTE.length] });
