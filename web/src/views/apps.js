@@ -320,7 +320,7 @@ export async function renderApps({ unitId = '' } = {}) {
   };
   const drawTools = () => {
     fill(tools,
-      isSuper() && h('button', { class: 'icon-btn', title: 'Статусы и поля приложения', onclick: e => { e.stopPropagation(); settingsMenu(e.currentTarget, reload); } }, icon('settings', 16)),
+      isSuper() && h('button', { class: 'icon-btn', title: 'Статусы и поля приложения', onclick: e => { e.stopPropagation(); settingsMenu(e.currentTarget, reload); } }, icon('sliders', 16)),
       isSuper() && units().length > 0 && h('button', { class: 'btn', title: 'Уже существующие приложения: название и ссылка на App Store построчно', onclick: () => openImportApps(reload, unitId) }, icon('layers', 14), h('span', { class: 'btn-label' }, 'Добавить списком')),
       isSuper() && units().length > 0 && h('button', { class: 'btn primary', onclick: () => openCreateApp(reload, unitId || undefined) }, icon('plus', 14), h('span', { class: 'btn-label' }, 'Новое приложение')));
     fill(bar,
