@@ -1913,11 +1913,15 @@ export function createBackend(db, opts = {}) {
         const log = await all(() => T('app_status_log').select('app_id,from_status,to_status,at').in('app_id', apps.map(a => a.id)).order('at').order('id'));
         const by = {};
         for (const r of log) (by[r.app_id] || (by[r.app_id] = [])).push(r);
+        const kindOf = id => (statuses.find(x => x.id === id) || {}).kind || '';
         for (const a of apps) {
           const ev = by[a.id] || [];
+          // добавлено списком уже готовым (сразу не «в разработке») — оно было и до того, как его завели в системе
+          const first = ev.length ? ev[0].from_status : a.status;
+          const existed = !!first && kindOf(first) !== 'dev';
           days.forEach((d, i) => {
             const t = d + 'T23:59:59.999Z';
-            if (a.created_at && a.created_at > t) return; // приложения ещё не было
+            if (!existed && a.created_at && a.created_at > t) return; // приложения ещё не было
             let st = ev.length ? ev[0].from_status || (ev[0].at <= t ? '' : a.status) : a.status;
             for (const e of ev) { if (e.at <= t) st = e.to_status; else break; }
             if (!st && ev.length) st = ev[0].to_status;

@@ -164,5 +164,8 @@ test('статусы приложений во времени: ряд по дн�
   assert.equal(end.live, 1);
   assert.equal(end.dev, 1);
   assert.equal(Object.values(end).reduce((a, b) => a + b, 0), 2); // каждое приложение — ровно в одном статусе
+  // добавленное списком уже в сторе было и раньше — весь период в «В сторе»; новое — только с дня создания
+  assert.deepEqual(s.counts.live, [1, 1, 1, 1, 1, 1, 1]);
+  assert.deepEqual(s.counts.dev.slice(0, 6), [0, 0, 0, 0, 0, 0]);
   assert.ok(app.id);
 });
