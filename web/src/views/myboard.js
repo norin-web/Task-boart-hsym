@@ -125,12 +125,12 @@ function draw(page, data) {
         due ? h('span', { class: 'due ' + due.cls, title: due.hint }, icon('calendar', 14), due.text) : h('span', { class: 'muted my-nodue' }, 'Без срока'),
         h('span', { class: 'spacer' }),
         // я ревьюер — решение прямо на карточке
-        t.assigneeId === S.meId && t.reviewFrom && t.reviewFrom !== S.meId && groupOf(data, t) === 'review' && h('span', { class: 'my-review' }, reviewButtons(t, () => renderMyBoard())),
         // отправил на ревью сам — можно забрать обратно (что-то забыл)
         t.reviewFrom === S.meId && groupOf(data, t) === 'review' && h('button', {
           class: 'btn ghost sm my-recall', title: 'Забрать из ревью — вернуть себе в работу',
           onclick: e => { e.stopPropagation(); send('recallReview', { id: t.id }).then(() => { toast('Задача снова у вас'); renderMyBoard(); }).catch(showErr); },
-        }, icon('back', 13), 'Забрать')));
+        }, icon('back', 13), 'Забрать')),
+      t.assigneeId === S.meId && t.reviewFrom && t.reviewFrom !== S.meId && groupOf(data, t) === 'review' && h('div', { class: 'my-review' }, reviewButtons(t, () => renderMyBoard())));
   };
 
   const columnEls = cols.map(c => {
