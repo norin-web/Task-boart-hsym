@@ -681,3 +681,20 @@ test('Lead: видит и ведёт только свою зону — пози
   await api.as(admin, () => api('setLeadPeople', { leadId: L.id, personIds: [out.id, dev.id] }));
   assert.deepEqual((await api.as(admin, () => api('getLeadPeople', {})))[L.id], [dev.id]);
 });
+
+
+test('лид после «Раздать» видит розданное на своём дашборде', async () => {
+  const api = await setup();
+  const { mod, designer, A } = await team(api);
+  const lead = await api('createPerson', { name: 'Лид', email: 'u6@x.ru', access: 'lead', positionId: 'd_design' });
+  await api.pg.query('update people set user_id = $1 where id = $2', [UID(6), lead.id]);
+  await api('setMember', { unitId: A.id, personId: lead.id });
+  const L = { ...lead, uid: UID(6) };
+  const st = (await api('getBoard', { unitId: A.id })).unit.settings;
+  const prog = st.columns.find(c => c.kind === 'progress').id;
+  const stage = await api.as(mod, () => api('createTask', { unitId: A.id, title: 'Дизайн', assigneeId: lead.id, status: prog }));
+  await api.as(L, () => api('splitTask', { taskId: stage.id, items: [{ title: 'Онбординг', assigneeId: designer.id }, { title: 'Пейволл', assigneeId: designer.id }] }));
+  const d = await api.as(L, () => api('getMyDashboard', { personId: lead.id, today: '2026-11-02' }));
+  assert.equal(d.lead.split.length, 1);
+  assert.equal(d.lead.split[0].parts.length, 2);
+});

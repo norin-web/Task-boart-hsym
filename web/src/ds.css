@@ -1340,10 +1340,11 @@ body.sb-collapsed .nav-unit-row .nav-abbr { display: inline; font-size: 12px; li
 }
 /* #25: скелетон загрузки */
 .skel { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; }
-.skel i { display: block; height: 44px; border-radius: 12px; background: var(--surface-3); animation: skel 1.4s ease-in-out infinite; }
+.skel i { display: block; height: 44px; border-radius: 12px; background: linear-gradient(100deg, var(--surface-3) 30%, var(--surface-2) 50%, var(--surface-3) 70%) 0 0 / 300% 100%; animation: skel-shim 1.4s ease-in-out infinite; }
 .skel .skel-t { height: 16px; width: 200px; border-radius: 8px; }
 .skel .skel-s { width: 70%; }
 @keyframes skel { 50% { opacity: .55; } }
+@keyframes skel-shim { from { background-position: 100% 0; } to { background-position: 0 0; } }
 @media (prefers-reduced-motion: reduce) { .skel i { animation: none; } }
 /* #17: подсветка входящих скруглённая */
 .ib-row { border-radius: 12px; }
@@ -2887,3 +2888,18 @@ button.rd-check.on { background: var(--text); border-color: transparent; }
 .rd-field textarea { min-height: 96px; resize: vertical; }
 .rd-in[type=date].empty { color: var(--muted); }
 .rd-in[type=date].empty::-webkit-datetime-edit { opacity: .45; }
+/* поля быстрых действий в карточке (Раздать, Сегодня…) видны всегда, не только при наведении */
+.panel-side .prop .quick-chip { display: inline-flex; opacity: 1; }
+/* Аналитика в узком окне: «Команда и KPI» и «Выпущено» друг под другом, подписи не ломаются по буквам */
+@media (max-width: 1300px) { .analytics-page .an-grid-32 { grid-template-columns: minmax(0, 1fr); } }
+.stale-row .rc-main { min-width: 0; }
+.stale-row .rc-main b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.analytics-page .kpi-table { overflow-x: auto; }
+/* Сводка: колонка «Приложение» не уезжает при прокрутке вправо — таблица остаётся цельной */
+.rd-row > :first-child { position: sticky; left: 0; z-index: 1; background: inherit; }
+.rd-band > :first-child { z-index: 4; }
+.rd-head > :first-child { z-index: 3; }
+/* «Требует внимания»: строки без скруглённых линий — ровные разделители */
+.att-list .att-row { border-radius: 0; border: 0; border-bottom: 1px solid var(--border); background: transparent; }
+.att-list .att-row:last-child { border-bottom: 0; }
+.att-list .att-row:hover { background: var(--surface-2); }

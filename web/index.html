@@ -18,7 +18,11 @@
     .nav-scrim { display: none; }
     .first-load { padding: 88px 16px 0 24px; }
     .first-load .skel { display: flex; flex-direction: column; gap: 8px; }
-    .first-load .skel i { display: block; height: 44px; border-radius: 12px; background: #eceef2; }
+    .first-load .skel i { display: block; height: 44px; border-radius: 12px; background: linear-gradient(100deg, #eceef2 30%, #f7f8fa 50%, #eceef2 70%) 0 0 / 300% 100%; animation: shim 1.4s ease-in-out infinite; }
+    #sidebar:empty { animation: pulse 1.6s ease-in-out infinite; }
+    @keyframes shim { from { background-position: 100% 0; } to { background-position: 0 0; } }
+    @keyframes pulse { 50% { opacity: .82; } }
+    @media (prefers-reduced-motion: reduce) { .first-load .skel i, #sidebar:empty { animation: none; } }
     .first-load .skel .skel-t { height: 16px; width: 200px; border-radius: 8px; }
     .first-load .skel .skel-s { width: 70%; }
     @media (max-width: 900px) { #shell { display: block; padding: 0; } #sidebar { display: none; } .first-load { padding: 72px 16px 0; } }

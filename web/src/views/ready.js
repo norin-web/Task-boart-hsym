@@ -420,7 +420,8 @@ export async function renderReady() {
     const pos = old ? [old.scrollLeft, old.scrollTop] : null;
     fill(body,
       h('div', { class: 'rd-sum' },
-        h('span', null, h('b', null, inUnit.length), ' ' + plural(inUnit.length, ['приложение', 'приложения', 'приложений'])),
+        h('button', { class: 'rd-queue' + (!onlyReady ? ' on' : ''), type: 'button', 'aria-pressed': String(!onlyReady), title: 'Показать все приложения', onclick: () => { onlyReady = false; draw(); } },
+          icon('rows', 13), `Все приложения: ${inUnit.length}`),
         h('button', { class: 'rd-queue' + (onlyReady ? ' on' : ''), type: 'button', 'aria-pressed': String(onlyReady), title: 'Дизайн закрыт, разработка ещё не начата', onclick: () => { onlyReady = !onlyReady; draw(); } },
           icon('layers', 13), `Ждут разработки: ${queue.length}`, late > 0 && h('span', { class: 'rd-late' }, ` · дольше недели ${late}`)),
         hidden.length > 0 && h('button', { class: 'rd-queue', type: 'button', 'aria-haspopup': 'menu', title: 'Строки, скрытые из сводки', onclick: e => menu(e.currentTarget, [

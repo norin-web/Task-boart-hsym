@@ -836,7 +836,7 @@ function openTaskPool(a, onDone) {
     title: 'Задачи · ' + a.name,
     body: [h('p', { class: 'hint', style: { marginTop: 0 } }, 'Каждая строка — отдельная задача PM. Enter — ещё строка.'), rows,
       h('button', { class: 'btn sm', style: { marginTop: '6px' }, onclick: () => addRow() }, icon('plus', 13), 'Строка'),
-      h('div', { class: 'grid2', style: { marginTop: '14px' } }, field('Тип', type), field('PM', pm.el)),
+      h('div', { class: 'grid2', style: { marginTop: '14px' } }, field('Тип', type), field('PM', pm.el, pm.hint)),
       h('div', { class: 'grid2' }, field('Срок', due), field('Приоритет', prio))],
     actions: [{ label: 'Отмена' }, {
       label: 'Поставить', primary: true,
@@ -1027,12 +1027,15 @@ export async function sendRelease(stageId) {
 /** Выбор PM юнита: по умолчанию — первый PM; пусто — предупреждение (запрос повиснет без исполнителя). */
 function pmPicker(unitId) {
   const sel = h('select', { class: 'inp', 'aria-label': 'PM' });
+  const hint = document.createTextNode('');
   const draw = id => {
     const pms = pmsOf(id);
+    const u = unitById(id);
+    hint.textContent = !u ? '' : pms.length > 1 ? `PM юнита «${u.name}»: задача уйдёт выбранному.` : pms.length ? `PM юнита «${u.name}» — задача уйдёт ему.` : '';
     fill(sel, pms.length ? pms.map(p => h('option', { value: p.id }, p.name)) : h('option', { value: '' }, 'В юните нет PM — добавьте в Структуре'));
   };
   draw(unitId);
-  return { el: sel, setUnit: draw };
+  return { el: sel, hint, setUnit: draw };
 }
 
 /** Приоритет: от высокого к низкому, «—» — без приоритета. */
@@ -1067,7 +1070,7 @@ export function openCreateApp(onDone, unitId) {
     body: [
       // порядок как в макете 35: название, юнит и PM, срок и приоритет, ссылка в стор, описание
       field('Название', name),
-      h('div', { class: 'grid2' }, field('Юнит', unit), field('PM', pm.el, 'Получит задачу «New App»')),
+      h('div', { class: 'grid2' }, field('Юнит', unit), field('PM', pm.el, pm.hint)),
       h('div', { class: 'grid2' }, field('Срок', due), field('Приоритет', prio)),
       field('Ссылка в App Store', store, preview),
       field('Описание', desc),
@@ -1299,7 +1302,7 @@ export function openNewAppTask(onDone, unitId) {
   modal({
     title: 'Новая задача',
     body: [field('Название', title), h('div', { class: 'grid2' }, field('Приложение', app), field('Тип', type)),
-      h('div', { class: 'grid2' }, field('PM', pm.el), field('Срок', due)), field('Приоритет', prio), field('Описание', desc)],
+      h('div', { class: 'grid2' }, field('PM', pm.el, pm.hint), field('Срок', due)), field('Приоритет', prio), field('Описание', desc)],
     actions: [{ label: 'Отмена' }, {
       label: 'Поставить', primary: true,
       action: async close => {
@@ -1342,7 +1345,7 @@ function openCreateRequest(a, type, onDone) {
   });
   modal({
     title: (reject ? 'Реджект' : REQUEST_TYPES[type] || 'Задача') + ' · ' + a.name,
-    body: [tplSel && field('Шаблон', tplSel, tplInfo), field(reject ? 'Причина' : 'Название', title), h('div', { class: 'grid2' }, field('PM', pm.el), field('Срок', due)),
+    body: [tplSel && field('Шаблон', tplSel, tplInfo), field(reject ? 'Причина' : 'Название', title), h('div', { class: 'grid2' }, field('PM', pm.el, pm.hint), field('Срок', due)),
       field('Приоритет', prio, 'Перейдёт этапам, когда PM разложит задачу'), field('Описание', desc)],
     actions: [{ label: 'Отмена' }, {
       label: 'Поставить', primary: true,

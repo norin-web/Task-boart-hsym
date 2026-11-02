@@ -351,6 +351,7 @@ function openSplit(t, people) {
         const created = await send('splitTask', { taskId: t.id, items });
         close();
         toast(`Роздано: ${created.length}`);
+        S.peekStamp = null; // сам этап не менялся, но страница под карточкой (дашборд, «Раздано») устарела — перерисуется при закрытии
         if (S.board && S.board.unit.id === t.unitId) { await reloadBoard().catch(() => {}); }
         refreshPanel(t);
       },
@@ -729,7 +730,7 @@ function sideBlock(t, { staff, editable }) {
 
   // ревьюер задачи; у старых задач его нет — тогда показываем того, кому её отдаст настройка ревью юнита
   const rv = (u.settings || {}).review || {};
-  if (staff && t.step !== 'release') prop('Ревьюер', reviewerSelect(t.reviewerId || (rv.byPosition || {})[t.departmentId] || rv.default || '', u, v => { patchTask(t, { reviewerId: v }); }));
+  if ((staff || ((me() || {}).access === 'lead' && t.assigneeId === S.meId)) && t.step !== 'release') prop('Ревьюер', reviewerSelect(t.reviewerId || (rv.byPosition || {})[t.departmentId] || rv.default || '', u, v => { patchTask(t, { reviewerId: v }); }));
 
   if (!B.dueDate.hidden && !staff && !zone) {
     const info = dueInfo(t.dueDate, taskDone(t));
