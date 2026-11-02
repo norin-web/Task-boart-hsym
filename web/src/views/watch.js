@@ -153,7 +153,7 @@ export function watchBlock(apps, { openApp, openTask, appIcon, appStatusCell, st
 }
 
 /** Выбор, что отслеживать: поиск по приложениям и задачам (название или ключ задачи), клик — добавить / убрать. */
-function openWatchPicker(apps, onDone) {
+export function openWatchPicker(apps, onDone) {
   const q = h('input', { class: 'inp', type: 'search', placeholder: 'Приложение или задача: название, ключ GLD-12…', 'aria-label': 'Поиск' });
   const list = h('div', { class: 'w-pick' });
   let tasks = [], seq = 0;
@@ -182,5 +182,5 @@ function openWatchPicker(apps, onDone) {
     try { const r = await call('queryTasks', { q: s, limit: 15 }); if (my === seq) { tasks = r; draw(); } } catch (e) { showErr(e); }
   });
   draw();
-  modal({ title: 'Отслеживать на дашборде', body: [q, list], actions: [{ label: 'Готово' }], onClose: onDone });
+  modal({ title: 'Отслеживать на дашборде', cls: 'dlg wp-dlg', body: [q, list], actions: [{ label: 'Готово' }], onClose: onDone });
 }

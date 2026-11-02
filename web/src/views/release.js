@@ -38,6 +38,7 @@ export function openReleaseCardSettings(onDone) {
   const canFields = ['superadmin', 'rm'].includes((me() || {}).access);
   const close = modal({
     title: 'Настроить карточку релиза',
+    cls: 'dlg rc-dlg',
     body: [h('p', { class: 'hint', style: { margin: '0 0 8px' } }, 'Какие блоки показывать — только у вас, во всех релизах.'), list,
       canFields && h('div', { style: { marginTop: '14px' } }, h('button', { class: 'btn sm', onclick: () => { close(); openReleaseSettings(onDone); } }, icon('settings', 14), 'Релизные поля…'),
         h('p', { class: 'hint', style: { margin: '6px 0 0' } }, 'Какие поля заполнять перед отправкой в Apple и какие обязательны — для всей студии.'))],
@@ -268,7 +269,7 @@ export async function openReleaseSettings(onDone) {
   ];
   modal({
     title: 'Настройка релиза',
-    wide: true,
+    cls: 'dlg dlg-p rs-dlg',
     body: [
       h('div', { class: 'sub-title', style: { marginTop: 0 } }, 'Релизные поля'),
       h('p', { class: 'hint', style: { marginTop: '-4px' } }, 'Что RM заполняет в карточке релиза перед отправкой в Apple.'),
@@ -349,7 +350,7 @@ export function openReleaseHistory(preset = {}) {
   paintApps();
   const closeHistory = modal({
     title: 'История релизов',
-    wide: true,
+    cls: 'dlg dlg-w rh-dlg',
     body: [h('div', { class: 'rh-bar' }, seg, dates), h('div', { class: 'rh-filters' }, unitSel, appSel, resSel), stats, list],
     actions: [{ label: 'Закрыть' }],
   });

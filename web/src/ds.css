@@ -2418,3 +2418,73 @@ table.tasks.unit-list .chips .chip::before { display: none; }
 @media (max-width: 640px) { .rl-head { flex-wrap: wrap; } .rl-actions { flex: 1 1 100%; } }
 .rl-fields { gap: 0; }
 .rl-fields .af-row, .rl-fields .rl-row { box-sizing: border-box; }
+
+/* ---------- окна RM: листы R05 и R06 ---------- */
+.rh-dlg .modal-body, .rs-dlg .modal-body, .rc-dlg .modal-body, .wp-dlg .modal-body { display: flex; flex-direction: column; gap: 16px; }
+.modal.dlg-p { width: min(640px, calc(100vw - 32px)); max-width: none; }
+.rh-dlg .rh-bar { display: flex; align-items: center; gap: 12px; margin: 0; }
+.rh-dlg .seg { padding: 4px; gap: 2px; background: var(--surface-2); }
+.rh-dlg .seg button { height: 32px; padding: 0 12px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--muted); }
+.rh-dlg .seg button.on { color: var(--text); }
+.rh-dlg .rh-dates { display: flex; align-items: center; gap: 8px; }
+.rh-dlg .rh-dates[hidden] { display: none; }
+.rh-dlg .rh-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.rh-dlg .rh-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.rh-dlg .cs { display: flex; flex-direction: column; justify-content: flex-start; gap: 4px; min-height: 0; padding: 14px; border-radius: 20px; background: var(--surface-2); box-shadow: none; }
+.rh-dlg .cs-label { order: 0; font-size: 12px; line-height: 16px; font-weight: 600; }
+.rh-dlg .cs-n { font-size: 24px; line-height: 32px; }
+.rh-dlg .cs-sub { padding: 0; }
+.rh-dlg .cs.danger .cs-sub { color: var(--muted); font-weight: 500; }
+.rh-dlg .rh-list { display: block; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.rh-dlg .rh-row { display: grid; grid-template-columns: minmax(0, 1fr) 64px 84px 150px 56px; align-items: center; gap: 12px; width: 100%; min-height: 44px; padding: 0; border: 0; border-top: 1px solid var(--border); border-radius: 0; background: transparent; color: var(--text); font-size: 13px; line-height: 20px; font-weight: 500; text-align: left; }
+.rh-dlg .rh-row:hover { background: transparent; }
+.rh-dlg .rh-row.rh-head { min-height: 32px; border-top: 0; font-size: 12px; line-height: 16px; color: var(--muted); }
+.rh-dlg .rh-app b { font-weight: 600; }
+.rh-dlg .rh-list > p { padding: 14px 0 !important; font-size: 13px; line-height: 20px; font-weight: 500; }
+.rs-dlg .sub-title { margin: 0 0 -14px; font-size: 16px; line-height: 24px; font-weight: 600; letter-spacing: -.02em; text-transform: none; color: var(--text); }
+.rs-dlg .hint { margin: 0 !important; }
+.rs-dlg .col-edit-list { display: block; margin: 0 0 16px; }
+.rs-dlg .col-edit-row.rs-row { display: flex; align-items: center; gap: 8px; min-height: 52px; margin: 0; padding: 0; border: 0; border-top: 1px solid var(--border); border-radius: 0; background: transparent; }
+.rs-dlg .col-edit-row.rs-row:first-child { border-top: 0; }
+.rs-dlg .rs-row .drag { flex: none; width: 16px; color: var(--border-strong); }
+.rs-dlg .rs-row input.inp { flex: 1; min-width: 0; }
+.rs-dlg .rs-row select.inp { flex: none; width: 104px; }
+.rs-dlg .chk { flex: none; gap: 6px; }
+.rs-dlg .chk input { width: 18px; height: 18px; }
+.rs-dlg .rs-row .icon-btn { flex: none; width: 14px; height: 14px; min-width: 0; padding: 0; background: none; color: var(--muted); }
+.rs-dlg .btn.sm, .rc-dlg .btn.sm { height: 32px; }
+.rs-dlg .hint .i { vertical-align: -1px; }
+.rc-dlg .modal-body > .hint { margin-top: -12px; }
+.rc-dlg .cl-tpl-list, .wp-dlg .w-pick { display: flex; flex-direction: column; gap: 2px; }
+.rc-dlg .aud-item, .wp-dlg .w-pick-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 0 8px; border-radius: 12px; font-size: 13px; line-height: 20px; font-weight: 500; color: var(--text); text-align: left; }
+.rc-dlg .aud-item { height: 40px; }
+.wp-dlg .w-pick-row { height: auto; min-height: 44px; }
+.rc-dlg .aud-check, .wp-dlg .aud-check { flex: none; display: grid; place-items: center; width: 18px; height: 18px; border: 2px solid var(--border-strong); border-radius: 6px; background: transparent; color: #fff; }
+.rc-dlg .aud-item.on .aud-check, .wp-dlg .w-pick-row.on .aud-check { border-color: var(--primary); background: var(--primary); color: var(--on-primary); }
+.rc-dlg .modal-body > div[style] { margin-top: 0 !important; display: grid; justify-items: start; gap: 6px; }
+.rc-dlg .modal-body > div[style] .hint { margin: 0 !important; }
+.wp-dlg .menu-label { padding: 8px 8px 4px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--muted); text-transform: none; letter-spacing: 0; }
+.wp-dlg .app-ic-slot { flex: none; display: grid; place-items: center; width: 24px; height: 24px; }
+.wp-dlg .app-ic-slot .app-img { width: 24px; height: 24px; border-radius: 8px; }
+.wp-dlg .w-pick-name { display: flex; flex-direction: column; min-width: 0; font-weight: 600; }
+.wp-dlg .w-pick-name small { font-size: 12px; line-height: 16px; font-weight: 500; }
+.wp-dlg .key-badge { flex: none; height: 20px; padding: 0 6px; border-radius: 6px; background: var(--surface-3); font-size: 12px; line-height: 20px; font-weight: 600; }
+.wp-dlg .w-pick-empty { margin: 0; padding: 8px; font-size: 13px; line-height: 20px; font-weight: 500; }
+@media (max-width: 640px) { .rh-dlg .rh-stats, .rh-dlg .rh-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rh-dlg .rh-row { grid-template-columns: minmax(0, 1fr) auto; } .rh-dlg .rh-bar { flex-wrap: wrap; } }
+.modal.dlg.rs-dlg .chk input { width: 18px; height: 18px; }
+.modal.dlg.rs-dlg .btn.sm, .modal.dlg.rc-dlg .btn.sm { height: 32px; }
+.modal.dlg.rh-dlg .cs { align-items: flex-start; text-align: left; }
+.modal.dlg.rh-dlg .cs-label { order: -1; text-align: left; }
+.modal.dlg.rh-dlg .cs-n { text-align: left; }
+.modal.dlg.rs-dlg .sub-title { margin: 0 0 -14px !important; font-size: 16px; line-height: 24px; letter-spacing: -.02em; }
+.modal.dlg.rs-dlg .rs-row { grid-template-columns: none; }
+.modal.dlg.rs-dlg .rs-row input.inp { flex: 1 1 0; width: auto; min-width: 0; }
+.modal.dlg.rs-dlg .rs-row select.inp { flex: none; width: 104px; }
+.modal.dlg.rs-dlg .rs-row .chk { flex: none; width: auto; margin: 0; }
+.modal.dlg.rs-dlg .modal-body > .hint:last-child { display: flex; gap: 6px; }
+.modal.dlg.rs-dlg .modal-body > .hint:last-child .i { flex: none; margin-top: 4px; }
+.modal.dlg.rc-dlg .aud-item.on, .modal.dlg.wp-dlg .w-pick-row.on { background: transparent; }
+.rc-dlg .aud-check svg, .wp-dlg .aud-check svg { stroke: #fff; color: #fff; width: 12px; height: 12px; }
+.modal.rh-dlg .modal-foot .btn:not(.primary), .modal.rs-dlg .modal-foot .btn:not(.primary), .modal.rc-dlg .modal-foot .btn:not(.primary), .modal.wp-dlg .modal-foot .btn:not(.primary) { height: 40px; padding: 0 18px; background: var(--surface-3); }
+.modal.dlg.rs-dlg .col-edit-row.rs-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) 104px auto 14px; gap: 8px; }
+.modal.dlg.rs-dlg .rs-row input.inp { width: 100%; }
