@@ -10,7 +10,7 @@
  *   #/u/:unit[/overview|/apps|/list|/team|/settings][?task=:id] — вкладки юнита; без режима — доска
  *   #/u/:unit/t/:team[?task=:id] — доска команды в юните и кто чем занят
  */
-import { S, isStaff, isSuper, myAccess, loadBoardView, ceoDefault, seesApps } from './state.js';
+import { S, me, isStaff, isSuper, myAccess, loadBoardView, ceoDefault, seesApps, ownTeamsOnly } from './state.js';
 import { $, h, fill, icon, closeMenu, closeNav, showErr, setBack, skeleton } from './ui.js';
 import { renderSidebar } from './views/sidebar.js';
 import { renderHome } from './views/home.js';
@@ -175,6 +175,7 @@ export async function render() {
 
   if (r.mode === 'settings' && !isStaff()) return navigate({ unit: r.unit, mode: 'board' }, { replace: true });
   if (['overview', 'apps'].includes(r.mode) && !seesApps()) return navigate({ unit: r.unit, mode: 'board' }, { replace: true });
+  if (ownTeamsOnly() && (r.mode === 'team' || (r.team && !((me() || {}).teamIds || []).includes(r.team)))) return navigate({ unit: r.unit, mode: 'board' }, { replace: true });
   const key = r.mode + ':' + r.unit + (r.team ? ':' + r.team : '');
   if (rendered !== key) {
     rendered = key;

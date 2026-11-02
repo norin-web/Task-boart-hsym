@@ -581,3 +581,15 @@ test('история: участник пишет только про свои �
   const hist = (await api('getTaskExtras', { taskId: t1.id })).activity.filter(a => a.field === 'status');
   assert.ok(hist.length >= 2);
 });
+
+test('приложения видят только CEO, PM и RM: Lead и сотрудник не получают их из базы', async () => {
+  const api = await setup();
+  const { admin, mod, dev, A } = await team(api);
+  const lead = await api('createPerson', { name: 'Лид', email: 'u5@x.ru', access: 'lead', positionId: 'd_ios' });
+  await api.pg.query('update people set user_id = $1 where id = $2', [UID(5), lead.id]);
+  await api('setMember', { unitId: A.id, personId: lead.id });
+  await api.as(admin, () => api('createApp', { name: 'Forest', unitId: A.id }));
+  assert.equal((await api.as(mod, () => api('listApps', {}))).length, 1);
+  assert.equal((await api.as(dev, () => api('listApps', {}))).length, 0);
+  assert.equal((await api.as({ ...lead, uid: UID(5) }, () => api('listApps', {}))).length, 0);
+});

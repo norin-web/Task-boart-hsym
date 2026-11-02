@@ -63,6 +63,7 @@ export const METRICS = [
   { screen: 'L08', checks: [{ sel: '.modal', prop: 'width', want: 760 }, { sel: '.sp-dlg .split-row select.inp', prop: 'height', want: 40 }] },
   { screen: 'RM12', checks: [{ sel: '.wp-dlg .app-ic-slot', prop: 'width', want: 40 }] },
   { screen: 'RM18', checks: [{ sel: '.rm-page .w-row', prop: 'borderTopLeftRadius', want: '0px' }, { sel: '.rm-page .w-row', prop: 'minHeight', want: '60px' }] },
+  { screen: 'P01', checks: [{ sel: '.ib-row', prop: 'cursor', want: 'pointer' }, { sel: '.ib-row', prop: 'borderTopLeftRadius', want: '12px' }] },
   { screen: 'RM01', checks: [{ sel: '.rm-grid .rm-row', prop: 'minHeight', want: '60px' }, { sel: '.rm-grid .rm-row .app-img, .rm-grid .rm-row .uc-icon', prop: 'width', want: 34 }, { sel: '.rm-actions .btn', prop: 'height', want: 32 }, { sel: '#sidebar', noText: 'Мои задачи', prop: 'text', want: 'есть' }, { sel: '#sidebar', noText: 'Мои юниты', prop: 'text', want: 'нет' }] },
   { screen: 'D37', checks: [{ sel: '.modal.dq-dlg', prop: 'width', want: 760 }, { sel: '.dq-row.yn', prop: 'height', want: 56 }, { sel: '.dq-row .seg button', prop: 'height', want: 32 }] },
   { screen: 'B05', checks: [{ sel: '.topbar .back-btn', prop: 'width', want: 44 }] },

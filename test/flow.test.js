@@ -79,12 +79,12 @@ test('New App: CEO → PM юнита → этапы по флоу → блоки
   assert.equal(request.assigneeId, pm.id);
   assert.equal(request.appId, app.id);
 
-  // PM другого юнита ни приложения, ни запроса не видит; сотрудник Gold видит приложение своего юнита
+  // PM другого юнита ни приложения, ни запроса не видит; сотрудник приложений не видит вовсе (только CEO, PM, RM)
   await api.as(pmRf, async () => {
     assert.deepEqual(await api('listApps', {}), []);
     await assert.rejects(() => api('decomposeRequest', { taskId: request.id }), e => e.code === 'NOT_FOUND');
   });
-  await api.as(ios, async () => assert.deepEqual((await api('listApps', {})).map(a => a.name), ['Sleep Sounds']));
+  await api.as(ios, async () => assert.deepEqual(await api('listApps', {}), []));
   // создаёт приложения только CEO
   await api.as(pm, () => assert.rejects(() => api('createApp', { name: 'x', unitId: gold.id }), forbidden));
   // импорт уже вышедшего приложения: свой статус, без запроса PM

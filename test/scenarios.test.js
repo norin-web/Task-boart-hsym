@@ -196,9 +196,9 @@ test('сценарии: роли × позиции × жизненный цик�
   };
   for (const [who, calls] of Object.entries(smoke)) for (const [m, payload] of calls) await check(`сводка ${m} у ${who}`, () => api.as(S[who], () => api(m, payload)));
   await api.as(pm, () => api('addAppNote', { appId: app.id, text: 'Договорились о цене' }));
-  await check('заметки к приложению видят PM, RM и лид, но не сотрудник', async () => {
+  await check('заметки к приложению видят PM и RM, но не лид и не сотрудник', async () => {
     assert.equal((await api.as(rm, () => api('getAppNotes', { appId: app.id }))).length, 1);
-    assert.equal((await api.as(lead, () => api('getAppNotes', { appId: app.id }))).length, 1);
+    assert.equal((await api.as(lead, () => api('getAppNotes', { appId: app.id }))).length, 0);
     assert.equal((await api.as(ios, () => api('getAppNotes', { appId: app.id }))).length, 0);
   });
   await check('сотрудник не пишет заметки к приложению', () => mustFail(api.as(ios, () => api('addAppNote', { appId: app.id, text: 'x' }))));

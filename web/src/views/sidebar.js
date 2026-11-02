@@ -1,5 +1,5 @@
 import Sortable from 'sortablejs';
-import { S, LS, byOrder, openCount, me, unitById, personById, activeTeams, isStaff, isSuper, ceoMode, isDev, ACCESS_LABELS, seesApps } from '../state.js';
+import { S, LS, byOrder, openCount, me, unitById, personById, activeTeams, isStaff, isSuper, ceoMode, isDev, ACCESS_LABELS, seesApps, ownTeamsOnly } from '../state.js';
 import { $, h, icon, avatar, menu, closeMenu, showErr, fill, confirmDlg, setBell } from '../ui.js';
 import { call, send } from '../api.js';
 import { link, navigate, rerender } from '../router.js';
@@ -69,7 +69,8 @@ function toggleUnit(id) {
 /** Команды юнита: те, в которых состоят его участники. */
 export const unitTeams = u => {
   const ids = new Set((u.members || []).flatMap(id => (personById(id) || {}).teamIds || []));
-  return activeTeams().filter(t => ids.has(t.id));
+  const mine = (me() || {}).teamIds || [];
+  return activeTeams().filter(t => ids.has(t.id) && (!ownTeamsOnly() || mine.includes(t.id)));
 };
 
 function unitItem(u, r) {

@@ -74,13 +74,13 @@ function inbox(d, reload, redraw) {
   const rows = inboxAll ? d.inbox : d.inbox.slice(0, INBOX_LIMIT);
   return h('section', { class: 'pm-inbox' },
     h('div', { class: 'section-head' }, h('h2', null, 'Входящие от CEO'), h('span', { class: 'sec-badge' }, d.inbox.length)),
-    h('div', { class: 'card-box att-list' }, rows.map(r => h('div', { class: 'ib-row' },
+    h('div', { class: 'card-box att-list' }, rows.map(r => h('div', { class: 'ib-row', role: 'button', tabindex: '0', onclick: () => peekTask(r.unitId, r.id), onkeydown: e => { if (e.key === 'Enter') peekTask(r.unitId, r.id); } },
       r.app ? appIcon(r.app, 'md') : h('span'),
-      h('button', { class: 'link-btn ib-title', onclick: () => peekTask(r.unitId, r.id) }, h('b', null, r.app ? r.app.name : ''), h('span', { class: 'muted' }, (r.app ? ' · ' : '') + shortTitle(r))),
+      h('span', { class: 'ib-title' }, h('b', null, r.app ? r.app.name : ''), h('span', { class: 'muted' }, (r.app ? ' · ' : '') + shortTitle(r))),
       prioLabel(r.app) || h('span'),
       r.dueDate && h('span', { class: 'ib-due' + (r.dueDate < todayStr() ? ' late' : '') }, icon('calendar', 14), dueText(r.dueDate)),
       h('button', {
-        class: 'btn soft sm', onclick: () => openDecomposeDialog({ id: r.id, unitId: r.unitId, type: r.type, title: r.title, appName: r.app && r.app.name, dueDate: r.dueDate }).then(ok => ok && reload()),
+        class: 'btn soft sm', onclick: e => e.stopPropagation() || openDecomposeDialog({ id: r.id, unitId: r.unitId, type: r.type, title: r.title, appName: r.app && r.app.name, dueDate: r.dueDate }).then(ok => ok && reload()),
       }, icon('tree', 13), 'Разложить')))),
     d.inbox.length > INBOX_LIMIT && h('button', { class: 'pm-more', onclick: () => { inboxAll = !inboxAll; redraw(); } }, inboxAll ? 'Свернуть' : 'Показать больше'));
 }

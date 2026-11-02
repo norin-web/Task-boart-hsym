@@ -1700,8 +1700,8 @@ create policy notifications_read on notifications for update to authenticated
 -- Приложения: CEO — все; остальные — приложения своих юнитов. Создаёт и удаляет CEO, правит — CEO и PM юнита.
 alter table app_notes enable row level security;
 drop policy if exists app_notes_read on app_notes;
--- заметки к приложению — рабочие, для CEO, PM, RM и лидов; сотрудники их не видят (как и раздел «Приложения»)
-create policy app_notes_read on app_notes for select to authenticated using (app_system() or (my_access() <> 'member' and exists (select 1 from apps a where a.id = app_id)));
+-- заметки к приложению — рабочие, для CEO, PM и RM; Lead и сотрудник их не видят (как и раздел «Приложения»)
+create policy app_notes_read on app_notes for select to authenticated using (app_system() or (my_access() in ('superadmin', 'moderator', 'rm') and exists (select 1 from apps a where a.id = app_id)));
 drop policy if exists app_notes_insert on app_notes;
 create policy app_notes_insert on app_notes for insert to authenticated
   with check (author_id = my_person_id() and my_access() <> 'member' and exists (select 1 from apps a where a.id = app_id));
@@ -1733,8 +1733,10 @@ alter table app_status_log enable row level security;
 drop policy if exists app_status_log_read on app_status_log;
 create policy app_status_log_read on app_status_log for select to authenticated using (exists (select 1 from apps a where a.id = app_id));
 drop policy if exists apps_read on apps;
+-- приложения видят только CEO, PM и RM: Lead и сотрудник работают с задачами
 create policy apps_read on apps for select to authenticated
-  using ((not is_test or is_dev()) and (is_superadmin() or is_unit_member(unit_id)));
+  using ((not is_test or is_dev()) and (is_superadmin() or (is_unit_member(unit_id) and exists (
+    select 1 from people where id = my_person_id() and access in ('moderator', 'rm')))));
 drop policy if exists apps_insert on apps;
 create policy apps_insert on apps for insert to authenticated with check (is_superadmin());
 drop policy if exists apps_update on apps;

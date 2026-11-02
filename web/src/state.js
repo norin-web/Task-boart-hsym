@@ -87,8 +87,10 @@ export const ACCESS_HINTS = {
 };
 export const REQUEST_TYPES = { new_app: 'New App', update: 'Апдейт', other: 'Задача' };
 export const myAccess = () => (me() || {}).access || 'member';
-/** «Приложения» видят CEO, PM, RM и лиды; сотрудникам — нет. */
-export const seesApps = () => ['superadmin', 'moderator', 'rm', 'lead'].includes(myAccess());
+/** «Приложения» видят только CEO, PM и RM. */
+export const seesApps = () => ['superadmin', 'moderator', 'rm'].includes(myAccess());
+/** Lead и сотрудник видят только свои команды: чужих нет ни в сайдбаре, ни по прямой ссылке. */
+export const ownTeamsOnly = () => ['lead', 'member'].includes(myAccess());
 /** Модератор или супер-админ: управляет юнитами, задачами и людьми. */
 export const isStaff = () => ['superadmin', 'moderator'].includes(myAccess());
 /** Только CEO (супер-админ): роли и доступы, приложения. */

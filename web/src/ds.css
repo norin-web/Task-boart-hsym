@@ -1732,8 +1732,6 @@ body { letter-spacing: -.01em; }
 .pm-problems { padding: 20px 20px 8px; }
 .pm-inbox > .section-head, .pm-problems > .section-head { margin: 0; }
 .pm-inbox > .card-box, .pm-problems > .card-box { margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-.pm-page .ib-row { padding: 0; border-radius: 0; }
-.pm-page .ib-row:hover { background: none; }
 .pm-page .att-list { gap: 0; }
 .pm-page .sec-badge { justify-content: center; min-width: 28px; height: 28px; font-weight: 600; }
 .pm-page .ib-row .uc-icon.md, .pm-page .ib-row .app-img.md, .pm-page .pl-app .uc-icon.md, .pm-page .pl-app .app-img.md { width: 34px; height: 34px; font-size: 14px; font-weight: 600; }
@@ -2573,3 +2571,11 @@ body:has(#modal-root .modal-wrap) #panel-root { visibility: hidden; }
 .panel-side .status-wrap::after { display: none; }
 .panel-side .prop select.inp:disabled { cursor: default; }
 .panel-side .status-wrap:has(select:disabled)::after { display: none; }
+
+/* входящие от CEO: вся строка кликабельна, наведение подсвечивает её целиком */
+.ib-row { position: relative; margin: 0 -8px; padding: 0 8px; border-radius: 12px; cursor: pointer; }
+.ib-row:hover { background: var(--surface-2); }
+.ib-row:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.ib-row + .ib-row { border-top: 0; }
+.ib-row + .ib-row::before { content: ''; position: absolute; top: 0; left: 8px; right: 8px; height: 1px; background: var(--border); }
+.ib-title, .ib-title:hover { text-decoration: none; }

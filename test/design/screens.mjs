@@ -123,7 +123,6 @@ export const SCREENS = [
   { code: 'L08', name: 'Раздать, окно', as: 'lead', route: '#/', act: async p => { await p.evaluate(async () => { const { call } = await import('/src/api.js'); const { S } = await import('/src/state.js'); const { peekTask } = await import('/src/views/task.js'); const r = await call('queryTasks', { assigneeId: S.meId, limit: 50 }); const t = r.find(x => /Иконка/.test(x.title)); await peekTask(t.unitId, t.id); }); await p.waitForSelector('.quick-chip.primary', { state: 'attached' }); await p.evaluate(() => document.querySelector('.quick-chip.primary').click()); await p.waitForTimeout(400); } },
   { code: 'L02', name: 'Моя доска, Lead', as: 'lead', route: '#/board' },
   { code: 'L03', name: 'Мои задачи, Lead', as: 'lead', route: '#/my' },
-  { code: 'L04', name: 'Приложения, Lead', as: 'lead', route: '#/apps' },
   { code: 'L05', name: 'Юнит, Lead', as: 'lead', route: ids => `#/u/${ids.mvp}` },
   { code: 'L06', name: 'Настройки, Lead', as: 'lead', route: '#/settings' },
   { code: 'M10', name: 'Дашборд, сотрудник', as: 'member', route: '#/' },
