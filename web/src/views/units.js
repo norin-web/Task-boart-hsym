@@ -73,6 +73,11 @@ export function openCreateUnit(onCreated) {
   const copy = h('select', { class: 'inp' },
     h('option', { value: '' }, 'Стандартная схема (поле «Приоритет»)'),
     S.units.map(u => h('option', { value: u.id }, `Как в «${u.name}»`)));
+  // PM юнита: из тех, у кого доступ «PM»; если он один — сразу выбран
+  const pms = S.people.filter(p => p.active && p.access === 'moderator');
+  const pmSel = h('select', { class: 'inp', 'aria-label': 'PM юнита' },
+    h('option', { value: '' }, pms.length ? '— выбрать позже —' : 'Нет PM — назначьте в «Люди и доступы»'),
+    pms.map(p => h('option', { value: p.id, selected: pms.length === 1 }, p.name)));
   // ревьюеры по позициям: дизайн — …, разработка — …; по умолчанию — для остальных
   const who = (empty, dept) => personSelect('', null, { empty, dept, label: 'Ревьюер' });
   const byDept = activeDepts().map(d => ({ d, sel: who('— по умолчанию —', d.id) }));
@@ -87,6 +92,7 @@ export function openCreateUnit(onCreated) {
       h('div', { class: 'grid2' }, field('Название', name), field('Ключ задач', key, h('span', null, 'Номера задач: ', keyHint))),
       field('Цвет', color.el),
       field('Описание', desc),
+      field('PM юнита', pmSel, 'PM раскладывает задачи CEO по этапам. Добавить или сменить можно во вкладке «Команда».'),
       field('Поля карточки', copy, 'Можно скопировать настройки полей и колонок из существующего юнита.'),
       field('Ревьюеры по позициям', reviewBox, 'Задача, пришедшая в ревью, станет задачей этого человека. Можно изменить позже в настройках юнита.'),
     ],
@@ -96,7 +102,7 @@ export function openCreateUnit(onCreated) {
       {
         label: 'Создать юнит', primary: true, action: async close => {
           if (!name.value.trim()) { name.focus(); return; }
-          const u = await send('createUnit', { name: name.value, key: key.value, color: color.value(), description: desc.value, copyFieldsFrom: copy.value,
+          const u = await send('createUnit', { name: name.value, key: key.value, color: color.value(), description: desc.value, pmId: pmSel.value, copyFieldsFrom: copy.value,
             review: { byPosition: Object.fromEntries(byDept.filter(x => x.sel.value).map(x => [x.d.id, x.sel.value])), default: dflt.value } });
           S.units.push(u);
           close();

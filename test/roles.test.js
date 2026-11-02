@@ -716,6 +716,17 @@ test('юнит создаётся сразу с ревьюерами по поз
 });
 
 
+test('CEO создаёт юнит сразу с PM, а PM можно добавить в команду из вкладки «Команда»', async () => {
+  const api = await setup();
+  const { mod } = await team(api);
+  const u = await api('createUnit', { name: 'С PM', pmId: mod.id });
+  assert.ok(u.members.some(m => m.personId === mod.id));
+  const v = await api('createUnit', { name: 'Без PM' });
+  assert.equal(v.members.length, 0);
+  await api('setMember', { unitId: v.id, personId: mod.id });
+  assert.ok((await api('getBoard', { unitId: v.id })).members.some(m => m.personId === mod.id));
+});
+
 test('PM собирает команду своего юнита: добавляет и убирает сотрудников, но не чужого юнита и не PM', async () => {
   const api = await setup();
   const { mod, designer, A, B } = await team(api);

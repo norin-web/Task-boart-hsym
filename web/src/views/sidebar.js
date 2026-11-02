@@ -69,7 +69,7 @@ function toggleUnit(id) {
 }
 /** Команды юнита: те, в которых состоят его участники. */
 export const unitTeams = u => {
-  if (myAccess() === 'member') return [];  // у сотрудника только свои задачи: досок команд ему не показываем
+  if (myAccess() === 'member' || myAccess() === 'rm') return [];  // релиз-менеджеру команды не нужны, только юнит; у сотрудника только свои задачи: досок команд ему не показываем
   const ids = new Set((u.members || []).flatMap(id => (personById(id) || {}).teamIds || []));
   const mine = (me() || {}).teamIds || [];
   return activeTeams().filter(t => ids.has(t.id) && (!ownTeamsOnly() || mine.includes(t.id)));

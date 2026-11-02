@@ -1046,7 +1046,12 @@ export function createBackend(db, opts = {}) {
       };
       await run(T('units').insert(unit));
       await insertFields(unit.id, fields);
-      return { ...unitOut(unit), counts: emptyCounts(), members: [] };
+      // PM юнита сразу в команде: без него задачи CEO некому раскладывать
+      const pm = p.pmId ? await one('people', String(p.pmId)) : null;
+      if (pm && pm.access === 'moderator') {
+        await run(T('unit_members').upsert({ unit_id: unit.id, person_id: pm.id, department_id: await validDept(null), created_at: ts }, { onConflict: 'unit_id,person_id' }));
+      }
+      return { ...unitOut(unit), counts: emptyCounts(), members: pm && pm.access === 'moderator' ? await unitMembers(unit.id) : [] };
     },
 
     async updateUnit(p) {

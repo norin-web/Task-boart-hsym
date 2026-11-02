@@ -15,7 +15,7 @@ function tabs(u) {
     seesApps() && ['apps', 'Приложения', 'app', apps],
     ['list', 'Задачи', 'list'],
     ['board', 'Доска', 'board'],
-    !ownTeamsOnly() && ['team', 'Команда', 'users', S.board ? S.board.members.length : 0],
+    !ownTeamsOnly() && (me() || {}).access !== 'rm' && ['team', 'Команда', 'users', S.board ? S.board.members.length : 0],
     isStaff() && !ceoDefault() && ['settings', 'Настройки', 'settings'],
   ].filter(Boolean);
 }
