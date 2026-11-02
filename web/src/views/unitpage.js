@@ -160,20 +160,27 @@ export function renderUnitTeam() {
     fill($('#main'), ...unitHeader('team', [
       canEdit && h('button', { class: 'btn primary', onclick: async () => { if (await addMemberDialog(u.id)) draw(); } }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Участник')),
     ]), h('div', { class: 'view-body' }, body));
+    const row = ({ m, p }) => {
+      const t = mine(p.id), late = t.filter(x => x.dueDate && x.dueDate < today).length;
+      return h('div', { class: 'team-row' },
+        avatar(p, 'sm'),
+        h('b', { class: 'team-who', 'data-pcard': p.id }, p.name),
+        h('span', { class: 'muted team-pos' }, (deptById(m.departmentId) || deptById(p.positionId) || {}).name || '—'),
+        h('span', { class: 'muted team-role' }, ACCESS_LABELS[p.access] || '',
+          p.access === 'lead' && isStaff() && h('button', { class: 'link-btn', style: { marginLeft: '8px' }, title: 'Позиции лида и выданные ему люди', onclick: () => zoneDialog(p) },
+            'зона' + ((zones[p.id] || []).length ? ' · +' + zones[p.id].length : ''))),
+        h('span', { class: 'team-load' }, t.length ? `${t.length} ${plural(t.length, ['задача', 'задачи', 'задач'])}` : null,
+          late > 0 && h('span', { class: 'warn-text' }, ` · просрочено ${late}`),
+          canEdit && (p.access === 'moderator' ? isSuper() : p.access !== 'superadmin') && h('button', { class: 'icon-btn sm', type: 'button', title: p.access === 'moderator' ? 'Убрать PM из юнита' : 'Убрать из команды', 'aria-label': 'Убрать ' + p.name + ' из команды', onclick: () => removeMember(p) }, icon('x', 14))));
+    };
+    const head = () => h('div', { class: 'team-head' }, h('span', null, 'Человек'), h('span', null, 'Позиция'), h('span', null, 'Роль'), h('span', null, 'Задачи в юните'));
+    const isPm = x => ['moderator', 'superadmin'].includes(x.p.access);
+    const pms = rows.filter(isPm), crew = rows.filter(x => !isPm(x));
+    const block = (title, list) => list.length > 0 && h('section', null,
+      h('div', { class: 'section-head' }, h('h2', null, title, h('span', { class: 'muted sec-n' }, list.length))),
+      h('div', { class: 'card-box team-list team-table' }, head(), list.map(row)));
     fill(body, rows.length
-      ? h('div', { class: 'card-box team-list team-table' }, h('div', { class: 'team-head' }, h('span', null, 'Человек'), h('span', null, 'Позиция'), h('span', null, 'Роль'), h('span', null, 'Задачи в юните')), rows.map(({ m, p }) => {
-        const t = mine(p.id), late = t.filter(x => x.dueDate && x.dueDate < today).length;
-        return h('div', { class: 'team-row' },
-          avatar(p, 'sm'),
-          h('b', { class: 'team-who', 'data-pcard': p.id }, p.name),
-          h('span', { class: 'muted team-pos' }, (deptById(m.departmentId) || deptById(p.positionId) || {}).name || '—'),
-          h('span', { class: 'muted team-role' }, ACCESS_LABELS[p.access] || '',
-            p.access === 'lead' && isStaff() && h('button', { class: 'link-btn', style: { marginLeft: '8px' }, title: 'Позиции лида и выданные ему люди', onclick: () => zoneDialog(p) },
-              'зона' + ((zones[p.id] || []).length ? ' · +' + zones[p.id].length : ''))),
-          h('span', { class: 'team-load' }, t.length ? `${t.length} ${plural(t.length, ['задача', 'задачи', 'задач'])}` : h('span', { class: 'muted' }, 'нет задач'),
-            late > 0 && h('span', { class: 'warn-text' }, ` · просрочено ${late}`),
-            canEdit && !['moderator', 'superadmin'].includes(p.access) && h('button', { class: 'icon-btn sm', type: 'button', title: 'Убрать из команды', 'aria-label': 'Убрать ' + p.name + ' из команды', onclick: () => removeMember(p) }, icon('x', 14))));
-      }))
+      ? [pms.length ? block('PM', pms) : h('section', null, h('div', { class: 'section-head' }, h('h2', null, 'PM')), emptyBlock('PM не назначен', { ic: 'users', sub: canEdit ? 'Добавьте через «Участник»' : '' })), block('Команда', crew)]
       : h('div', { class: 'card-box empty-state' }, h('h2', null, 'Команда не собрана'),
         canEdit && h('button', { class: 'btn primary', onclick: async () => { if (await addMemberDialog(u.id)) draw(); } }, icon('plus', 15), 'Добавить участника')));
   };
