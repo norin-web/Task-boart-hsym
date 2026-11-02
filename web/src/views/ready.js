@@ -7,6 +7,7 @@
  */
 import { S, isDev, isStaff, ceoDefault, me, personById, unitById, plural } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, skeleton, modal, toast, menu, confirmDlg } from '../ui.js';
+import Sortable from 'sortablejs';
 import { call, send } from '../api.js';
 import { navigate } from '../router.js';
 import { openAppById, appIcon } from './apps.js';
@@ -189,16 +190,16 @@ function columnsDialog(cols, ids, apply) {
   const list = h('div', { class: 'rd-cols' });
   const draw = () => {
     const off = cols.filter(c => !order.includes(c.id));
-    const row = (c, i) => h('div', { class: 'rd-col-row' },
+    const row = (c, i) => h('div', { class: 'rd-col-row', dataset: { id: c.id } },
+      i != null ? h('span', { class: 'rd-grip', 'aria-hidden': 'true', title: 'Перетащить' }, icon('grip', 14)) : h('span', { class: 'rd-grip off' }),
       h('input', { type: 'checkbox', checked: i != null, 'aria-label': c.name, onchange: e => { order = e.target.checked ? [...order, c.id] : order.filter(x => x !== c.id); draw(); } }),
-      h('span', { class: 'rd-col-name' }, c.name, h('small', { class: 'muted' }, ' · ' + ({ person: 'человек', unit: 'юнит', link: 'ссылка', check: 'галочка', checkbox: 'флажок', select: 'список', number: 'число', date: 'дата', wait: 'срок в очереди', status: 'статус', stage: 'этап', upd: 'апдейт', text: 'текст' }[c.type] || ''))),
-      i != null && h('span', { class: 'rd-col-move' },
-        h('button', { class: 'icon-btn sm', type: 'button', title: 'Выше', disabled: i === 0, onclick: () => { [order[i - 1], order[i]] = [order[i], order[i - 1]]; draw(); } }, icon('chevron', 12)),
-        h('button', { class: 'icon-btn sm rd-down', type: 'button', title: 'Ниже', disabled: i === order.length - 1, onclick: () => { [order[i + 1], order[i]] = [order[i], order[i + 1]]; draw(); } }, icon('chevron', 12))));
+      h('span', { class: 'rd-col-name' }, c.name, h('small', { class: 'muted' }, ' · ' + ({ person: 'человек', unit: 'юнит', link: 'ссылка', check: 'галочка', checkbox: 'флажок', select: 'список', number: 'число', date: 'дата', wait: 'срок в очереди', status: 'статус', stage: 'этап', upd: 'апдейт', text: 'текст' }[c.type] || ''))));
+    const shown = h('div', { class: 'rd-col-shown' }, ...order.map((id, i) => row(cols.find(c => c.id === id), i)));
+    Sortable.create(shown, { handle: '.rd-grip', animation: 150, forceFallback: true, onEnd: e => { const [x] = order.splice(e.oldIndex, 1); order.splice(e.newIndex, 0, x); draw(); } });
     const groups = [...new Set(off.map(c => c.group))];
     fill(list,
       order.length > 0 && h('div', { class: 'rd-col-group' }, 'Показаны'),
-      ...order.map((id, i) => row(cols.find(c => c.id === id), i)),
+      order.length > 0 && shown,
       ...groups.flatMap(g => [h('div', { class: 'rd-col-group' }, g), ...off.filter(c => c.group === g).map(c => row(c, null))]));
   };
   draw();

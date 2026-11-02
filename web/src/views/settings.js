@@ -305,7 +305,7 @@ export function columnsEditor(initial) {
  * ушла дальше или назад — возвращается тому, кто делал её до ревью. Сохраняется сразу.
  */
 export function reviewSection(u = S.board.unit, { bare = false } = {}) {
-  const box = h(bare ? 'div' : 'section', { class: bare ? '' : 'card-box' });
+  const box = h(bare ? 'div' : 'section', { class: bare ? 'rv-flat' : 'card-box rv-flat' });
   const save = async review => {
     const saved = await send('updateUnit', { id: u.id, settings: { ...u.settings, review } });
     u.settings = saved.settings;

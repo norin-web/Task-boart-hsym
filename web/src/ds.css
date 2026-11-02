@@ -2918,3 +2918,19 @@ button.rd-check.on { background: var(--text); border-color: transparent; }
 .am-row:hover { background: var(--surface-2); }
 .am-name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .am-row input { width: 18px; height: 18px; flex: none; accent-color: var(--text); }
+
+.rd-grip { display: inline-flex; width: 16px; flex: none; color: var(--border-strong); cursor: grab; }
+.rd-grip.off { cursor: default; }
+.rd-col-row.sortable-chosen { background: var(--surface-2); border-radius: 10px; }
+
+/* ревью в настройках юнита: без линий и рамок, ровная колонка */
+.rv-flat .rv-list { border: 0; border-radius: 0; overflow: visible; }
+.rv-flat .rv-row, .rv-flat .rv-row:hover, .rv-flat .rv-row + .rv-row, .rv-flat .rv-list .rv-row + .rv-row { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.rv-flat .rv-label { flex: none; width: 220px; font-size: 13px; line-height: 20px; font-weight: 500; }
+.rv-flat .rv-default .rv-label { font-weight: 600; }
+.rv-flat .rv-row .inp { flex: none; width: 260px; max-width: 100%; }
+.rv-flat .sub-title { margin-top: 12px; }
+
+/* колонки доски: карточки не обрезаются жёстко, а мягко уходят под край */
+.col-list { padding: 8px 8px 16px; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 8px, #000 calc(100% - 16px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 8px, #000 calc(100% - 16px), transparent 100%); }
+.lane-cell .col-list { -webkit-mask-image: none; mask-image: none; padding: 2px 8px 4px; }
