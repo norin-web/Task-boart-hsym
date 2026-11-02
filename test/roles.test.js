@@ -255,7 +255,8 @@ test('несколько позиций, приоритет — только а�
 
 test('ревью: ревьюер по позиции из настроек юнита важнее того, кто поставил задачу (PM)', async () => {
   const api = await setup();
-  const { mod, designer, dev, A } = await team(api);
+  const { mod, designer, dev, A, link } = await team(api);
+  await api('updateField', { id: link.id, required: false });
   const st = (await api('getBoard', { unitId: A.id })).unit.settings;
   const prog = st.columns.find(c => c.kind === 'progress').id;
   await api('updateUnit', { id: A.id, settings: { ...st, review: { column: st.review.column || 'review', byPosition: { d_ios: designer.id }, default: '' } } });
