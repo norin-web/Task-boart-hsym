@@ -2752,3 +2752,15 @@ body:has(#modal-root .modal-wrap) #panel-root { visibility: hidden; }
 }
 .ch-actions .btn { height: 40px; padding: 0 20px; }
 .ch-actions .btn.danger-text { padding: 0 14px; }
+
+/* Меню аккаунта в сайдбаре: не шире колонки, цвета для белой карточки */
+.inline-menu.menu.me-menu { min-width: 0; width: 100%; box-sizing: border-box; }
+.inline-menu .me-card small, .inline-menu .menu-label { color: var(--muted); }
+.inline-menu .menu-sep { background: var(--border); }
+.inline-menu .menu-item.danger, .inline-menu .menu-item.danger .i { color: var(--danger); }
+.inline-menu .me-card-text b { color: var(--text); }
+
+/* Длинное содержимое окна скроллится целиком, а не обрезает блок с overflow: hidden (список людей и т.п.) */
+.modal-body { grid-auto-rows: max-content; }
+.inline-menu.me-menu .menu-item { white-space: nowrap; }
+.inline-menu.me-menu .me-card-text small { overflow: hidden; text-overflow: ellipsis; }

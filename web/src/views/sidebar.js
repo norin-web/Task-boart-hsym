@@ -236,14 +236,14 @@ function meMenuPanel() {
   return h('div', { class: 'menu inline-menu me-menu', role: 'menu', onclick: e => e.stopPropagation() },
     renderMenuItems([
       p && h('button', { class: 'menu-item me-card', role: 'menuitem', onclick: () => { closeMe(); openMyProfile(); } },
-        avatar(p), h('span', { class: 'me-card-text' }, h('b', null, email || p.name), h('small', { class: 'muted' }, ACCESS_LABELS[p.access] + ' · открыть профиль'))),
+        avatar(p), h('span', { class: 'me-card-text' }, h('b', null, email || p.name), h('small', { class: 'muted' }, ACCESS_LABELS[p.access] + ' · профиль'))),
       { sep: true },
       { label: 'Настройки', icon: 'settings', action: () => { closeMe(); navigate({ view: 'settings' }); } },
       { label: 'Горячие клавиши', icon: 'keyboard', action: () => { closeMe(); import('./people.js').then(m => m.openShortcuts()); } },
       mode === 'local' && { title: 'Локальный режим: данные только в этом браузере' },
       mode === 'local' && { label: 'Войти как…', icon: 'users', action: () => { closeMe(); openActAs(); } },
       mode === 'local' && { sep: true },
-      mode === 'local' && { label: 'Очистить локальную базу', icon: 'trash', danger: true, action: () => { closeMe(); resetLocal(); } },
+      mode === 'local' && { label: 'Очистить базу', icon: 'trash', danger: true, action: () => { closeMe(); resetLocal(); } },
       mode === 'supabase' && { sep: true },
       mode === 'supabase' && { label: 'Выйти', icon: 'back', danger: true, action: () => supabase.auth.signOut() },
     ]));
