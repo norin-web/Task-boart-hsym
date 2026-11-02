@@ -127,7 +127,7 @@ export function renderSettings() {
           h('button', { class: 'btn', onclick: () => { archiveUnit(unitById(u.id) || u, !u.archived); renderSettings(); } }, u.archived ? 'Вернуть из архива' : 'В архив'),
           h('button', { class: 'btn danger solid', onclick: () => deleteUnit(unitById(u.id) || u) }, 'Удалить юнит')))),
 
-      h('div', { class: 'us-wide' }, isSuper() && teamSection(), flowSection(u)))));
+      h('div', { class: 'us-wide' }, isSuper() && teamSection(), reviewSection(u), flowSection(u)))));
 
   if (active.length > 1) {
     Sortable.create(fieldList, {
