@@ -2940,3 +2940,8 @@ button.rd-check.on { background: var(--text); border-color: transparent; }
 
 .opt-grip { display: inline-flex; flex: none; color: var(--border-strong); cursor: grab; }
 .modal.dlg .opt-row .icon-btn { width: 24px; height: 24px; }
+
+/* строка «Приложений пока нет»: текст и кнопки на одной линии, кнопки одного размера */
+.empty-state.sm { gap: 16px; flex-wrap: wrap; }
+.empty-state.sm .row { align-items: center; }
+.empty-state.sm .btn { margin-top: 0; height: 32px; padding: 0 14px; font-size: 13px; line-height: 20px; }
