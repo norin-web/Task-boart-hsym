@@ -1,6 +1,12 @@
 /**
- * Демо-процесс: 10 приложений уже в App Store, одно в разработке (разложено по этапам, идёт дизайн) и одно на ревью Apple.
- * Всё остальное — без шума: ни лишних задач, ни реджектов.
+ * Тестовый процесс: ветки по ролям, у каждой — задачи на трёх стадиях (бэклог / в работе / на выходе).
+ *   A  CEO ставит и сам раскладывает         (3 приложения: запрос → разработка → очередь релиза)
+ *   B  CEO ставит на PM, PM раскладывает     (3 приложения: входящее → разработка → отправлено в Apple)
+ *   C  PM получил устно, ставит на команду   (3 задачи на доске: к выполнению / в работе / в ревью)
+ *   D  задача у лида                          (3 задачи: у лида; одна раздана сотрудникам)
+ *   E  задачи сотрудников                     (3 задачи на доске)
+ *   R  релиз-менеджер                         (очередь, заполняет, на ревью Apple, реджект, 3 в сторе)
+ *   флоу реджекта (реджект → правка → отправили снова) и флоу апдейта (запрос «Апдейт» у вышедшего приложения)
  *   seedDemo()    — пустая локальная база: юниты Gold / RF / MVP, люди и процесс (обычные данные).
  *   seedProcess() — режим разработчика: тот же процесс поверх текущей базы, всё с пометкой «тест»
  *                   (недостающих людей и юниты добавляет). Только локальный режим.
@@ -23,13 +29,6 @@ const STORE = {
   'CARROT Weather: Alerts & Radar': { storeUrl: 'https://apps.apple.com/us/app/carrot-weather-alerts-radar/id961390574', iconUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/0c/6e/8c/0c6e8c1d-b032-899e-4093-9a46af46d645/AppIcon-0-0-1x_U007epad-0-0-0-1-0-0-sRGB-0-85-220.png/512x512bb.jpg' },
   'Streaks': { storeUrl: 'https://apps.apple.com/us/app/streaks/id963034692', iconUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/80/c5/78/80c57847-4c05-f8b4-1a8b-3e42423e4392/orange_normal-0-0-1x_U007epad-0-1-0-85-220.png/512x512bb.jpg' },
 };
-
-/** Уже в App Store: название → юнит и цвет. */
-const LIVE = [
-  ['Sleep Cycle - Tracker & Sounds', 'GLD', '#6366f1'], ['Calm', 'GLD', '#14b8a6'], ['Headspace: Sleep & Meditation', 'GLD', '#f59e0b'], ['Flo Cycle & Period Tracker', 'GLD', '#ec4899'],
-  ['Forest: Focus for Productivity', 'RF', '#10b981'], ['Overcast Podcast App', 'RF', '#ef4444'], ['Fantastical Calendar', 'RF', '#0ea5e9'],
-  ['Things 3', 'MVP', '#3b82f6'], ['Day One: Daily Journal & Diary', 'MVP', '#8b5cf6'], ['Bear Markdown Notes & Journal', 'MVP', '#64748b'],
-];
 
 const day = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 
@@ -138,6 +137,7 @@ async function runProcess(api, P, U, test) {
   const act = (who, method, payload) => api(method, payload, P[who].id);
   const set = (id, patch, who) => act(who, 'updateTask', { id, patch });
   const move = (id, status, who) => set(id, { status }, who);
+  const PM = { GLD: 'oleg', RF: 'kate', MVP: 'kate' };
   /** Закрыть этап как положено: чеклист закрыт, исполнитель — на ревью, PM юнита — «Аппрув». */
   const close = async (stage, who, pm) => {
     if ((stage.checklist || []).length) await set(stage.id, { checklist: stage.checklist.map(i => ({ ...i, done: true })) }, who);
@@ -145,36 +145,120 @@ async function runProcess(api, P, U, test) {
     await move(stage.id, 'review', who).catch(() => null);
     await act(pm, 'reviewDecision', { taskId: stage.id, approve: true });
   };
-  const app = (name, unit, color, extra = {}) => act('anna', 'createApp', { name, unitId: U[unit].id, color, test, ...STORE[name], ...extra });
-  const steps = async (requestId, pm) => Object.fromEntries((await act(pm, 'decomposeRequest', { taskId: requestId })).map(t => [t.step, t]));
+  const slug = name => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const linksOf = name => ({ design: ['lf_figma', `https://figma.com/design/${slug(name)}`], ios: ['lf_github', `https://github.com/studio/${slug(name)}`],
+    meta: ['lf_meta', `https://docs.google.com/document/d/${slug(name)}-texts`], retext: ['lf_drive', `https://drive.google.com/drive/folders/${slug(name)}-sources`],
+    l10n: ['lf_l10n', `https://docs.google.com/spreadsheets/d/${slug(name)}-l10n`] });
+  const worker = (P, id) => Object.keys(P).find(k => P[k].id === id) || 'anna';
   let apps = 0;
 
-  // 10 приложений уже в App Store: без запросов и задач
-  for (const [name, unit, color] of LIVE) {
-    await app(name, unit, color, { status: 'live', noRequest: true });
+  /**
+   * Приложение по ветке: until — докуда довести.
+   *   inbox  — запрос поставлен, не разложен        dev    — дизайн готов, iOS в работе
+   *   queue  — все этапы закрыты, релиз передан RM  fill   — RM заполняет релиз (поля, чеклист)
+   *   apple  — отправлено в Apple                   reject — Apple отклонил (задача PM «Реджект №1»)
+   *   fixed  — реджект исправлен, отправили снова   live   — вышло в App Store
+   * by — кто раскладывает запрос (anna — CEO сам, иначе PM юнита).
+   */
+  const ship = async (name, unit, color, until, { by, priority, due, description, requestTitle } = {}) => {
+    const pm = PM[unit];
+    const a = await act('anna', 'createApp', { name, unitId: U[unit].id, color, test, ...STORE[name], priority, dueDate: due, description, requestTitle });
     apps++;
-  }
+    if (until === 'inbox') return { app: a.app, request: a.request };
+    const who = by || pm;
+    const s = Object.fromEntries((await act(who, 'decomposeRequest', { taskId: a.request.id })).map(t => [t.step, t]));
+    for (const [k, [fieldId, url]] of Object.entries(linksOf(name))) await act('anna', 'setTaskLink', { taskId: s[k].id, fieldId, url });
+    const dev = s.design;
+    await set(dev.id, { checklist: dev.checklist.map((i, n) => ({ ...i, done: until !== 'design' ? true : n === 0 })) }, who).catch(() => null);
+    if (until === 'design') { await move(dev.id, 'in_progress', worker(P, dev.assigneeId || P[pm].id)); return { app: a.app, request: a.request, s }; }
+    const keys = until === 'dev' ? ['design'] : ['design', 'ios', 'qa', 'meta', 'retext', 'l10n'];
+    for (const k of keys) await close(s[k], s[k].assigneeId ? worker(P, s[k].assigneeId) : pm, pm);
+    if (until === 'dev') { await move(s.ios.id, 'in_progress', worker(P, s.ios.assigneeId || P[pm].id)); return { app: a.app, request: a.request, s }; }
+    await act(who, 'sendToRelease', { taskId: s.release.id });
+    if (until === 'queue') return { app: a.app, request: a.request, s };
+    await act('sergey', 'saveReleaseValues', { taskId: s.release.id, values: { version: '1.0', build: String(100 + apps), whatsnew: 'Первый выпуск' } });
+    if (until === 'fill') { await set(s.release.id, { checklist: ['Скриншоты и метаданные', 'Покупки в песочнице', 'Политика и условия'].map((text, n) => ({ text, done: n === 0 })) }, 'sergey'); return { app: a.app, request: a.request, s }; }
+    await set(s.release.id, { checklist: ['Скриншоты и метаданные', 'Покупки в песочнице', 'Политика и условия'].map(text => ({ text, done: true })) }, 'sergey');
+    await act('sergey', 'releaseStep', { taskId: s.release.id, action: 'submit' });
+    if (until === 'apple') return { app: a.app, request: a.request, s };
+    if (until === 'live') { await act('sergey', 'releaseStep', { taskId: s.release.id, action: 'live' }); return { app: a.app, request: a.request, s }; }
+    const rej = await act('sergey', 'releaseStep', { taskId: s.release.id, action: 'reject', reason: '2.1 Performance: приложение падает при открытии пейволла на iPhone 15' });
+    if (until === 'reject') return { app: a.app, request: a.request, s, rej };
+    // fixed: PM закрывает задачу «Реджект №1», RM отправляет снова
+    await move(rej.rejectRequestId, 'done', pm);
+    await act('sergey', 'releaseStep', { taskId: s.release.id, action: 'resubmit' });
+    return { app: a.app, request: a.request, s, rej };
+  };
 
-  // Ревью Apple: вся разработка позади, RM отправил сборку и ждёт ответа
-  const wx = await app('CARROT Weather: Alerts & Radar', 'RF', '#0ea5e9', { requestTitle: 'Старт приложения', priority: 'o_high' });
-  apps++;
-  const s = await steps(wx.request.id, 'kate');
-  const links = { design: ['lf_figma', 'https://figma.com/design/carrot-weather'], ios: ['lf_github', 'https://github.com/studio/carrot-weather'],
-    meta: ['lf_meta', 'https://docs.google.com/document/d/carrot-weather-texts'], retext: ['lf_drive', 'https://drive.google.com/drive/folders/carrot-weather-sources'], l10n: ['lf_l10n', 'https://docs.google.com/spreadsheets/d/carrot-weather-l10n'] };
-  for (const [k, [fieldId, url]] of Object.entries(links)) await act('anna', 'setTaskLink', { taskId: s[k].id, fieldId, url });
-  for (const k of ['design', 'ios', 'qa', 'meta', 'retext', 'l10n']) await close(s[k], s[k].assigneeId ? keyOf(P, s[k].assigneeId) : 'kate', 'kate');
-  await act('kate', 'sendToRelease', { taskId: s.release.id });
-  await act('sergey', 'saveReleaseValues', { taskId: s.release.id, values: { version: '1.0', build: '101', whatsnew: 'Первый выпуск' } });
-  await set(s.release.id, { checklist: ['Скриншоты и метаданные', 'Покупки в песочнице', 'Политика и условия'].map(text => ({ text, done: true })) }, 'sergey');
-  await act('sergey', 'releaseStep', { taskId: s.release.id, action: 'submit' });
+  // ── A. CEO ставит и сам раскладывает: GLD (PM юнита — Олег, но запрос ведёт CEO)
+  await ship('Calm', 'GLD', '#14b8a6', 'inbox', { requestTitle: 'New App: Calm — запрос CEO', description: 'Ветка A: CEO поставил запрос, пока не разложен.' });
+  await ship('Headspace: Sleep & Meditation', 'GLD', '#f59e0b', 'dev', { by: 'anna', priority: 'o_high', due: day(30), description: 'Ветка A: CEO сам разложил запрос; дизайн готов, iOS в работе.' });
+  await ship('Sleep Cycle - Tracker & Sounds', 'GLD', '#6366f1', 'queue', { by: 'anna', description: 'Ветка A: все этапы закрыты, релиз ждёт RM.' });
 
-  // В разработке: запрос разложен по всем этапам, идёт первый — дизайн (онбординг готов), остальные ждут
-  const streaks = await app('Streaks', 'MVP', '#f59e0b', { dueDate: day(45), description: 'Трекер привычек: стрики, напоминания, виджеты.' });
-  apps++;
-  const d = await steps(streaks.request.id, 'kate');
-  await set(d.design.id, { assigneeId: P.julia.id, checklist: d.design.checklist.map((i, n) => ({ ...i, done: n === 0 })) }, 'kate');
-  await move(d.design.id, 'in_progress', 'julia');
+  // ── B. CEO ставит на PM, PM раскладывает: RF (Екатерина)
+  await ship('Forest: Focus for Productivity', 'RF', '#10b981', 'inbox', { description: 'Ветка B: запрос во входящих PM, не разложен.' });
+  await ship('Overcast Podcast App', 'RF', '#ef4444', 'dev', { priority: 'o_high', due: day(21), description: 'Ветка B: PM разложил по этапам; дизайн готов, iOS в работе.' });
+  await ship('Fantastical Calendar', 'RF', '#0ea5e9', 'apple', { description: 'Ветка B: PM передал в релиз, сборка в ревью Apple.' });
+
+  // ── R. Релиз-менеджер: очередь / заполняет / Apple / реджект / в сторе ×3
+  await ship('Things 3', 'MVP', '#3b82f6', 'queue', { description: 'Ветка RM: релиз передан, RM ещё не начал.' });
+  await ship('Day One: Daily Journal & Diary', 'MVP', '#8b5cf6', 'fill', { description: 'Ветка RM: поля заполнены, чеклист в процессе.' });
+  await ship('Bear Markdown Notes & Journal', 'MVP', '#64748b', 'apple', { description: 'Ветка RM: отправлено в Apple, ждём ответ.' });
+  await ship('Flo Cycle & Period Tracker', 'GLD', '#ec4899', 'reject', { description: 'Ветка RM / флоу реджекта: Apple отклонил, у PM задача «Реджект №1».' });
+  // флоу реджекта до конца: отклонили → исправили → отправили снова
+  await ship('Todoist', 'RF', '#ef4444', 'fixed', { description: 'Флоу реджекта: реджект №1 исправлен, RM отправил сборку снова.' });
+  const live1 = await ship('CARROT Weather: Alerts & Radar', 'RF', '#0ea5e9', 'live', { description: 'Ветка RM: вышло в App Store.' });
+  const live2 = await ship('Streaks', 'MVP', '#f59e0b', 'live', { description: 'Ветка RM: вышло в App Store.' });
+  await ship('Notability', 'GLD', '#6366f1', 'live', { description: 'Ветка RM: вышло в App Store.' });
+
+  // ── Флоу апдейта: у вышедшего приложения запрос «Апдейт» (дизайн → iOS → тесты → релиз)
+  const update = async (a, unit, until) => {
+    const pm = PM[unit];
+    const r = await act('anna', 'createRequest', { appId: a.id, type: 'update', title: `Апдейт 1.1: ${a.name}`, description: 'Новые виджеты и правки пейволла.', dueDate: day(14), pmId: P[pm].id });
+    const s = Object.fromEntries((await act(pm, 'decomposeRequest', { taskId: r.id })).map(t => [t.step, t]));
+    await close(s.design, s.design.assigneeId ? worker(P, s.design.assigneeId) : pm, pm);
+    if (until === 'dev') { await move(s.ios.id, 'in_progress', worker(P, s.ios.assigneeId || P[pm].id)); return; }
+    for (const k of ['ios', 'qa']) await close(s[k], s[k].assigneeId ? worker(P, s[k].assigneeId) : pm, pm);
+    await act(pm, 'sendToRelease', { taskId: s.release.id });
+    await act('sergey', 'saveReleaseValues', { taskId: s.release.id, values: { version: '1.1', build: '210', whatsnew: 'Виджеты и исправления' } });
+    await set(s.release.id, { checklist: ['Скриншоты и метаданные', 'Покупки в песочнице', 'Политика и условия'].map(text => ({ text, done: true })) }, 'sergey');
+    await act('sergey', 'releaseStep', { taskId: s.release.id, action: 'submit' });
+    if (until === 'live') await act('sergey', 'releaseStep', { taskId: s.release.id, action: 'live' });
+  };
+  await update(live1.app, 'RF', 'dev');   // апдейт в работе
+  await update(live2.app, 'MVP', 'live'); // апдейт прошёл весь путь и вышел
+
+  // ── Обычные задачи на доске юнита: к выполнению / в работе / в ревью
+  const task = (unit, who, title, assignee, extra = {}) => act(who, 'createTask', { unitId: U[unit].id, title, assigneeId: P[assignee].id, test, ...extra });
+  const trio = async (unit, who, rows) => {
+    const made = [];
+    for (const [title, assignee, state, extra] of rows) {
+      const t = await task(unit, who, title, assignee, extra);
+      if (state !== 'todo') await move(t.id, 'in_progress', assignee);
+      if (state === 'review') await move(t.id, 'review', assignee);
+      made.push(t);
+    }
+    return made;
+  };
+  // C. PM получил устно и ставит на команду (MVP, Екатерина)
+  await trio('MVP', 'kate', [
+    ['Поправить копирайт на экране оплаты', 'julia', 'todo', { dueDate: day(5), description: 'Ветка C: PM получил задачу устно.' }],
+    ['Обновить иконки таб-бара', 'julia', 'progress', { dueDate: day(3), description: 'Ветка C: PM получил задачу устно.' }],
+    ['Исправить переход с онбординга на пейволл', 'alex', 'review', { dueDate: day(2), description: 'Ветка C: PM получил задачу устно.' }],
+  ]);
+  // D. Задача у лида iOS (GLD): одну из них лид раздаёт сотрудникам
+  await trio('GLD', 'oleg', [
+    ['Оценить миграцию на SwiftData', 'dima', 'todo', { dueDate: day(10), description: 'Ветка D: задача у лида.' }],
+    ['Подготовить релизную ветку 2.4', 'dima', 'progress', { dueDate: day(6), description: 'Ветка D: лид раздаёт сотрудникам.' }],
+    ['Ревью архитектуры нового модуля', 'dima', 'review', { dueDate: day(4), description: 'Ветка D: задача у лида.' }],
+  ]);
+  // лид сам ставит подзадачи сотруднику (раздача через splitTask требует настоящего входа, в демо — обычные задачи)
+  for (const [title, due] of [['Собрать changelog релиза 2.4', 4], ['Прогнать smoke-тесты на сборке', 5]]) await task('GLD', 'dima', title, 'alex', { dueDate: day(due), description: 'Ветка D: лид раздал сотруднику.' });
+  // E. Задачи сотрудников (GLD)
+  await trio('GLD', 'oleg', [
+    ['Нарисовать пустое состояние списка', 'julia', 'todo', { dueDate: day(7), description: 'Ветка E: задача сотрудника.' }],
+    ['Реализовать виджет «Сегодня»', 'alex', 'progress', { dueDate: day(8), description: 'Ветка E: задача сотрудника.' }],
+    ['Написать тест-кейсы на покупки', 'ira', 'review', { dueDate: day(3), description: 'Ветка E: задача сотрудника.' }],
+  ]);
   return apps;
 }
-
-const keyOf = (P, id) => Object.keys(P).find(k => P[k].id === id) || 'anna';
