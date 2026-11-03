@@ -1,4 +1,4 @@
--- Fix-encoding v4: repairs Russian text stored as mojibake. Pure ASCII, safe to copy/paste and to run repeatedly.
+-- Fix-encoding v5: repairs Russian text stored as mojibake. Pure ASCII, safe to copy/paste and to run repeatedly.
 -- Run in Supabase -> SQL Editor. The LAST statement returns a table of what was fixed (or errors) - send it if anything is still broken.
 
 drop table if exists public._fix_log;
@@ -22,20 +22,25 @@ exception when others then
   return t;
 end $f$;
 
+-- direct fix of settings (statuses, fields, ...) without any dynamic SQL
+update public.app_settings set value = public._fix_mojibake(value::text)::jsonb
+  where public._fix_mojibake(value::text) is distinct from value::text;
+insert into public._fix_log select 'app_settings', 'value (direct)', 0, null;
+
 do $$
 declare c record; n bigint;
 begin
   for c in
     select table_name t, column_name col, data_type dt from information_schema.columns
      where table_schema = 'public' and data_type in ('text', 'character varying', 'jsonb', 'json')
-       and table_name not in ('tasks', 'comments', 'activity', 'notifications', '_fix_log')
+       and table_name not in ('tasks', 'comments', 'activity', 'notifications', '_fix_log', 'app_settings')
        and table_name in (select table_name from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE')
   loop
     begin
       if c.dt in ('jsonb', 'json') then
-        execute format('update public.%I set %I = public._fix_mojibake(%I::text)::%s where %I::text ~ ''[\u2013\u2014]'' and public._fix_mojibake(%I::text) is distinct from %I::text', c.t, c.col, c.col, c.dt, c.col, c.col, c.col);
+        execute format('update public.%I set %I = public._fix_mojibake(%I::text)::%s where public._fix_mojibake(%I::text) is distinct from %I::text', c.t, c.col, c.col, c.dt, c.col, c.col);
       else
-        execute format('update public.%I set %I = public._fix_mojibake(%I) where %I ~ ''[\u2013\u2014]'' and public._fix_mojibake(%I) is distinct from %I', c.t, c.col, c.col, c.col, c.col, c.col);
+        execute format('update public.%I set %I = public._fix_mojibake(%I) where public._fix_mojibake(%I) is distinct from %I', c.t, c.col, c.col, c.col, c.col);
       end if;
       get diagnostics n = row_count;
       if n > 0 then insert into public._fix_log values (c.t, c.col, n, null); end if;
