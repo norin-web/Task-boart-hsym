@@ -587,6 +587,14 @@ function openQuickAdd(status, dept) {
   renderTasks();
 }
 
+// клик мимо пустого поля быстрого создания закрывает его
+document.addEventListener('mousedown', e => {
+  if (!S.quick || !S.quick.status || S.quick.text.trim() || !S.board) return;
+  if (e.target.closest('.quick, .quick-btn, .col-head, .modal, .menu')) return;
+  S.quick = { status: null, dept: null, text: '' };
+  renderTasks();
+});
+
 function quickAddEl(status, dept, compact) {
   if (!isStaff()) return null;
   if (S.quick.status !== status || S.quick.dept !== dept) {
@@ -615,14 +623,18 @@ function submitQuick(status, dept) {
   S.quick.text = '';
   const unitId = S.board.unit.id;
   const departmentId = dept || (S.filters.depts.length === 1 ? S.filters.depts[0] : '');
+  // на доске команды видны только задачи её людей: новая достаётся мне (если я в команде) или первому человеку команды
+  const team = teamById(S.route.team);
+  const crew = team ? teamPeople(team) : [];
+  const assignee = team ? (crew.find(p => p.id === S.meId) || crew[0] || {}).id || '' : '';
   const t = {
     id: 'tmp_' + Math.random().toString(36).slice(2), _temp: true, unitId, num: 0, title, description: '',
-    status, assigneeId: '', departmentId, dueDate: '', fields: {}, checklist: [], archived: false, updatedAt: '', commentCount: 0,
+    status, assigneeId: assignee, departmentId, dueDate: '', fields: {}, checklist: [], archived: false, updatedAt: '', commentCount: 0,
     order: maxOrder(S.board.tasks.filter(x => x.status === status)) + 1,
   };
   S.board.tasks.push(t);
   renderTasks();
-  send('createTask', { unitId, title, status, departmentId }, real => {
+  send('createTask', { unitId, title, status, departmentId, ...(assignee ? { assigneeId: assignee } : {}) }, real => {
     Object.assign(t, real);
     delete t._temp;
     if (S.board && S.board.unit.id === unitId) renderTasks();
