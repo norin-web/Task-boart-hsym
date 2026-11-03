@@ -164,8 +164,18 @@ async function demoScenario(closePanel) {
       const have = new Set((boot.apps || []).filter(a => a.unitId === unit.id).map(a => a.name));
       for (const [name, status, , storeUrl] of DEMO_APPS) {
         if (have.has(name)) continue;
-        const made = await call('createApp', { name, unitId: unit.id, status, test: true, storeUrl, noRequest: status !== 'dev', ...(pm ? { pmId: pm.id } : {}) });
-        if (status === 'dev' && made.request) await call('decomposeRequest', { taskId: made.request.id });
+        const made = await call('createApp', { name, unitId: unit.id, status, test: true, storeUrl, ...(pm ? { pmId: pm.id } : {}) });
+        if (!made.request) continue;
+        const stages = await call('decomposeRequest', { taskId: made.request.id });
+        if (status === 'dev') continue;
+        // в сторе / готово к ревью: этапы закрыты; у «готово к ревью» релиз стоит в очереди у релиз-менеджера
+        for (const st of stages) {
+          if (st.step === 'release' && status !== 'live') continue;
+          await call('updateTask', { id: st.id, patch: { status: 'done' } }).catch(() => null);
+        }
+        const rel = stages.find(st => st.step === 'release');
+        if (rel && status !== 'live') await call('sendToRelease', { taskId: rel.id }).catch(() => null);
+        if (status === 'live') await call('updateTask', { id: made.request.id, patch: { status: 'done' } }).catch(() => null);
       }
     });
     toast('Демо-версия готова');
