@@ -4,7 +4,7 @@
  * Всё, что создают шорткаты, помечено «тест»: реальные люди этого не видят и уведомлений не получают.
  * Шорткаты добавляются в SHORTCUTS.
  */
-import { S, LS, ACCESS_LABELS, ACCESS_HINTS, personById, unitById, isDev, deptById } from '../state.js';
+import { S, LS, ACCESS_LABELS, ACCESS_HINTS, personById, unitById, isDev, deptById, activeDepts } from '../state.js';
 import { $, h, icon, avatar, modal, field, toast, showErr, confirmDlg, fill, topbar } from '../ui.js';
 import { call } from '../api.js';
 import { mode, localLogin, asSystem } from '../data.js';
@@ -22,6 +22,11 @@ const SHORTCUTS = [
     id: 'new_app', title: 'New App', icon: 'rocket',
     hint: 'CEO создаёт приложение → запрос PM юнита → PM раскладывает по флоу → этапы назначены исполнителям',
     run: newAppScenario,
+  },
+  {
+    id: 'demo', title: 'Демо-версия', icon: 'users',
+    hint: 'Юнит «Demo», по сотруднику на каждую позицию и три приложения: в сторе, в работе, готово к ревью',
+    run: demoScenario,
   },
   {
     id: 'process', title: 'Демо-процесс', icon: 'layers', localOnly: true,
@@ -120,6 +125,45 @@ async function processScenario(closePanel) {
     const { seedProcess } = await import('../demo.js');
     const n = await seedProcess();
     toast(`Демо-процесс готов: ${n} приложений`);
+    setTimeout(() => { location.hash = '#/apps'; location.reload(); }, 700);
+  } catch (e) { showErr(e); }
+}
+
+/** Демо-версия: юнит, по человеку на позицию (профили без входа — смотреть через «Смотреть как») и три приложения. Работает и на проде. */
+const DEMO_APPS = [
+  ['Calm', 'live', 'В сторе', 'https://apps.apple.com/us/app/calm/id571800810'],
+  ['Forest: Focus for Productivity', 'dev', 'В работе', 'https://apps.apple.com/us/app/forest-focus-for-productivity/id866450515'],
+  ['Things 3', 'release', 'Готово к ревью', 'https://apps.apple.com/us/app/things-3/id904237743'],
+];
+async function demoScenario(closePanel) {
+  const depts = activeDepts();
+  if (!(await confirmDlg(`Добавить демо-версию: юнит «Demo», ${depts.length} сотрудников (по одному на позицию, без входа) и 3 приложения — в сторе, в работе, готово к ревью. Приложения удаляются кнопкой «Удалить тестовые данные»; людей и юнит — вручную.`, { ok: 'Добавить', title: 'Демо-версия' }))) return;
+  if (closePanel) closePanel();
+  toast('Собираем демо-версию…');
+  try {
+    await asDev(async () => {
+      const boot = await call('bootstrap', {});
+      const people = boot.people || [];
+      // человек на позицию: PM — модератор, релиз — RM, остальные — участники; уже созданные берём по имени
+      const staff = [];
+      for (const d of depts) {
+        const name = `Демо · ${d.name}`;
+        const access = d.id === 'd_po' ? 'moderator' : d.id === 'd_release' ? 'rm' : 'member';
+        const p = people.find(x => x.name === name) || await call('createPerson', { name, role: d.name, access, positionId: d.id });
+        staff.push({ p, d });
+      }
+      const pm = (staff.find(x => x.d.id === 'd_po') || {}).p;
+      let unit = (boot.units || []).find(u => u.key === 'DEMO' && !u.archived);
+      if (!unit) unit = await call('createUnit', { name: 'Demo', key: 'DEMO', color: '#0ea5e9', description: 'Демо-версия: люди по позициям и приложения на разных стадиях', ...(pm ? { pmId: pm.id, review: { default: pm.id } } : {}) });
+      for (const { p, d } of staff) await call('setMember', { unitId: unit.id, personId: p.id, departmentId: d.id });
+      const have = new Set((boot.apps || []).filter(a => a.unitId === unit.id).map(a => a.name));
+      for (const [name, status, , storeUrl] of DEMO_APPS) {
+        if (have.has(name)) continue;
+        const made = await call('createApp', { name, unitId: unit.id, status, test: true, storeUrl, noRequest: status !== 'dev', ...(pm ? { pmId: pm.id } : {}) });
+        if (status === 'dev' && made.request) await call('decomposeRequest', { taskId: made.request.id });
+      }
+    });
+    toast('Демо-версия готова');
     setTimeout(() => { location.hash = '#/apps'; location.reload(); }, 700);
   } catch (e) { showErr(e); }
 }
