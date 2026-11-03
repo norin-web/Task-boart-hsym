@@ -134,7 +134,7 @@ async function setupUnits(api, P, U) {
  * Сам процесс. test — всё с пометкой «тест» (режим разработчика). Возвращает число созданных приложений.
  * Кто что делает — от имени этого человека (actorId), права обходит системный режим.
  */
-async function runProcess(api, P, U, test) {
+export async function runProcess(api, P, U, test) {
   const act = (who, method, payload) => api(method, payload, P[who].id);
   const set = (id, patch, who) => act(who, 'updateTask', { id, patch });
   const move = (id, status, who) => set(id, { status }, who);
@@ -283,5 +283,23 @@ async function runProcess(api, P, U, test) {
     ['Реализовать виджет «Сегодня»', 'alex', 'progress', { dueDate: day(8), description: 'Ветка E: задача сотрудника.' }],
     ['Написать тест-кейсы на покупки', 'ira', 'review', { dueDate: day(3), description: 'Ветка E: задача сотрудника.' }],
   ]);
+  // чтобы у лидов дизайна, QA и ASO тоже была очередь ревью и загрузка людей
+  await trio('GLD', 'oleg', [
+    ['Нарисовать иконки для виджетов', 'julia', 'review', { dueDate: day(1), description: 'Ревью у лида дизайна.' }],
+    ['Макет экрана подписки', 'julia', 'progress', { dueDate: day(6), description: 'Задача дизайнера в работе.' }],
+    ['Подготовить скриншоты для App Store', 'pavel', 'review', { dueDate: day(2), description: 'Ревью у лида ASO.' }],
+    ['Описание и ключевые слова для ASO', 'pavel', 'progress', { dueDate: day(4), description: 'Задача ASO в работе.' }],
+    ['Регресс-тест перед релизом', 'ira', 'progress', { dueDate: day(1), description: 'Задача тестировщика в работе.' }],
+  ]);
+  // F. Для дашбордов: просрочка и решения ревью (принято / вернули) — у сотрудников видно, куда кликать
+  await task('GLD', 'oleg', 'Согласовать тексты пейволла', 'julia', { dueDate: day(-3), description: 'Просрочено: у сотрудника и в «Требует внимания».' });
+  const late = await task('GLD', 'oleg', 'Собрать сборку для тестировщиков', 'alex', { dueDate: day(-1), description: 'Просрочено: в работе.' });
+  await move(late.id, 'in_progress', 'alex');
+  for (const [title, approve, comment] of [['Починить анимацию перехода на пейволл', true, 'Всё хорошо, принято'], ['Поправить отступы на экране настроек', false, 'Поправьте отступы по макету']]) {
+    const t = await task('GLD', 'oleg', title, 'alex', { dueDate: day(2), description: 'Решение ревью: сотрудник видит результат в «Отправлено на ревью».' });
+    await move(t.id, 'in_progress', 'alex');
+    await move(t.id, 'review', 'alex');
+    await act('dima', 'reviewDecision', { taskId: t.id, approve, comment });
+  }
   return apps;
 }

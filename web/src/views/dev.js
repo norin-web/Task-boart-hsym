@@ -25,7 +25,7 @@ const SHORTCUTS = [
   },
   {
     id: 'demo', title: 'Демо-версия', icon: 'users',
-    hint: 'Юнит «Demo», по сотруднику на каждую позицию и три приложения: в сторе, в работе, готово к ревью',
+    hint: 'Юнит Demo, люди и лиды по позициям и ~25 приложений на всех стадиях: у каждой роли свой наполненный дашборд',
     run: demoScenario,
   },
   {
@@ -129,57 +129,48 @@ async function processScenario(closePanel) {
   } catch (e) { showErr(e); }
 }
 
-/** Демо-версия: юнит, по человеку на позицию (профили без входа — смотреть через «Смотреть как») и три приложения. Работает и на проде. */
-const DEMO_APPS = [
-  ['Calm', 'live', 'В сторе', 'https://apps.apple.com/us/app/calm/id571800810'],
-  ['Forest: Focus for Productivity', 'dev', 'В работе', 'https://apps.apple.com/us/app/forest-focus-for-productivity/id866450515'],
-  ['Things 3', 'release', 'Готово к ревью', 'https://apps.apple.com/us/app/things-3/id904237743'],
-];
+/** Демо-версия: юнит Demo, по человеку и лиду на позицию (профили без входа — смотреть через «Смотреть как») и демо-процесс
+ *  на всех стадиях — каждый дашборд (CEO, PM, релиз-менеджер, лиды, сотрудники) наполнен своим. Работает и на проде от вашего имени. */
 async function demoScenario(closePanel) {
   const depts = activeDepts();
-  if (!(await confirmDlg(`Добавить демо-версию: юнит «Demo», сотрудники по позициям, лиды и релиз-менеджер (без входа) и 3 приложения — в сторе, в работе, готово к ревью. Приложения удаляются кнопкой «Удалить тестовые данные»; людей и юнит — вручную.`, { ok: 'Добавить', title: 'Демо-версия' }))) return;
+  if (!(await confirmDlg('Добавить демо-версию: юнит «Demo», сотрудники и лиды по позициям, релиз-менеджер (без входа) и ~25 тестовых приложений на всех стадиях с задачами, ревью, релизами и реджектами — чтобы на каждом дашборде было что показать. Приложения и задачи удаляются кнопкой «Удалить тестовые данные»; людей и юнит — вручную.', { ok: 'Добавить', title: 'Демо-версия' }))) return;
   if (closePanel) closePanel();
-  toast('Собираем демо-версию…');
+  toast('Собираем демо-версию — это около минуты…');
   try {
-    await asDev(async () => {
-      const boot = await call('bootstrap', {});
-      const people = boot.people || [];
-      // человек на позицию: PM — модератор, релиз — RM, остальные — участники; плюс лид на каждую рабочую позицию; уже созданные берём по имени
-      const staff = [];
-      const person = async (name, role, access, d) => {
-        let p = people.find(x => x.name === name);
-        if (!p) p = await call('createPerson', { name, role, access, positionId: d.id });
-        else if (p.access !== access) p = await call('updatePerson', { id: p.id, access });
-        staff.push({ p, d });
-      };
-      for (const d of depts) {
-        const special = d.id === 'd_po' ? 'moderator' : d.id === 'd_release' ? 'rm' : '';
-        await person(`Демо · ${d.name}`, d.name, special || 'member', d);
-        if (!special && d.id !== 'd_other') await person(`Демо · Лид ${d.name}`, 'Lead ' + d.name, 'lead', d);
-      }
-      const pm = (staff.find(x => x.d.id === 'd_po') || {}).p;
-      let unit = (boot.units || []).find(u => u.key === 'DEMO' && !u.archived);
-      if (!unit) unit = await call('createUnit', { name: 'Demo', key: 'DEMO', color: '#0ea5e9', description: 'Демо-версия: люди по позициям и приложения на разных стадиях', ...(pm ? { pmId: pm.id, review: { default: pm.id } } : {}) });
-      for (const { p, d } of staff) await call('setMember', { unitId: unit.id, personId: p.id, departmentId: d.id });
-      const have = new Set((boot.apps || []).filter(a => a.unitId === unit.id).map(a => a.name));
-      for (const [name, status, , storeUrl] of DEMO_APPS) {
-        if (have.has(name)) continue;
-        const made = await call('createApp', { name, unitId: unit.id, status, test: true, storeUrl, ...(pm ? { pmId: pm.id } : {}) });
-        if (!made.request) continue;
-        const stages = await call('decomposeRequest', { taskId: made.request.id });
-        if (status === 'dev') continue;
-        // в сторе / готово к ревью: этапы закрыты; у «готово к ревью» релиз стоит в очереди у релиз-менеджера
-        for (const st of stages) {
-          if (st.step === 'release' && status !== 'live') continue;
-          await call('updateTask', { id: st.id, patch: { status: 'done' } }).catch(() => null);
-        }
-        const rel = stages.find(st => st.step === 'release');
-        if (rel && status !== 'live') await call('sendToRelease', { taskId: rel.id }).catch(() => null);
-        if (status === 'live') await call('updateTask', { id: made.request.id, patch: { status: 'done' } }).catch(() => null);
-      }
-    });
-    toast('Демо-версия готова');
-    setTimeout(() => { location.hash = '#/apps'; location.reload(); }, 700);
+    const boot = await call('bootstrap', {});
+    if ((boot.apps || []).some(a => a.isTest)) return toast('Тестовые приложения уже есть — сначала «Удалить тестовые данные»', { type: 'error' });
+    const people = boot.people || [];
+    // человек на позицию: PM — модератор, релиз — RM, остальные — участники; плюс лид на каждую рабочую позицию; уже созданные берём по имени
+    const staff = [];
+    const person = async (name, role, access, d, lead) => {
+      let p = people.find(x => x.name === name);
+      if (!p) p = await call('createPerson', { name, role, access, positionId: d.id });
+      else if (p.access !== access) p = await call('updatePerson', { id: p.id, access });
+      staff.push({ p, d, lead });
+    };
+    for (const d of depts) {
+      const special = d.id === 'd_po' ? 'moderator' : d.id === 'd_release' ? 'rm' : '';
+      await person(`Демо · ${d.name}`, d.name, special || 'member', d, false);
+      if (!special && d.id !== 'd_other') await person(`Демо · Лид ${d.name}`, 'Lead ' + d.name, 'lead', d, true);
+    }
+    const lead = id => (staff.find(x => x.d.id === id && x.lead) || {}).p;
+    const mem = id => (staff.find(x => x.d.id === id && !x.lead) || {}).p;
+    const pm = mem('d_po');
+    const need = { pm, rm: mem('d_release'), 'лид дизайна': lead('d_design'), 'дизайнер': mem('d_design'), 'лид iOS': lead('d_ios'), 'iOS-разработчик': mem('d_ios'), 'тестировщик': mem('d_qa'), ASO: mem('d_aso') };
+    const miss = Object.keys(need).filter(k => !need[k]);
+    if (miss.length) return toast('Не хватает позиций для демо: ' + miss.join(', '), { type: 'error' });
+    let unit = (boot.units || []).find(u => u.key === 'DEMO' && !u.archived);
+    if (!unit) unit = await call('createUnit', { name: 'Demo', key: 'DEMO', color: '#0ea5e9', description: 'Демо-версия: люди по позициям и приложения на разных стадиях', pmId: pm.id });
+    for (const { p, d } of staff) await call('setMember', { unitId: unit.id, personId: p.id, departmentId: d.id });
+    // ревью: задачи позиции проверяет её лид, остальное — PM
+    const byPosition = Object.fromEntries(staff.filter(x => x.lead).map(x => [x.d.id, x.p.id]));
+    const st = (await call('getBoard', { unitId: unit.id })).unit.settings;
+    if (st.columns.some(c => c.id === 'review')) await call('updateUnit', { id: unit.id, settings: { ...st, review: { column: 'review', byPosition, default: pm.id } } });
+    const P = { anna: { id: S.realMeId }, oleg: pm, kate: pm, sergey: need.rm, masha: need['лид дизайна'], dima: need['лид iOS'], alex: need['iOS-разработчик'], julia: need['дизайнер'], ira: need['тестировщик'], pavel: need.ASO };
+    const { runProcess } = await import('../demo.js');
+    const n = await runProcess((method, payload) => call(method, payload), P, { GLD: unit, RF: unit, MVP: unit }, true);
+    toast(`Демо-версия готова: ${n} приложений`);
+    setTimeout(() => { location.hash = '#/'; location.reload(); }, 700);
   } catch (e) { showErr(e); }
 }
 
