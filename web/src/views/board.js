@@ -37,7 +37,6 @@ export function renderBoardView() {
       !team && teamStack(),
       isStaff() && h('button', { class: 'btn primary', onclick: () => openCreateTask(), title: 'Новая задача (C)' }, h('span', { class: 'btn-label' }, 'Задача')),
     ], team),
-    team && whoDoesWhat(team),
     !team && h('div', { class: 'vs-line' }, viewSwitch(mode === 'list' ? 'list' : 'board')),
     filterBar(),
     h('div', { id: 'tasks', class: mode === 'list' ? 'view-body' : 'board' }));
@@ -47,26 +46,6 @@ export function renderBoardView() {
 /** Люди команды в этом юните. */
 const teamPeople = team => S.board.members.map(m => personById(m.personId)).filter(p => p && (p.teamIds || []).includes(team.id))
   .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-
-/** Доска команды: кто чем занят — у каждого его задача в работе (или «свободен»), сколько открытых и просрочено. */
-function whoDoesWhat(team) {
-  const today = todayStr();
-  const people = teamPeople(team);
-  if (!people.length) return h('div', { class: 'who-strip' }, h('p', { class: 'muted', style: { margin: 0 } }, 'В этом юните у команды нет людей'));
-  return h('div', { class: 'who-strip' }, people.map(p => {
-    const open = S.board.tasks.filter(t => !t.archived && !taskDone(t) && t.assigneeId === p.id);
-    const now = open.find(t => colById(t.status).kind === 'progress');
-    const late = open.filter(t => isOverdue(t, today)).length;
-    return h('button', { class: 'who-card', title: `Показать задачи: ${p.name}. Открыто ${open.length}, просрочено ${late}`, onclick: () => { S.filters.assignees = S.filters.assignees.includes(p.id) ? [] : [p.id]; renderTasks(); drawFilterRest(); markWho(); }, dataset: { person: p.id } },
-      avatar(p, 'sm'),
-      h('span', { class: 'who-main' }, h('b', null, p.name),
-        h('small', { class: now ? '' : 'muted' }, now ? now.title : open.length ? 'ничего в работе' : 'свободен')),
-      null);
-  }));
-}
-function markWho() {
-  document.querySelectorAll('.who-card').forEach(el => el.classList.toggle('on', S.filters.assignees.includes(el.dataset.person)));
-}
 
 /** Аватары команды в шапке — клик ведёт на вкладку «Команда». */
 function teamStack() {
@@ -308,9 +287,9 @@ function renderColumns(board) {
     const quickHere = S.quick.status === col.id && S.quick.dept == null;
     return h('section', { class: 'col', style: { '--cc': colColor(col) } },
       colHead(col, items.length),
-      quickAddEl(col.id, null),
       makeList(items, col.id, null, !quickHere && (S.route.team ? 'Здесь пусто' : filtered ? 'Нет задач по фильтру' : 'Пусто')),
-      oldDoneToggle(col));
+      oldDoneToggle(col),
+      quickAddEl(col.id, null));
   }));
   done();
 }

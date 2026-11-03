@@ -2991,3 +2991,6 @@ button.rd-check.on { background: var(--text); border-color: transparent; }
 .pc-line.copy { width: 100%; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; }
 .pc-line.copy:hover { background: var(--surface-2); }
 .pc-line.copy > .i:last-child { margin-left: auto; }
+
+/* Быстрое создание — сразу под последней карточкой, а не прижато к низу колонки */
+.board:not(.lanes) > .col > .col-list { flex: 0 0 auto; }
