@@ -308,9 +308,9 @@ function renderColumns(board) {
     const quickHere = S.quick.status === col.id && S.quick.dept == null;
     return h('section', { class: 'col', style: { '--cc': colColor(col) } },
       colHead(col, items.length),
+      quickAddEl(col.id, null),
       makeList(items, col.id, null, !quickHere && (S.route.team ? 'Здесь пусто' : filtered ? 'Нет задач по фильтру' : 'Пусто')),
-      oldDoneToggle(col),
-      quickAddEl(col.id, null));
+      oldDoneToggle(col));
   }));
   done();
 }

@@ -319,8 +319,8 @@ section:has(> .section-head + .card-box) > .card-box.empty-state { padding: 12px
 .card-foot .spacer { flex: 1; }
 .card-foot .meta-ic { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
 .card-foot .due { font-size: 12px; font-weight: 600; }
-.col-head .icon-btn { display: none; }
-.col:hover .col-head .icon-btn, .col-head .icon-btn:focus-visible { display: inline-flex; }
+.col-head .icon-btn { opacity: 0; pointer-events: none; }
+.col:hover .col-head .icon-btn, .col-head .icon-btn:focus-visible { opacity: 1; pointer-events: auto; }
 .col-name { white-space: nowrap; }
 .topbar .avatars-stack, .topbar .team-stack { display: none; }
 .card .chip.tag::before, .card-foot .chip.tag::before { display: none; }
