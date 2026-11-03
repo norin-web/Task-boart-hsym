@@ -137,20 +137,25 @@ const DEMO_APPS = [
 ];
 async function demoScenario(closePanel) {
   const depts = activeDepts();
-  if (!(await confirmDlg(`Добавить демо-версию: юнит «Demo», ${depts.length} сотрудников (по одному на позицию, без входа) и 3 приложения — в сторе, в работе, готово к ревью. Приложения удаляются кнопкой «Удалить тестовые данные»; людей и юнит — вручную.`, { ok: 'Добавить', title: 'Демо-версия' }))) return;
+  if (!(await confirmDlg(`Добавить демо-версию: юнит «Demo», сотрудники по позициям, лиды и релиз-менеджер (без входа) и 3 приложения — в сторе, в работе, готово к ревью. Приложения удаляются кнопкой «Удалить тестовые данные»; людей и юнит — вручную.`, { ok: 'Добавить', title: 'Демо-версия' }))) return;
   if (closePanel) closePanel();
   toast('Собираем демо-версию…');
   try {
     await asDev(async () => {
       const boot = await call('bootstrap', {});
       const people = boot.people || [];
-      // человек на позицию: PM — модератор, релиз — RM, остальные — участники; уже созданные берём по имени
+      // человек на позицию: PM — модератор, релиз — RM, остальные — участники; плюс лид на каждую рабочую позицию; уже созданные берём по имени
       const staff = [];
-      for (const d of depts) {
-        const name = `Демо · ${d.name}`;
-        const access = d.id === 'd_po' ? 'moderator' : d.id === 'd_release' ? 'rm' : 'member';
-        const p = people.find(x => x.name === name) || await call('createPerson', { name, role: d.name, access, positionId: d.id });
+      const person = async (name, role, access, d) => {
+        let p = people.find(x => x.name === name);
+        if (!p) p = await call('createPerson', { name, role, access, positionId: d.id });
+        else if (p.access !== access) p = await call('updatePerson', { id: p.id, access });
         staff.push({ p, d });
+      };
+      for (const d of depts) {
+        const special = d.id === 'd_po' ? 'moderator' : d.id === 'd_release' ? 'rm' : '';
+        await person(`Демо · ${d.name}`, d.name, special || 'member', d);
+        if (!special && d.id !== 'd_other') await person(`Демо · Лид ${d.name}`, 'Lead ' + d.name, 'lead', d);
       }
       const pm = (staff.find(x => x.d.id === 'd_po') || {}).p;
       let unit = (boot.units || []).find(u => u.key === 'DEMO' && !u.archived);
