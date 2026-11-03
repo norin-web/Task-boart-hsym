@@ -2984,3 +2984,6 @@ button.rd-check.on { background: var(--text); border-color: transparent; }
 .first-run h2 + p { margin-top: -8px; }
 .fr-steps { margin-top: 4px; padding-top: 18px; }
 .fr-step { padding: 14px; }
+/* Невысокий экран: на первом запуске убираем второстепенное, чтобы не было прокрутки */
+@media (max-height: 820px) { .fr-steps, .fr-note { display: none; } .first-run { padding-block: 24px; } }
+@media (max-height: 640px) { .fr-news { display: none; } .fr-ic { display: none; } }
