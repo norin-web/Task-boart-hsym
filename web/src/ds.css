@@ -2987,3 +2987,7 @@ button.rd-check.on { background: var(--text); border-color: transparent; }
 /* Невысокий экран: на первом запуске убираем второстепенное, чтобы не было прокрутки */
 @media (max-height: 820px) { .fr-steps, .fr-note { display: none; } .first-run { padding-block: 24px; } }
 @media (max-height: 640px) { .fr-news { display: none; } .fr-ic { display: none; } }
+
+.pc-line.copy { width: 100%; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; }
+.pc-line.copy:hover { background: var(--surface-2); }
+.pc-line.copy > .i:last-child { margin-left: auto; }

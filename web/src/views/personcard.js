@@ -3,7 +3,7 @@
  * Крупный аватар, имя, роль и позиции, должность, почта, местное время (часовой пояс из профиля), Telegram.
  */
 import { S, personById, deptById, ACCESS_LABELS, presenceText } from '../state.js';
-import { h, icon, avatar, menu, closeMenu } from '../ui.js';
+import { h, icon, avatar, menu, toast } from '../ui.js';
 
 /** Где аватар сам — элемент управления: там клик работает как раньше. */
 const SKIP = '.av-btn, .who-card, .nav-item.me, .menu, .modal, .av-opt, .dev-person, [data-no-card]';
@@ -38,9 +38,13 @@ function localTime(tz) {
 export function openPersonCard(anchor, p) {
   const pos = (p.positionIds || [p.positionId]).map(id => (deptById(id) || {}).name).filter(Boolean);
   const t = localTime(p.timezone);
-  const line = (ic, main, sub, href) => {
-    const body = [icon(ic, 15), h('span', { class: 'pc-line-text' }, h('span', null, main), sub && h('small', { class: 'muted' }, sub))];
-    return href ? h('a', { class: 'pc-line', href, target: href.startsWith('mailto:') ? null : '_blank', rel: 'noopener' }, body) : h('div', { class: 'pc-line' }, body);
+  // copyText — строка копируется в буфер по клику (почта, Telegram); меню остаётся открытым
+  const line = (ic, main, sub, copyText) => {
+    const body = [icon(ic, 15), h('span', { class: 'pc-line-text' }, h('span', null, main), sub && h('small', { class: 'muted' }, sub)), copyText && icon('copy', 14)];
+    if (!copyText) return h('div', { class: 'pc-line' }, body);
+    const done = () => toast('Скопировано: ' + copyText);
+    return h('button', { class: 'pc-line copy', type: 'button', title: 'Скопировать',
+      onclick: () => (navigator.clipboard ? navigator.clipboard.writeText(copyText) : Promise.reject()).then(done, () => toast(copyText)) }, body);
   };
   const box = h('div', { class: 'pc' },
     h('div', { class: 'pc-head' }, avatar(p, 'xxl'),
@@ -49,10 +53,9 @@ export function openPersonCard(anchor, p) {
         h('small', { class: 'muted' }, presenceText(p)))),
     h('div', { class: 'pc-lines' },
       (pos.length || p.role) && line('user', pos.join(', ') || p.role, pos.length && p.role ? p.role : ''),
-      p.email && line('send', p.email, '', 'mailto:' + p.email),
+      p.email && line('send', p.email, '', p.email),
       t && line('clock', t.time, t.sub),
-      p.telegram && line('message', '@' + p.telegram, 'Telegram', 'https://t.me/' + encodeURIComponent(p.telegram)),
+      p.telegram && line('message', '@' + p.telegram, 'Telegram', '@' + p.telegram),
       !p.email && !t && !p.telegram && h('p', { class: 'muted pc-empty' }, 'Контакты ещё не заполнены')));
   const m = menu(anchor, [box], { cls: 'pc-menu', align: 'left' });
-  m.addEventListener('click', e => { if (e.target.closest('a')) closeMenu(); });
 }
