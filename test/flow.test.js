@@ -919,3 +919,32 @@ test('опросник: RM принимает или возвращает с в�
   const f = await api.as(rm, () => api('reviewDevForm', { taskId: by.release.id, ok: true }));
   assert.ok(f.checked && f.checked.by === rm.id && !f.returned);
 });
+
+test('разработка → тестирование без код-ревью; QA возвращает в «Доработку»; баг-репорт: открыт → исправлен → закрыт', async () => {
+  const api = await setup();
+  const { ceo, pm, ios, qa, gold } = await studio(api);
+  // на доске есть колонка «Доработка»
+  const st = (await api.as(pm, () => api('getBoard', { unitId: gold.id }))).unit.settings;
+  const cols = [...st.columns]; cols.splice(2, 0, { id: 'rework', name: 'Доработка', kind: 'progress', color: '' });
+  await api.as(pm, () => api('updateUnit', { id: gold.id, settings: { ...st, columns: cols } }));
+  const { request } = await api.as(ceo, () => api('createApp', { name: 'NR', unitId: gold.id }));
+  const by = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: request.id }))).map(t => [t.step, t]));
+  await api.as(pm, () => api('updateTask', { id: by.design.id, patch: { status: 'done' } }));
+  await api.as(ios, () => api('saveDevForm', { taskId: by.ios.id, answers: DEV_ANSWERS }));
+  // разработчик сам отдаёт на тестирование: «готово» без ревью лида
+  const d1 = await api.as(ios, () => api('updateTask', { id: by.ios.id, patch: { status: 'done' } }));
+  assert.equal(d1.status, 'done');
+  assert.equal(d1.assigneeId, ios.id);
+  // QA вернул: разработка — в «Доработке», баг-репорт открыт
+  await api.as(qa, () => api('qaReturn', { taskId: by.qa.id, url: 'https://docs.google.com/b1' }));
+  const back = (await api.as(ios, () => api('getBoard', { unitId: gold.id }))).tasks.find(t => t.id === by.ios.id);
+  assert.equal(back.status, 'rework');
+  assert.ok(!back.bugs[0].fixedAt && !back.bugs[0].closedAt);
+  // исправил и сдал — «исправлен» у разработчика и у QA
+  await api.as(ios, () => api('updateTask', { id: by.ios.id, patch: { status: 'done' } }));
+  const bugsOf = async id => (await api.pg.query('select bugs from tasks where id = $1', [id])).rows[0].bugs[0];
+  assert.ok((await bugsOf(by.ios.id)).fixedAt && (await bugsOf(by.qa.id)).fixedAt);
+  // QA принял — закрыт
+  await api.as(qa, () => api('updateTask', { id: by.qa.id, patch: { status: 'done' } }));
+  assert.ok((await bugsOf(by.ios.id)).closedAt && (await bugsOf(by.qa.id)).closedAt);
+});

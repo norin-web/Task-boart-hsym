@@ -28,6 +28,12 @@ export function focusBlock(d, reload) {
     const col = ((u.settings || {}).review || {}).column || 'review';
     try { await send('updateTask', { id: t.id, patch: { status: col } }); toast('Отдано на ревью'); if (reload) reload(); } catch (e) { showErr(e); }
   };
+  // разработка без код-ревью — сразу на тестирование (этап «готово»; без опросника база откроет его сама)
+  const toTesting = async t => {
+    const u = S.units.find(x => x.id === t.unitId) || {};
+    const col = (((u.settings || {}).columns || []).find(c => c.kind === 'done') || {}).id;
+    try { await send('updateTask', { id: t.id, patch: { status: col } }); toast('Отдано на тестирование'); if (reload) reload(); } catch (e) { showErr(e); }
+  };
   // карточка: статус, ход чеклиста и срок с календарём; строка: только срок (E8B)
   const heroMeta = t => {
     const di = dueInfo(t.dueDate, false), cl = t.checklist || [];
@@ -46,7 +52,9 @@ export function focusBlock(d, reload) {
           h('div', { class: 'fc-hero-meta' }, heroMeta(first))),
         h('div', { class: 'fc-hero-actions' },
           h('button', { class: 'btn xl', onclick: () => peekTask(first.unitId, first.id) }, 'Открыть'),
-          h('button', { class: 'btn primary xl', onclick: () => toReview(first) }, 'Отдать на ревью'))),
+          first.step === 'ios'
+            ? h('button', { class: 'btn primary xl', onclick: () => toTesting(first) }, 'Отдать на тестирование')
+            : h('button', { class: 'btn primary xl', onclick: () => toReview(first) }, 'Отдать на ревью'))),
       rest.map(t => h('button', { class: 'fc-row', onclick: () => peekTask(t.unitId, t.id) },
         statusIcon(t.kind || 'todo', 16),
         h('span', { class: 'fc-key' }, t.key),

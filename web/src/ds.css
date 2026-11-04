@@ -3010,3 +3010,9 @@ a.bug-title:hover { text-decoration: underline; }
 .news-hist .news-row.read:hover { opacity: .85; }
 .nt-hist { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 12px; padding: 16px 20px; flex-wrap: wrap; }
 .nt-hist select { width: auto; }
+
+/* Разработка ↔ QA: метка возврата по баг-репорту на карточке, статус «исправлен» */
+.card-bug { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; margin-top: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--danger); background: var(--danger-soft); }
+.bug-row.fixed .bug-ic { color: var(--warn, #b7791f); }
+.bug-row.fixed .bug-pill { color: var(--text-2); background: var(--surface-2); }
+.dev-bar { margin-top: 8px; }

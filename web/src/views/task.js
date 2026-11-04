@@ -117,6 +117,13 @@ function buildPanel(t) {
       h('button', { class: 'btn sm', onclick: () => openQaReturn(t) }, icon('back', 13), 'Вернуть в разработку')),
     (t.bugs || []).length > 0 && bugsBlock(t),
     t.kind === 'request' && /^Реджект №/.test(t.title) && shotsStrip(t.id, '', 'Скриншоты реджекта'),
+    // разработка без код-ревью: исполнитель сразу отдаёт на тестирование (этап «готово» → QA получает «можно начинать»)
+    t.step === 'ios' && !taskDone(t) && t.assigneeId === S.meId && h('div', { class: 'qa-bar dev-bar' }, icon('send', 15),
+      h('span', null, (t.bugs || []).some(b => !b.closedAt && !b.fixedAt) ? 'Исправили баги?' : 'Готово?'), h('span', { class: 'spacer' }),
+      h('button', { class: 'btn primary sm', onclick: () => {
+        const done = (u.settings.columns.find(c => c.kind === 'done') || {}).id;
+        if (done) patchTask(t, { status: done }).then(() => { toast('Отдано на тестирование'); refreshPanel(t); }).catch(() => {});
+      } }, 'Отдать на тестирование')),
     // опросник — у этапа iOS (по умолчанию) или у интеграции, если PM так решил (dev_form.need)
     ((t.step === 'ios' && (t.devForm || {}).need !== false) || (t.step === 'integr' && (t.devForm || {}).need === true)) && devFormBlock(t, t.assigneeId === S.meId || isStaff()),
     t.step === 'release' && t.assigneeId && releaseBlock(t, () => reloadBoard().catch(() => {})),
@@ -309,16 +316,19 @@ function handoverPeople(t) {
 /** Баг-репорты QA: №, дата, кто, ссылка; открыт — пока QA не принял тестирование. Новые — сверху. */
 function bugsBlock(t) {
   const list = [...(t.bugs || [])].reverse();
-  const open = list.filter(b => !b.closedAt).length;
+  const open = list.filter(b => !b.closedAt && !b.fixedAt).length;
+  // открыт → исправлен (разработчик сдал, QA проверяет) → закрыт (QA принял)
+  const state = b => (b.closedAt ? 'closed' : b.fixedAt ? 'fixed' : 'open');
+  const LABEL = { open: 'открыт', fixed: 'исправлен · на проверке', closed: 'закрыт' };
   return h('div', { class: 'block bugs-block' },
     h('div', { class: 'block-title' }, 'Баг-репорты', open > 0 && h('span', { class: 'bug-open-count' }, `открыто ${open}`)),
-    h('div', { class: 'bug-list' }, list.map(b => h('div', { class: 'bug-row' + (b.closedAt ? ' closed' : '') },
-      h('span', { class: 'bug-ic' }, icon(b.closedAt ? 'check' : 'alert', 14)),
+    h('div', { class: 'bug-list' }, list.map(b => h('div', { class: 'bug-row ' + state(b) + (b.closedAt ? ' closed' : '') },
+      h('span', { class: 'bug-ic' }, icon(state(b) === 'open' ? 'alert' : 'check', 14)),
       h('div', { class: 'bug-main' },
         h('div', { class: 'bug-head' },
           b.url ? h('a', { class: 'bug-title', href: safeUrl(b.url), target: '_blank', rel: 'noopener noreferrer', title: b.url }, `Баг-репорт №${b.n}`, icon('arrowUpRight', 12))
             : h('b', { class: 'bug-title' }, `Баг-репорт №${b.n}`),
-          h('span', { class: 'bug-pill' }, b.closedAt ? 'закрыт' : 'открыт')),
+          h('span', { class: 'bug-pill' }, LABEL[state(b)])),
         h('div', { class: 'bug-meta' }, [fmtDate(String(b.at).slice(0, 10)), (personById(b.by) || {}).name].filter(Boolean).join(' · ')),
         b.text && h('div', { class: 'bug-text' }, b.text))))));
 }

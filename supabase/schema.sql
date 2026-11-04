@@ -814,8 +814,8 @@ declare
   at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
 begin
   if new.status is not distinct from old.status then return new; end if;
-  -- этап «Релиз» ведёт RM, его статус следует за фазой релиза — ревьюеру не переназначаем
-  if new.step = 'release' then return new; end if;
+  -- этап «Релиз» ведёт RM, его статус следует за фазой релиза; разработка проверяется тестированием, не ревью лида
+  if new.step in ('release', 'ios') then return new; end if;
   select settings -> 'review' into rv from units where id = new.unit_id;
   col := coalesce(rv ->> 'column', '');
   if col = '' then return new; end if;
@@ -855,8 +855,8 @@ declare
   k text;
 begin
   if app_system() or new.status is not distinct from old.status or can_manage(new.unit_id) then return new; end if;
-  -- тестирование: «готово» от QA и есть приёмка (approve), отдельного ревью нет (процесс заказчика)
-  if new.step = 'qa' then return new; end if;
+  -- разработка: код-ревью нет — «готово» и есть «отдать на тестирование»; тестирование: «готово» от QA = приёмка
+  if new.step in ('ios', 'qa') then return new; end if;
   select settings into st from units where id = new.unit_id;
   col := coalesce(st -> 'review' ->> 'column', '');
   if col = '' then return new; end if;
@@ -1149,8 +1149,10 @@ begin
   v_head := 'Баг-репорт №' || (v_bug ->> 'n') || ' от QA';
   perform set_config('app.system', 'on', true);
   for d in select * from tasks where id in (select jsonb_array_elements_text(t.depends_on)) and task_done(id) loop
+    -- колонка «Доработка», если она есть на доске, иначе первая «в работе»
     select c ->> 'id' into v_prog from units u, jsonb_array_elements(u.settings -> 'columns') c
-     where u.id = d.unit_id and c ->> 'kind' = 'progress' limit 1;
+     where u.id = d.unit_id and c ->> 'kind' = 'progress'
+     order by (lower(c ->> 'name') like 'доработ%') desc limit 1;
     update tasks set status = coalesce(v_prog, status), done_at = '', updated_at = at_, bugs = coalesce(bugs, '[]'::jsonb) || jsonb_build_array(v_bug) where id = d.id;
     insert into comments (id, task_id, text, author_id, at)
     values ('c_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), d.id,
@@ -1994,6 +1996,17 @@ declare
 begin
   if new.bugs is distinct from old.bugs and not app_system() then
     raise exception 'Баг-репорты добавляет только QA кнопкой «Вернуть в разработку»' using errcode = '42501';
+  end if;
+  -- разработчик сдал исправления (этап снова готов) — открытые баг-репорты: «исправлен, на проверке» (и у QA)
+  if new.step in ('ios', 'integr') and coalesce(new.done_at, '') <> '' and coalesce(old.done_at, '') = ''
+     and exists (select 1 from jsonb_array_elements(new.bugs) b where coalesce(b ->> 'closedAt', '') = '' and coalesce(b ->> 'fixedAt', '') = '') then
+    new.bugs := (select jsonb_agg(case when coalesce(b ->> 'closedAt', '') = '' and coalesce(b ->> 'fixedAt', '') = ''
+                                       then b || jsonb_build_object('fixedAt', new.done_at) else b end) from jsonb_array_elements(new.bugs) b);
+    perform set_config('app.system', 'on', true);
+    update tasks q set bugs = (select jsonb_agg(case when coalesce(b ->> 'closedAt', '') = '' and coalesce(b ->> 'fixedAt', '') = ''
+                                                    then b || jsonb_build_object('fixedAt', new.done_at) else b end) from jsonb_array_elements(q.bugs) b)
+     where q.step = 'qa' and q.depends_on ? new.id and jsonb_array_length(q.bugs) > 0;
+    perform set_config('app.system', v_prev, true);
   end if;
   if new.step = 'qa' and coalesce(new.done_at, '') <> '' and coalesce(old.done_at, '') = ''
      and exists (select 1 from jsonb_array_elements(new.bugs) b where coalesce(b ->> 'closedAt', '') = '') then

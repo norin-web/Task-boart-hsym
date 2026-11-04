@@ -438,6 +438,8 @@ function taskCard(t, inLane) {
       class: 'icon-btn sm card-more', title: 'Действия',
       onclick: e => { e.stopPropagation(); cardMenu(e.currentTarget, t); },
     }, icon('more'))),
+  // доработка по багам QA: на карточке видно, что это возврат с баг-репортом, а не новая задача
+  (() => { const b = (t.bugs || []).filter(x => !x.closedAt && !x.fixedAt).pop(); return b && !taskDone(t) && h('div', { class: 'card-bug' }, icon('alert', 12), `Баг-репорт №${b.n}`); })(),
   // вторая строка, как в макете: «откуда · состояние» — запрос CEO у этапа, «Запрос · 0 из 7» у самого запроса
   (t.parent || TASK_KINDS[t.kind] || waits.length > 0) && h('div', { class: 'card-sub', title: t.parent ? t.parent.unit.name + ' · ' + t.parent.key : '' },
     [t.parent && t.parent.title, !t.parent && TASK_KINDS[t.kind] && TASK_KINDS[t.kind].short + (t.tree ? ` · ${t.tree.done} из ${t.tree.total}` : ''),
