@@ -1431,7 +1431,8 @@ export function createBackend(db, opts = {}) {
       const t = await findTask(p.id);
       const gone = await run(T('tasks').delete().eq('id', t.id).select('id'));
       if (!gone.length) fail('Недостаточно прав для этого действия', 'FORBIDDEN');
-      await log([{ unitId: t.unit_id, taskId: t.id, action: 'delete', from: t.title }], ctx);
+      // запись в журнал — без ссылки на задачу: её уже нет, и база не даст сослаться на удалённую (название — в записи)
+      await log([{ unitId: t.unit_id, action: 'delete', from: `${t.title}` }], ctx);
       return true;
     },
 

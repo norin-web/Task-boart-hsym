@@ -1801,7 +1801,7 @@ drop policy if exists tasks_insert on tasks;
 create policy tasks_insert on tasks for insert to authenticated with check (can_manage(unit_id));
 drop policy if exists tasks_delete on tasks;
 -- запрос CEO и этапы приложения удаляет только CEO (PM убирает лишний этап через «Изменить этапы» — в архив)
-create policy tasks_delete on tasks for delete to authenticated using (can_manage(unit_id) and (kind not in ('request', 'stage') or is_superadmin()));
+create policy tasks_delete on tasks for delete to authenticated using (can_manage(unit_id) and (coalesce(kind, '') not in ('request', 'stage') or is_superadmin()));
 drop policy if exists tasks_update on tasks;
 -- После переноса в ревью/из ревью исполнитель меняется триггером — строка остаётся «своей» через review_from / reviewer_id
 create policy tasks_update on tasks for update to authenticated
