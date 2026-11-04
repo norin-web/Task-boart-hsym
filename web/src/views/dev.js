@@ -49,7 +49,12 @@ export function openDevPanel() {
 export function renderDev() {
   if (!isDev()) return navigate({ view: 'home' }, { replace: true });
   if (S.meId !== S.realMeId) return viewAs(''); // режим разработчика — только из своего аккаунта
-  const tests = S.apps.filter(a => a.isTest).length;
+  // тестовое: приложения сценариев, демо-юнит (метка или старый DEMO), демо-люди без входа (метка или «Демо · …»)
+  const testApps = S.apps.filter(a => a.isTest).length;
+  const testUnits = S.units.filter(u => u.isTest || u.key === 'DEMO').length;
+  const testPeople = S.people.filter(p => (p.isTest || /^Демо · /.test(p.name)) && !p.linked && !p.isDev).length;
+  const tests = testApps + testUnits + testPeople;
+  const testsText = [testApps && `приложений: ${testApps}`, testUnits && `демо-юнитов: ${testUnits}`, testPeople && `демо-людей: ${testPeople}`].filter(Boolean).join(', ');
   fill($('#main'),
     topbar([h('h1', null, 'Режим разработчика')], [h('span', { class: 'muted dev-sub' }, 'Виден только вам')]),
     h('div', { class: 'view-body' }, h('div', { class: 'page dev-page' },
@@ -62,7 +67,7 @@ export function renderDev() {
         h('section', { class: 'card-box dev-card' },
           h('div', { class: 'dev-head' }, h('h3', null, 'Тестовые данные')),
           h('div', { class: 'dev-row' },
-            h('span', { class: 'muted' }, tests ? `Тестовых приложений: ${tests} — и их задачи.` : 'Тестовых данных нет.'),
+            h('span', { class: 'muted' }, tests ? `Тестовое: ${testsText} — и их задачи.` : 'Тестовых данных нет.'),
             h('button', { class: 'btn danger sm', disabled: !tests, onclick: () => clearTestData() }, icon('trash', 13), 'Удалить тестовые данные')))),
       h('section', { class: 'card-box dev-card' },
         h('div', { class: 'dev-head' }, h('h3', null, 'Смотреть как'),

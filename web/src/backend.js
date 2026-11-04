@@ -233,7 +233,7 @@ function cleanFieldValues(obj, keepNulls) {
 const unitOut = r => ({
   id: r.id, name: r.name, key: r.key, color: r.color, description: r.description,
   settings: unitSettings(r.settings), nextNum: r.next_num, order: r.ord, archived: !!r.archived,
-  archivedAt: r.archived_at || '', createdAt: r.created_at, updatedAt: r.updated_at, pmId: r.pm_id || '',
+  archivedAt: r.archived_at || '', createdAt: r.created_at, updatedAt: r.updated_at, pmId: r.pm_id || '', isTest: !!r.is_test,
 });
 
 const taskOut = r => ({
@@ -272,7 +272,7 @@ const timezoneValue = v => { const s = String(v || '').trim(); return /^[A-Za-z_
 const personOut = r => ({
   id: r.id, name: r.name, email: r.email, role: r.role || '', color: r.color || '', active: !!r.active,
   access: r.access || 'member', positionId: r.position_id || '', linked: !!r.user_id, prefs: json(r.prefs, {}) || {},
-  lastSeenAt: r.last_seen_at || '', isDev: !!r.is_dev, avatar: r.avatar || '', telegram: r.telegram || '', timezone: r.timezone || '',
+  lastSeenAt: r.last_seen_at || '', isDev: !!r.is_dev, isTest: !!r.is_test, avatar: r.avatar || '', telegram: r.telegram || '', timezone: r.timezone || '',
   extraPositionIds: json(r.extra_positions, []) || [],
   teamIds: json(r.team_ids, []) || [],
   positionIds: [r.position_id || 'd_other', ...(json(r.extra_positions, []) || [])],
