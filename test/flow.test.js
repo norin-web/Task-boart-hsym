@@ -763,7 +763,7 @@ test('шаблон апдейта: пункты и нужные этапы; за
   assert.equal(tpl.kind, 'update');
   const { app } = await api.as(ceo, () => api('createApp', { name: 'Tpl', unitId: gold.id, noRequest: true }));
   const r = await api.as(ceo, () => api('createRequest', { appId: app.id, type: 'update', templateId: tpl.id }));
-  assert.equal(r.title, 'Апдейт: новый пейвол');
+  assert.equal(r.title, 'Апдейт №1: новый пейвол'); // номер ставится сам
   assert.deepEqual(r.checklist.map(i => i.text), ['Макет', 'Тексты']);
   const stages = await api.as(pm, () => api('decomposeRequest', { taskId: r.id }));
   assert.deepEqual(stages.map(t => t.step), ['design', 'ios', 'release']);

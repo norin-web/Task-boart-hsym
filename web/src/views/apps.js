@@ -511,8 +511,8 @@ export function openAppPanel(a, onChange, page = null) {
   const numbered = (list, label) => list.map((r, i) => {
     const cur = r.stages.find(s => !s.done && !s.blocked) || null;
     return h('button', { class: 'ap-num-row' + (r.done ? ' done' : ''), onclick: () => peekTask(r.unitId, r.id) },
-      h('span', { class: 'ap-num' }, label + ' ' + (i + 1)),
-      h('span', { class: 'ap-num-title' }, r.title.replace(/^Реджект:\s*/i, '')),
+      h('span', { class: 'ap-num' }, label + ' ' + ((/№\s*(\d+)/.exec(r.title) || [])[1] || i + 1)),
+      h('span', { class: 'ap-num-title' }, r.title.replace(/^(Реджект|Апдейт)\s*(№\s*\d+)?\s*[:·]?\s*/i, '') || r.title),
       h('span', { class: 'ap-num-state muted' }, r.done ? [icon('check', 13), ' готово'] : cur ? cur.title.split(' · ')[0] : r.stages.length ? 'релиз' : 'ждёт PM'),
       h('span', { class: 'muted ap-num-at' }, fmtDate((r.doneAt || r.createdAt || '').slice(0, 10))));
   });

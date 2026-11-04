@@ -2250,8 +2250,15 @@ export function createBackend(db, opts = {}) {
       const prio = await validPriority('priority' in p ? p.priority : a.priority);
       // шаблон апдейта: пункты — чеклистом запроса, нужные этапы — запоминаем для разбивки
       const tpl = p.templateId ? await one('task_templates', String(p.templateId)) : null;
+      let title = str(p.title, 500) || (tpl && tpl.title) || `${REQUEST_TYPES[type]}: ${a.name}`;
+      // апдейты нумеруются сами по приложению: «Апдейт №3: …» (руками номер не пишут)
+      if (type === 'update') {
+        const n = (await run(T('tasks').select('id').eq('app_id', a.id).eq('kind', 'request').eq('request_type', 'update'))).length + 1;
+        const rest = title.replace(/^апдейт\s*(№\s*\d+)?\s*[:·—-]?\s*/i, '').trim();
+        title = str(`Апдейт №${n}: ${rest || a.name}`, 500);
+      }
       return methods.createTask({
-        unitId: a.unit_id, title: str(p.title, 500) || (tpl && tpl.title) || `${REQUEST_TYPES[type]}: ${a.name}`,
+        unitId: a.unit_id, title,
         description: p.description || (tpl ? tpl.description : ''),
         assigneeId: pmId, dueDate: p.dueDate, kind: 'request', requestType: type, appId: a.id, test: !!a.is_test,
         fields: prio ? { [PRIORITY_FIELD]: prio } : {}, specUrl: p.specUrl,

@@ -237,7 +237,7 @@ export async function runProcess(api, P, U, test) {
   // ── Флоу апдейта: у вышедшего приложения запрос «Апдейт» (дизайн → iOS → тесты → релиз)
   const update = async (a, unit, until) => {
     const pm = PM[unit];
-    const r = await act('anna', 'createRequest', { appId: a.id, type: 'update', title: `Апдейт 1.1: ${a.name}`, description: 'Новые виджеты и правки пейволла.', dueDate: day(14), pmId: P[pm].id });
+    const r = await act('anna', 'createRequest', { appId: a.id, type: 'update', title: `Новые виджеты: ${a.name}`, description: 'Новые виджеты и правки пейволла.', dueDate: day(14), pmId: P[pm].id });
     const s = Object.fromEntries((await act(pm, 'decomposeRequest', { taskId: r.id })).map(t => [t.step, t]));
     await close(s.design, s.design.assigneeId ? worker(P, s.design.assigneeId) : pm, pm);
     if (until === 'dev') { await move(s.ios.id, 'in_progress', worker(P, s.ios.assigneeId || P[pm].id)); return; }

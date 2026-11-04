@@ -179,6 +179,11 @@ test('сценарии: роли × позиции × жизненный цик�
 
   // ---------- апдейт ----------
   const upd = await api.as(ceo, () => api('createRequest', { appId: app.id, type: 'update', title: 'Апдейт 1.1' }));
+  await check('апдейты нумеруются сами по приложению', async () => {
+    assert.equal(upd.title, 'Апдейт №1: 1.1');
+    const u2 = await api.as(ceo, () => api('createRequest', { appId: app.id, type: 'update', title: 'Виджеты' }));
+    assert.equal(u2.title, 'Апдейт №2: Виджеты');
+  });
   const us = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: upd.id }))).map(t => [t.step, t]));
   await check('в апдейте нет текстов и локализаций', async () => assert.deepEqual(Object.keys(us), ['design', 'ios', 'qa', 'integr', 'release']));
   await check('участник не ставит запрос на апдейт', () => mustFail(api.as(ios, () => api('createRequest', { appId: app.id, type: 'update', title: 'x' }))));
