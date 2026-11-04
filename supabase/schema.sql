@@ -1427,16 +1427,34 @@ drop trigger if exists guard_apps on apps;
 create trigger guard_apps before insert or update on apps for each row execute function guard_apps();
 
 -- Удалить всё, что создали шорткаты разработчика (задачи и приложения с is_test). Возвращает число задач.
-create or replace function delete_test_data() returns integer
+-- Удалить все тестовые данные: задачи и приложения шорткатов, демо-юниты (is_test или старый DEMO) целиком,
+-- демо-людей (is_test или старое «Демо · …») — только без входа в систему и не разработчиков. Реальные люди не трогаются.
+drop function if exists delete_test_data();
+create or replace function delete_test_data() returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare n integer;
+declare
+  n_tasks integer; n_apps integer; n_units integer; n_people integer;
+  v_prev text := coalesce(current_setting('app.system', true), '');
 begin
   if not app_system() and not is_dev() then raise exception 'Только для режима разработчика' using errcode = '42501'; end if;
-  delete from activity where task_id in (select id from tasks where is_test);
-  delete from tasks where is_test;
-  get diagnostics n = row_count;
-  delete from apps where is_test;
-  return n;
+  perform set_config('app.system', 'on', true);
+  create temp table if not exists _test_units (id text) on commit drop;
+  delete from _test_units;
+  insert into _test_units select id from units where is_test or key = 'DEMO';
+  delete from activity where task_id in (select id from tasks where is_test or unit_id in (select id from _test_units));
+  delete from activity where unit_id in (select id from _test_units);
+  delete from tasks where is_test or unit_id in (select id from _test_units);
+  get diagnostics n_tasks = row_count;
+  delete from apps where is_test or unit_id in (select id from _test_units);
+  get diagnostics n_apps = row_count;
+  delete from units where id in (select id from _test_units);
+  get diagnostics n_units = row_count;
+  update tasks set assignee_id = '' where assignee_id in
+    (select id from people where (is_test or name like 'Демо · %') and user_id is null and not is_dev);
+  delete from people where (is_test or name like 'Демо · %') and user_id is null and not is_dev;
+  get diagnostics n_people = row_count;
+  perform set_config('app.system', v_prev, true);
+  return jsonb_build_object('tasks', n_tasks, 'apps', n_apps, 'units', n_units, 'people', n_people);
 end $$;
 
 -- Шаги релиза (этап «Релиз», кнопки RM): submit — отправил в Apple (нужны обязательные релизные поля и закрытый чеклист;
@@ -2128,6 +2146,21 @@ begin
 end $$;
 drop trigger if exists tasks_guard_request_archive on tasks;
 create trigger tasks_guard_request_archive before update of archived on tasks for each row execute function guard_request_archive();
+
+-- Метка «тестовое» у юнитов и людей (демо из режима разработчика) — ставит только разработчик; удаляет delete_test_data.
+alter table units add column if not exists is_test boolean not null default false;
+alter table people add column if not exists is_test boolean not null default false;
+create or replace function guard_test_flag() returns trigger language plpgsql set search_path = public as $$
+begin
+  if new.is_test and (tg_op = 'INSERT' or not old.is_test) and not (app_system() or is_dev()) then
+    raise exception 'Тестовые данные создаёт только режим разработчика' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+drop trigger if exists units_guard_test on units;
+create trigger units_guard_test before insert or update of is_test on units for each row execute function guard_test_flag();
+drop trigger if exists people_guard_test on people;
+create trigger people_guard_test before insert or update of is_test on people for each row execute function guard_test_flag();
 
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;

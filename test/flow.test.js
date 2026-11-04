@@ -948,3 +948,27 @@ test('разработка → тестирование без код-ревью
   await api.as(qa, () => api('updateTask', { id: by.qa.id, patch: { status: 'done' } }));
   assert.ok((await bugsOf(by.ios.id)).closedAt && (await bugsOf(by.qa.id)).closedAt);
 });
+
+test('удалить тестовые данные: демо-юнит, демо-люди без входа, приложения и задачи — всё; реальные люди и юниты остаются', async () => {
+  const api = await setup();
+  const { ceo, pm, gold } = await studio(api);
+  await api.pg.query('update people set is_dev = true where id = $1', [ceo.id]);
+  await api.as(pm, () => assert.rejects(() => api('createUnit', { name: 'X', key: 'XX', test: true })));
+  const demo = await api.as(ceo, async () => {
+    const unit = await api('createUnit', { name: 'Demo', key: 'DEMO', test: true });
+    const p1 = await api('createPerson', { name: 'Демо · Дизайнер', access: 'member', positionId: 'd_design', test: true });
+    const old = await api('createPerson', { name: 'Демо · Старый', access: 'member', positionId: 'd_ios' }); // старое демо, без метки
+    await api('setMember', { unitId: unit.id, personId: p1.id });
+    await api('createApp', { unitId: unit.id, name: 'Демо-апп' });
+    await api('createApp', { unitId: gold.id, name: 'Тест в Gold', test: true });
+    return { unit, p1, old };
+  });
+  const r = await api.as(ceo, () => api('deleteTestData', {}));
+  assert.ok(r.units === 1 && r.people === 2 && r.apps === 2 && r.tasks >= 2, JSON.stringify(r));
+  const left = async (sql, args) => (await api.pg.query(sql, args)).rows.length;
+  assert.equal(await left('select 1 from units where id = $1', [demo.unit.id]), 0);
+  assert.equal(await left('select 1 from people where id in ($1, $2)', [demo.p1.id, demo.old.id]), 0);
+  // реальные остались: юнит Gold, PM и CEO
+  assert.equal(await left('select 1 from units where id = $1', [gold.id]), 1);
+  assert.equal(await left('select 1 from people where id in ($1, $2)', [pm.id, ceo.id]), 2);
+});

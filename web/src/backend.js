@@ -1089,7 +1089,7 @@ export function createBackend(db, opts = {}) {
       const unit = {
         id: uid('u'), name, key, color: color(p.color, PALETTE[count % PALETTE.length]),
         description: str(p.description, 1000), settings, next_num: 1,
-        ord: (await maxOrd('units')) + 1, archived: false, created_at: ts, updated_at: ts,
+        ord: (await maxOrd('units')) + 1, archived: false, created_at: ts, updated_at: ts, is_test: !!p.test,
       };
       // ответственный за юнит: PM или CEO (CEO в состав не добавляем — он видит всё)
       const pm = p.pmId ? await one('people', String(p.pmId)) : null;
@@ -2822,7 +2822,8 @@ export function createBackend(db, opts = {}) {
 
     /** Режим разработчика: удалить всё, что создали шорткаты (тестовые задачи и приложения). */
     async deleteTestData() {
-      return { tasks: Number(await rpc('delete_test_data', {})) || 0 };
+      const r = json(await rpc('delete_test_data', {}), {}) || {};
+      return { tasks: Number(r.tasks) || 0, apps: Number(r.apps) || 0, units: Number(r.units) || 0, people: Number(r.people) || 0 };
     },
 
     /* ---------- люди ---------- */
@@ -2838,7 +2839,7 @@ export function createBackend(db, opts = {}) {
     async createPerson(p) {
       const person = {
         id: uid('p'), name: req(str(p.name, 80), 'Имя'), email: str(p.email, 120).toLowerCase(),
-        role: str(p.role, 80), color: color(p.color, ''), avatar: avatarValue(p.avatar), telegram_chat_id: '', active: true, created_at: now(),
+        role: str(p.role, 80), color: color(p.color, ''), avatar: avatarValue(p.avatar), telegram_chat_id: '', active: true, created_at: now(), is_test: !!p.test,
         access: ACCESS.includes(p.access) ? p.access : 'member', position_id: (await validDept(p.positionId)) || 'd_other',
       };
       person.extra_positions = (await cleanPositions(p.extraPositionIds)).filter(id => id !== person.position_id);

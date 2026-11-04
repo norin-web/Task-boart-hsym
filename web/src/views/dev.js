@@ -106,10 +106,10 @@ export async function viewAs(personId) {
 }
 
 async function clearTestData() {
-  if (!(await confirmDlg('Удалить все тестовые приложения и задачи (созданные быстрыми сценариями)? Настоящие данные не тронутся.', { ok: 'Удалить', danger: true }))) return;
+  if (!(await confirmDlg('Удалить все тестовые данные: приложения и задачи сценариев, демо-юнит и демо-людей (без входа в систему)? Настоящие люди и данные не тронутся.', { ok: 'Удалить', danger: true }))) return;
   try {
     const r = await asDev(() => call('deleteTestData', {}));
-    toast(`Удалено тестовых задач: ${r.tasks}`);
+    toast(`Удалено: задач ${r.tasks}, приложений ${r.apps}, юнитов ${r.units}, демо-людей ${r.people}`);
     setTimeout(() => location.reload(), 700);
   } catch (e) { showErr(e); }
 }
@@ -144,7 +144,7 @@ async function demoScenario(closePanel) {
     const staff = [];
     const person = async (name, role, access, d, lead) => {
       let p = people.find(x => x.name === name);
-      if (!p) p = await call('createPerson', { name, role, access, positionId: d.id });
+      if (!p) p = await call('createPerson', { name, role, access, positionId: d.id, test: true });
       else if (p.access !== access) p = await call('updatePerson', { id: p.id, access });
       staff.push({ p, d, lead });
     };
@@ -160,7 +160,7 @@ async function demoScenario(closePanel) {
     const miss = Object.keys(need).filter(k => !need[k]);
     if (miss.length) return toast('Не хватает позиций для демо: ' + miss.join(', '), { type: 'error' });
     let unit = (boot.units || []).find(u => u.key === 'DEMO' && !u.archived);
-    if (!unit) unit = await call('createUnit', { name: 'Demo', key: 'DEMO', color: '#0ea5e9', description: 'Демо-версия: люди по позициям и приложения на разных стадиях', pmId: pm.id });
+    if (!unit) unit = await call('createUnit', { name: 'Demo', key: 'DEMO', test: true, color: '#0ea5e9', description: 'Демо-версия: люди по позициям и приложения на разных стадиях', pmId: pm.id });
     for (const { p, d } of staff) await call('setMember', { unitId: unit.id, personId: p.id, departmentId: d.id });
     // ревью: задачи позиции проверяет её лид, остальное — PM
     const byPosition = Object.fromEntries(staff.filter(x => x.lead).map(x => [x.d.id, x.p.id]));
