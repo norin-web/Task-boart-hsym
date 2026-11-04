@@ -38,6 +38,12 @@ export function activityText(a) {
     case 'unarchive': return 'задача возвращена из архива';
     case 'move': return 'перенос ' + a.fromText + ' → ' + a.toText;
     case 'delete': return 'удаление задачи «' + a.fromText + '»';
+    case 'stage_add': return 'добавлен этап «' + a.toText + '»';
+    case 'stage_remove': return 'убран этап «' + a.fromText + '»';
+    case 'unit_pm': return 'ответственный за юнит — ' + a.toText;
+    case 'form_step': return 'опросник заполняет ' + a.toText;
+    case 'deputy': return 'замещение: ' + a.toText;
+    case 'deputy_off': return 'замещение снято: ' + a.fromText;
     case 'update':
       if (a.field === 'description') return a.label.toLowerCase() + ' изменено' + (a.toText ? ': «' + cut(a.toText) + '»' : ' (очищено)');
       if (a.field === 'specUrl') return a.toText ? 'ТЗ: ' + a.toText : 'ТЗ убрано';

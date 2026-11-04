@@ -1614,13 +1614,14 @@ export function createBackend(db, opts = {}) {
      * Сменить ответственного (PM) юнита: новый PM — в составе, прежние PM — из состава вон,
      * их открытые задачи CEO (запросы) переходят новому.
      */
-    async setUnitPm(p) {
+    async setUnitPm(p, ctx) {
       const u = await findUnit(p.unitId);
       const pm = (await one('people', p.personId)) || fail('Человек не найден', 'NOT_FOUND');
       if (!['moderator', 'superadmin'].includes(pm.access) || !pm.active) fail('Ответственным за юнит может быть только PM или CEO');
       const old = (await unitPeople(u.id, 'moderator')).filter(x => x.id !== pm.id).map(x => x.id);
       if (pm.access === 'moderator') await methods.setMember({ unitId: u.id, personId: pm.id, departmentId: pm.position_id || '' });
       await updateOne('units', u.id, { pm_id: pm.id, updated_at: now() });
+      await log([{ unitId: u.id, action: 'unit_pm', to: pm.name }], ctx);
       for (const id of old) await methods.removeMember({ unitId: u.id, personId: id });
       if (old.length) {
         const st = unitSettings(u.settings);
@@ -2359,11 +2360,12 @@ export function createBackend(db, opts = {}) {
         const deps = json(w.depends_on, []) || [];
         if (kindOf(st, w.status) !== 'done' && !deps.includes(t.id)) await updateOne('tasks', w.id, { depends_on: [...deps, t.id], updated_at: now() });
       }
+      await log([{ unitId: r.unit_id, taskId: r.id, action: 'stage_add', to: def.title }], ctx);
       return t;
     },
 
     /** PM/CEO: убрать незакрытый этап запроса (в архив). Кто его ждал — теперь ждёт то, что ждал он. Релиз не убирается. */
-    async removeStage(p) {
+    async removeStage(p, ctx) {
       const t = await findTask(p.taskId);
       if (t.kind !== 'stage' || !t.parent_id) fail('Убрать можно только этап запроса');
       if (t.step === 'release') fail('Релиз убрать нельзя');
@@ -2378,6 +2380,7 @@ export function createBackend(db, opts = {}) {
         }
       }
       await updateOne('tasks', t.id, { archived: true, updated_at: now() });
+      await log([{ unitId: t.unit_id, taskId: t.parent_id, action: 'stage_remove', from: t.title.split(' · ')[0] }], ctx);
       return true;
     },
 
@@ -2572,7 +2575,7 @@ export function createBackend(db, opts = {}) {
       return (await run(T('deputies').select('*').order('date_from'))).map(r => ({ id: r.id, personId: r.person_id, deputyId: r.deputy_id, from: r.date_from, to: r.date_to, note: r.note || '' }));
     },
 
-    async saveDeputy(p) {
+    async saveDeputy(p, ctx) {
       const person = (await one('people', p.personId)) || fail('Кого замещают — не выбран');
       const deputy = (await one('people', p.deputyId)) || fail('Заместитель не выбран');
       if (person.id === deputy.id) fail('Человек не может замещать сам себя');
@@ -2582,11 +2585,16 @@ export function createBackend(db, opts = {}) {
       const row = { person_id: person.id, deputy_id: deputy.id, date_from: from, date_to: to, note: str(p.note, 200) };
       if (p.id) await updateOne('deputies', String(p.id), row);
       else await run(T('deputies').insert({ id: uid('dp'), ...row, created_at: now() }));
+      await log([{ action: 'deputy', to: `${person.name} → ${deputy.name}, ${from} – ${to}` }], ctx);
       return methods.listDeputies();
     },
 
-    async deleteDeputy(p) {
-      await run(T('deputies').delete().eq('id', String(p.id || '')));
+    async deleteDeputy(p, ctx) {
+      const gone = await run(T('deputies').delete().eq('id', String(p.id || '')).select('person_id,deputy_id'));
+      if (gone.length) {
+        const nm = async id => ((await one('people', id)) || {}).name || '';
+        await log([{ action: 'deputy_off', from: `${await nm(gone[0].person_id)} → ${await nm(gone[0].deputy_id)}` }], ctx);
+      }
       return methods.listDeputies();
     },
 
@@ -2664,7 +2672,7 @@ export function createBackend(db, opts = {}) {
     },
 
     /** PM/CEO: кто заполняет опросник в этом запросе — разработчик (этап iOS) или лид на интеграции. */
-    async setFormStep(p) {
+    async setFormStep(p, ctx) {
       const r = await findTask(p.requestId);
       const step = p.step === 'integr' ? 'integr' : 'ios';
       const stages = (await run(T('tasks').select('id,step,dev_form,archived').eq('parent_id', r.id).eq('kind', 'stage'))).filter(x => !x.archived);
@@ -2672,6 +2680,7 @@ export function createBackend(db, opts = {}) {
       for (const x of stages.filter(y => y.step === 'ios' || y.step === 'integr')) {
         await updateOne('tasks', x.id, { dev_form: { ...(json(x.dev_form, {}) || {}), need: x.step === step }, updated_at: now() });
       }
+      await log([{ unitId: r.unit_id, taskId: r.id, action: 'form_step', to: step === 'integr' ? 'лид на интеграции' : 'разработчик' }], ctx);
       return step;
     },
 
