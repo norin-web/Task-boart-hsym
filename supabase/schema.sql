@@ -2022,6 +2022,25 @@ create policy task_files_insert on task_files for insert to authenticated with c
 drop policy if exists task_files_delete on task_files;
 create policy task_files_delete on task_files for delete to authenticated using (is_superadmin() or created_by = my_person_id());
 
+-- Бэклог (CEO): идеи и ТЗ до старта работ — новое приложение или апдейт. «Запустить» создаёт приложение
+-- с запросом New App или запрос «Апдейт»; идея помнит, во что превратилась (request_id).
+create table if not exists ideas (
+  id          text primary key,
+  title       text not null,
+  description text not null default '',
+  spec_url    text not null default '',
+  kind        text not null default 'new_app' check (kind in ('new_app', 'update')),
+  app_id      text not null default '',
+  status      text not null default 'new' check (status in ('new', 'started', 'dropped')),
+  request_id  text not null default '',
+  created_by  text not null default '',
+  created_at  text not null,
+  updated_at  text not null
+);
+alter table ideas enable row level security;
+drop policy if exists ideas_all on ideas;
+create policy ideas_all on ideas for all to authenticated using (is_superadmin()) with check (is_superadmin());
+
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
 revoke execute on all functions in schema public from public, anon;

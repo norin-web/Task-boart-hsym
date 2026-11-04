@@ -247,6 +247,7 @@ const taskOut = r => ({
   createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at,
 });
 
+const ideaOut = r => ({ id: r.id, title: r.title, description: r.description || '', specUrl: r.spec_url || '', kind: r.kind, appId: r.app_id || '', status: r.status, requestId: r.request_id || '', createdBy: r.created_by || '', createdAt: r.created_at, updatedAt: r.updated_at });
 const fileOut = r => ({ id: r.id, taskId: r.task_id, tag: r.tag || '', name: r.name || '', data: r.data, by: r.created_by || '', at: r.created_at });
 
 const fieldOut = r => ({
@@ -1837,7 +1838,7 @@ export function createBackend(db, opts = {}) {
       if (p.noRequest) return { app: appOut(app), request: null };
       const request = await methods.createRequest({
         appId: app.id, type: 'new_app', title: str(p.requestTitle, 500) || `New App: ${app.name}`, description: p.description,
-        pmId: p.pmId, dueDate: p.dueDate, priority: app.priority,
+        pmId: p.pmId, dueDate: p.dueDate, priority: app.priority, specUrl: p.specUrl,
       }, ctx);
       return { app: appOut(app), request };
     },
@@ -2568,6 +2569,47 @@ export function createBackend(db, opts = {}) {
       const t = await findTask(p.taskId);
       const id = await rpc('release_step', { p_task: t.id, p_action: p.action, p_reason: str(p.reason, 2000), p_shot: linkUrl(p.shot), p_self: p.action === 'reject' && !!p.self });
       return { task: taskOut(await findTask(t.id)), rejectRequestId: p.action === 'reject' ? id : '' };
+    },
+
+    /** Бэклог (CEO): идеи и ТЗ — новые сверху, запущенные ниже. */
+    async listIdeas() {
+      return (await run(T('ideas').select('*').order('created_at', { ascending: false }))).map(ideaOut);
+    },
+
+    async saveIdea(p, ctx) {
+      const kind = p.kind === 'update' ? 'update' : 'new_app';
+      const row = {
+        title: req(str(p.title, 200), 'Название'), description: str(p.description, 20000), spec_url: linkUrl(p.specUrl), kind,
+        app_id: kind === 'update' ? ((p.appId && (await one('apps', String(p.appId))) || fail('Выберите приложение для апдейта')).id) : '',
+        updated_at: now(),
+      };
+      if (p.id) {
+        await updateOne('ideas', String(p.id), row);
+        return ideaOut(await one('ideas', String(p.id)));
+      }
+      const idea = { id: uid('i'), ...row, status: 'new', request_id: '', created_by: actor(ctx), created_at: now() };
+      await run(T('ideas').insert(idea));
+      return ideaOut(idea);
+    },
+
+    async deleteIdea(p) {
+      await run(T('ideas').delete().eq('id', String(p.id || '')));
+      return true;
+    },
+
+    /** Запустить идею: новое приложение в юните (запрос New App ответственному) или запрос «Апдейт» по приложению. */
+    async startIdea(p, ctx) {
+      const idea = (await one('ideas', String(p.id || ''))) || fail('Идея не найдена', 'NOT_FOUND');
+      if (idea.status === 'started') fail('Идея уже запущена');
+      let request;
+      if (idea.kind === 'update') {
+        request = await methods.createRequest({ appId: idea.app_id, type: 'update', title: idea.title, description: idea.description, specUrl: idea.spec_url, templateId: p.templateId }, ctx);
+      } else {
+        const made = await methods.createApp({ unitId: p.unitId, name: str(p.name, 120) || idea.title, description: idea.description, specUrl: idea.spec_url, requestTitle: `New App: ${str(p.name, 120) || idea.title}` }, ctx);
+        request = made.request;
+      }
+      await updateOne('ideas', idea.id, { status: 'started', request_id: request ? request.id : '', updated_at: now() });
+      return { idea: ideaOut(await one('ideas', idea.id)), request };
     },
 
     /** Замещения (CEO): кто за кого и с какого по какое число. */

@@ -3089,3 +3089,18 @@ a.bug-title:hover { text-decoration: underline; }
 .dep-pill { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; color: var(--accent-text); background: var(--surface-2); }
 .rl-waits { margin-top: 8px; }
 .rl-waits .link-btn { font-weight: 600; }
+
+/* ---------- Бэклог (CEO) ---------- */
+.bl-list { display: grid; gap: 2px; padding: 8px; }
+.bl-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 12px; border-radius: 18px; }
+.bl-row:hover { background: var(--surface-2); }
+.bl-row.started { opacity: .75; }
+.bl-kind { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: var(--surface-2); color: var(--text-2); white-space: nowrap; margin-top: 1px; }
+.bl-kind.update { color: var(--accent-text); }
+.bl-main { min-width: 0; display: grid; gap: 4px; }
+.bl-title { overflow-wrap: anywhere; }
+.bl-desc { font-size: 13px; color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.bl-meta { display: flex; gap: 12px; align-items: center; font-size: 12px; color: var(--muted); }
+.bl-meta a { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); }
+.bl-act { display: flex; gap: 4px; align-items: center; }
+@container main (max-width: 640px) { .bl-row { grid-template-columns: minmax(0, 1fr); } }

@@ -190,6 +190,7 @@ function drawSidebar() {
       navLink({ view: 'home' }, person && person.access === 'rm' ? 'rocket' : 'home', staff ? 'Дашборд' : person && person.access === 'rm' ? 'Релизы' : 'Мой дашборд'),
       seesApps() && navLink({ view: 'apps' }, 'app', 'Приложения'),
       staff && !ceoDefault() && navLink({ view: 'ready' }, 'rows', 'Сводка', readyCount()),
+      ceo && navLink({ view: 'backlog' }, 'layers', 'Бэклог'),
       (ceo || (person && person.access === 'rm')) && navLink({ view: 'rejects' }, 'rejected', 'Реджекты', rejectCount()),
       ceo && navLink({ view: 'analytics' }, 'chart', 'Аналитика'),
       !lite && navLink({ view: 'myboard' }, 'board', 'Моя доска', !staff && !(person && person.access === 'rm') && myCount()),

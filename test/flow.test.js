@@ -869,3 +869,21 @@ test('опросник: PM решает, кто заполняет — разр�
   const r = await api.as(rm, () => api('getRelease', { taskId: by.release.id }));
   assert.deepEqual(r.devForm.answers[qs[0].id], { v: 'Да', q: 'Есть backend?' });
 });
+
+test('бэклог: идеи и ТЗ ведёт CEO; запуск — новое приложение с запросом New App или запрос «Апдейт»', async () => {
+  const api = await setup();
+  const { ceo, pm, gold } = await studio(api);
+  await api.as(pm, () => assert.rejects(() => api('saveIdea', { title: 'x' }))); // только CEO
+  const idea = await api.as(ceo, () => api('saveIdea', { title: 'AI-фоторедактор', description: 'ТЗ', specUrl: 'https://docs.google.com/tz' }));
+  assert.equal(idea.status, 'new');
+  const res = await api.as(ceo, () => api('startIdea', { id: idea.id, unitId: gold.id, name: 'Photo AI' }));
+  assert.equal(res.idea.status, 'started');
+  assert.equal(res.request.assigneeId, pm.id); // запрос — ответственному за юнит
+  assert.equal(res.request.specUrl, 'https://docs.google.com/tz');
+  await api.as(ceo, () => assert.rejects(() => api('startIdea', { id: idea.id, unitId: gold.id }), /уже запущена/));
+  const app = (await api.pg.query("select id from apps where name = 'Photo AI'")).rows[0];
+  const upd = await api.as(ceo, () => api('saveIdea', { kind: 'update', appId: app.id, title: 'Виджеты' }));
+  const r2 = await api.as(ceo, () => api('startIdea', { id: upd.id }));
+  assert.equal(r2.request.title, 'Апдейт №1: Виджеты');
+  assert.equal((await api.as(ceo, () => api('listIdeas', {}))).filter(x => x.status === 'started').length, 2);
+});
