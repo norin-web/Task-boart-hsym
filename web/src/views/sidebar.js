@@ -1,5 +1,6 @@
 import Sortable from 'sortablejs';
 import { queueCount } from './ready.js';
+import { openRejectCount } from './rejects.js';
 import { S, LS, byOrder, openCount, me, unitById, personById, activeTeams, isStaff, isSuper, ceoMode, ceoDefault, isDev, ACCESS_LABELS, seesApps, ownTeamsOnly, myAccess } from '../state.js';
 import { $, h, icon, avatar, menu, closeMenu, showErr, fill, confirmDlg, setBell } from '../ui.js';
 import { call, send } from '../api.js';
@@ -10,7 +11,7 @@ import { openActAs, openMyProfile, openTeamDialog } from './people.js';
 import { personCaption } from './my.js';
 import { mode, supabase, resetLocalData } from '../data.js';
 
-let myOpen = 0, myOpenAt = 0, readyN = 0, readyAt = 0;
+let myOpen = 0, myOpenAt = 0, readyN = 0, readyAt = 0, rejN = 0, rejAt = 0;
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 
@@ -146,6 +147,15 @@ function drawSidebar() {
     }
     return el;
   };
+  // сколько реджектов открыто — число у «Реджекты» (CEO и релиз-менеджер)
+  const rejectCount = () => {
+    const el = h('span', { class: 'nav-count' + (rejN ? ' danger' : '') }, rejN || '');
+    if (Date.now() - rejAt > 30000) {
+      rejAt = Date.now();
+      openRejectCount().then(n => { rejN = n; el.textContent = n || ''; el.classList.toggle('danger', !!n); });
+    }
+    return el;
+  };
   const myCount = () => {
     const el = h('span', { class: 'nav-count' }, myOpen || '');
     if (Date.now() - myOpenAt > 30000) {
@@ -180,6 +190,7 @@ function drawSidebar() {
       navLink({ view: 'home' }, person && person.access === 'rm' ? 'rocket' : 'home', staff ? 'Дашборд' : person && person.access === 'rm' ? 'Релизы' : 'Мой дашборд'),
       seesApps() && navLink({ view: 'apps' }, 'app', 'Приложения'),
       staff && !ceoDefault() && navLink({ view: 'ready' }, 'rows', 'Сводка', readyCount()),
+      (ceo || (person && person.access === 'rm')) && navLink({ view: 'rejects' }, 'rejected', 'Реджекты', rejectCount()),
       ceo && navLink({ view: 'analytics' }, 'chart', 'Аналитика'),
       !lite && navLink({ view: 'myboard' }, 'board', 'Моя доска', !staff && !(person && person.access === 'rm') && myCount()),
       !lite && (staff || (person && person.access === 'rm')) && navLink({ view: 'my' }, 'list', 'Мои задачи', !staff && myCount()),
