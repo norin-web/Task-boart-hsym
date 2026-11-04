@@ -2688,13 +2688,14 @@ export function createBackend(db, opts = {}) {
       }
       const src = p.answers && typeof p.answers === 'object' ? p.answers : {};
       const answers = {};
-      for (const q of await devQuestions()) {
+      for (const [n, q] of (await devQuestions()).entries()) {
         const a = src[q.id] || {};
         const v = q.kind === 'yn' ? (['Да', 'Нет'].includes(a.v) ? a.v : '') : str(a.v, 1000);
         if (!v) { if (q.optional) continue; fail('Ответьте на вопрос: ' + q.q); }
         const note = q.kind === 'yn' && v === 'Да' ? str(a.note, 500) : '';
         if (q.kind === 'yn' && v === 'Да' && q.note && !note) fail(q.q + ' ' + q.note);
-        answers[q.id] = note ? { v, note, q: q.q } : { v, q: q.q }; // текст вопроса — в ответе: вопросы потом могут поменять
+        // текст и номер вопроса — в ответе: вопросы потом могут поменять, а база не хранит порядок ключей
+        answers[q.id] = note ? { v, note, q: q.q, n } : { v, q: q.q, n };
       }
       const form = { ...(json(t.dev_form, {}) || {}), answers, by: (await rpc('my_person_id', {})) || '', at: now() };
       await updateOne('tasks', t.id, { dev_form: form });

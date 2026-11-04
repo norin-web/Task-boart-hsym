@@ -3104,3 +3104,10 @@ a.bug-title:hover { text-decoration: underline; }
 .bl-meta a { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); }
 .bl-act { display: flex; gap: 4px; align-items: center; }
 @container main (max-width: 640px) { .bl-row { grid-template-columns: minmax(0, 1fr); } }
+
+/* Карточка релиза в узкой панели (окно ~1024): шапка и шаги переносятся, длинные ссылки обрезаются — без горизонтальной прокрутки */
+.rl-head, .rl-track, .rl-actions, .rl-card-head { flex-wrap: wrap; }
+.rl-block .rl-card { min-width: 0; }
+.rl-links { grid-template-columns: minmax(0, 1fr); }
+.rl-link, .rl-link > * { min-width: 0; }
+.rl-link-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -867,7 +867,7 @@ test('опросник: PM решает, кто заполняет — разр�
   for (const k of ['design', 'art', 'ios', 'qa', 'integr', 'meta', 'store', 'retext', 'l10n']) await api.as(pm, () => api('updateTask', { id: by[k].id, patch: { status: 'done' } }));
   await api.as(pm, () => api('sendToRelease', { taskId: by.release.id }));
   const r = await api.as(rm, () => api('getRelease', { taskId: by.release.id }));
-  assert.deepEqual(r.devForm.answers[qs[0].id], { v: 'Да', q: 'Есть backend?' });
+  assert.deepEqual(r.devForm.answers[qs[0].id], { v: 'Да', q: 'Есть backend?', n: 0 });
 });
 
 test('бэклог: идеи и ТЗ ведёт CEO; запуск — новое приложение с запросом New App или запрос «Апдейт»', async () => {

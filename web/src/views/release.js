@@ -227,8 +227,9 @@ function devAnswers(form) {
   const who = form && personById(form.by);
   if (!form || !form.at) return h('div', { class: 'rl-card rl-dev-empty' }, h('h3', null, 'Опросник разработчика'), h('p', { class: 'muted rl-small' }, 'Разработчик ещё не заполнил опросник — ответы появятся здесь.'));
   // порядок и текст — как сохранены в ответе (старые ответы — по вопросам по умолчанию)
-  const known = Object.fromEntries(DEV_QUESTIONS.map(q => [q.id, q.q]));
-  const rows = Object.entries(a).map(([id, x]) => ({ q: x.q || known[id] || id, a: answerText(x) })).filter(x => x.a);
+  const known = Object.fromEntries(DEV_QUESTIONS.map((q, i) => [q.id, { q: q.q, n: i }]));
+  const rows = Object.entries(a).map(([id, x]) => ({ q: x.q || (known[id] || {}).q || id, n: x.n ?? (known[id] || {}).n ?? 99, a: answerText(x) }))
+    .filter(x => x.a).sort((x, y) => x.n - y.n);
   const copy = () => {
     const text = rows.map(x => `${x.q}\n${x.a}`).join('\n\n');
     (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(() => toast('Ответы опросника скопированы'), () => toast('Не удалось скопировать', { type: 'error' }));
