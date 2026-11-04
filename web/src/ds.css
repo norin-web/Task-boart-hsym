@@ -3029,3 +3029,6 @@ button.rd-check.on { background: var(--text); border-color: transparent; }
 .rj-row[role=button] { cursor: pointer; }
 .rj-row[role=button]:hover { background: var(--surface-2); }
 .rj-row.fixed[role=button]:hover { background: color-mix(in srgb, var(--success, #1f9d55) 11%, transparent); }
+
+.rj-list { padding: 8px; gap: 2px; }
+.rj-row { border-bottom: 0; border-radius: 18px; }
