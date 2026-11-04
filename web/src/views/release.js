@@ -4,7 +4,7 @@
  * Чеклист релиза — обычный чеклист этапа ниже. Настройка релизных полей и чеклиста студии — openReleaseSettings (CEO, RM).
  */
 import Sortable from 'sortablejs';
-import { S, me, canEditTask, fmtDateTime, relTime, personById, plural } from '../state.js';
+import { S, me, canEditTask, relTime, personById, plural } from '../state.js';
 import { h, icon, fill, modal, toast, showErr, field, confirmDlg } from '../ui.js';
 import { DEV_QUESTIONS, answerText } from '../devform.js';
 import { brandIcon, brandOf } from './brand.js';

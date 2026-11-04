@@ -3,13 +3,13 @@ import Sortable from 'sortablejs';
 import { AUTO_ARCHIVE, HIDE_DONE } from '../state.js';
 import { reviewSection, openFieldEditor, requiredLabel } from './settings.js';
 import { TYPE_LABELS } from '../state.js';
-import { S, LS, me, ceoDefault, byOrder, unitById, emptyCounts, personById, todayStr, isSuper, plural, LINK_KINDS, activeDepts, deptById, activeTeams } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill, toast, confirmDlg, menu, modal, field, skeleton } from '../ui.js';
+import { S, LS, ceoDefault, byOrder, unitById, emptyCounts, personById, todayStr, isSuper, plural, LINK_KINDS, activeDepts, deptById, activeTeams } from '../state.js';
+import { $, h, icon, avatar, showErr, fill, toast, confirmDlg, menu, modal, field, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView, link, rerender } from '../router.js';
 import { renderSidebar } from './sidebar.js';
-import { peopleManager, positionsManager, teamsManager, addPersonDialog, teamChips, positionChips, addMemberDialog } from './people.js';
-import { openCreateTask } from './task.js';
+import { peopleManager, positionsManager, teamsManager, addPersonDialog, addMemberDialog } from './people.js';
+
 import { activityFeed } from './feed.js';
 import { openCreateUnit, archiveUnit, deleteUnit } from './units.js';
 

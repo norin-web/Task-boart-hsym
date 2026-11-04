@@ -5,7 +5,7 @@
 import { S, personById, colById, deptById, colColor, todayStr, taskKey, taskDone, fmtDate } from '../state.js';
 import { $, h, icon, avatar, statusIcon, fill } from '../ui.js';
 import { link } from '../router.js';
-import { unitHeader } from './unitnav.js';
+
 import { openCreateTask, peekTask } from './task.js';
 import { isStaff } from '../state.js';
 

@@ -2,11 +2,11 @@
  * Блоки «Моего дашборда» сотрудника и лида: фокус (что делать сейчас), очередь ревью лида («Принять» / «Вернуть»)
  * и загрузка людей позиции лида. Данные — getMyDashboard.
  */
-import { S, personById, deptById, prioById, fmtDate, plural, dueInfo } from '../state.js';
+import { S, personById, deptById, fmtDate, plural, dueInfo } from '../state.js';
 import { h, icon, avatar, statusIcon, toast, showErr, emptyBlock } from '../ui.js';
 import { send } from '../api.js';
 import { peekTask } from './task.js';
-import { appIcon, prioTag, isHighPrio } from './apps.js';
+import { appIcon } from './apps.js';
 import { reviewButtons } from './review.js';
 import { readNote } from './home.js';
 

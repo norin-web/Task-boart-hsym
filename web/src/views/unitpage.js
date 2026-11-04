@@ -9,7 +9,7 @@ import { call, send } from '../api.js';
 import { currentView, link } from '../router.js';
 import { openCreateApp, openNewAppTask, pmsOf, openAppCard, appStatusCell } from './apps.js';
 import { attention, inProgress, recent } from './ceo.js';
-import { unitHeader } from './unitnav.js';
+
 import { addMemberDialog, applyMembers } from './people.js';
 import { sparkline, openSeries } from './charts.js';
 

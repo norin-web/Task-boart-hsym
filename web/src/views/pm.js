@@ -3,12 +3,12 @@
  * «Передать в релиз»), проблемы (просрочено, долго на ревью, без исполнителя, без движения, готово к релизу)
  * и команда с KPI за неделю / месяц / квартал. Только юниты PM (видимость решает база).
  */
-import { S, me, personById, deptById, REQUEST_TYPES, LS, greeting, plural, fmtDate, todayStr, nameFrom } from '../state.js';
+import { S, personById, deptById, LS, fmtDate, todayStr, nameFrom } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, emptyBlock, statusIcon, skeleton } from '../ui.js';
 import { call } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask, openCreateTask } from './task.js';
-import { appIcon, prioTag, isHighPrio, openDecomposeDialog, sendRelease, openAppById } from './apps.js';
+import { appIcon, prioTag, openDecomposeDialog, sendRelease, openAppById } from './apps.js';
 import { newsBlock, loadNotes } from './home.js';
 import { renderLayout, editLayout } from './layout.js';
 

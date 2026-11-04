@@ -1,7 +1,4 @@
-import {
-  S, LS, todayStr, me, priorityOf, taskById, personById, activeFields, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDate, fmtDateTime, relTime, addDays,
-  unitById, safeUrl, visibleLinkFields, REQUEST_TYPES, plural, appById, isSuper, ceoDefault, KIND_COLORS, whoName, teamById, activeTeams, colById, colColor, taskDone, activeDepts, deptById, isStaff, canEditTask, inMyZone, fmtValue,
-} from '../state.js';
+import { S, LS, todayStr, me, priorityOf, taskById, personById, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDate, fmtDateTime, relTime, addDays, unitById, safeUrl, visibleLinkFields, plural, appById, isSuper, ceoDefault, KIND_COLORS, whoName, colById, colColor, taskDone, isStaff, canEditTask, inMyZone, fmtValue } from '../state.js';
 import { $, h, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, statusIcon, fill, prioMark, prioSelect } from '../ui.js';
 import { call, send } from '../api.js';
 import { navigate, rerender } from '../router.js';
@@ -726,12 +723,6 @@ function discussionBlock(t, editable) {
 /** Значение только для чтения в правой колонке. */
 const ro = node => h('div', { class: 'ro-value' }, node || h('span', { class: 'muted' }, '—'));
 
-function reviewerSelect(value, unit, onChange) {
-  const ids = [...new Set([value, S.meId, ...(unit.members || [])].filter(Boolean))];
-  return h('select', { class: 'inp', 'aria-label': 'Ревьюер', onchange: e => onChange(e.target.value) },
-    !value && h('option', { value: '', selected: true }, 'Без ревью'),
-    ids.map(personById).filter(p => p && (p.active || p.id === value)).map(p => h('option', { value: p.id, selected: p.id === value }, p.name)));
-}
 
 /** Приоритет в карточке релиза: значок и название (R04). */
 function prioRo(t, f) {
@@ -834,29 +825,7 @@ function metaLines(t) {
 
 /* ---------- контролы полей ---------- */
 
-/** Отдел: select с цветной точкой. */
-/** Команда задачи: выбор с цветной точкой. */
-export function teamSelect(value, onChange) {
-  const t = teamById(value);
-  const dot = h('span', { class: 'dot', style: { background: t ? t.color : 'var(--border-strong)' } });
-  const list = activeTeams();
-  if (t && t.archived) list.push(t);
-  return h('div', { class: 'status-wrap' }, dot, h('select', {
-    class: 'inp', value: value || '',
-    onchange: e => { const nt = teamById(e.target.value); dot.style.background = nt ? nt.color : 'var(--border-strong)'; onChange(e.target.value); },
-  }, h('option', { value: '' }, '— без команды —'), list.map(x => h('option', { value: x.id }, x.name))));
-}
 
-export function deptSelect(value, onChange) {
-  const d = deptById(value);
-  const dot = h('span', { class: 'dot', style: { background: d ? d.color : 'var(--border-strong)' } });
-  const list = activeDepts();
-  if (d && d.archived) list.push(d);
-  return h('div', { class: 'status-wrap' }, dot, h('select', {
-    class: 'inp', value: value || '',
-    onchange: e => { const nd = deptById(e.target.value); dot.style.background = nd ? nd.color : 'var(--border-strong)'; onChange(e.target.value); },
-  }, h('option', { value: '' }, '— без позиции —'), list.map(x => h('option', { value: x.id }, x.name))));
-}
 
 /**
  * Исполнитель: только участники команды (юнита). Текущий исполнитель вне команды тоже показывается.

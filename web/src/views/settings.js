@@ -1,13 +1,12 @@
 import Sortable from 'sortablejs';
 import { S, TYPE_LABELS, PALETTE, unitById, byOrder, KINDS, KIND_LABELS, KIND_COLORS, colColor, personById, activeDepts, plural, isSuper } from '../state.js';
-import { $, h, icon, avatar, field, topbar, menu, closeMenu, modal, confirmDlg, toast, showErr, colorPicker, fill, personSelect } from '../ui.js';
+import { $, h, icon, avatar, field, menu, closeMenu, modal, confirmDlg, toast, showErr, colorPicker, fill, personSelect } from '../ui.js';
 import { send } from '../api.js';
 import { link } from '../router.js';
 import { renderSidebar } from './sidebar.js';
 import { archiveUnit, deleteUnit } from './units.js';
 import { flowSection } from './flows.js';
 import { addMemberDialog, applyMembers, openDepartments, positionChips } from './people.js';
-import { unitHeader } from './unitnav.js';
 
 export function renderSettings() {
   const b = S.board;

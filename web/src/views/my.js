@@ -61,17 +61,6 @@ export async function renderMy() {
   drawList();
 }
 
-/** Сводка над списком: открыто / в работе / просрочено. */
-function mySummary(tasks) {
-  const today = todayStr();
-  const open = tasks.filter(t => t.statusKind !== 'done');
-  const late = open.filter(t => t.dueDate && t.dueDate < today).length;
-  const prog = open.filter(t => t.statusKind === 'progress').length;
-  return h('div', { class: 'my-summary' },
-    h('span', null, h('b', null, open.length), ' ' + plural(open.length, ['открытая', 'открытые', 'открытых'])),
-    h('span', null, h('span', { class: 'dot', style: { background: KIND_COLORS.progress } }), h('b', null, prog), ' в работе'),
-    late > 0 && h('span', { class: 'warn-text' }, h('b', null, late), ' просрочено'));
-}
 
 /** Задачи по юнитам: в каждом — просроченные, в работе, к выполнению; готовые — по кнопке. */
 export function unitGroups(tasks) {

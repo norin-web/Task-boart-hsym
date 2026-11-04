@@ -40,18 +40,6 @@ function fadeOut(el) {
   }, 220);
 }
 
-/** «на ревью от Дмитрия» / «вернул(а) с ревью Мария» / «назначил(а) Анна». */
-function noteText(kind, by) {
-  const who = by && by.id !== S.meId ? by.name.split(' ')[0] : '';
-  // тип (ревью / возврат) виден плашкой слева — здесь только кто
-  if (kind === 'review') return who ? 'отправил(а) ' + who : 'от вас';
-  if (kind === 'returned') return who ? 'вернул(а) ' + who : 'вернули';
-  if (kind === 'approved') return who ? 'принял(а) ' + who : 'принято';
-  if (kind === 'unblocked') return 'предыдущие этапы закрыты';
-  if (kind === 'mention') return who ? 'отметил(а) ' + who : 'вас отметили';
-  if (kind === 'store_live' || kind === 'store_reject') return who ? 'отметил(а) ' + who : '';
-  return who ? 'назначил(а) ' + who : 'назначено';
-}
 
 /** Пульс увидел новые уведомления: блок на главной обновляется сам (без перезагрузки страницы). */
 export async function refreshNews() {

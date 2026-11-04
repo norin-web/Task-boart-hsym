@@ -70,7 +70,6 @@ export const S = {
 export const unitById = id => S.units.find(u => u.id === id);
 export const taskById = id => (S.board ? S.board.tasks.find(t => t.id === id) : null);
 export const personById = id => (id ? S.people.find(p => p.id === id) : null);
-export const activePeople = () => S.people.filter(p => p.active);
 export const me = () => personById(S.meId);
 /** Имя автора/участника истории; кого удалили из системы — «Удалённый сотрудник». */
 export const whoName = id => { const p = personById(id); return p ? p.name : id ? 'Удалённый сотрудник' : 'Система'; };
@@ -130,7 +129,6 @@ export const activeDepts = () => S.departments.filter(d => !d.archived).sort(byO
 export const deptById = id => (id ? S.departments.find(d => d.id === id) : null);
 /** Участники текущего юнита: [{ personId, departmentId }]. */
 export const members = () => (S.board ? S.board.members : []);
-export const memberOf = personId => members().find(m => m.personId === personId);
 export const taskKey = t => (t._temp ? '…' : S.board.unit.key + '-' + t.num);
 /** Поле-приоритет юнита (одно): варианты по порядку — от низкого к высокому. */
 export const priorityField = () => activeFields().find(f => f.role === 'priority' && f.type === 'select');
@@ -279,11 +277,6 @@ export function fmtValue(f, v) {
   }
 }
 
-/** Заголовок дашборда: «Пятница, 1 ноября». */
-export function todayLabel() {
-  const t = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
-  return t.charAt(0).toUpperCase() + t.slice(1);
-}
 export function greeting() {
   const h = new Date().getHours();
   if (h < 5) return 'Доброй ночи';

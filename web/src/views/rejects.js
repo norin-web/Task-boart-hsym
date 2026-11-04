@@ -3,7 +3,7 @@
  * Открытые — у PM на исправлении или уже исправлены и ждут повторной отправки; закрытые — история.
  * Данные: getRmDashboard (что открыто сейчас) + getReleaseHistory (все реджекты).
  */
-import { S, isSuper, personById, unitById, fmtDate, relTime, nameFrom, plural } from '../state.js';
+import { isSuper, personById, unitById, fmtDate, nameFrom, plural } from '../state.js';
 import { $, h, icon, fill, topbar, toast, showErr, confirmDlg, emptyBlock, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { peekTask } from './task.js';

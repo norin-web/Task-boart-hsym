@@ -18,8 +18,6 @@ import { mode } from '../data.js';
 const units = () => S.units.filter(u => !u.archived).sort((a, b) => (a.order || 0) - (b.order || 0));
 const prioRank = id => S.priorityOptions.findIndex(o => o.id === id);
 const daysSince = iso => Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 864e5));
-// «высокий» — два верхних варианта приоритета (High, Critical)
-const isHigh = id => { const i = prioRank(id); return i >= 0 && i >= S.priorityOptions.length - 2; };
 const daysLate = due => Math.max(1, Math.round((Date.parse(todayStr()) - Date.parse(due)) / 864e5));
 
 let editHook = null;

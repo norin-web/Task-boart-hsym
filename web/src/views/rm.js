@@ -2,16 +2,16 @@
  * Дашборд RM (главная RM): очередь на релиз (переданные PM — чего не хватает до отправки), на ревью Apple (сколько ждут;
  * «Вышло в стор» / «Реджект» прямо здесь), реджекты (причина, кто исправляет; «Отправить снова»). Клик — карточка релиза.
  */
-import { me, personById, greeting, plural, relTime, nameFrom } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill, toast, confirmDlg, emptyBlock, skeleton } from '../ui.js';
+import { personById, relTime, nameFrom } from '../state.js';
+import { $, h, icon, topbar, showErr, fill, toast, confirmDlg, emptyBlock, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
-import { appIcon, prioTag, isHighPrio, appStatusCell, stageDots, openAppById } from './apps.js';
+import { appIcon, appStatusCell, stageDots, openAppById } from './apps.js';
 import { watchBlock } from './watch.js';
-import { newsBlock, loadNotes } from './home.js';
+import { loadNotes } from './home.js';
 import { renderLayout, editLayout } from './layout.js';
-import { openReleaseSettings, openReleaseHistory, openRejectForm } from './release.js';
+import { openReleaseHistory, openRejectForm } from './release.js';
 
 /** «от Екатерины»: имя в родительном падеже. */
 

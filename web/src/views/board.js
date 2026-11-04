@@ -1,14 +1,10 @@
 import Sortable from 'sortablejs';
-import {
-  S, taskById, appById, personById, activeFields, missingFor, missingNext, priorityOf, priorityField, byPriority, visibleLinkFields, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder,
-  between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, relTime, unitById, emptyCounts, freshFilters, saveBoardView,
-  activeDepts, deptById, teamById, KINDS, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS, me, ownTeamsOnly
-} from '../state.js';
-import { $, h, icon, avatar, topbar, menu, closeMenu, modal, field, confirmDlg, promptDlg, toast, showErr, statusDot, statusIcon, fill, prioMark } from '../ui.js';
+import { S, taskById, appById, personById, activeFields, missingFor, missingNext, priorityOf, priorityField, byPriority, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder, between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, unitById, emptyCounts, freshFilters, saveBoardView, activeDepts, deptById, teamById, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS, me, ownTeamsOnly } from '../state.js';
+import { $, h, icon, avatar, menu, closeMenu, modal, field, confirmDlg, promptDlg, toast, showErr, statusDot, statusIcon, fill, prioMark } from '../ui.js';
 import { call, send } from '../api.js';
 import { navigate, link } from '../router.js';
 import { updateSidebarCounts, renderUnread } from './sidebar.js';
-import { unitHeader } from './unitnav.js';
+
 import { viewSwitch } from './timeline.js';
 import { openTask, closePanel, openCreateTask, duplicateTask, deleteTaskUndoable, refreshPanel } from './task.js';
 
@@ -505,8 +501,6 @@ export async function saveColumns(cols, remap) {
   if (remap && Object.keys(remap).length) await reloadBoard();
   else renderTasks();
 }
-
-const newColumnId = () => 'c_' + Math.random().toString(36).slice(2, 10);
 
 function columnMenu(anchor, col) {
   const cols = columns();
