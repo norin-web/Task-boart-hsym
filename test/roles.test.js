@@ -189,19 +189,19 @@ test('уведомления о назначении и онлайн-метка'
     await api('createTask', { unitId: A.id, title: 'Сам себе', assigneeId: admin.id });
   });
   await api.as(designer, async () => {
-    const list = await api('getNotifications', {});
+    const list = (await api('getNotifications', {})).filter(n => !n.read);
     assert.deepEqual(list.map(n => [n.taskId, n.actorId, n.key]), [[t.id, admin.id, 'ALP-' + t.num]]);
     assert.equal((await api('heartbeat', {})).unread, 1);
   });
   await api.as(admin, async () => {
-    assert.equal((await api('getNotifications', {})).length, 0); // себе не уведомляем
+    assert.equal((await api('getNotifications', {})).filter(n => !n.read).length, 0); // себе не уведомляем
     await api('updateTask', { id: t.id, patch: { assigneeId: dev.id } }); // переназначили — у дизайнера снялось
   });
   await api.as(designer, async () => {
-    assert.equal((await api('getNotifications', {})).length, 0);
+    assert.equal((await api('getNotifications', {})).filter(n => !n.read).length, 0);
   });
   await api.as(dev, async () => {
-    assert.equal((await api('getNotifications', {}))[0].taskId, t.id);
+    assert.equal((await api('getNotifications', {})).filter(n => !n.read)[0].taskId, t.id);
     assert.equal(await api('readNotifications', { taskId: t.id }), 1);
     assert.equal((await api('heartbeat', {})).unread, 0);
     const hb = await api('heartbeat', {});
@@ -212,10 +212,10 @@ test('уведомления о назначении и онлайн-метка'
   // чужие уведомления не видны и не отмечаются
   await api.as(admin, () => api('createTask', { unitId: A.id, title: 'Ещё', assigneeId: dev.id }));
   await api.as(designer, async () => {
-    assert.equal((await api('getNotifications', {})).length, 0);
+    assert.equal((await api('getNotifications', {})).filter(n => !n.read).length, 0);
     assert.equal(await api('readNotifications', {}), 0);
   });
-  assert.equal((await api.as(dev, () => api('getNotifications', {}))).length, 1);
+  assert.equal((await api.as(dev, () => api('getNotifications', {}))).filter(n => !n.read).length, 1);
 });
 
 test('несколько позиций, приоритет — только админы, удаление человека', async () => {
@@ -307,7 +307,7 @@ test('ревью: автоназначение ревьюера по позиц�
   });
   // ревьюер — обычный участник другой позиции: видит, двигает, задача возвращается исполнителю
   await api.as(designer, async () => {
-    assert.equal((await api('getNotifications', {})).filter(n => n.taskId === t2.id).length, 1);
+    assert.equal((await api('getNotifications', {})).filter(n => !n.read).filter(n => n.taskId === t2.id).length, 1);
     const t = await api('updateTask', { id: t2.id, patch: { status: 'done' } });
     assert.equal(t.assigneeId, dev.id);
     assert.equal(t.reviewFrom, '');
@@ -328,11 +328,11 @@ test('ревью: автоназначение ревьюера по позиц�
     const back = await api('recallReview', { id: t2.id });
     assert.equal(back.status, 'in_progress'); // колонка перед Review
     assert.equal(back.assigneeId, dev.id);
-    assert.equal((await api('getNotifications', {})).length, 0); // сам себе — без уведомления
+    assert.equal((await api('getNotifications', {})).filter(n => !n.read).length, 0); // сам себе — без уведомления
     await assert.rejects(() => api('recallReview', { id: t2.id }), /уже не на ревью/);
   });
   await api.as(designer, async () => {
-    assert.equal((await api('getNotifications', {})).filter(n => n.taskId === t2.id).length, 0); // у ревьюера снялось
+    assert.equal((await api('getNotifications', {})).filter(n => !n.read).filter(n => n.taskId === t2.id).length, 0); // у ревьюера снялось
   });
   // отправленное на ревью видно на дашборде автора
   await api.as(dev, () => api('updateTask', { id: t2.id, patch: { status: 'review' } }));
@@ -345,7 +345,7 @@ test('ревью: автоназначение ревьюера по позиц�
   await api.as(dev, () => api('updateTask', { id: t2.id, patch: { status: 'review' } }));
   await api.as(designer, () => api('updateTask', { id: t2.id, patch: { status: 'in_progress' } }));
   await api.as(dev, async () => {
-    assert.equal((await api('getNotifications', {})).find(x => x.taskId === t2.id).kind, 'returned');
+    assert.equal((await api('getNotifications', {})).filter(n => !n.read).find(x => x.taskId === t2.id).kind, 'returned');
     await api('readNotifications', {});
   });
   // снова на ревью и возврат ревьюером — для проверки ниже
@@ -354,7 +354,7 @@ test('ревью: автоназначение ревьюера по позиц�
 
   // ревьюер перенёс в «готово» — исполнителю «закрыта по ревью», а не «вернули»
   await api.as(dev, async () => {
-    const n = (await api('getNotifications', {})).find(x => x.taskId === t2.id);
+    const n = (await api('getNotifications', {})).filter(n => !n.read).find(x => x.taskId === t2.id);
     assert.equal(n.kind, 'approved');
     assert.equal(n.actorId, designer.id);
   });
@@ -367,7 +367,7 @@ test('ревью: автоназначение ревьюера по позиц�
     await api('updateTask', { id: t1.id, patch: { status: 'in_progress' } });
     const own = await api('createTask', { unitId: A.id, title: 'Своя', assigneeId: designer.id, departmentId: 'd_qa' });
     await api('updateTask', { id: own.id, patch: { status: 'review' } });
-    const n = (await api('getNotifications', {})).find(x => x.taskId === own.id);
+    const n = (await api('getNotifications', {})).filter(n => !n.read).find(x => x.taskId === own.id);
     assert.equal(n && n.kind, 'review');
   });
 });
@@ -410,21 +410,21 @@ test('уведомления о сроках: просрочено и срок �
     const n = await api('getNotifications', { today });
     assert.deepEqual(n.map(x => [x.taskId, x.kind, x.ref]), [[t1.id, 'overdue', '2026-10-20']]);
     await api('readNotifications', {});
-    assert.equal((await api('getNotifications', { today })).length, 0); // прочитано — не возвращается
+    assert.equal((await api('getNotifications', { today })).filter(n => !n.read).length, 0); // прочитано — не возвращается
   });
   await api.as(dev, async () => {
     await api('readNotifications', {});
-    assert.deepEqual((await api('getNotifications', { today })).map(x => x.kind), ['due_soon']);
-    assert.deepEqual((await api('getNotifications', { today: '2026-10-27' })).map(x => x.kind), ['overdue']); // «скоро» заменено
+    assert.deepEqual((await api('getNotifications', { today })).filter(n => !n.read).map(x => x.kind), ['due_soon']);
+    assert.deepEqual((await api('getNotifications', { today: '2026-10-27' })).filter(n => !n.read).map(x => x.kind), ['overdue']); // «скоро» заменено
   });
   await api('updateTask', { id: t1.id, patch: { dueDate: '2026-10-22' } }); // новый срок — новое уведомление
   await api.as(designer, async () => {
-    assert.equal((await api('getNotifications', { today })).length, 1);
+    assert.equal((await api('getNotifications', { today })).filter(n => !n.read).length, 1);
   });
   await api('updateTask', { id: t2.id, patch: { status: 'done' } });
   await api.as(dev, async () => {
     await api('readNotifications', {});
-    assert.equal((await api('getNotifications', { today: '2026-11-01' })).length, 0); // выполненные не напоминают
+    assert.equal((await api('getNotifications', { today: '2026-11-01' })).filter(n => !n.read).length, 0); // выполненные не напоминают
   });
 });
 
@@ -852,4 +852,30 @@ test('уведомления: по тестовым задачам — толь�
   assert.equal((await api.pg.query("select count(*)::int n from notifications where task_id = $1 and read_at = ''", [t3.id])).rows[0].n, 1);
   // обычный сотрудник чужие уведомления не видит
   await api.as(dev, async () => assert.ok(!(await api('getNotifications', { personId: designer.id })).some(n => n.taskId === t3.id)));
+});
+
+test('уведомления: история — прочитанные остаются (read), старше срока из настроек — нет', async () => {
+  const api = await setup();
+  const { admin, designer, A } = await team(api);
+  await api.pg.query("update fields set required = false where unit_id = $1", [A.id]);
+  const t1 = await api('createTask', { unitId: A.id, title: 'Свежая', assigneeId: designer.id });
+  const t2 = await api('createTask', { unitId: A.id, title: 'Старая', assigneeId: designer.id });
+  await api.as(designer, async () => {
+    assert.equal((await api('getNotifications', {})).filter(n => !n.read && [t1.id, t2.id].includes(n.taskId)).length, 2);
+    await api('readNotifications', {});
+    const list = await api('getNotifications', {});
+    assert.ok(list.some(n => n.taskId === t1.id && n.read)); // прочитанное — в истории
+    assert.equal((await api('heartbeat', {})).unread, 0);
+  });
+  // прочитанное 10 дней назад — за пределами 7 дней по умолчанию; при 14 днях — видно
+  const old = new Date(Date.now() - 10 * 864e5).toISOString();
+  await api.pg.query('update notifications set at = $1 where task_id = $2', [old, t2.id]);
+  await api.as(designer, async () => {
+    assert.ok(!(await api('getNotifications', {})).some(n => n.taskId === t2.id));
+    await api('setMyPrefs', { personId: designer.id, prefs: { notifyDays: 14 } });
+    assert.ok((await api('getNotifications', {})).some(n => n.taskId === t2.id && n.read));
+  });
+  // «смотреть как» — тоже с историей
+  await api.pg.query('update people set is_dev = true where id = $1', [admin.id]);
+  await api.as(admin, async () => assert.ok((await api('getNotifications', { personId: designer.id })).some(n => n.taskId === t1.id && n.read)));
 });

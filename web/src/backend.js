@@ -677,12 +677,18 @@ export function createBackend(db, opts = {}) {
 
   const actor = ctx => str(ctx && ctx.actorId, 40);
   /** Какие уведомления вошедший выключил в «Настройки → Уведомления» (prefs.notifyOff — виды событий). */
-  const mutedKinds = async () => {
+  const myPrefs = async () => {
     const id = await rpc('my_person_id', {}).catch(() => '');
     const p = id && (await one('people', String(id)));
-    const off = p && (json(p.prefs, {}) || {}).notifyOff;
+    return (p && json(p.prefs, {})) || {};
+  };
+  const mutedKinds = async (prefs = null) => {
+    const off = (prefs || (await myPrefs())).notifyOff;
     return Array.isArray(off) ? off.map(String) : [];
   };
+  /** Сколько дней хранить историю уведомлений (Настройки → Уведомления): 3, 7, 14 или 30; по умолчанию 7. */
+  const NOTIFY_DAYS = [3, 7, 14, 30];
+  const historyDays = prefs => (NOTIFY_DAYS.includes(Number(prefs.notifyDays)) ? Number(prefs.notifyDays) : 7);
 
   const logVal = v => {
     if (v === undefined || v === null) return '';
@@ -2893,10 +2899,17 @@ export function createBackend(db, opts = {}) {
     /** Непрочитанные уведомления вошедшего — с задачей и юнитом (скрытые от него задачи пропускаются). */
     async getNotifications(p) {
       if (p.today) await rpc('scan_due', { p_today: today(p.today) });
-      const off = await mutedKinds();
+      const prefs = await myPrefs();
+      const off = await mutedKinds(prefs);
+      // история: непрочитанные + прочитанные за N дней (по умолчанию 7) — прочитанные не пропадают, а приглушаются
+      const since = new Date(Date.now() - historyDays(prefs) * 864e5).toISOString();
       // «смотреть как» (режим разработчика): уведомления того, за кого смотрим — только посмотреть
       const other = await viewedPerson(p.personId);
-      const all_ = other ? (await rpc('notifications_of', { p_person: other })) || [] : await run(T('notifications').select('*').eq('read_at', '').order('at', { ascending: false }).limit(50));
+      const all_ = other ? (await rpc('notifications_of', { p_person: other, p_since: since })) || []
+        : (await Promise.all([
+          run(T('notifications').select('*').eq('read_at', '').order('at', { ascending: false }).limit(50)),
+          run(T('notifications').select('*').neq('read_at', '').gte('at', since).order('at', { ascending: false }).limit(100)),
+        ])).flat();
       const rows = (Array.isArray(all_) ? all_ : [all_]).filter(r => r && !off.includes(r.kind));
       if (!rows.length) return [];
       const tasks = await run(T('tasks').select('id,unit_id,num,title,status,due_date,archived,app_id').in('id', [...new Set(rows.map(r => r.task_id))]));
@@ -2916,13 +2929,16 @@ export function createBackend(db, opts = {}) {
         if (!t || t.archived || !U[t.unit_id]) continue;
         (byTask.get(t.id) || byTask.set(t.id, []).get(t.id)).push(r);
       }
-      return [...byTask.values()].map(list => {
+      return [...byTask.values()].map(all => {
+        // есть непрочитанные — показываем их (прочитанное по задаче уже видели); нет — запись истории, приглушённо
+        const fresh = all.filter(r => !r.read_at);
+        const list = fresh.length ? fresh : all;
         const top = [...list].sort((a, b) => rank(a.kind) - rank(b.kind) || String(b.at).localeCompare(String(a.at)))[0];
         const t = TT[top.task_id], u = U[t.unit_id];
         return {
           id: top.id, kind: top.kind, kinds: [...new Set(list.map(r => r.kind))].sort((a, b) => rank(a) - rank(b)), count: list.length,
           actorId: top.actor_id, at: list.map(r => r.at).sort().pop(), ref: top.ref || '', taskId: t.id, title: t.title, dueDate: t.due_date,
-          key: `${u.key}-${t.num}`, unit: { id: u.id, name: u.name, color: u.color }, app: A[t.app_id] || null,
+          key: `${u.key}-${t.num}`, unit: { id: u.id, name: u.name, color: u.color }, app: A[t.app_id] || null, read: !fresh.length,
         };
       }).sort((a, b) => String(b.at).localeCompare(String(a.at)));
     },

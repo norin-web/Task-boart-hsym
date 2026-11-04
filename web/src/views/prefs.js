@@ -155,7 +155,16 @@ function notify() {
         h('span', { role: 'cell' }, h('input', { type: 'checkbox', class: 'switch', disabled: true, title: 'Скоро', 'aria-label': title + ' — Telegram' })));
     }));
   draw();
-  return [head('Уведомления', 'Что приходит в «Новое для вас» и на колокольчик. Сохраняется сразу'), table];
+  // история в колокольчике: прочитанные не пропадают, а хранятся N дней
+  const days = Number((((p && p.prefs) || {}).notifyDays)) || 7;
+  const hist = h('div', { class: 'card-box nt-hist' },
+    h('span', { class: 'prefs-row-text' }, h('b', null, 'История уведомлений'), h('small', { class: 'muted' }, 'Прочитанные остаются в колокольчике приглушёнными, чтобы ничего не потерять')),
+    h('select', { class: 'inp sm', 'aria-label': 'Сколько дней хранить историю', onchange: e => {
+      const v = Number(e.target.value);
+      if (p) p.prefs = { ...(p.prefs || {}), notifyDays: v };
+      send('setMyPrefs', { personId: S.meId, prefs: { notifyDays: v } }).then(() => toast('Сохранено')).catch(showErr);
+    } }, [3, 7, 14, 30].map(d => h('option', { value: d, selected: d === days }, `${d} ${plural(d, ['день', 'дня', 'дней'])}`))));
+  return [head('Уведомления', 'Что приходит в «Новое для вас» и на колокольчик. Сохраняется сразу'), table, hist];
 }
 
 function boards() {

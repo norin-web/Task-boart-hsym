@@ -3003,3 +3003,10 @@ a.bug-title:hover { text-decoration: underline; }
 /* Опросник в карточке релиза: проверка RM */
 .rl-dev-check { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; }
 .rl-dev-check > span { flex: 1 1 180px; }
+
+/* ---------- Колокольчик: история уведомлений ---------- */
+.news-row.read { opacity: .6; }
+.news-row.read .news-sentence { font-weight: 400; }
+.news-hist .news-row.read:hover { opacity: .85; }
+.nt-hist { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 12px; padding: 16px 20px; flex-wrap: wrap; }
+.nt-hist select { width: auto; }

@@ -2095,10 +2095,13 @@ begin
   return f;
 end $$;
 
--- Режим разработчика «смотреть как»: непрочитанные уведомления этого человека — только посмотреть, без отметки «прочитано».
-create or replace function notifications_of(p_person text) returns setof notifications
+-- Режим разработчика «смотреть как»: уведомления этого человека — непрочитанные и история с p_since; только посмотреть.
+drop function if exists notifications_of(text);
+create or replace function notifications_of(p_person text, p_since text default '') returns setof notifications
 language sql stable security definer set search_path = public as $$
-  select * from notifications where is_dev() and person_id = p_person and read_at = '' order by at desc limit 50;
+  select * from notifications
+   where is_dev() and person_id = p_person and (read_at = '' or (p_since <> '' and at >= p_since))
+   order by at desc limit 150;
 $$;
 
 grant usage on schema public to authenticated;

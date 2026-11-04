@@ -15,19 +15,23 @@ import { focusBlock, reviewsBlock, teamLoadBlock, splitBlock, sentBlock } from '
 
 /* ---------- «Новое для вас»: задачи, которые на меня назначили ---------- */
 
+/** S.history — уведомления с историей (прочитанные за N дней, read: true); S.notes — только новые (блок на главной). */
 export async function loadNotes() {
-  S.notes = await call('getNotifications', { today: todayStr(), personId: S.meId }).catch(() => []);
+  S.history = await call('getNotifications', { today: todayStr(), personId: S.meId }).catch(() => []);
+  S.notes = S.history.filter(n => !n.read);
   S.unread = S.notes.length;
   renderUnread();
 }
 
-/** Отметить прочитанным по задаче (открыли её) — строка в блоке плавно исчезает. */
+/** Отметить прочитанным по задаче (открыли её): на главной строка уходит, в колокольчике — остаётся приглушённой. */
 export function readNote(taskId) {
   if (!S.notes.some(n => n.taskId === taskId)) return;
   S.notes = S.notes.filter(n => n.taskId !== taskId);
+  (S.history || []).forEach(n => { if (n.taskId === taskId) n.read = true; });
   S.unread = Math.max(0, S.unread - 1);
   renderUnread();
   document.querySelectorAll(`[data-note-task="${CSS.escape(taskId)}"]`).forEach(fadeOut);
+  document.querySelectorAll(`[data-hist-task="${CSS.escape(taskId)}"]`).forEach(el => el.classList.add('read'));
   call('readNotifications', { taskId, personId: S.meId }).catch(showErr);
 }
 
@@ -59,8 +63,13 @@ const NEWS_BLOCK = {
 
 const NEWS_DANGER = ['overdue', 'returned', 'store_reject'];
 
-export function newsBlock() {
-  if (!S.notes.length) return null;
+/**
+ * «Новое для вас» на главной — только новые. history: true — колокольчик: новые и прочитанные за N дней
+ * (прочитанные приглушены, без точки), «Прочитать все» не убирает строки, а приглушает их.
+ */
+export function newsBlock({ history = false } = {}) {
+  const src = () => (history ? S.history || [] : S.notes);
+  if (!src().length) return null;
   const row = n => {
     const by = personById(n.actorId);
     const who = by && by.id !== S.meId ? h('b', null, by.name.split(' ')[0]) : null;
@@ -82,39 +91,44 @@ export function newsBlock() {
       store_reject: ['Реджект Apple: ', q],
     }[n.kind] || [q];
     return h('button', {
-      class: 'news-row', dataset: { noteTask: n.taskId }, onclick: () => peekTask(n.unit.id, n.taskId),
+      class: 'news-row' + (n.read ? ' read' : ''), dataset: history ? { histTask: n.taskId } : { noteTask: n.taskId }, onclick: () => peekTask(n.unit.id, n.taskId),
       title: `${n.key} · ${n.unit.name}`,
     },
     by ? avatar(by, 'lg') : n.app ? appIcon(n.app, 'sm') : h('span', { class: 'news-noapp' }),
     h('span', { class: 'news-body' },
       h('span', { class: 'news-sentence' }, text),
       h('span', { class: 'news-sub' }, [n.unit.name, relTime(n.at), di && di.cls === 'overdue' && 'срок ' + fmtDate(n.dueDate)].filter(Boolean).join(' · '))),
-    h('span', { class: 'news-dot' + (NEWS_DANGER.includes(n.kind) ? ' danger' : '') }));
+    !n.read && h('span', { class: 'news-dot' + (NEWS_DANGER.includes(n.kind) ? ' danger' : '') }));
   };
   const readAll = () => {
     S.notes = [];
+    (S.history || []).forEach(n => { n.read = true; });
     S.unread = 0;
     renderUnread();
     call('readNotifications', { personId: S.meId }).catch(showErr);
-    sec.querySelectorAll('.news-row').forEach(fadeOut);
+    if (history) {
+      sec.querySelectorAll('.news-row').forEach(el => { el.classList.add('read'); el.querySelector('.news-dot')?.remove(); });
+      readBtn.remove(); title.textContent = 'Уведомления';
+      document.querySelectorAll('[data-note-task]').forEach(fadeOut); // и блок «Новое для вас» на главной
+    }
+    else sec.querySelectorAll('.news-row').forEach(fadeOut);
   };
   // колонка «что случилось» — только если хоть у одной строки есть подпись (иначе не занимает место)
-  const list = h('div', { class: 'news card-box' });
-  const sec = h('section', { class: 'news-sec' },
-    h('div', { class: 'section-head' },
-      h('h2', null, 'Новое для вас · ' + S.notes.length),
-      h('button', { class: 'link-btn', onclick: readAll }, 'Прочитать все')),
-    list);
-  // длинный список: 2 строки, «Ещё N» раскрывает до 15, больше — «Все уведомления» отдельным окном
-  const LIMIT = 2, MAX = 15;
+  const list = h('div', { class: 'news card-box' + (history ? ' news-hist' : '') });
+  const title = h('h2', null, history ? (S.unread ? 'Новых: ' + S.unread : 'Уведомления') : 'Новое для вас · ' + S.notes.length);
+  const readBtn = (!history || S.unread > 0) ? h('button', { class: 'link-btn', onclick: readAll }, 'Прочитать все') : null;
+  const sec = h('section', { class: 'news-sec' }, h('div', { class: 'section-head' }, title, readBtn), list);
+  // длинный список: 2 строки (в колокольчике — 6), «Ещё N» раскрывает до 15 (40), больше — «Все уведомления» окном
+  const LIMIT = history ? 6 : 2, MAX = history ? 40 : 15;
   let all = false;
   function drawList() {
-    const n = S.notes.length;
-    fill(list, (all ? S.notes.slice(0, MAX) : S.notes.slice(0, LIMIT)).map(row),
+    const items = src();
+    const n = items.length;
+    fill(list, (all ? items.slice(0, MAX) : items.slice(0, LIMIT)).map(row),
       n > LIMIT && h('div', { class: 'news-more-row' },
         h('button', { class: 'link-btn news-more', 'aria-expanded': String(all), onclick: () => { all = !all; drawList(); } },
           all ? 'Свернуть' : 'Показать ещё ' + (Math.min(n, MAX) - LIMIT)),
-        all && n > MAX && h('button', { class: 'link-btn news-more', onclick: () => openAllNews(row) }, 'Все уведомления · ' + n)));
+        all && n > MAX && h('button', { class: 'link-btn news-more', onclick: () => openAllNews(row, items) }, 'Все уведомления · ' + n)));
     list.classList.toggle('expanded', all);
   }
   drawList();
@@ -122,9 +136,9 @@ export function newsBlock() {
 }
 
 /** Все непрочитанные отдельным окном (когда их больше 15). */
-function openAllNews(row) {
-  const list = h('div', { class: 'news card-box news-all' }, S.notes.map(row));
-  const close = modal({ title: 'Новое для вас · ' + S.notes.length, cls: 'dlg', body: list, actions: [{ label: 'Закрыть', primary: true, action: c => c() }] });
+function openAllNews(row, items) {
+  const list = h('div', { class: 'news card-box news-all' }, items.map(row));
+  const close = modal({ title: 'Уведомления · ' + items.length, cls: 'dlg', body: list, actions: [{ label: 'Закрыть', primary: true, action: c => c() }] });
   list.addEventListener('click', e => { if (e.target.closest('.news-row')) close(); });
 }
 
