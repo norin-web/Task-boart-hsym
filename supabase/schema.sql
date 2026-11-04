@@ -1434,20 +1434,20 @@ create or replace function delete_test_data() returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
   n_tasks integer; n_apps integer; n_units integer; n_people integer;
+  v_units text[];
   v_prev text := coalesce(current_setting('app.system', true), '');
 begin
   if not app_system() and not is_dev() then raise exception 'Только для режима разработчика' using errcode = '42501'; end if;
   perform set_config('app.system', 'on', true);
-  create temp table if not exists _test_units (id text) on commit drop;
-  delete from _test_units;
-  insert into _test_units select id from units where is_test or key = 'DEMO';
-  delete from activity where task_id in (select id from tasks where is_test or unit_id in (select id from _test_units));
-  delete from activity where unit_id in (select id from _test_units);
-  delete from tasks where is_test or unit_id in (select id from _test_units);
+  -- без временных таблиц и DELETE без WHERE: в Supabase это запрещено (safeupdate)
+  v_units := array(select id from units where is_test or key = 'DEMO');
+  delete from activity where task_id in (select id from tasks where is_test or unit_id = any(v_units));
+  delete from activity where unit_id = any(v_units);
+  delete from tasks where is_test or unit_id = any(v_units);
   get diagnostics n_tasks = row_count;
-  delete from apps where is_test or unit_id in (select id from _test_units);
+  delete from apps where is_test or unit_id = any(v_units);
   get diagnostics n_apps = row_count;
-  delete from units where id in (select id from _test_units);
+  delete from units where id = any(v_units);
   get diagnostics n_units = row_count;
   update tasks set assignee_id = '' where assignee_id in
     (select id from people where (is_test or name like 'Демо · %') and user_id is null and not is_dev);
