@@ -147,11 +147,15 @@ test('New App: CEO → PM юнита → этапы по флоу → блоки
     await assert.rejects(() => api('updateTask', { id: by.ios.id, patch: { status: 'in_progress' } }).then(() => api.pg.query("update tasks set bugs = '[]' where id = $1", [by.ios.id])), /Баг-репорты/);
     assert.ok((await api('getNotifications', {})).some(n => n.taskId === by.ios.id && n.kind === 'returned'));
   });
+  await api.as(qa, () => api('readNotifications', {}));
   await finish(api, ios, pm, by.ios.id);
+  // разработка сдана снова — QA снова получает «можно начинать»
+  assert.equal((await api.pg.query("select count(*)::int as n from notifications where task_id = $1 and person_id = $2 and kind = 'unblocked' and read_at = ''", [by.qa.id, qa.id])).rows[0].n, 1);
 
   // в релиз — только когда всё закрыто
   await api.as(pm, () => assert.rejects(() => api('sendToRelease', { taskId: by.release.id }), /Сначала закройте.*Тестирование/));
-  await finish(api, qa, pm, by.qa.id);
+  // QA принимает сам: «готово» без отдельного ревью
+  assert.equal((await api.as(qa, () => api('updateTask', { id: by.qa.id, patch: { status: 'done' } }))).status, 'done');
   await api.as(pm, () => assert.rejects(() => api('sendToRelease', { taskId: by.release.id }), /Сначала закройте.*Интеграция/));
   await finish(api, ios, pm, by.integr.id); // интеграция — после приёмки QA
   // QA принял — баг-репорты закрыты и у QA, и у разработчика

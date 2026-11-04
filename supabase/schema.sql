@@ -855,6 +855,8 @@ declare
   k text;
 begin
   if app_system() or new.status is not distinct from old.status or can_manage(new.unit_id) then return new; end if;
+  -- тестирование: «готово» от QA и есть приёмка (approve), отдельного ревью нет (процесс заказчика)
+  if new.step = 'qa' then return new; end if;
   select settings into st from units where id = new.unit_id;
   col := coalesce(st -> 'review' ->> 'column', '');
   if col = '' then return new; end if;
@@ -1003,7 +1005,8 @@ begin
    where d.depends_on ? new.id and d.assignee_id <> '' and not d.archived and not task_done(d.id)
      and open_deps(d.depends_on) is null
      and (not d.is_test or exists (select 1 from people where id = d.assignee_id and is_dev))
-     and not exists (select 1 from notifications n where n.task_id = d.id and n.person_id = d.assignee_id and n.kind = 'unblocked');
+     -- не дублируем, пока прежнее не прочитано; после возврата QA и повторной сдачи — снова «можно начинать»
+     and not exists (select 1 from notifications n where n.task_id = d.id and n.person_id = d.assignee_id and n.kind = 'unblocked' and n.read_at = '');
   return new;
 end $$;
 -- Задача закрыта: сообщаем тому, кто её поставил, и ревьюеру (себе не пишем)

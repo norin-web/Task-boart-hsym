@@ -240,7 +240,9 @@ function flowBlock(t) {
         h('span', null, 'Сначала закройте ', h('b', null, waits.join(', ')))),
       stages.length > 0 && h('div', { class: 'rq-stages' }, (() => {
         const cur = stages.findIndex(n => n.id === t.id);
-        const vis = expanded ? stages.length : Math.min(stages.length, Math.max(3, cur + 3));
+        // релиз готов к передаче — список раскрыт, чтобы кнопка «Передать в релиз» не пряталась под «Ещё N этапов»
+        const relReady = manage && stages.some(n => n.step === 'release' && !n.assigneeId && !['blocked', 'done'].includes(stateOf(n, stages)));
+        const vis = expanded || relReady ? stages.length : Math.min(stages.length, Math.max(3, cur + 3));
         const hidden = stages.length - vis;
         return [stages.slice(0, vis).map(n => stageRow(n, stages)),
           (hidden > 0 || expanded) && stages.length > 3 && h('button', { class: 'rq-more', 'aria-expanded': String(expanded), onclick: () => { expanded = !expanded; load(); } },
