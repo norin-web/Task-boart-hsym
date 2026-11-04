@@ -117,6 +117,7 @@ function buildPanel(t) {
     t.step === 'qa' && !taskDone(t) && (t.assigneeId === S.meId || isStaff()) && h('div', { class: 'qa-bar' }, icon('alert', 15),
       h('span', null, 'Есть баги?'), h('span', { class: 'spacer' }),
       h('button', { class: 'btn sm', onclick: () => openQaReturn(t) }, icon('back', 13), 'Вернуть в разработку')),
+    (t.bugs || []).length > 0 && bugsBlock(t),
     t.step === 'ios' && devFormBlock(t, t.assigneeId === S.meId || isStaff()),
     t.step === 'release' && t.assigneeId && releaseBlock(t, () => reloadBoard().catch(() => {})),
     t.kind === 'request' || t.kind === 'stage' ? [flowBlock(t), t.kind === 'stage' && treeBlock(t, { noParents: true })] : treeBlock(t),
@@ -266,24 +267,43 @@ function handoverPeople(t) {
     .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 }
 
-/** QA: «Вернуть в разработку» — список багов уйдёт комментарием в этап разработки, он снова в работе, тестирование ждёт. */
+/** Баг-репорты QA: №, дата, кто, ссылка; открыт — пока QA не принял тестирование. Новые — сверху. */
+function bugsBlock(t) {
+  const list = [...(t.bugs || [])].reverse();
+  const open = list.filter(b => !b.closedAt).length;
+  return h('div', { class: 'block bugs-block' },
+    h('div', { class: 'block-title' }, 'Баг-репорты', open > 0 && h('span', { class: 'bug-open-count' }, `открыто ${open}`)),
+    h('div', { class: 'bug-list' }, list.map(b => h('div', { class: 'bug-row' + (b.closedAt ? ' closed' : '') },
+      h('span', { class: 'bug-ic' }, icon(b.closedAt ? 'check' : 'alert', 14)),
+      h('div', { class: 'bug-main' },
+        h('div', { class: 'bug-head' },
+          b.url ? h('a', { class: 'bug-title', href: safeUrl(b.url), target: '_blank', rel: 'noopener noreferrer', title: b.url }, `Баг-репорт №${b.n}`, icon('arrowUpRight', 12))
+            : h('b', { class: 'bug-title' }, `Баг-репорт №${b.n}`),
+          h('span', { class: 'bug-pill' }, b.closedAt ? 'закрыт' : 'открыт')),
+        h('div', { class: 'bug-meta' }, [fmtDate(String(b.at).slice(0, 10)), (personById(b.by) || {}).name].filter(Boolean).join(' · ')),
+        b.text && h('div', { class: 'bug-text' }, b.text))))));
+}
+
+/** QA: «Вернуть в разработку» — баг-репорт №N (ссылка и/или текст) уйдёт в этап разработки, он снова в работе, тестирование ждёт. */
 export function openQaReturn(t) {
-  const ta = h('textarea', { class: 'inp', rows: 6, maxlength: 5000, placeholder: '1. Краш при открытии онбординга\n2. Кнопка «Купить» не реагирует на iPhone SE\n…' });
+  const n = (t.bugs || []).length + 1;
+  const url = h('input', { class: 'inp', type: 'url', maxlength: 2000, placeholder: 'https://… ссылка на баг-репорт' });
+  const ta = h('textarea', { class: 'inp', rows: 4, maxlength: 5000, placeholder: 'Коротко, если нужно: 1. Краш при открытии онбординга…' });
   modal({
-    title: 'Вернуть в разработку',
+    title: `Баг-репорт №${n}`,
     cls: 'dlg',
-    body: [h('p', { class: 'hint' }, 'Этап разработки снова будет в работе у исполнителя, баги придут ему комментарием. Тестирование подождёт.'),
-      field('Баги', ta)],
-    actions: [{ label: 'Отмена' }, { label: 'Вернуть', primary: true, action: async close => {
-      if (!ta.value.trim()) { ta.focus(); return; }
-      await send('qaReturn', { taskId: t.id, text: ta.value.trim() });
+    body: [h('p', { class: 'hint' }, 'Разработка снова будет в работе у исполнителя, баг-репорт появится в его карточке. Тестирование подождёт.'),
+      field('Ссылка на баг-репорт', url), field('Комментарий', ta)],
+    actions: [{ label: 'Отмена' }, { label: 'Вернуть в разработку', primary: true, action: async close => {
+      if (!url.value.trim() && !ta.value.trim()) { url.focus(); return; }
+      await send('qaReturn', { taskId: t.id, url: url.value.trim(), text: ta.value.trim() });
       close();
-      toast('Вернули в разработку');
+      toast(`Баг-репорт №${n} отправлен, задача вернулась в разработку`);
       if (S.board && S.board.unit.id === t.unitId) await reloadBoard().catch(() => {});
       refreshPanel(t);
     } }],
   });
-  setTimeout(() => ta.focus(), 0);
+  setTimeout(() => url.focus(), 0);
 }
 
 /** Команда релиза (для RM): PM, дизайн, разработка, тестирование, тексты — кто делал приложение. */

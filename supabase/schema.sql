@@ -1103,12 +1103,16 @@ end $$;
 
 -- QA нашёл баги: «Вернуть в разработку» — закрытые этапы, от которых зависит тестирование (обычно iOS), снова в работе
 -- у их исполнителей; список багов — комментарием к этим этапам и уведомление «вернули»; этап QA — снова «не начат» и ждёт.
-create or replace function qa_return(p_task text, p_text text) returns integer
+drop function if exists qa_return(text, text);
+-- QA вернул в разработку: баг-репорт №N (дата, кто, ссылка, текст) — в карточку QA и в карточки возвращённых этапов.
+create or replace function qa_return(p_task text, p_text text, p_url text default '') returns integer
 language plpgsql security definer set search_path = public as $$
 declare
   t tasks;
   d tasks;
   v_me text := my_person_id();
+  v_bug jsonb;
+  v_head text;
   at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
   v_todo text;
   v_prog text;
@@ -1119,14 +1123,21 @@ begin
   if not (can_manage(t.unit_id) or t.assignee_id = v_me) then
     raise exception 'Вернуть в разработку может исполнитель тестирования (или PM)' using errcode = '42501';
   end if;
-  if btrim(coalesce(p_text, '')) = '' then raise exception 'Опишите баги' using errcode = 'P0001'; end if;
+  if btrim(coalesce(p_text, '')) = '' and btrim(coalesce(p_url, '')) = '' then
+    raise exception 'Добавьте ссылку на баг-репорт или опишите баги' using errcode = 'P0001';
+  end if;
+  v_bug := jsonb_build_object('n', jsonb_array_length(coalesce(t.bugs, '[]'::jsonb)) + 1, 'at', at_, 'by', coalesce(v_me, ''),
+                              'url', btrim(coalesce(p_url, '')), 'text', left(btrim(coalesce(p_text, '')), 5000), 'qaTask', t.id, 'closedAt', '');
+  v_head := 'Баг-репорт №' || (v_bug ->> 'n') || ' от QA';
   perform set_config('app.system', 'on', true);
   for d in select * from tasks where id in (select jsonb_array_elements_text(t.depends_on)) and task_done(id) loop
     select c ->> 'id' into v_prog from units u, jsonb_array_elements(u.settings -> 'columns') c
      where u.id = d.unit_id and c ->> 'kind' = 'progress' limit 1;
-    update tasks set status = coalesce(v_prog, status), done_at = '', updated_at = at_ where id = d.id;
+    update tasks set status = coalesce(v_prog, status), done_at = '', updated_at = at_, bugs = coalesce(bugs, '[]'::jsonb) || jsonb_build_array(v_bug) where id = d.id;
     insert into comments (id, task_id, text, author_id, at)
-    values ('c_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), d.id, left('Баги от QA: ' || btrim(p_text), 5000), coalesce(v_me, ''), at_);
+    values ('c_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), d.id,
+            left(v_head || case when v_bug ->> 'url' <> '' then ': ' || (v_bug ->> 'url') else '' end
+                 || case when v_bug ->> 'text' <> '' then chr(10) || (v_bug ->> 'text') else '' end, 5000), coalesce(v_me, ''), at_);
     insert into activity (id, unit_id, task_id, action, field, from_val, to_val, actor_id, at)
     values ('a_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), d.unit_id, d.id, 'update', 'status', to_jsonb(d.status)::text, to_jsonb(coalesce(v_prog, d.status))::text, coalesce(v_me, ''), at_);
     if d.assignee_id <> '' then
@@ -1141,9 +1152,9 @@ begin
     raise exception 'Возвращать нечего: этапы до тестирования ещё не закрыты' using errcode = 'P0001';
   end if;
   select c ->> 'id' into v_todo from units u, jsonb_array_elements(u.settings -> 'columns') c where u.id = t.unit_id and c ->> 'kind' = 'todo' limit 1;
-  update tasks set status = coalesce(v_todo, status), done_at = '', updated_at = at_ where id = t.id;
+  update tasks set status = coalesce(v_todo, status), done_at = '', updated_at = at_, bugs = coalesce(bugs, '[]'::jsonb) || jsonb_build_array(v_bug) where id = t.id;
   insert into activity (id, unit_id, task_id, action, field, from_val, to_val, actor_id, at)
-  values ('a_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), t.unit_id, t.id, 'comment', '', '', to_jsonb(left('Вернул в разработку: ' || btrim(p_text), 200))::text, coalesce(v_me, ''), at_);
+  values ('a_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), t.unit_id, t.id, 'comment', '', '', to_jsonb(left('Вернул в разработку: ' || v_head || case when v_bug ->> 'text' <> '' then '. ' || (v_bug ->> 'text') else '' end, 200))::text, coalesce(v_me, ''), at_);
   perform set_config('app.system', 'off', true);
   return n;
 end $$;
@@ -1922,6 +1933,31 @@ begin
 end $$;
 drop trigger if exists units_guard_pm on units;
 create trigger units_guard_pm before update of pm_id on units for each row execute function guard_unit_pm();
+
+-- Баг-репорты QA на задаче (пишет только система: qa_return). Когда QA закрыл тестирование — все его открытые репорты закрыты.
+alter table tasks add column if not exists bugs jsonb not null default '[]';
+create or replace function task_bugs_guard() returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_prev text := coalesce(current_setting('app.system', true), '');
+begin
+  if new.bugs is distinct from old.bugs and not app_system() then
+    raise exception 'Баг-репорты добавляет только QA кнопкой «Вернуть в разработку»' using errcode = '42501';
+  end if;
+  if new.step = 'qa' and coalesce(new.done_at, '') <> '' and coalesce(old.done_at, '') = ''
+     and exists (select 1 from jsonb_array_elements(new.bugs) b where coalesce(b ->> 'closedAt', '') = '') then
+    new.bugs := (select jsonb_agg(case when coalesce(b ->> 'closedAt', '') = '' then b || jsonb_build_object('closedAt', new.done_at) else b end)
+                   from jsonb_array_elements(new.bugs) b);
+    perform set_config('app.system', 'on', true);
+    update tasks d set bugs = (select jsonb_agg(case when b ->> 'qaTask' = new.id and coalesce(b ->> 'closedAt', '') = ''
+                                                    then b || jsonb_build_object('closedAt', new.done_at) else b end)
+                                 from jsonb_array_elements(d.bugs) b)
+     where d.id in (select jsonb_array_elements_text(coalesce(new.depends_on, '[]'::jsonb))) and jsonb_array_length(d.bugs) > 0;
+    perform set_config('app.system', v_prev, true);
+  end if;
+  return new;
+end $$;
+drop trigger if exists tasks_bugs_guard on tasks;
+create trigger tasks_bugs_guard before update on tasks for each row execute function task_bugs_guard();
 
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;

@@ -3032,3 +3032,19 @@ button.rd-check.on { background: var(--text); border-color: transparent; }
 
 .rj-list { padding: 8px; gap: 2px; }
 .rj-row { border-bottom: 0; border-radius: 18px; }
+
+/* ---------- Баг-репорты QA в карточке задачи ---------- */
+.bugs-block .block-title { display: flex; align-items: center; gap: 8px; }
+.bug-open-count { font-size: 12px; font-weight: 600; color: var(--danger); }
+.bug-list { display: grid; gap: 6px; }
+.bug-row { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+.bug-ic { display: grid; place-items: center; width: 22px; height: 22px; color: var(--danger); }
+.bug-row.closed .bug-ic { color: var(--muted); }
+.bug-main { min-width: 0; display: grid; gap: 2px; }
+.bug-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.bug-title { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; color: var(--text); text-decoration: none; }
+a.bug-title:hover { text-decoration: underline; }
+.bug-pill { margin-left: auto; flex-shrink: 0; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; color: var(--danger); background: var(--danger-soft); }
+.bug-row.closed .bug-pill { color: var(--muted); background: var(--surface-2); }
+.bug-meta { font-size: 12px; color: var(--muted); }
+.bug-text { font-size: 13px; color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; }

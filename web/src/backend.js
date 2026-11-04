@@ -237,7 +237,7 @@ const taskOut = r => ({
   reviewFrom: r.review_from || '', reviewerId: r.reviewer_id || '', teamId: r.team_id || '', specUrl: r.spec_url || '',
   parentId: r.parent_id || '', kind: r.kind || '', startedAt: r.started_at || '',
   release: json(r.release, {}) || {}, flowSteps: json(r.flow_steps, []) || [],
-  appId: r.app_id || '', requestType: r.request_type || '', step: r.step || '', devForm: json(r.dev_form, {}) || {}, dependsOn: json(r.depends_on, []) || [], isTest: !!r.is_test,
+  appId: r.app_id || '', requestType: r.request_type || '', step: r.step || '', devForm: json(r.dev_form, {}) || {}, dependsOn: json(r.depends_on, []) || [], isTest: !!r.is_test, bugs: json(r.bugs, []) || [],
   createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at,
 });
 
@@ -2409,7 +2409,7 @@ export function createBackend(db, opts = {}) {
     /** QA: «Вернуть в разработку» со списком багов — предыдущие этапы снова в работе, QA ждёт. Возвращает число этапов. */
     async qaReturn(p) {
       const t = await findTask(p.taskId);
-      return rpc('qa_return', { p_task: t.id, p_text: str(p.text, 5000) });
+      return rpc('qa_return', { p_task: t.id, p_text: str(p.text, 5000), p_url: linkUrl(p.url) });
     },
 
     /** Лид передаёт свою задачу сотруднику своей позиции в юните (проверяет база). */

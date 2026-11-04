@@ -132,12 +132,17 @@ test('New App: CEO → PM юнита → этапы по флоу → блоки
   await api.as(ios, async () => assert.ok((await api('getBoard', { unitId: gold.id })).tasks.some(t => t.id === by.ios.id)));
   await finish(api, ios, pm, by.ios.id);
   // QA нашёл баги — «Вернуть в разработку»: iOS снова в работе с комментарием, QA ждёт
-  assert.equal(await api.as(qa, () => api('qaReturn', { taskId: by.qa.id, text: 'Краш на онбординге' })), 1);
+  assert.equal(await api.as(qa, () => api('qaReturn', { taskId: by.qa.id, text: 'Краш на онбординге', url: 'https://docs.google.com/bug1' })), 1);
   await api.as(ios, async () => {
     const b = await api('getBoard', { unitId: gold.id });
     assert.equal(b.tasks.find(t => t.id === by.ios.id).status, 'in_progress');
     assert.ok(!b.tasks.some(t => t.id === by.qa.id) || true);
-    assert.ok((await api('getTaskExtras', { taskId: by.ios.id })).comments.some(c => /Баги от QA: Краш/.test(c.text)));
+    assert.ok((await api('getTaskExtras', { taskId: by.ios.id })).comments.some(c => /Баг-репорт №1 от QA: https:\/\/docs\.google\.com\/bug1\nКраш/.test(c.text)));
+    // баг-репорт №1 открыт в карточке разработчика: номер, кто, ссылка
+    const bug = b.tasks.find(t => t.id === by.ios.id).bugs[0];
+    assert.deepEqual([bug.n, bug.by, bug.url, bug.closedAt], [1, qa.id, 'https://docs.google.com/bug1', '']);
+    // руками баг-репорты не правятся
+    await assert.rejects(() => api('updateTask', { id: by.ios.id, patch: { status: 'in_progress' } }).then(() => api.pg.query("update tasks set bugs = '[]' where id = $1", [by.ios.id])), /Баг-репорты/);
     assert.ok((await api('getNotifications', {})).some(n => n.taskId === by.ios.id && n.kind === 'returned'));
   });
   await finish(api, ios, pm, by.ios.id);
@@ -145,6 +150,11 @@ test('New App: CEO → PM юнита → этапы по флоу → блоки
   // в релиз — только когда всё закрыто
   await api.as(pm, () => assert.rejects(() => api('sendToRelease', { taskId: by.release.id }), /Сначала закройте.*Тестирование/));
   await finish(api, qa, pm, by.qa.id);
+  // QA принял — баг-репорты закрыты и у QA, и у разработчика
+  for (const id of [by.qa.id, by.ios.id]) {
+    const bugs = (await api.pg.query('select bugs from tasks where id = $1', [id])).rows[0].bugs;
+    assert.ok(bugs.length === 1 && bugs[0].closedAt, 'закрыт: ' + id);
+  }
   await finish(api, aso, pm, by.meta.id);
   await finish(api, lead, pm, by.retext.id);
   await finish(api, aso, pm, by.l10n.id);
