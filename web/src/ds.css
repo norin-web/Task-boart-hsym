@@ -3001,3 +3001,4 @@ button.rd-check.on { background: var(--text); border-color: transparent; }
 #main:fullscreen { height: 100vh; background: var(--bg); padding: 12px 16px 0; }
 #main:fullscreen .rd-table { max-height: calc(100vh - 150px); }
 #main:has(> .rd-fs) { position: relative; }
+.pm-pipeline > .pm-more { display: block; margin: 12px auto 0; }
