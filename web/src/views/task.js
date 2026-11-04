@@ -256,9 +256,11 @@ function flowBlock(t) {
   }
   // PM/CEO: добавить этап из флоу (например, «Интеграция», если решили по ходу) или убрать незакрытый
   async function editStages(anchor, stages) {
-    let flow = [];
-    try { flow = (await call('getFlows', { unitId: t.unitId }))[t.requestType] || []; } catch (e) { return showErr(e); }
-    if (!flow.some(x => x.key === 'integr')) flow = [...flow, { key: 'integr', title: 'Интеграция' }];
+    let flows;
+    try { flows = await call('getFlows', { unitId: t.unitId }); } catch (e) { return showErr(e); }
+    // этапы своего флоу и New App (например, «Метаданные» в апдейт), плюс интеграция
+    const flow = [];
+    for (const x of [...(flows[t.requestType] || []), ...(flows.new_app || []), { key: 'integr', title: 'Интеграция' }]) if (!flow.some(y => y.key === x.key)) flow.push(x);
     const has = new Set(stages.map(n => n.step));
     const add = flow.filter(x => !x.release && !has.has(x.key));
     const del = stages.filter(n => n.step !== 'release' && n.statusKind !== 'done');

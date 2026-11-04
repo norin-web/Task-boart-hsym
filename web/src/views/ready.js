@@ -29,7 +29,7 @@ function sheetOf() {
   return { cols: s.cols || [], vals: s.vals || {}, rows: s.rows || [], hide: s.hide || [], group: s.group || '', foldRows: s.foldRows || [], colGroup: s.colGroup || {}, foldCols: s.foldCols || [] };
 }
 
-const STAGES = [['design', 'Дизайн'], ['ios', 'Разработка'], ['qa', 'Тесты'], ['integr', 'Интеграция'], ['meta', 'Тексты'], ['retext', 'Тексты в дизайне'], ['l10n', 'Локализации'], ['release', 'Релиз']];
+const STAGES = [['design', 'Дизайн'], ['art', 'OB и ASO-графика'], ['ios', 'Разработка'], ['qa', 'Тесты'], ['integr', 'Интеграция'], ['meta', 'Тексты'], ['store', 'Метаданные'], ['retext', 'Тексты в дизайне'], ['l10n', 'Локализации'], ['release', 'Релиз']];
 
 /** Все колонки, которые можно показать: { id, name, type, group, get(row) → значение }. Приложение — всегда первая, не настраивается. */
 function allColumns(sheet) {

@@ -106,14 +106,14 @@ test('New App: CEO → PM юнита → этапы по флоу → блоки
   // PM раскладывает запрос по флоу
   const stages = await api.as(pm, () => api('decomposeRequest', { taskId: request.id }));
   const by = Object.fromEntries(stages.map(t => [t.step, t]));
-  assert.deepEqual(stages.map(t => t.step), ['design', 'ios', 'qa', 'integr', 'meta', 'retext', 'l10n', 'release']);
+  assert.deepEqual(stages.map(t => t.step), ['design', 'art', 'ios', 'qa', 'integr', 'meta', 'store', 'retext', 'l10n', 'release']);
   assert.equal(by.design.assigneeId, lead.id); // лид позиции
   assert.equal(by.ios.assigneeId, ios.id);
   assert.equal(by.qa.assigneeId, qa.id);
   assert.equal(by.meta.assigneeId, aso.id);
   assert.equal(by.release.assigneeId, ''); // релиз — пока не передадут
   assert.deepEqual(by.ios.dependsOn, [by.design.id]);
-  assert.deepEqual(by.release.dependsOn.length, 7);
+  assert.deepEqual(by.release.dependsOn.length, 9);
   await api.as(pm, () => assert.rejects(() => api('decomposeRequest', { taskId: request.id }), /уже разложен/));
   const req2 = (await api.as(ceo, () => api('getBoard', { unitId: gold.id }))).tasks.find(t => t.id === request.id);
   assert.equal(req2.status, 'in_progress'); // запрос — в работе
@@ -121,13 +121,15 @@ test('New App: CEO → PM юнита → этапы по флоу → блоки
   // iOS заблокирован, пока не закрыт дизайн (никому, даже CEO)
   await api.as(ios, () => assert.rejects(() => api('updateTask', { id: by.ios.id, patch: { status: 'in_progress' } }), /заблокирован.*Дизайн/));
   await api.as(ceo, () => assert.rejects(() => api('updateTask', { id: by.ios.id, patch: { status: 'in_progress' } }), /заблокирован/));
-  // мета ждёт дизайна, а исполнители ждущих этапов не видят
-  await api.as(aso, () => assert.rejects(() => api('updateTask', { id: by.meta.id, patch: { status: 'in_progress' } }), /заблокирован.*Дизайн/));
+  // тексты ждут графики (онбординг и ASO), а исполнители ждущих этапов не видят
+  await api.as(aso, () => assert.rejects(() => api('updateTask', { id: by.meta.id, patch: { status: 'in_progress' } }), /заблокирован.*Онбординг/));
   await api.as(ios, async () => assert.ok(!(await api('getBoard', { unitId: gold.id })).tasks.some(t => t.id === by.ios.id)));
   assert.ok((await api.as(pm, () => api('getBoard', { unitId: gold.id }))).tasks.some(t => t.id === by.ios.id)); // PM видит всю цепочку
   await api.as(ios, async () => assert.ok(!(await api('getNotifications', {})).some(n => n.taskId === by.ios.id))); // и уведомления нет
   await finish(api, lead, pm, by.design.id);
-  // дизайн готов — мета параллельно разработке; iOS открылся и виден
+  // дизайн готов — метаданные сразу, графика у дизайн-лида; после графики — тексты, параллельно разработке; iOS открылся
+  await api.as(aso, () => api('updateTask', { id: by.store.id, patch: { status: 'in_progress' } }));
+  await finish(api, lead, pm, by.art.id);
   await api.as(aso, () => api('updateTask', { id: by.meta.id, patch: { status: 'in_progress' } }));
   await api.as(ios, async () => assert.ok((await api('getBoard', { unitId: gold.id })).tasks.some(t => t.id === by.ios.id)));
   await finish(api, ios, pm, by.ios.id);
@@ -159,6 +161,7 @@ test('New App: CEO → PM юнита → этапы по флоу → блоки
   }
   await finish(api, aso, pm, by.meta.id);
   await finish(api, lead, pm, by.retext.id);
+  await finish(api, aso, pm, by.store.id);
   await finish(api, aso, pm, by.l10n.id);
   await api.as(ios, () => assert.rejects(() => api('sendToRelease', { taskId: by.release.id }), e => e.code === 'NOT_FOUND' || forbidden(e))); // чужой этап ему не виден
   const rel = await api.as(pm, () => api('sendToRelease', { taskId: by.release.id }));
@@ -170,7 +173,7 @@ test('New App: CEO → PM юнита → этапы по флоу → блоки
   });
   const [summary] = await api.as(ceo, () => api('listApps', {}));
   assert.equal(summary.status, 'release');
-  assert.equal(summary.requests[0].progress, 88); // 7 из 8 этапов закрыты
+  assert.equal(summary.requests[0].progress, 90); // 9 из 10 этапов закрыты
   assert.equal(summary.requests[0].stages.find(s => s.step === 'release').blocked, false);
 
   // CEO переносит приложение в другой юнит; PM — нет
@@ -217,7 +220,7 @@ test('режим разработчика: тестовые данные вид�
   await api.as(ios, async () => assert.equal((await api('getMyBoard', { personId: ios.id })).tasks.length, 0));
   await api.as(pm, () => assert.rejects(() => api('deleteTestData', {}), forbidden));
   const r = await api.as(ceo, () => api('deleteTestData', {}));
-  assert.equal(r.tasks, 9); // запрос + 8 этапов
+  assert.equal(r.tasks, 11); // запрос + 10 этапов
   await api.as(ceo, async () => assert.deepEqual(await api('listApps', {}), []));
 });
 
@@ -243,6 +246,13 @@ test('интеграция: этап после QA у iOS-лида; PM доба�
   await api.as(pm, () => api('removeStage', { taskId: integr.id }));
   assert.ok(!(await rel()).dependsOn.includes(integr.id));
   await api.as(pm, () => assert.rejects(() => api('removeStage', { taskId: st.release.id }), /Релиз убрать нельзя/));
+  // в апдейт — этап из флоу New App: «Метаданные» (рефактор меты) у ASO, релиз ждёт и его
+  const { app } = (await api.pg.query("select id from apps where name = 'Пульт 2'")).rows.map(r => ({ app: r }))[0];
+  const upd = await api.as(ceo, () => api('createRequest', { appId: app.id, type: 'update', title: 'Рефактор меты' }));
+  const us = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: upd.id }))).map(t => [t.step, t]));
+  const store = await api.as(pm, () => api('addStage', { requestId: upd.id, key: 'store' }));
+  assert.equal(store.departmentId, 'd_aso');
+  assert.ok((await api.as(pm, () => api('getBoard', { unitId: gold.id }))).tasks.find(t => t.id === us.release.id).dependsOn.includes(store.id));
 });
 
 test('статусы приложения и флоу настраиваются', async () => {
@@ -343,7 +353,7 @@ test('PM: свой флоу у юнита; разбивка по плану из
       { key: 'ios', title: 'iOS', positionId: 'd_ios' }, { key: 'qa', title: 'QA', positionId: 'd_qa', dependsOn: ['ios'] },
       { key: 'release', title: 'Релиз', positionId: 'd_release', dependsOn: ['ios', 'qa'], release: true }] });
     assert.deepEqual(f.update.map(s => s.key), ['ios', 'qa', 'release']);
-    assert.deepEqual(f.new_app.map(s => s.key), ['design', 'ios', 'qa', 'integr', 'meta', 'retext', 'l10n', 'release']); // остальные — по умолчанию
+    assert.deepEqual(f.new_app.map(s => s.key), ['design', 'art', 'ios', 'qa', 'integr', 'meta', 'store', 'retext', 'l10n', 'release']); // остальные — по умолчанию
     await assert.rejects(() => api('saveFlow', { unitId: rf.id, type: 'update', steps: [] }), e => e.code === 'NOT_FOUND' || forbidden(e));
   });
   await api.as(pmRf, async () => assert.equal((await api('getFlows', { unitId: rf.id })).update.length, 5)); // у RF — по умолчанию (с интеграцией)
@@ -387,8 +397,8 @@ test('дашборд PM: входящие, этапы, проблемы, KPI к�
   assert.deepEqual(d.inbox.map(x => x.id), [inboxReq.id]);
   assert.equal(d.inbox[0].app.name, 'Inbox');
   const w = d.pipeline.find(x => x.id === r.id);
-  assert.equal(w.stages.length, 8);
-  assert.equal(w.progress, 25); // 2 из 8
+  assert.equal(w.stages.length, 10);
+  assert.equal(w.progress, 20); // 2 из 10
   assert.equal(w.releaseReady, false);
   assert.ok(d.problems.some(x => x.type === 'overdue' && x.task.id === late.id));
   assert.ok(d.problems.some(x => x.type === 'unassigned' && x.task.title === 'Ничья'));
@@ -411,7 +421,7 @@ test('RM: релиз — поля, свой чеклист, отправка в 
   const { app, request } = await api.as(ceo, () => api('createApp', { name: 'Sleep', unitId: gold.id, priority: 'o_high' }));
   const st = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: request.id }))).map(t => [t.step, t]));
   await api.as(lead, () => api('setTaskLink', { taskId: st.design.id, fieldId: 'lf_figma', url: 'https://figma.com/x' }));
-  for (const [who, k] of [[lead, 'design'], [ios, 'ios'], [qa, 'qa'], [ios, 'integr'], [aso, 'meta'], [lead, 'retext'], [aso, 'l10n']]) await finish(api, who, pm, st[k].id);
+  for (const [who, k] of [[lead, 'design'], [lead, 'art'], [ios, 'ios'], [qa, 'qa'], [ios, 'integr'], [aso, 'meta'], [aso, 'store'], [lead, 'retext'], [aso, 'l10n']]) await finish(api, who, pm, st[k].id);
   const rel = await api.as(pm, () => api('sendToRelease', { taskId: st.release.id }));
   assert.equal(rel.checklist.length, 0); // авточеклиста больше нет — у RM свои шаблоны
 
@@ -513,10 +523,10 @@ test('сотрудник и лид: «Можно начинать», фокус,
 
   // ревью дизайна — у лида: в очереди, «Принять» → готово
   await api('updateUnit', { id: gold.id, settings: { ...(await api('getBoard', { unitId: gold.id })).unit.settings, review: { column: 'review', byPosition: { d_design: lead.id }, default: pm.id } } });
-  // чеклист дизайна (OB, PW, ASO) не закрыт — на ревью и в «готово» нельзя
+  // чеклист дизайна (экраны, PW) не закрыт — на ревью и в «готово» нельзя
   await api.as(designer, () => assert.rejects(() => api('updateTask', { id: st.design.id, patch: { status: 'review' } }), /чеклист этапа/));
   const done = (await api.pg.query('select checklist from tasks where id = $1', [st.design.id])).rows[0].checklist.map(i => ({ ...i, done: true }));
-  assert.equal(done.length, 3);
+  assert.equal(done.length, 2);
   await api.as(designer, () => api('updateTask', { id: st.design.id, patch: { checklist: done } }));
   // в «готово» мимо ревью исполнителю нельзя
   await api.as(designer, () => assert.rejects(() => api('updateTask', { id: st.design.id, patch: { status: 'done' } }), /ревью/));
@@ -778,7 +788,7 @@ test('опросник разработчика: без него этап iOS н
   await api.as(ceo, () => api('updateRequest', { id: request.id, pmId: pm.id })).catch(() => null);
   const stages = await api.as(pm, () => api('decomposeRequest', { taskId: request.id }));
   const by = Object.fromEntries(stages.map(t => [t.step, t]));
-  for (const k of ['design', 'meta', 'retext', 'l10n']) await finish(api, ceo, pm, by[k].id).catch(() => api.as(pm, () => api('updateTask', { id: by[k].id, patch: { status: 'done' } })));
+  for (const k of ['design', 'art', 'meta', 'store', 'retext', 'l10n']) await finish(api, ceo, pm, by[k].id).catch(() => api.as(pm, () => api('updateTask', { id: by[k].id, patch: { status: 'done' } })));
   await api.as(ios, async () => {
     await assert.rejects(() => api('updateTask', { id: by.ios.id, patch: { status: 'review' } }), /^Error: DEV_FORM:|DEV_FORM:/);
     await assert.rejects(() => api('saveDevForm', { taskId: by.ios.id, answers: {} }), /Ответьте на вопрос/);
@@ -811,12 +821,16 @@ test('тексты и переводы: ASO пишет тексты → диза
   const { ceo, pm, rm, lead, ios, qa, aso, gold } = await studio(api);
   const { request } = await api.as(ceo, () => api('createApp', { name: 'Texts', unitId: gold.id }));
   const st = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: request.id }))).map(t => [t.step, t]));
-  assert.deepEqual(st.meta.dependsOn, [st.design.id]); // тексты ждут дизайна (его чеклиста OB / PW / ASO)
+  assert.deepEqual(st.art.dependsOn, [st.design.id]); // онбординг и ASO-графика — после дизайна
+  assert.deepEqual(st.meta.dependsOn, [st.art.id]); // тексты — по готовой графике
+  assert.deepEqual(st.store.dependsOn, [st.design.id]); // метаданные — параллельно
   assert.deepEqual(st.retext.dependsOn, [st.meta.id]);
-  assert.deepEqual(st.l10n.dependsOn, [st.retext.id]);
+  assert.deepEqual(st.l10n.dependsOn, [st.retext.id, st.store.id]);
   assert.equal(st.retext.assigneeId, lead.id); // тексты в дизайне — дизайнер
   assert.equal(st.l10n.assigneeId, aso.id); // переводы — ASO
   await finish(api, lead, pm, st.design.id);
+  await finish(api, lead, pm, st.art.id);
+  await finish(api, aso, pm, st.store.id);
   // ASO ещё не вернул тексты — дизайнер не может начать подстановку; переводы ждут подстановки
   await api.as(lead, () => assert.rejects(() => api('updateTask', { id: st.retext.id, patch: { status: 'in_progress' } }), /заблокирован.*Тексты/));
   await finish(api, aso, pm, st.meta.id);
@@ -850,7 +864,7 @@ test('опросник: PM решает, кто заполняет — разр�
   await api.as(ios, () => assert.rejects(() => api('saveDevForm', { taskId: by.ios.id, answers: { [qs[0].id]: { v: 'Нет' } } }), /лид на интеграции/));
   await api.as(ceo, () => api('saveDevForm', { taskId: by.integr.id, answers: { [qs[0].id]: { v: 'Да' } } }));
   // в релизе — ответы с интеграции, с текстом вопроса
-  for (const k of ['design', 'ios', 'qa', 'integr', 'meta', 'retext', 'l10n']) await api.as(pm, () => api('updateTask', { id: by[k].id, patch: { status: 'done' } }));
+  for (const k of ['design', 'art', 'ios', 'qa', 'integr', 'meta', 'store', 'retext', 'l10n']) await api.as(pm, () => api('updateTask', { id: by[k].id, patch: { status: 'done' } }));
   await api.as(pm, () => api('sendToRelease', { taskId: by.release.id }));
   const r = await api.as(rm, () => api('getRelease', { taskId: by.release.id }));
   assert.deepEqual(r.devForm.answers[qs[0].id], { v: 'Да', q: 'Есть backend?' });

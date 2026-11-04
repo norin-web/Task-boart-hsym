@@ -175,7 +175,7 @@ export async function runProcess(api, P, U, test) {
     await set(dev.id, { checklist: dev.checklist.map((i, n) => ({ ...i, done: until !== 'design' ? true : n === 0 })) }, who).catch(() => null);
     if (until === 'design') { await move(dev.id, 'in_progress', worker(P, dev.assigneeId || P[pm].id)); return { app: a.app, request: a.request, s }; }
     // промежуточные стадии: iOS на ревью / тесты в работе / тексты в работе
-    const STOP = { review: ['design'], qa: ['design', 'ios'], texts: ['design', 'ios', 'qa'] };
+    const STOP = { review: ['design'], qa: ['design', 'ios'], texts: ['design', 'art', 'ios', 'qa'] };
     if (STOP[until]) {
       for (const k of STOP[until]) await close(s[k], s[k].assigneeId ? worker(P, s[k].assigneeId) : pm, pm);
       const cur = { review: 'ios', qa: 'qa', texts: 'meta' }[until];
@@ -183,7 +183,7 @@ export async function runProcess(api, P, U, test) {
       await move(s[cur].id, until === 'review' ? 'review' : 'in_progress', who2).catch(() => null);
       return { app: a.app, request: a.request, s };
     }
-    const keys = until === 'dev' || until === 'ready' ? ['design'] : ['design', 'ios', 'qa', 'integr', 'meta', 'retext', 'l10n'];
+    const keys = until === 'dev' || until === 'ready' ? ['design'] : ['design', 'art', 'ios', 'qa', 'integr', 'meta', 'store', 'retext', 'l10n'];
     for (const k of keys.filter(x => s[x])) await close(s[k], s[k].assigneeId ? worker(P, s[k].assigneeId) : pm, pm);
     if (until === 'ready') return { app: a.app, request: a.request, s };  // дизайн закрыт, iOS ждёт разработчика
     if (until === 'dev') { await move(s.ios.id, 'in_progress', worker(P, s.ios.assigneeId || P[pm].id)); return { app: a.app, request: a.request, s }; }

@@ -23,17 +23,20 @@ export const REQUEST_TYPES = { new_app: 'New App', update: 'Апдейт', other
  */
 export const DEFAULT_FLOWS = {
   new_app: [
-    { key: 'design', title: 'Дизайн', positionId: 'd_design', dependsOn: [], checklist: ['Онбординг (OB)', 'Пейволл (PW)', 'Скриншоты и иконка (ASO)'] },
+    { key: 'design', title: 'Дизайн', positionId: 'd_design', dependsOn: [], checklist: ['Экраны приложения', 'Пейволл (PW)'] },
+    // после approve дизайна — дизайн-лиду (сам или дизайнеру): онбординг и ASO-графика; потом по ним пишет тексты ASO
+    { key: 'art', title: 'Онбординг и ASO-графика', positionId: 'd_design', dependsOn: ['design'], checklist: ['Онбординг (OB)', 'Скриншоты и иконка (ASO)'] },
     { key: 'ios', title: 'Разработка iOS', positionId: 'd_ios', dependsOn: ['design'] },
     { key: 'qa', title: 'Тестирование', positionId: 'd_qa', dependsOn: ['ios'] },
     // интеграция (OB, PW, SDK) — iOS-лид после приёмки QA; не нужна — PM снимает галочку при разбивке
     { key: 'integr', title: 'Интеграция', positionId: 'd_ios', dependsOn: ['qa'] },
-    // тексты открываются, когда дизайнер закрыл в чеклисте дизайна OB, PW и ASO; идут параллельно разработке.
-    // Готовые тексты ASO возвращает дизайнеру: он ставит их в макеты и выгружает исходники на Google Drive; после — переводы.
-    { key: 'meta', title: 'Тексты OB / PW / ASO', positionId: 'd_aso', dependsOn: ['design'], checklist: ['Тексты онбординга', 'Тексты пейволла', 'Название, подзаголовок и описание', 'Ключевые слова'] },
+    // ASO, два трека: тексты (OB, PW, скриншоты) — после графики; метаданные стора — параллельно, сразу после дизайна.
+    // Готовые тексты дизайнер ставит в макеты и выгружает исходники на Google Drive; после — переводы.
+    { key: 'meta', title: 'Тексты OB / PW / ASO', positionId: 'd_aso', dependsOn: ['art'], checklist: ['Тексты онбординга', 'Тексты пейволла', 'Тексты на скриншотах'] },
+    { key: 'store', title: 'Метаданные', positionId: 'd_aso', dependsOn: ['design'], checklist: ['Название и подзаголовок', 'Описание', 'Ключевые слова'] },
     { key: 'retext', title: 'Тексты в дизайне', positionId: 'd_design', dependsOn: ['meta'], checklist: ['Тексты OB заменены в макетах', 'Тексты PW заменены в макетах', 'Тексты ASO заменены в скриншотах', 'Исходники выгружены на Google Drive'] },
-    { key: 'l10n', title: 'Локализации', positionId: 'd_aso', dependsOn: ['retext'], checklist: ['Переводы приложения и пейволла', 'Переводы метаданных', 'Скриншоты на языках'] },
-    { key: 'release', title: 'Релиз', positionId: 'd_release', dependsOn: ['design', 'ios', 'qa', 'integr', 'meta', 'retext', 'l10n'], release: true },
+    { key: 'l10n', title: 'Локализации', positionId: 'd_aso', dependsOn: ['retext', 'store'], checklist: ['Переводы приложения и пейволла', 'Переводы метаданных', 'Скриншоты на языках'] },
+    { key: 'release', title: 'Релиз', positionId: 'd_release', dependsOn: ['design', 'art', 'ios', 'qa', 'integr', 'meta', 'store', 'retext', 'l10n'], release: true },
   ],
   update: [
     { key: 'design', title: 'Дизайн', positionId: 'd_design', dependsOn: [] },
@@ -2336,9 +2339,9 @@ export function createBackend(db, opts = {}) {
     async addStage(p, ctx) {
       const r = await findTask(p.requestId);
       if (r.kind !== 'request') fail('Этап добавляется в запрос');
-      const own = (await flows(r.unit_id))[r.request_type] || [];
-      const base = DEFAULT_FLOWS[r.request_type] && DEFAULT_FLOWS[r.request_type].length ? DEFAULT_FLOWS[r.request_type] : DEFAULT_FLOWS.new_app;
-      const flow = own.some(x => x.key === p.key) ? own : base;
+      // этап ищем во флоу запроса, потом во флоу New App (например, «Метаданные» в апдейт — рефактор меты)
+      const all_ = await flows(r.unit_id);
+      const flow = [all_[r.request_type] || [], DEFAULT_FLOWS[r.request_type] || [], all_.new_app || [], DEFAULT_FLOWS.new_app].find(f => f.some(x => x.key === p.key)) || [];
       const def = flow.find(x => x.key === p.key) || fail('Такого этапа нет во флоу');
       if (def.release) fail('Релиз уже есть в разложенном запросе');
       const stages = (await run(T('tasks').select('id,step,status,depends_on,archived').eq('parent_id', r.id).eq('kind', 'stage'))).filter(x => !x.archived);

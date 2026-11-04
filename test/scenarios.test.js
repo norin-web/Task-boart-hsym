@@ -87,8 +87,8 @@ test('сценарии: роли × позиции × жизненный цик�
   await check('участник не раскладывает запрос', () => mustFail(api.as(ios, () => api('decomposeRequest', { taskId: request.id }))));
   await check('чужой PM не раскладывает запрос', () => mustFail(api.as(pmRf, () => api('decomposeRequest', { taskId: request.id }))));
   const st = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: request.id }))).map(t => [t.step, t]));
-  await check('8 этапов: дизайн, iOS, QA, интеграция, тексты, тексты в дизайне, локализации, релиз', async () => assert.deepEqual(Object.keys(st), ['design', 'ios', 'qa', 'integr', 'meta', 'retext', 'l10n', 'release']));
-  await check('чеклист дизайна: OB, PW, ASO', async () => assert.equal(st.design.checklist.length, 3));
+  await check('10 этапов: дизайн, графика, iOS, QA, интеграция, тексты, метаданные, тексты в дизайне, локализации, релиз', async () => assert.deepEqual(Object.keys(st), ['design', 'art', 'ios', 'qa', 'integr', 'meta', 'store', 'retext', 'l10n', 'release']));
+  await check('чеклист дизайна: экраны и PW; графики — OB и ASO', async () => { assert.equal(st.design.checklist.length, 2); assert.equal(st.art.checklist.length, 2); });
   await check('у каждого этапа исполнитель своей позиции', async () => {
     assert.equal(st.design.assigneeId, lead.id); assert.equal(st.ios.assigneeId, ios.id); assert.equal(st.qa.assigneeId, qa.id);
     assert.equal(st.meta.assigneeId, aso.id); assert.equal(st.retext.assigneeId, lead.id); assert.equal(st.l10n.assigneeId, aso.id); assert.equal(st.release.assigneeId, '');
@@ -106,7 +106,7 @@ test('сценарии: роли × позиции × жизненный цик�
     }
   });
   await check('каждый видит свой этап: лид — дизайн', async () => assert.ok((await api.as(lead, () => api('getBoard', { unitId: gold.id }))).tasks.some(t => t.id === st.design.id)));
-  await check('PM видит всю цепочку', async () => assert.equal((await api.as(pm, () => api('getBoard', { unitId: gold.id }))).tasks.filter(t => t.step).length, 8));
+  await check('PM видит всю цепочку', async () => assert.equal((await api.as(pm, () => api('getBoard', { unitId: gold.id }))).tasks.filter(t => t.step).length, 10));
   await check('iOS не двигает чужой этап (дизайн)', () => mustFail(api.as(ios, () => api('updateTask', { id: st.design.id, patch: { status: 'in_progress' } }))));
   await check('сотрудник не создаёт задачи', () => mustFail(api.as(des, () => api('createTask', { unitId: gold.id, title: 'x' }))));
   await check('лид не создаёт задачи', () => mustFail(api.as(lead, () => api('createTask', { unitId: gold.id, title: 'x' }))));
@@ -117,6 +117,8 @@ test('сценарии: роли × позиции × жизненный цик�
   await check('дизайн: на ревью только с закрытым чеклистом', () => mustFail(api.as(lead, () => api('updateTask', { id: st.design.id, patch: { status: 'review' } })), /чеклист/));
   await check('исполнитель не закрывает мимо ревью', () => mustFail(api.as(lead, () => api('updateTask', { id: st.design.id, patch: { status: 'done' } }))));
   await finish(api, lead, pm, st.design.id);
+  await finish(api, lead, pm, st.art.id); // онбординг и ASO-графика — тексты ждут её
+  await finish(api, aso, pm, st.store.id); // метаданные стора
   await check('после дизайна: iOS и ASO видят свои этапы', async () => {
     assert.ok((await api.as(ios, () => api('getBoard', { unitId: gold.id }))).tasks.some(t => t.id === st.ios.id));
     assert.ok((await api.as(aso, () => api('getBoard', { unitId: gold.id }))).tasks.some(t => t.id === st.meta.id));
