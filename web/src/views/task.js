@@ -772,7 +772,8 @@ function sideBlock(t, { staff, editable }) {
       const p = personById(v);
       // команды ещё нет — берём первую команду исполнителя
       const patch = { assigneeId: v };
-      if (p && !t.teamId && (p.teamIds || []).length) patch.teamId = p.teamIds[0];
+      // команду проставляют только CEO и PM — лиду база её менять не даёт, и вся смена исполнителя откатилась бы
+      if (!zone && p && !t.teamId && (p.teamIds || []).length) patch.teamId = p.teamIds[0];
       patchTask(t, patch).then(() => refreshPanel(t));
     }, zone ? { ids: zonePeople(t) } : undefined)), {
       after: !zone && S.meId && t.assigneeId !== S.meId && h('div', { class: 'quick-chips' }, h('button', {
