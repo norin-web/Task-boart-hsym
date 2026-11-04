@@ -598,6 +598,13 @@ export function createBackend(db, opts = {}) {
     const own = unitId ? unitSettings((await findUnit(unitId)).settings).flows : {};
     return Object.fromEntries(Object.keys(REQUEST_TYPES).map(k => [k, own[k] || (k in saved ? cleanFlow(saved[k]) : DEFAULT_FLOWS[k])]));
   };
+  /** «Смотреть как»: id того, за кого смотрит разработчик (не он сам), иначе ''. Права проверяет база (notifications_of). */
+  const viewedPerson = async id => {
+    const v = str(id, 40);
+    if (!v) return '';
+    const me = (await rpc('my_person_id', {})) || '';
+    return v !== me ? v : '';
+  };
   const devQuestions = async () => { const own = cleanDevQuestions(await setting('devQuestions')); return own.length ? own : DEV_QUESTIONS; };
   const templates = async () => (await all(() => T('task_templates').select('*').order('ord').order('id'))).map(templateOut);
   const linkFields = async () => (await all(() => T('link_fields').select('*').order('ord').order('id'))).map(linkFieldOut);
@@ -2873,11 +2880,13 @@ export function createBackend(db, opts = {}) {
     async heartbeat(p) {
       // «я в сети» и напоминания о сроках — параллельно (напоминания нужны до подсчёта непрочитанных)
       await Promise.all([rpc('touch_presence', {}), p.today ? rpc('scan_due', { p_today: today(p.today) }) : null]);
-      const [seen, unread, off] = await Promise.all([
+      const other = await viewedPerson(p.personId);
+      const [seen, unreadRaw, off] = await Promise.all([
         all(() => T('people').select('id,last_seen_at').order('id')),
-        run(T('notifications').select('id,kind').eq('read_at', '').limit(100)),
+        other ? rpc('notifications_of', { p_person: other }) : run(T('notifications').select('id,kind').eq('read_at', '').limit(100)),
         mutedKinds(),
       ]);
+      const unread = (Array.isArray(unreadRaw) ? unreadRaw : unreadRaw ? [unreadRaw] : []);
       return { seen: Object.fromEntries(seen.map(r => [r.id, r.last_seen_at || ''])), unread: unread.filter(r => !off.includes(r.kind)).length };
     },
 
@@ -2885,7 +2894,10 @@ export function createBackend(db, opts = {}) {
     async getNotifications(p) {
       if (p.today) await rpc('scan_due', { p_today: today(p.today) });
       const off = await mutedKinds();
-      const rows = (await run(T('notifications').select('*').eq('read_at', '').order('at', { ascending: false }).limit(50))).filter(r => !off.includes(r.kind));
+      // «смотреть как» (режим разработчика): уведомления того, за кого смотрим — только посмотреть
+      const other = await viewedPerson(p.personId);
+      const all_ = other ? (await rpc('notifications_of', { p_person: other })) || [] : await run(T('notifications').select('*').eq('read_at', '').order('at', { ascending: false }).limit(50));
+      const rows = (Array.isArray(all_) ? all_ : [all_]).filter(r => r && !off.includes(r.kind));
       if (!rows.length) return [];
       const tasks = await run(T('tasks').select('id,unit_id,num,title,status,due_date,archived,app_id').in('id', [...new Set(rows.map(r => r.task_id))]));
       const appIds = [...new Set(tasks.map(t => t.app_id).filter(Boolean))];
@@ -2917,6 +2929,7 @@ export function createBackend(db, opts = {}) {
 
     /** Отметить прочитанными: все или по одной задаче (taskId). База даёт менять только свои. */
     async readNotifications(p) {
+      if (await viewedPerson(p.personId)) return 0; // «смотреть как» — только посмотреть, не отмечаем
       let q = T('notifications').update({ read_at: now() }).eq('read_at', '');
       if (p.taskId) q = q.eq('task_id', String(p.taskId));
       return (await run(q.select('id'))).length;

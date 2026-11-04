@@ -959,6 +959,13 @@ end $$;
 -- у прежнего исполнителя непрочитанное уведомление по этой задаче снимается.
 -- Автоназначение ревью (kind 'review'), возврат с ревью ('returned') и закрытие по ревью ('approved') —
 -- тоже уведомления исполнителю; на ревью уведомляют всегда, даже если перенёс сам.
+-- Уведомления по тестовым задачам (демо, шорткаты разработчика): только разработчику и людям без входа (демо-люди) —
+-- реальных сотрудников не беспокоим. Обычные задачи — всем.
+create or replace function notify_test_ok(p_is_test boolean, p_person text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select not coalesce(p_is_test, false) or exists (select 1 from people where id = p_person and (is_dev or user_id is null));
+$$;
+
 create or replace function notify_assignee() returns trigger language plpgsql security definer set search_path = public as $$
 declare
   v_actor text := coalesce(my_person_id(), '');
@@ -969,7 +976,7 @@ begin
   -- этап ещё ждёт предыдущих — исполнитель его пока не видит; когда откроется, придёт «Можно начинать»
   if new.depends_on <> '[]'::jsonb and open_deps(new.depends_on) is not null then return new; end if;
   -- тестовые задачи (шорткаты разработчика) не беспокоят реальных людей
-  if new.is_test and not exists (select 1 from people where id = new.assignee_id and is_dev) then return new; end if;
+  if not notify_test_ok(new.is_test, new.assignee_id) then return new; end if;
   if tg_op = 'UPDATE' and new.status is distinct from old.status then
     if new.review_from <> '' and old.review_from = '' then v_kind := 'review';
     elsif old.review_from <> '' and new.review_from = '' and new.assignee_id = old.review_from then
@@ -1004,7 +1011,7 @@ begin
     from tasks d
    where d.depends_on ? new.id and d.assignee_id <> '' and not d.archived and not task_done(d.id)
      and open_deps(d.depends_on) is null
-     and (not d.is_test or exists (select 1 from people where id = d.assignee_id and is_dev))
+     and notify_test_ok(d.is_test, d.assignee_id)
      -- не дублируем, пока прежнее не прочитано; после возврата QA и повторной сдачи — снова «можно начинать»
      and not exists (select 1 from notifications n where n.task_id = d.id and n.person_id = d.assignee_id and n.kind = 'unblocked' and n.read_at = '');
   return new;
@@ -1015,12 +1022,12 @@ declare
   v_actor text := coalesce(my_person_id(), '');
   v_who text;
 begin
-  if new.is_test or new.status is not distinct from old.status then return new; end if;
+  if new.status is not distinct from old.status then return new; end if;
   if not exists (select 1 from units u, jsonb_array_elements(u.settings -> 'columns') c
                   where u.id = new.unit_id and c ->> 'id' = new.status and c ->> 'kind' = 'done') then return new; end if;
   if exists (select 1 from units u, jsonb_array_elements(u.settings -> 'columns') c
               where u.id = new.unit_id and c ->> 'id' = old.status and c ->> 'kind' = 'done') then return new; end if;
-  for v_who in select distinct x from unnest(array[new.created_by, new.reviewer_id]) x where x <> '' and x <> v_actor and exists (select 1 from people where id = x and active) loop
+  for v_who in select distinct x from unnest(array[new.created_by, new.reviewer_id]) x where x <> '' and x <> v_actor and exists (select 1 from people where id = x and active) and notify_test_ok(new.is_test, x) loop
     insert into notifications (id, person_id, task_id, kind, actor_id, at)
     values ('n_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), v_who, new.id, 'task_done', v_actor,
             to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'));
@@ -1150,7 +1157,7 @@ begin
                  || case when v_bug ->> 'text' <> '' then chr(10) || (v_bug ->> 'text') else '' end, 5000), coalesce(v_me, ''), at_);
     insert into activity (id, unit_id, task_id, action, field, from_val, to_val, actor_id, at)
     values ('a_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), d.unit_id, d.id, 'update', 'status', to_jsonb(d.status)::text, to_jsonb(coalesce(v_prog, d.status))::text, coalesce(v_me, ''), at_);
-    if d.assignee_id <> '' then
+    if d.assignee_id <> '' and notify_test_ok(d.is_test, d.assignee_id) then
       delete from notifications where task_id = d.id and person_id = d.assignee_id and read_at = '';
       insert into notifications (id, person_id, task_id, kind, actor_id, at)
       values ('n_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), d.assignee_id, d.id, 'returned', coalesce(v_me, ''), at_);
@@ -1442,7 +1449,7 @@ declare
   at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
 begin
   select * into t from tasks where id = p_task;
-  if t.id is null or t.is_test then return; end if;
+  if t.id is null then return; end if;
   -- вышло в стор: непрочитанный реджект по этому релизу устарел и не должен перекрывать «вышло»
   if p_kind = 'store_live' then
     delete from notifications n where n.kind = 'store_reject' and n.read_at = ''
@@ -1452,7 +1459,7 @@ begin
   insert into notifications (id, person_id, task_id, kind, actor_id, at)
   select 'n_' || substr(md5(random()::text || clock_timestamp()::text || p.id), 1, 12), p.id, t.id, p_kind, v_me, at_
     from people p
-   where p.active and p.id <> v_me
+   where p.active and p.id <> v_me and notify_test_ok(t.is_test, p.id)
      and (p.access = 'superadmin'
           or (p.access = 'moderator' and exists (select 1 from unit_members m where m.unit_id = t.unit_id and m.person_id = p.id)));
   -- «вышло в стор» — только CEO и PM (решение заказчика); о реджекте — ещё лидам, на этап их позиции (релиз им не виден)
@@ -1463,7 +1470,7 @@ begin
     join unit_members m on m.unit_id = t.unit_id and m.person_id = p.id
     join tasks s on s.parent_id = t.parent_id and t.parent_id <> '' and s.id <> t.id
                 and (s.department_id = p.position_id or p.extra_positions ? s.department_id)
-   where p.active and p.id <> v_me and p.access = 'lead'
+   where p.active and p.id <> v_me and p.access = 'lead' and notify_test_ok(t.is_test, p.id)
    order by p.id, s.created_at;
 end $$;
 
@@ -2078,7 +2085,7 @@ begin
   if not p_ok then
     insert into comments (id, task_id, text, author_id, at)
     values ('c_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), s.id, left('Опросник вернули с вопросами: ' || btrim(p_note), 5000), v_me, at_);
-    if s.assignee_id <> '' and s.assignee_id <> v_me then
+    if s.assignee_id <> '' and s.assignee_id <> v_me and notify_test_ok(s.is_test, s.assignee_id) then
       insert into notifications (id, person_id, task_id, kind, actor_id, at)
       values ('n_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), s.assignee_id, s.id, 'returned', v_me, at_);
     end if;
@@ -2086,6 +2093,12 @@ begin
   perform set_config('app.system', v_prev, true);
   return f;
 end $$;
+
+-- Режим разработчика «смотреть как»: непрочитанные уведомления этого человека — только посмотреть, без отметки «прочитано».
+create or replace function notifications_of(p_person text) returns setof notifications
+language sql stable security definer set search_path = public as $$
+  select * from notifications where is_dev() and person_id = p_person and read_at = '' order by at desc limit 50;
+$$;
 
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;

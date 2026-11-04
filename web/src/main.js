@@ -123,7 +123,7 @@ function startPulse() {
   const pulse = async () => {
     if (document.hidden) return;
     try {
-      const r = await call('heartbeat', { today: todayStr() });
+      const r = await call('heartbeat', { today: todayStr(), personId: S.meId });
       S.people.forEach(p => { if (p.id in r.seen) p.lastSeenAt = r.seen[p.id]; });
       refreshPresence();
       if (r.unread !== S.unread) {

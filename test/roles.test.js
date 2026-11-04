@@ -828,3 +828,28 @@ test('замещение: на период запросы PM и ревью ид
   const r2 = await api('createRequest', { appId: (await api.pg.query("select id from apps where name = 'Пульт 3'")).rows[0].id, type: 'other', title: 'x' });
   assert.equal(r2.assigneeId, mod.id);
 });
+
+test('уведомления: по тестовым задачам — только демо-людям без входа; «смотреть как» показывает чужие (только разработчику, без отметки)', async () => {
+  const api = await setup();
+  const { admin, designer, dev, A } = await team(api);
+  await api.pg.query('update people set is_dev = true where id = $1', [admin.id]);
+  const demo = await api('createPerson', { name: 'Демо · Лид', access: 'member', positionId: 'd_design' });
+  await api('setMember', { unitId: A.id, personId: demo.id });
+  await api.pg.query("update fields set required = false where unit_id = $1", [A.id]);
+  // тестовая задача: демо-человеку (без входа) уведомление приходит, реальному сотруднику — нет
+  const t1 = await api.as(admin, () => api('createTask', { unitId: A.id, title: 'Демо-этап', assigneeId: demo.id, test: true }));
+  const t2 = await api.as(admin, () => api('createTask', { unitId: A.id, title: 'Демо для реального', assigneeId: designer.id, test: true }));
+  const cnt = async (task, person) => (await api.pg.query("select count(*)::int n from notifications where task_id = $1 and person_id = $2", [task, person])).rows[0].n;
+  assert.equal(await cnt(t1.id, demo.id), 1);
+  assert.equal(await cnt(t2.id, designer.id), 0);
+  // обычная задача дизайнеру; разработчик «смотрит как» дизайнер — видит её, но не отмечает прочитанной
+  const t3 = await api.as(admin, () => api('createTask', { unitId: A.id, title: 'Реальная', assigneeId: designer.id }));
+  await api.as(admin, async () => {
+    assert.ok((await api('getNotifications', { personId: designer.id })).some(n => n.taskId === t3.id));
+    assert.ok((await api('heartbeat', { personId: designer.id })).unread >= 1);
+    await api('readNotifications', { personId: designer.id });
+  });
+  assert.equal((await api.pg.query("select count(*)::int n from notifications where task_id = $1 and read_at = ''", [t3.id])).rows[0].n, 1);
+  // обычный сотрудник чужие уведомления не видит
+  await api.as(dev, async () => assert.ok(!(await api('getNotifications', { personId: designer.id })).some(n => n.taskId === t3.id)));
+});

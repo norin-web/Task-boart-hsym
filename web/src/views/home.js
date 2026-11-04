@@ -16,7 +16,7 @@ import { focusBlock, reviewsBlock, teamLoadBlock, splitBlock, sentBlock } from '
 /* ---------- «Новое для вас»: задачи, которые на меня назначили ---------- */
 
 export async function loadNotes() {
-  S.notes = await call('getNotifications', { today: todayStr() }).catch(() => []);
+  S.notes = await call('getNotifications', { today: todayStr(), personId: S.meId }).catch(() => []);
   S.unread = S.notes.length;
   renderUnread();
 }
@@ -28,7 +28,7 @@ export function readNote(taskId) {
   S.unread = Math.max(0, S.unread - 1);
   renderUnread();
   document.querySelectorAll(`[data-note-task="${CSS.escape(taskId)}"]`).forEach(fadeOut);
-  call('readNotifications', { taskId }).catch(showErr);
+  call('readNotifications', { taskId, personId: S.meId }).catch(showErr);
 }
 
 function fadeOut(el) {
@@ -95,7 +95,7 @@ export function newsBlock() {
     S.notes = [];
     S.unread = 0;
     renderUnread();
-    call('readNotifications', {}).catch(showErr);
+    call('readNotifications', { personId: S.meId }).catch(showErr);
     sec.querySelectorAll('.news-row').forEach(fadeOut);
   };
   // колонка «что случилось» — только если хоть у одной строки есть подпись (иначе не занимает место)
