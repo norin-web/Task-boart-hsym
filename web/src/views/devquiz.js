@@ -75,7 +75,7 @@ export function devFormBlock(t, canEdit) {
   const draw = () => {
     const at = t.devForm && t.devForm.at;
     fill(box, icon(at ? 'check' : 'checklist', 15),
-      h('span', { class: 'dq-bar-text' }, h('b', null, 'Опросник перед релизом'), h('small', { class: 'muted' }, at ? 'заполнен ' + fmtDate(at.slice(0, 10)) : 'заполните перед ревью')),
+      h('span', { class: 'dq-bar-text' }, h('b', null, 'Опросник перед релизом'), h('small', { class: (t.devForm || {}).returned && !at ? 'danger-text' : 'muted' }, at ? 'заполнен ' + fmtDate(at.slice(0, 10)) + ((t.devForm || {}).checked ? ' · RM принял' : '') : (t.devForm || {}).returned ? 'RM вернул с вопросами: ' + t.devForm.returned.note : 'заполните перед ревью')),
       canEdit && h('button', { class: 'btn sm' + (at ? ' ghost' : ' primary'), onclick: () => openDevForm(t, draw) }, at ? 'Изменить' : 'Заполнить'));
   };
   draw();

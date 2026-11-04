@@ -2999,3 +2999,7 @@ a.bug-title:hover { text-decoration: underline; }
   .topbar .tb-right { gap: 8px; }
   .topbar .tb-right > .row { display: contents; }
 }
+
+/* Опросник в карточке релиза: проверка RM */
+.rl-dev-check { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; }
+.rl-dev-check > span { flex: 1 1 180px; }

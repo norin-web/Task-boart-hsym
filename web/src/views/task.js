@@ -754,7 +754,9 @@ function sideBlock(t, { staff, editable }) {
   if (!B.assignee.hidden && !staff && !zone) {
     const p = personById(t.assigneeId);
     // лид может отдать свою задачу сотруднику своей позиции в этом юните
-    const handover = me() && me().access === 'lead' && t.assigneeId === S.meId && !taskDone(t) && handoverPeople(t);
+    // на ревью у лида — только «Правки / Аппрув»: раздавать и передавать можно, пока задача у него в работе
+    const onReview = !!t.reviewFrom && t.status === ((u.settings.review || {}).column || '');
+    const handover = me() && me().access === 'lead' && t.assigneeId === S.meId && !taskDone(t) && !onReview && handoverPeople(t);
     prop(B.assignee.label, ro(p && h('span', { class: 'row', style: { gap: '6px', flexWrap: 'nowrap' } }, avatar(p, 'sm'), p.name)), {
       after: handover && handover.length > 0 && h('div', { class: 'quick-chips' },
         h('button', { class: 'quick-chip primary', title: 'Разложить на подзадачи сотрудникам позиции', onclick: () => openSplit(t, handover) }, icon('layers', 12), 'Раздать'),

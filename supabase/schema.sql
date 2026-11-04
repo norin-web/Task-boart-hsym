@@ -2044,6 +2044,49 @@ alter table ideas enable row level security;
 drop policy if exists ideas_all on ideas;
 create policy ideas_all on ideas for all to authenticated using (is_superadmin()) with check (is_superadmin());
 
+-- RM проверяет опросник разработчика: «Принять» (checked) или «Вернуть с вопросами» — ответы сбрасываются,
+-- тому, кто заполнял этап (iOS или интеграция), — комментарий и уведомление. RM этап не видит — функция с правами владельца.
+create or replace function dev_form_review(p_task text, p_ok boolean, p_note text default '') returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  r tasks;
+  s tasks;
+  f jsonb;
+  v_me text := coalesce(my_person_id(), '');
+  v_prev text := coalesce(current_setting('app.system', true), '');
+  at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+begin
+  select * into r from tasks where id = p_task and step = 'release';
+  if r.id is null then raise exception 'Это не этап «Релиз»' using errcode = 'P0001'; end if;
+  if not (app_system() or r.assignee_id = v_me or can_manage(r.unit_id)) then
+    raise exception 'Опросник проверяет RM релиза' using errcode = '42501';
+  end if;
+  select * into s from tasks
+   where parent_id = r.parent_id and r.parent_id <> '' and step in ('ios', 'integr') and not archived
+   order by case when step = 'integr' and dev_form ->> 'need' = 'true' then 0
+                 when step = 'ios' and coalesce(dev_form ->> 'need', '') <> 'false' then 1 else 2 end
+   limit 1;
+  if s.id is null or coalesce(s.dev_form ->> 'at', '') = '' then raise exception 'Опросник ещё не заполнен' using errcode = 'P0001'; end if;
+  if p_ok then
+    f := (s.dev_form - 'returned') || jsonb_build_object('checked', jsonb_build_object('by', v_me, 'at', at_));
+  else
+    if btrim(coalesce(p_note, '')) = '' then raise exception 'Напишите, что уточнить в опроснике' using errcode = 'P0001'; end if;
+    f := (s.dev_form - 'checked') || jsonb_build_object('at', '', 'returned', jsonb_build_object('by', v_me, 'at', at_, 'note', left(btrim(p_note), 2000)));
+  end if;
+  perform set_config('app.system', 'on', true);
+  update tasks set dev_form = f, updated_at = at_ where id = s.id;
+  if not p_ok then
+    insert into comments (id, task_id, text, author_id, at)
+    values ('c_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), s.id, left('Опросник вернули с вопросами: ' || btrim(p_note), 5000), v_me, at_);
+    if s.assignee_id <> '' and s.assignee_id <> v_me then
+      insert into notifications (id, person_id, task_id, kind, actor_id, at)
+      values ('n_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), s.assignee_id, s.id, 'returned', v_me, at_);
+    end if;
+  end if;
+  perform set_config('app.system', v_prev, true);
+  return f;
+end $$;
+
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
 revoke execute on all functions in schema public from public, anon;

@@ -891,3 +891,28 @@ test('бэклог: идеи и ТЗ ведёт CEO; запуск — новое
   assert.equal(r2.request.title, 'Апдейт №1: Виджеты');
   assert.equal((await api.as(ceo, () => api('listIdeas', {}))).filter(x => x.status === 'started').length, 2);
 });
+
+test('опросник: RM принимает или возвращает с вопросами — ответы сбрасываются, разработчику комментарий и уведомление', async () => {
+  const api = await setup();
+  const { ceo, pm, rm, ios, gold } = await studio(api);
+  const { request } = await api.as(ceo, () => api('createApp', { name: 'DF', unitId: gold.id }));
+  const by = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: request.id }))).map(t => [t.step, t]));
+  await api.as(pm, () => api('updateTask', { id: by.design.id, patch: { status: 'done' } }));
+  await api.as(ios, () => api('saveDevForm', { taskId: by.ios.id, answers: DEV_ANSWERS }));
+  for (const k of ['ios', 'art', 'meta', 'store', 'retext', 'l10n', 'qa', 'integr']) await api.as(pm, () => api('updateTask', { id: by[k].id, patch: { status: 'done' } }));
+  await api.as(pm, () => api('sendToRelease', { taskId: by.release.id }));
+  // чужой не проверяет; пустой вопрос нельзя
+  await api.as(ios, () => assert.rejects(() => api('reviewDevForm', { taskId: by.release.id, ok: true })));
+  await api.as(rm, () => assert.rejects(() => api('reviewDevForm', { taskId: by.release.id, ok: false, note: ' ' }), /что уточнить/));
+  // вернули: ответы сброшены, у разработчика комментарий и уведомление
+  await api.as(rm, () => api('reviewDevForm', { taskId: by.release.id, ok: false, note: 'Какие SDK собирают IDFA?' }));
+  assert.equal((await api.as(rm, () => api('getRelease', { taskId: by.release.id }))).devForm.at, '');
+  await api.as(ios, async () => {
+    assert.ok((await api('getNotifications', {})).some(n => n.taskId === by.ios.id && n.kinds.includes('returned')));
+    assert.ok((await api('getTaskExtras', { taskId: by.ios.id })).comments.some(c => /вернули с вопросами: Какие SDK/.test(c.text)));
+    await api('saveDevForm', { taskId: by.ios.id, answers: DEV_ANSWERS });
+  });
+  // заполнил снова — RM принял
+  const f = await api.as(rm, () => api('reviewDevForm', { taskId: by.release.id, ok: true }));
+  assert.ok(f.checked && f.checked.by === rm.id && !f.returned);
+});

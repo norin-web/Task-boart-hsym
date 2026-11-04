@@ -199,7 +199,7 @@ export function releaseBlock(t, onChange) {
         h('div', { class: 'rl-card-head' }, h('h3', null, 'Релизные поля'), h('span', { class: missing.length ? 'danger-text' : 'muted' }, `${filled} из ${data.fields.length}`)),
         h('div', { class: 'af-list rl-fields' }, data.fields.map(f => valueRow(f, values[f.id] || '', editable && phase !== 'live', v => saveValue(f, v))))),
       // опросник разработчика — своей карточкой (R04)
-      !hide.includes('fields') && data.fields.length > 0 && devAnswers(data.devForm),
+      !hide.includes('fields') && data.fields.length > 0 && devAnswers(data.devForm, t, editable, load),
       // ссылки приложения и команды — карточкой
       !hide.includes('links') && links.length > 0 && h('div', { class: 'rl-card rl-list-card' }, h('div', { class: 'rl-card-head' }, h('h3', null, 'Ссылки')),
         h('div', { class: 'rl-links' }, links.map(l => h('a', { class: 'rl-link', href: l.url, target: '_blank', rel: 'noopener', title: l.url }, l.icon,
@@ -221,10 +221,16 @@ export function releaseBlock(t, onChange) {
 }
 
 /** Ответы разработчика на опросник — отдельная карточка, только чтение. */
-function devAnswers(form) {
+function devAnswers(form, t, canCheck, reload) {
   const a = (form && form.answers) || {};
   const who = form && personById(form.by);
-  if (!form || !form.at) return h('div', { class: 'rl-card rl-dev-empty' }, h('h3', null, 'Опросник разработчика'), h('p', { class: 'muted rl-small' }, 'Разработчик ещё не заполнил опросник — ответы появятся здесь.'));
+  const back = form && form.returned;
+  if (!form || !form.at) {
+    return h('div', { class: 'rl-card rl-dev-empty' }, h('h3', null, 'Опросник разработчика'),
+      back
+        ? h('p', { class: 'rl-small' }, h('span', { class: 'danger-text' }, 'Вернули с вопросами: '), back.note, h('span', { class: 'muted' }, ' · ждём ответа разработчика'))
+        : h('p', { class: 'muted rl-small' }, 'Разработчик ещё не заполнил опросник — ответы появятся здесь.'));
+  }
   // порядок и текст — как сохранены в ответе (старые ответы — по вопросам по умолчанию)
   const known = Object.fromEntries(DEV_QUESTIONS.map((q, i) => [q.id, { q: q.q, n: i }]));
   const rows = Object.entries(a).map(([id, x]) => ({ q: x.q || (known[id] || {}).q || id, n: x.n ?? (known[id] || {}).n ?? 99, a: answerText(x) }))
@@ -233,9 +239,29 @@ function devAnswers(form) {
     const text = rows.map(x => `${x.q}\n${x.a}`).join('\n\n');
     (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(() => toast('Ответы опросника скопированы'), () => toast('Не удалось скопировать', { type: 'error' }));
   };
+  // RM проверяет: принять или вернуть с вопросами (ответы сбросятся, разработчику — комментарий и уведомление)
+  const accept = () => send('reviewDevForm', { taskId: t.id, ok: true }).then(() => { toast('Опросник принят'); reload(); }).catch(showErr);
+  const ask = () => {
+    const ta = h('textarea', { class: 'inp', rows: 4, maxlength: 2000, placeholder: 'Что уточнить: например, какие SDK собирают IDFA?' });
+    modal({
+      title: 'Вернуть опросник с вопросами', cls: 'dlg',
+      body: [h('p', { class: 'hint' }, 'Ответы сбросятся, разработчик получит комментарий и уведомление и заполнит опросник заново.'), field('Вопросы', ta)],
+      actions: [{ label: 'Отмена' }, { label: 'Вернуть', primary: true, action: async close => {
+        if (!ta.value.trim()) { ta.focus(); return; }
+        await send('reviewDevForm', { taskId: t.id, ok: false, note: ta.value.trim() });
+        close(); toast('Опросник вернули разработчику'); reload();
+      } }],
+    });
+  };
+  const checker = form.checked && personById(form.checked.by);
   return h('div', { class: 'rl-card rl-list-card' },
     h('div', { class: 'rl-card-head' }, h('h3', null, 'Опросник разработчика'), h('span', { class: 'muted' }, [who && who.name, fmtD(form.at)].filter(Boolean).join(' · ')),
       h('button', { class: 'btn sm', title: 'Скопировать все вопросы и ответы', onclick: copy }, icon('copy', 13), 'Скопировать')),
+    form.checked
+      ? h('p', { class: 'rl-line ok-text rl-small' }, icon('check', 14), 'Принят' + (checker ? ' · ' + checker.name : '') + ' · ' + fmtD(form.checked.at))
+      : canCheck && h('div', { class: 'rl-dev-check' }, h('span', { class: 'muted rl-small' }, 'Проверьте ответы перед отправкой в Apple'),
+        h('button', { class: 'btn sm', onclick: ask }, 'Вернуть с вопросами'),
+        h('button', { class: 'btn primary sm', onclick: accept }, icon('check', 13), 'Принять')),
     h('div', { class: 'rl-dev' }, rows.map(x => h('div', { class: 'rl-dev-row' }, h('span', { class: 'rl-dev-q' }, x.q), h('span', { class: 'rl-dev-a pre' }, x.a)))));
 }
 

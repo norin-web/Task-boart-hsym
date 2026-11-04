@@ -2661,6 +2661,12 @@ export function createBackend(db, opts = {}) {
       return taskOut({ ...t, dev_form: form });
     },
 
+    /** RM: принять опросник или вернуть с вопросами (ответы сбрасываются, разработчику — комментарий и уведомление). */
+    async reviewDevForm(p) {
+      const t = await findTask(p.taskId);
+      return json(await rpc('dev_form_review', { p_task: t.id, p_ok: !!p.ok, p_note: str(p.note, 2000) }), {}) || {};
+    },
+
     /** Вопросы опросника студии (настраивают CEO, PM и RM); пусто — набор по умолчанию. */
     async getDevQuestions() {
       return devQuestions();
