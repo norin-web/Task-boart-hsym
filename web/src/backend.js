@@ -870,9 +870,13 @@ export function createBackend(db, opts = {}) {
     }
   }
 
+  // автоархив доски — не чаще раза в 10 минут на юнит за сессию: иначе лишний запрос на каждое открытие доски
+  const archivedAt = new Map();
   async function autoArchive(unit) {
     const st = unitSettings(unit.settings);
     if (!st.autoArchiveDays) return;
+    if (Date.now() - (archivedAt.get(unit.id) || 0) < 10 * 60e3) return;
+    archivedAt.set(unit.id, Date.now());
     const doneIds = st.columns.filter(c => c.kind === 'done').map(c => c.id);
     if (!doneIds.length) return;
     const cutoff = new Date(Date.now() - st.autoArchiveDays * 864e5).toISOString();
@@ -895,13 +899,13 @@ export function createBackend(db, opts = {}) {
     },
 
     async getHome(p) {
-      // Заодно чистим корзину юнитов по сроку хранения (для участников функция ничего не делает)
-      await rpc('purge_archived_units', {}).catch(() => 0);
       const day = today(p.today);
       const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
-      const [units, ppl, depts, log] = await Promise.all([
+      // заодно — корзина юнитов по сроку хранения (для участников функция ничего не делает); всё параллельно
+      const [, units, ppl, depts, log, tm] = await Promise.all([
+        rpc('purge_archived_units', {}).catch(() => 0),
         unitsWithCounts(day, weekAgo), people(), departments(),
-        run(T('activity').select('*').order('at', { ascending: false }).limit(30)),
+        run(T('activity').select('*').order('at', { ascending: false }).limit(30)), teams(),
       ]);
       const stats = { todo: 0, in_progress: 0, overdue: 0, doneWeek: 0 };
       for (const u of units) {
@@ -911,7 +915,7 @@ export function createBackend(db, opts = {}) {
         stats.overdue += u.counts.overdue;
         stats.doneWeek += u.doneWeek;
       }
-      return { units: units.map(({ doneWeek, ...u }) => u), people: ppl, departments: depts, teams: await teams(), stats, activity: await enrichActivity(log) };
+      return { units: units.map(({ doneWeek, ...u }) => u), people: ppl, departments: depts, teams: tm, stats, activity: await enrichActivity(log) };
     },
 
     /**
@@ -2861,8 +2865,8 @@ export function createBackend(db, opts = {}) {
 
     /** Пульс раз в минуту: отметить «я в приложении», вернуть, кто когда был, и число непрочитанных уведомлений. */
     async heartbeat(p) {
-      await rpc('touch_presence', {});
-      if (p.today) await rpc('scan_due', { p_today: today(p.today) });
+      // «я в сети» и напоминания о сроках — параллельно (напоминания нужны до подсчёта непрочитанных)
+      await Promise.all([rpc('touch_presence', {}), p.today ? rpc('scan_due', { p_today: today(p.today) }) : null]);
       const [seen, unread, off] = await Promise.all([
         all(() => T('people').select('id,last_seen_at').order('id')),
         run(T('notifications').select('id,kind').eq('read_at', '').limit(100)),
