@@ -513,6 +513,9 @@ test('сотрудник и лид: «Можно начинать», фокус,
   await api.as(lead, () => assert.rejects(() => api('handOverTask', { taskId: st.design.id, personId: ios.id }), /этой позиции/));
   await api.as(ios, () => assert.rejects(() => api('handOverTask', { taskId: st.ios.id, personId: designer.id }), /лид/));
   assert.equal((await api.as(lead, () => api('handOverTask', { taskId: st.design.id, personId: designer.id }))).assigneeId, designer.id);
+  // PM юнита (и CEO) передаёт за лида — в том числе из «смотреть как»
+  assert.equal((await api.as(pm, () => api('handOverTask', { taskId: st.design.id, personId: lead.id }))).assigneeId, lead.id);
+  assert.equal((await api.as(lead, () => api('handOverTask', { taskId: st.design.id, personId: designer.id }))).assigneeId, designer.id);
   await api.as(designer, async () => assert.ok((await api('getNotifications', {})).some(n => n.taskId === st.design.id && n.kind === 'assigned')));
 
   // фокус: просроченное — первым, заблокированные этапы — не в фокусе

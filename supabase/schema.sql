@@ -1049,21 +1049,22 @@ declare
 begin
   select * into t from tasks where id = p_task;
   if t.id is null then raise exception 'Задача не найдена' using errcode = 'P0001'; end if;
-  if my_access() <> 'lead' or t.assignee_id is distinct from v_me then
-    raise exception 'Недостаточно прав: передать может лид — свою задачу' using errcode = '42501';
+  -- лид — свою задачу; CEO и PM юнита — за лида (как «Раздать»; в том числе из «смотреть как»)
+  if not (can_manage(t.unit_id) or (my_access() = 'lead' and t.assignee_id = v_me)) then
+    raise exception 'Недостаточно прав: передать может лид — свою задачу (или PM юнита)' using errcode = '42501';
   end if;
   if task_done(t.id) then raise exception 'Задача уже готова' using errcode = 'P0001'; end if;
   if not exists (select 1 from people p join unit_members m on m.person_id = p.id and m.unit_id = t.unit_id
-                  where p.id = p_person and p.active and p.id <> v_me
+                  where p.id = p_person and p.active and p.id <> t.assignee_id
                     and (t.department_id = '' or t.department_id = p.position_id or p.extra_positions ? t.department_id
-                         or exists (select 1 from lead_people lp where lp.lead_id = v_me and lp.person_id = p.id))) then
+                         or exists (select 1 from lead_people lp where lp.lead_id = t.assignee_id and lp.person_id = p.id))) then
     raise exception 'Передать можно сотруднику этой позиции или из вашей зоны' using errcode = 'P0001';
   end if;
   perform set_config('app.system', 'on', true);
   update tasks set assignee_id = p_person, updated_at = at_ where id = t.id;
   insert into activity (id, unit_id, task_id, action, field, from_val, to_val, actor_id, at)
   values ('a_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), t.unit_id, t.id, 'update', 'assigneeId',
-          to_jsonb(v_me)::text, to_jsonb(p_person)::text, v_me, at_);
+          to_jsonb(t.assignee_id)::text, to_jsonb(p_person)::text, coalesce(v_me, ''), at_);
   perform set_config('app.system', 'off', true);
 end $$;
 
