@@ -3026,3 +3026,6 @@ button.rd-check.on { background: var(--text); border-color: transparent; }
 .rj-state.ok { background: color-mix(in srgb, var(--success, #1f9d55) 18%, transparent); color: var(--text); }
 .rj-actions { display: flex; gap: 8px; }
 @container main (max-width: 720px) { .rj-row { grid-template-columns: 40px minmax(0, 1fr); } .rj-side { grid-column: 2; justify-items: start; } }
+.rj-row[role=button] { cursor: pointer; }
+.rj-row[role=button]:hover { background: var(--surface-2); }
+.rj-row.fixed[role=button]:hover { background: color-mix(in srgb, var(--success, #1f9d55) 11%, transparent); }

@@ -2519,7 +2519,7 @@ export function createBackend(db, opts = {}) {
           list.push({
             taskId: t.id, unitId: t.unit_id, key: `${U[t.unit_id].key}-${t.num}`, app: A[t.app_id] || null, rmId: t.assignee_id,
             version: [(rel.values || {}).version, (rel.values || {}).build].filter(Boolean).join(' · '),
-            n: x.n || 1, submittedAt: x.submittedAt || '', result: x.result || 'pending', at: x.at || '', reason: x.reason || '', rejectNo: x.rejectNo || 0, shot: x.shot || '',
+            n: x.n || 1, submittedAt: x.submittedAt || '', result: x.result || 'pending', at: x.at || '', reason: x.reason || '', rejectNo: x.rejectNo || 0, shot: x.shot || '', requestId: x.requestId || '',
             reviewDays: x.at && x.submittedAt ? Math.max(0, (Date.parse(x.at) - Date.parse(x.submittedAt)) / 864e5) : null,
           });
         }
@@ -2586,7 +2586,7 @@ export function createBackend(db, opts = {}) {
         const cl = json(t.checklist, []) || [];
         return {
           id: t.id, unitId: t.unit_id, key: `${U[t.unit_id].key}-${t.num}`, title: t.title, assigneeId: t.assignee_id, dueDate: t.due_date,
-          app: A[t.app_id] || null, phase: rel.phase || '', reason: rel.reason || '', pmId: rel.pmId || '',
+          app: A[t.app_id] || null, phase: rel.phase || '', reason: rel.reason || '', pmId: rel.pmId || '', rejectRequestId: rel.rejectRequestId || '',
           submittedAt: rel.submittedAt || '', rejectedAt: rel.rejectedAt || '', updatedAt: t.updated_at,
           rejectNo: rel.rejectNo || 0, shot: rel.shot || '', fixedAt: rel.fixedAt || '', attempts: (rel.history || []).length, version: (rel.values || {}).version || '',
           missing: required.filter(f => !(rel.values || {})[f.id]).map(f => f.name),

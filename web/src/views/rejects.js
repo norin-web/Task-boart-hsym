@@ -3,7 +3,7 @@
  * Открытые — у PM на исправлении или уже исправлены и ждут повторной отправки; закрытые — история.
  * Данные: getRmDashboard (что открыто сейчас) + getReleaseHistory (все реджекты).
  */
-import { S, personById, unitById, fmtDate, relTime, nameFrom, plural } from '../state.js';
+import { S, isSuper, personById, unitById, fmtDate, relTime, nameFrom, plural } from '../state.js';
 import { $, h, icon, fill, topbar, toast, showErr, confirmDlg, emptyBlock, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { peekTask } from './task.js';
@@ -34,11 +34,11 @@ export async function renderRejects() {
       rows = (hist.rows || []).map(x => {
         const a = active.get(x.taskId);
         const open = !!a && (a.rejectNo || 0) === (x.rejectNo || 0);
-        return { ...x, open, fixed: open && !!a.fixedAt, pmId: open ? a.pmId : '', shot: x.shot || (open ? a.shot : '') };
+        return { ...x, open, fixed: open && !!a.fixedAt, pmId: open ? a.pmId : '', shot: x.shot || (open ? a.shot : ''), requestId: x.requestId || (open ? a.rejectRequestId : '') };
       });
       // открытый реджект, которого нет в истории (старые данные), всё равно показываем
       for (const a of dash.rejected || []) {
-        if (!rows.some(r => r.taskId === a.id && r.open)) rows.push({ taskId: a.id, unitId: a.unitId, app: a.app, rejectNo: a.rejectNo, reason: a.reason, at: a.rejectedAt, shot: a.shot, open: true, fixed: !!a.fixedAt, pmId: a.pmId });
+        if (!rows.some(r => r.taskId === a.id && r.open)) rows.push({ taskId: a.id, requestId: a.rejectRequestId || '', unitId: a.unitId, app: a.app, rejectNo: a.rejectNo, reason: a.reason, at: a.rejectedAt, shot: a.shot, open: true, fixed: !!a.fixedAt, pmId: a.pmId });
       }
       draw();
     } catch (e) { showErr(e); }
@@ -59,7 +59,9 @@ export async function renderRejects() {
     const pm = personById(x.pmId);
     const late = x.open && !x.fixed && daysAgo(x.at) >= LATE_DAYS;
     const u = unitById(x.unitId);
-    return h('div', { class: 'rj-row' + (x.fixed ? ' fixed' : '') + (late ? ' late' : '') + (x.open ? '' : ' closed') },
+    // карточка реджекта = задача PM «Реджект №N»: причина, статус работы над ним, исполнитель, комментарии; у RM её нет — открываем релиз
+    const openCard = () => (x.requestId && isSuper() ? peekTask(x.unitId, x.requestId) : peekTask(x.unitId, x.taskId));
+    return h('div', { class: 'rj-row' + (x.fixed ? ' fixed' : '') + (late ? ' late' : '') + (x.open ? '' : ' closed'), role: 'button', tabindex: '0', title: 'Открыть реджект', onclick: e => { if (!e.target.closest('button, a')) openCard(); }, onkeydown: e => { if (e.key === 'Enter' && e.target === e.currentTarget) openCard(); } },
       x.app ? appIcon(x.app, 'md') : h('span'),
       h('div', { class: 'rj-main' },
         h('div', { class: 'rj-title' },
@@ -76,7 +78,8 @@ export async function renderRejects() {
       h('div', { class: 'rj-side' },
         h('span', { class: 'rj-state ' + (x.fixed ? 'ok' : x.open ? 'wait' : 'done') }, x.fixed ? 'Исправлен — отправьте снова' : x.open ? 'У PM на исправлении' : 'Закрыт'),
         h('div', { class: 'rj-actions' },
-          h('button', { class: 'btn sm', onclick: () => peekTask(x.unitId, x.taskId) }, 'Релиз'),
+          h('button', { class: 'btn sm', onclick: openCard }, isSuper() && x.requestId ? 'Открыть' : 'Релиз'),
+          isSuper() && x.requestId && h('button', { class: 'btn sm', title: 'Карточка релиза', onclick: () => peekTask(x.unitId, x.taskId) }, 'Релиз'),
           x.open && (x.fixed
             ? h('button', { class: 'btn primary sm', onclick: () => step(x, 'resubmit') }, 'Отправил снова')
             : h('button', { class: 'btn sm', title: 'Задача по реджекту закроется, релиз вернётся в очередь', onclick: () => closeReject(x) }, 'Закрыть реджект')))));
