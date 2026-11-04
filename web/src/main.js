@@ -58,6 +58,10 @@ let booted = false;
 async function boot() {
   if (booted) return;
   booted = true;
+  // Пока грузятся данные, форма входа не должна торчать в сетке приложения (сжималась в узкую колонку)
+  if (document.body.classList.contains('login-page')) {
+    fill($('#shell'), h('div', { class: 'boot', style: { gridColumn: '1 / -1' } }, 'Загружаем…'));
+  }
   document.body.classList.remove('login-page');
   // После входа по ссылке в адресе остаётся ?code=… — убираем
   if (location.search) history.replaceState(null, '', location.pathname + location.hash);
