@@ -225,11 +225,18 @@ export function releaseBlock(t, onChange) {
 function devAnswers(form) {
   const a = (form && form.answers) || {};
   const who = form && personById(form.by);
-  if (!form || !form.at) return h('div', { class: 'rl-card rl-dev-empty' }, h('h3', null, 'Опросник разработчика'), h('p', { class: 'muted rl-small' }, 'Разработчик ещё не заполнил'));
+  if (!form || !form.at) return h('div', { class: 'rl-card rl-dev-empty' }, h('h3', null, 'Опросник разработчика'), h('p', { class: 'muted rl-small' }, 'Разработчик ещё не заполнил опросник — ответы появятся здесь.'));
+  // порядок и текст — как сохранены в ответе (старые ответы — по вопросам по умолчанию)
+  const known = Object.fromEntries(DEV_QUESTIONS.map(q => [q.id, q.q]));
+  const rows = Object.entries(a).map(([id, x]) => ({ q: x.q || known[id] || id, a: answerText(x) })).filter(x => x.a);
+  const copy = () => {
+    const text = rows.map(x => `${x.q}\n${x.a}`).join('\n\n');
+    (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(() => toast('Ответы опросника скопированы'), () => toast('Не удалось скопировать', { type: 'error' }));
+  };
   return h('div', { class: 'rl-card rl-list-card' },
-    h('div', { class: 'rl-card-head' }, h('h3', null, 'Опросник разработчика'), h('span', { class: 'muted' }, [who && who.name, fmtD(form.at)].filter(Boolean).join(' · '))),
-    h('div', { class: 'rl-dev' }, DEV_QUESTIONS.filter(q => a[q.id]).map(q => h('div', { class: 'rl-dev-row' },
-      h('span', { class: 'rl-dev-q' }, q.q), h('span', { class: 'rl-dev-a pre' }, answerText(a[q.id]))))));
+    h('div', { class: 'rl-card-head' }, h('h3', null, 'Опросник разработчика'), h('span', { class: 'muted' }, [who && who.name, fmtD(form.at)].filter(Boolean).join(' · ')),
+      h('button', { class: 'btn sm', title: 'Скопировать все вопросы и ответы', onclick: copy }, icon('copy', 13), 'Скопировать')),
+    h('div', { class: 'rl-dev' }, rows.map(x => h('div', { class: 'rl-dev-row' }, h('span', { class: 'rl-dev-q' }, x.q), h('span', { class: 'rl-dev-a pre' }, x.a)))));
 }
 
 /** Релизное поле: значение и правка на месте (длинный текст — многострочное поле). */

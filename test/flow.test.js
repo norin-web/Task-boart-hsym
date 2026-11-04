@@ -831,3 +831,27 @@ test('тексты и переводы: ASO пишет тексты → диза
   await finish(api, aso, pm, st.l10n.id);
   assert.equal((await api.as(pm, () => api('sendToRelease', { taskId: st.release.id }))).assigneeId, rm.id);
 });
+
+test('опросник: PM решает, кто заполняет — разработчик или лид на интеграции; вопросы настраиваются', async () => {
+  const api = await setup();
+  const { ceo, pm, rm, ios, gold } = await studio(api);
+  const { request } = await api.as(ceo, () => api('createApp', { name: 'Q', unitId: gold.id }));
+  const by = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: request.id }))).map(t => [t.step, t]));
+  // вопросы: PM и RM настраивают, сотрудник — нет
+  const qs = await api.as(pm, () => api('saveDevQuestions', { questions: [{ q: 'Есть backend?', kind: 'yn' }, { q: 'Что ещё?', kind: 'text', optional: true }] }));
+  assert.equal(qs.length, 2);
+  await api.as(rm, () => api('saveDevQuestions', { questions: qs }));
+  await api.as(ios, () => assert.rejects(() => api('saveDevQuestions', { questions: qs })));
+  // по умолчанию — разработчик; интеграции заполнять нельзя
+  await api.as(ceo, () => assert.rejects(() => api('saveDevForm', { taskId: by.integr.id, answers: { [qs[0].id]: { v: 'Нет' } } }), /заполняет разработчик/));
+  // PM переключил на лида: разработчику больше не нужно, лиду — нужно
+  await api.as(ios, () => assert.rejects(() => api('setFormStep', { requestId: request.id, step: 'integr' })));
+  await api.as(pm, () => api('setFormStep', { requestId: request.id, step: 'integr' }));
+  await api.as(ios, () => assert.rejects(() => api('saveDevForm', { taskId: by.ios.id, answers: { [qs[0].id]: { v: 'Нет' } } }), /лид на интеграции/));
+  await api.as(ceo, () => api('saveDevForm', { taskId: by.integr.id, answers: { [qs[0].id]: { v: 'Да' } } }));
+  // в релизе — ответы с интеграции, с текстом вопроса
+  for (const k of ['design', 'ios', 'qa', 'integr', 'meta', 'retext', 'l10n']) await api.as(pm, () => api('updateTask', { id: by[k].id, patch: { status: 'done' } }));
+  await api.as(pm, () => api('sendToRelease', { taskId: by.release.id }));
+  const r = await api.as(rm, () => api('getRelease', { taskId: by.release.id }));
+  assert.deepEqual(r.devForm.answers[qs[0].id], { v: 'Да', q: 'Есть backend?' });
+});

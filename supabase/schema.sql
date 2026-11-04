@@ -873,7 +873,13 @@ declare
   st jsonb;
   k text;
 begin
-  if app_system() or new.step <> 'ios' or new.status is not distinct from old.status or can_manage(new.unit_id) then return new; end if;
+  -- кто заполняет опросник (dev_form.need: этап iOS — да, если не false; интеграция — только если true) решают PM и CEO
+  if (new.dev_form -> 'need') is distinct from (old.dev_form -> 'need') and not (app_system() or can_manage(new.unit_id)) then
+    raise exception 'Кто заполняет опросник, решает PM' using errcode = '42501';
+  end if;
+  if app_system() or new.step not in ('ios', 'integr') or new.status is not distinct from old.status or can_manage(new.unit_id) then return new; end if;
+  if new.step = 'ios' and coalesce(new.dev_form ->> 'need', '') = 'false' then return new; end if;
+  if new.step = 'integr' and coalesce(new.dev_form ->> 'need', '') <> 'true' then return new; end if;
   if coalesce(new.dev_form ->> 'at', '') <> '' then return new; end if;
   select settings into st from units where id = new.unit_id;
   select x ->> 'kind' into k from jsonb_array_elements(st -> 'columns') x where x ->> 'id' = new.status limit 1;
@@ -1673,10 +1679,12 @@ create trigger release_fixed after update on tasks for each row execute function
 create or replace function release_dev_form(p_task text) returns jsonb
 language sql stable security definer set search_path = public as $$
   select s.dev_form
-    from tasks r join tasks s on s.parent_id = r.parent_id and s.step = 'ios' and r.parent_id <> ''
+    from tasks r join tasks s on s.parent_id = r.parent_id and s.step in ('ios', 'integr') and r.parent_id <> '' and not s.archived
    where r.id = p_task and r.step = 'release'
      and (r.assignee_id = my_person_id() or can_manage(r.unit_id))
-   order by s.dev_form ->> 'at' desc nulls last limit 1;
+   order by case when s.step = 'integr' and s.dev_form ->> 'need' = 'true' then 0
+                 when s.step = 'ios' and coalesce(s.dev_form ->> 'need', '') <> 'false' then 1 else 2 end,
+            s.dev_form ->> 'at' desc nulls last limit 1;
 $$;
 
 create or replace function release_links(p_task text) returns table (task_id text, step text, title text, field_id text, url text)
@@ -1722,8 +1730,8 @@ drop policy if exists settings_read on app_settings;
 create policy settings_read on app_settings for select to authenticated using (true);
 drop policy if exists settings_write on app_settings;
 create policy settings_write on app_settings for all to authenticated
-  using (is_superadmin() or (my_access() = 'rm' and key in ('releaseFields', 'releaseChecklist')))
-  with check (is_superadmin() or (my_access() = 'rm' and key in ('releaseFields', 'releaseChecklist')));
+  using (is_superadmin() or (my_access() = 'rm' and key in ('releaseFields', 'releaseChecklist', 'devQuestions')) or (my_access() = 'moderator' and key = 'devQuestions'))
+  with check (is_superadmin() or (my_access() = 'rm' and key in ('releaseFields', 'releaseChecklist', 'devQuestions')) or (my_access() = 'moderator' and key = 'devQuestions'));
 
 -- Юниты, поля, состав: видят администраторы и участники юнита; меняют администраторы.
 drop policy if exists units_read on units;

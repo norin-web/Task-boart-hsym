@@ -120,7 +120,8 @@ function buildPanel(t) {
       h('button', { class: 'btn sm', onclick: () => openQaReturn(t) }, icon('back', 13), 'Вернуть в разработку')),
     (t.bugs || []).length > 0 && bugsBlock(t),
     t.kind === 'request' && /^Реджект №/.test(t.title) && shotsStrip(t.id, '', 'Скриншоты реджекта'),
-    t.step === 'ios' && devFormBlock(t, t.assigneeId === S.meId || isStaff()),
+    // опросник — у этапа iOS (по умолчанию) или у интеграции, если PM так решил (dev_form.need)
+    ((t.step === 'ios' && (t.devForm || {}).need !== false) || (t.step === 'integr' && (t.devForm || {}).need === true)) && devFormBlock(t, t.assigneeId === S.meId || isStaff()),
     t.step === 'release' && t.assigneeId && releaseBlock(t, () => reloadBoard().catch(() => {})),
     t.kind === 'request' || t.kind === 'stage' ? [flowBlock(t), t.kind === 'stage' && treeBlock(t, { noParents: true })] : treeBlock(t),
     !B.description.hidden && !relHide('description') && descriptionBlock(t, B.description.label, editable),
@@ -262,7 +263,14 @@ function flowBlock(t) {
     const add = flow.filter(x => !x.release && !has.has(x.key));
     const del = stages.filter(n => n.step !== 'release' && n.statusKind !== 'done');
     const name = n => n.title.split(' · ')[0];
+    // кто заполняет опросник перед релизом: разработчик или лид на интеграции
+    const integ = stages.find(n => n.step === 'integr');
+    const formOnInteg = !!integ && (integ.devForm || {}).need === true;
+    const setForm = step => send('setFormStep', { requestId: t.id, step }).then(() => { toast(step === 'integr' ? 'Опросник заполнит лид на интеграции' : 'Опросник заполнит разработчик'); reload(); }).catch(showErr);
     menu(anchor, [
+      integ && { title: 'Опросник заполняет' },
+      integ && { label: 'Разработчик (этап iOS)', icon: formOnInteg ? null : 'check', action: () => formOnInteg && setForm('ios') },
+      integ && { label: 'Лид на интеграции', icon: formOnInteg ? 'check' : null, action: () => !formOnInteg && setForm('integr') },
       add.length > 0 && { title: 'Добавить этап' },
       ...add.map(x => ({ label: x.title, icon: 'plus', action: () => send('addStage', { requestId: t.id, key: x.key })
         .then(() => { toast(`Этап «${x.title}» добавлен`); reload(); }).catch(showErr) })),

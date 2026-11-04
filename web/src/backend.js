@@ -379,6 +379,22 @@ function cleanAppStatuses(list) {
 }
 
 /** Флоу: этапы { key, title, positionId, dependsOn: [key], release }; зависимости — только на этапы выше по списку. */
+/** Вопросы опросника: id, вид (yn — Да/Нет, text), текст, подсказка, что уточнить при «Да», необязательный. */
+function cleanDevQuestions(list) {
+  const seen = new Set();
+  return (Array.isArray(list) ? list : []).slice(0, 40).map(x => {
+    const q = str(x && x.q, 300);
+    if (!q) return null;
+    let id = /^[a-z0-9_]{1,40}$/.test((x && x.id) || '') && !seen.has(x.id) ? x.id : uid('q').toLowerCase().replace(/[^a-z0-9_]/g, '');
+    seen.add(id);
+    const out = { id, kind: x.kind === 'text' ? 'text' : 'yn', q };
+    if (str(x.hint, 300)) out.hint = str(x.hint, 300);
+    if (out.kind === 'yn' && str(x.note, 100)) out.note = str(x.note, 100);
+    if (x.optional) out.optional = true;
+    return out;
+  }).filter(Boolean);
+}
+
 function cleanFlow(list) {
   const keys = [];
   return (Array.isArray(list) ? list : []).slice(0, 20).map(x => {
@@ -582,6 +598,7 @@ export function createBackend(db, opts = {}) {
     const own = unitId ? unitSettings((await findUnit(unitId)).settings).flows : {};
     return Object.fromEntries(Object.keys(REQUEST_TYPES).map(k => [k, own[k] || (k in saved ? cleanFlow(saved[k]) : DEFAULT_FLOWS[k])]));
   };
+  const devQuestions = async () => { const own = cleanDevQuestions(await setting('devQuestions')); return own.length ? own : DEV_QUESTIONS; };
   const templates = async () => (await all(() => T('task_templates').select('*').order('ord').order('id'))).map(templateOut);
   const linkFields = async () => (await all(() => T('link_fields').select('*').order('ord').order('id'))).map(linkFieldOut);
   const cleanPositions = async list => {
@@ -2592,21 +2609,50 @@ export function createBackend(db, opts = {}) {
     /** Опросник разработчика перед релизом: только этап iOS, все обязательные ответы; при «Нет» уточнение не хранится. */
     async saveDevForm(p) {
       const t = await findTask(p.taskId);
-      if (t.step !== 'ios') fail('Опросник — у этапа «Разработка iOS»');
+      if (t.step !== 'ios' && t.step !== 'integr') fail('Опросник — у этапа «Разработка iOS» или «Интеграция»');
+      const df = json(t.dev_form, {}) || {};
+      if ((t.step === 'ios' && df.need === false) || (t.step === 'integr' && df.need !== true)) {
+        fail('Опросник в этом запросе заполняет ' + (t.step === 'ios' ? 'лид на интеграции' : 'разработчик (этап iOS)'));
+      }
       const src = p.answers && typeof p.answers === 'object' ? p.answers : {};
       const answers = {};
-      for (const q of DEV_QUESTIONS) {
+      for (const q of await devQuestions()) {
         const a = src[q.id] || {};
         const v = q.kind === 'yn' ? (['Да', 'Нет'].includes(a.v) ? a.v : '') : str(a.v, 1000);
         if (!v) { if (q.optional) continue; fail('Ответьте на вопрос: ' + q.q); }
         const note = q.kind === 'yn' && v === 'Да' ? str(a.note, 500) : '';
         if (q.kind === 'yn' && v === 'Да' && q.note && !note) fail(q.q + ' ' + q.note);
-        answers[q.id] = note ? { v, note } : { v };
+        answers[q.id] = note ? { v, note, q: q.q } : { v, q: q.q }; // текст вопроса — в ответе: вопросы потом могут поменять
       }
-      const form = { answers, by: (await rpc('my_person_id', {})) || '', at: now() };
+      const form = { ...(json(t.dev_form, {}) || {}), answers, by: (await rpc('my_person_id', {})) || '', at: now() };
       await updateOne('tasks', t.id, { dev_form: form });
       return taskOut({ ...t, dev_form: form });
     },
+
+    /** Вопросы опросника студии (настраивают CEO, PM и RM); пусто — набор по умолчанию. */
+    async getDevQuestions() {
+      return devQuestions();
+    },
+
+    async saveDevQuestions(p) {
+      const list = cleanDevQuestions(p.questions);
+      if (!list.length) fail('Оставьте хотя бы один вопрос');
+      await run(T('app_settings').upsert({ key: 'devQuestions', value: list, updated_at: now() }, { onConflict: 'key' }));
+      return list;
+    },
+
+    /** PM/CEO: кто заполняет опросник в этом запросе — разработчик (этап iOS) или лид на интеграции. */
+    async setFormStep(p) {
+      const r = await findTask(p.requestId);
+      const step = p.step === 'integr' ? 'integr' : 'ios';
+      const stages = (await run(T('tasks').select('id,step,dev_form,archived').eq('parent_id', r.id).eq('kind', 'stage'))).filter(x => !x.archived);
+      if (step === 'integr' && !stages.some(x => x.step === 'integr')) fail('Сначала добавьте этап «Интеграция»');
+      for (const x of stages.filter(y => y.step === 'ios' || y.step === 'integr')) {
+        await updateOne('tasks', x.id, { dev_form: { ...(json(x.dev_form, {}) || {}), need: x.step === step }, updated_at: now() });
+      }
+      return step;
+    },
+
 
     /**
      * Дашборд RM: релизы, которые ему видны (свои и своей позиции), кроме вышедших: очередь (к отправке — чего не хватает),
