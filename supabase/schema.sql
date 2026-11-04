@@ -1575,8 +1575,7 @@ begin
     -- номер реджекта — по приложению (все релизы)
     select count(*) + 1 into v_no from tasks r, jsonb_array_elements(coalesce(r.release -> 'history', '[]'::jsonb)) h
      where r.app_id = t.app_id and r.step = 'release' and h ->> 'result' = 'reject';
-    select m.person_id into pm from unit_members m join people p on p.id = m.person_id
-     where m.unit_id = t.unit_id and p.access = 'moderator' and p.active order by m.created_at limit 1;
+    pm := unit_pm(t.unit_id);
     v_id := 't_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12);
     insert into tasks (id, unit_id, num, title, description, status, assignee_id, department_id, due_date, ord, fields, checklist,
                        archived, done_at, created_by, created_at, updated_at, parent_id, kind, request_type, app_id, is_test, spec_url)
@@ -1904,6 +1903,25 @@ create policy activity_insert on activity for insert to authenticated with check
   or (task_id <> '' and exists (select 1 from tasks t where t.id = task_id and t.unit_id = activity.unit_id
     and (can_manage(t.unit_id) or my_person_id() in (t.assignee_id, t.review_from, t.reviewer_id)
          or in_lead_zone(t.unit_id, t.department_id, t.assignee_id)))));
+
+-- Ответственный за юнит (роль PM): PM или CEO. Пусто — первый PM из состава. Менять может только CEO.
+alter table units add column if not exists pm_id text not null default '';
+create or replace function unit_pm(p_unit text) returns text language sql stable set search_path = public as $$
+  select coalesce(
+    (select u.pm_id from units u join people p on p.id = u.pm_id and p.active where u.id = p_unit and u.pm_id <> ''),
+    (select m.person_id from unit_members m join people p on p.id = m.person_id
+      where m.unit_id = p_unit and p.access = 'moderator' and p.active order by m.created_at limit 1),
+    '');
+$$;
+create or replace function guard_unit_pm() returns trigger language plpgsql set search_path = public as $$
+begin
+  if new.pm_id is distinct from old.pm_id and not (is_superadmin() or app_system()) then
+    raise exception 'Ответственного за юнит меняет только CEO' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+drop trigger if exists units_guard_pm on units;
+create trigger units_guard_pm before update of pm_id on units for each row execute function guard_unit_pm();
 
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;

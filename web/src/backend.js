@@ -227,7 +227,7 @@ function cleanFieldValues(obj, keepNulls) {
 const unitOut = r => ({
   id: r.id, name: r.name, key: r.key, color: r.color, description: r.description,
   settings: unitSettings(r.settings), nextNum: r.next_num, order: r.ord, archived: !!r.archived,
-  archivedAt: r.archived_at || '', createdAt: r.created_at, updatedAt: r.updated_at,
+  archivedAt: r.archived_at || '', createdAt: r.created_at, updatedAt: r.updated_at, pmId: r.pm_id || '',
 });
 
 const taskOut = r => ({
@@ -527,6 +527,14 @@ export function createBackend(db, opts = {}) {
     const list = (await people()).filter(x => x.active && ids.includes(x.id));
     return role ? list.filter(x => x.access === role) : list;
   }
+  /** Ответственный за юнит: заданный (PM или CEO), иначе первый PM из состава. */
+  async function responsiblePm(unitId) {
+    const u = await one('units', unitId);
+    const own = u && u.pm_id ? await one('people', u.pm_id) : null;
+    if (own && own.active) return own.id;
+    const pms = await unitPeople(unitId, 'moderator');
+    return pms.length ? pms[0].id : '';
+  }
   async function setting(key) {
     const r = await run(T('app_settings').select('value').eq('key', key).maybeSingle());
     return r ? json(r.value, null) : null;
@@ -547,11 +555,11 @@ export function createBackend(db, opts = {}) {
   async function moveAppTasks(a, unitId, ctx) {
     const rows = await all(() => T('tasks').select('id,kind,status,unit_id').eq('app_id', a.id).order('created_at').order('id'));
     for (const t of rows) if (t.unit_id !== unitId) await methods.moveTask({ id: t.id, unitId }, ctx);
-    const pms = await unitPeople(unitId, 'moderator');
+    const respId = await responsiblePm(unitId);
     const st = unitSettings((await findUnit(unitId)).settings);
     for (const t of rows.filter(x => x.kind === 'request')) {
       const fresh = await findTask(t.id);
-      if (kindOf(st, fresh.status) !== 'done') await methods.updateTask({ id: t.id, patch: { assigneeId: pms.length ? pms[0].id : '' } }, ctx);
+      if (kindOf(st, fresh.status) !== 'done') await methods.updateTask({ id: t.id, patch: { assigneeId: respId } }, ctx);
     }
     // исполнителей, которых нет в новом юните, не оставляем на открытых задачах: этап — человек той же позиции здесь, релиз — RM, иначе без исполнителя
     const crew = await unitPeople(unitId);
@@ -1044,10 +1052,12 @@ export function createBackend(db, opts = {}) {
         description: str(p.description, 1000), settings, next_num: 1,
         ord: (await maxOrd('units')) + 1, archived: false, created_at: ts, updated_at: ts,
       };
+      // ответственный за юнит: PM или CEO (CEO в состав не добавляем — он видит всё)
+      const pm = p.pmId ? await one('people', String(p.pmId)) : null;
+      if (pm && ['moderator', 'superadmin'].includes(pm.access) && pm.active) unit.pm_id = pm.id;
       await run(T('units').insert(unit));
       await insertFields(unit.id, fields);
       // PM юнита сразу в команде: без него задачи CEO некому раскладывать
-      const pm = p.pmId ? await one('people', String(p.pmId)) : null;
       if (pm && pm.access === 'moderator') {
         await run(T('unit_members').upsert({ unit_id: unit.id, person_id: pm.id, department_id: await validDept(null), created_at: ts }, { onConflict: 'unit_id,person_id' }));
       }
@@ -1586,9 +1596,10 @@ export function createBackend(db, opts = {}) {
     async setUnitPm(p) {
       const u = await findUnit(p.unitId);
       const pm = (await one('people', p.personId)) || fail('Человек не найден', 'NOT_FOUND');
-      if (pm.access !== 'moderator') fail('Ответственным за юнит может быть только PM');
+      if (!['moderator', 'superadmin'].includes(pm.access) || !pm.active) fail('Ответственным за юнит может быть только PM или CEO');
       const old = (await unitPeople(u.id, 'moderator')).filter(x => x.id !== pm.id).map(x => x.id);
-      await methods.setMember({ unitId: u.id, personId: pm.id, departmentId: pm.position_id || '' });
+      if (pm.access === 'moderator') await methods.setMember({ unitId: u.id, personId: pm.id, departmentId: pm.position_id || '' });
+      await updateOne('units', u.id, { pm_id: pm.id, updated_at: now() });
       for (const id of old) await methods.removeMember({ unitId: u.id, personId: id });
       if (old.length) {
         const st = unitSettings(u.settings);
@@ -2229,7 +2240,8 @@ export function createBackend(db, opts = {}) {
       const a = (await one('apps', p.appId)) || fail('Приложение не найдено', 'NOT_FOUND');
       const type = REQUEST_TYPES[p.type] ? p.type : 'other';
       const pms = await unitPeople(a.unit_id, 'moderator');
-      const pmId = p.pmId && pms.some(x => x.id === p.pmId) ? p.pmId : pms.length ? pms[0].id : '';
+      const respId = await responsiblePm(a.unit_id);
+      const pmId = p.pmId && (p.pmId === respId || pms.some(x => x.id === p.pmId)) ? p.pmId : respId;
       const prio = await validPriority('priority' in p ? p.priority : a.priority);
       // шаблон апдейта: пункты — чеклистом запроса, нужные этапы — запоминаем для разбивки
       const tpl = p.templateId ? await one('task_templates', String(p.templateId)) : null;

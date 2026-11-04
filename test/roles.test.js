@@ -82,6 +82,23 @@ test('PM: удаляет свой юнит, чужой не видит, новы
   assert.deepEqual(left.rows.map(r => r.id), [B.id]);
 });
 
+test('ответственный за юнит: CEO может им быть, менять может только CEO, запросы идут ему', async () => {
+  const api = await setup();
+  const { admin, mod, A } = await team(api);
+  // PM не меняет ответственного напрямую (база не даёт)
+  await api.as(mod, async () => {
+    await assert.rejects(() => api.pg.query('update units set pm_id = $1 where id = $2', [admin.id, A.id]), /только CEO/);
+  });
+  // CEO как ответственный: запросы по приложениям юнита идут ему, а не первому PM
+  await api('setUnitPm', { unitId: A.id, personId: admin.id });
+  assert.equal((await api.pg.query('select pm_id from units where id = $1', [A.id])).rows[0].pm_id, admin.id);
+  const { app, request } = await api('createApp', { unitId: A.id, name: 'Пульт 1' });
+  assert.equal(request.assigneeId, admin.id);
+  // обратно на PM — работает
+  await api('setUnitPm', { unitId: A.id, personId: mod.id });
+  assert.equal((await api.pg.query('select unit_pm($1) as p', [A.id])).rows[0].p, mod.id);
+});
+
 test('участник: только свои задачи, обязательные поля перед переносом', async () => {
   const api = await setup();
   const { admin, designer, A, link, t1, t3 } = await team(api);

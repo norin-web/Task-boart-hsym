@@ -1,4 +1,4 @@
-import { S, PALETTE, suggestKey, isSuper, activeDepts } from '../state.js';
+import { S, PALETTE, suggestKey, isSuper, activeDepts, ACCESS_LABELS } from '../state.js';
 import { h, field, menu, modal, confirmDlg, promptDlg, toast, showErr, colorPicker, personSelect } from '../ui.js';
 import { send } from '../api.js';
 import { navigate, rerender } from '../router.js';
@@ -74,10 +74,10 @@ export function openCreateUnit(onCreated) {
     h('option', { value: '' }, 'Стандартная схема (поле «Приоритет»)'),
     S.units.map(u => h('option', { value: u.id }, `Как в «${u.name}»`)));
   // PM юнита: из тех, у кого доступ «PM»; если он один — сразу выбран
-  const pms = S.people.filter(p => p.active && p.access === 'moderator');
+  const pms = S.people.filter(p => p.active && (p.access === 'moderator' || p.access === 'superadmin'));
   const pmSel = h('select', { class: 'inp', 'aria-label': 'PM юнита' },
-    h('option', { value: '' }, pms.length ? '— выбрать позже —' : 'Нет PM — назначьте в «Люди и доступы»'),
-    pms.map(p => h('option', { value: p.id, selected: pms.length === 1 }, p.name)));
+    h('option', { value: '' }, '— выбрать позже —'),
+    pms.map(p => h('option', { value: p.id }, `${p.name} · ${ACCESS_LABELS[p.access]}`)));
   // ревьюеры по позициям: дизайн — …, разработка — …; по умолчанию — для остальных
   const who = (empty, dept) => personSelect('', null, { empty, dept, label: 'Ревьюер' });
   const byDept = activeDepts().map(d => ({ d, sel: who('— по умолчанию —', d.id) }));
@@ -92,7 +92,7 @@ export function openCreateUnit(onCreated) {
       h('div', { class: 'grid2' }, field('Название', name), field('Ключ задач', key, h('span', null, 'Номера задач: ', keyHint))),
       field('Цвет', color.el),
       field('Описание', desc),
-      field('PM юнита', pmSel, 'PM раскладывает задачи CEO по этапам. Добавить или сменить можно во вкладке «Команда».'),
+      field('Ответственный за юнит', pmSel, 'PM или CEO: ему идут запросы CEO и реджекты. Сменить потом может только CEO.'),
       field('Поля карточки', copy, 'Можно скопировать настройки полей и колонок из существующего юнита.'),
       field('Ревьюеры по позициям', reviewBox, 'Задача, пришедшая в ревью, станет задачей этого человека. Можно изменить позже в настройках юнита.'),
     ],

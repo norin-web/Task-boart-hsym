@@ -192,20 +192,21 @@ export function renderUnitTeam() {
 function owner(u, reload) {
   const pms = pmsOf(u.id);
   const pick = anchor => {
-    const all = S.people.filter(p => p.active && p.access === 'moderator');
+    const all = S.people.filter(p => p.active && (p.access === 'moderator' || p.access === 'superadmin'));
     menu(anchor, [
       { title: 'Ответственный за юнит' },
       ...all.map(p => ({
-        label: p.name, icon: pms.some(x => x.id === p.id) ? 'check' : null,
+        label: `${p.name} · ${ACCESS_LABELS[p.access]}`, icon: pms[0] && pms[0].id === p.id ? 'check' : null,
         action: () => send('setUnitPm', { unitId: u.id, personId: p.id }).then(members => {
           u.members = members.map(m => m.personId);
+          u.pmId = p.id;
           const lu = S.units.find(x => x.id === u.id);
-          if (lu) lu.members = u.members;
+          if (lu) { lu.members = u.members; lu.pmId = p.id; }
           toast(`Ответственный — ${p.name}`);
           reload();
         }).catch(showErr),
       })),
-      !all.length && h('p', { class: 'muted', style: { padding: '4px 10px', margin: 0 } }, 'Нет людей с ролью ' + ACCESS_LABELS.moderator),
+      !all.length && h('p', { class: 'muted', style: { padding: '4px 10px', margin: 0 } }, 'Нет PM или CEO'),
     ]);
   };
   return h('section', null,

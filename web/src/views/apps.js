@@ -17,7 +17,13 @@ import { mode } from '../data.js';
 import appStoreSvg from '../assets/app-store.svg';  // thesvg.org/icons/app-store
 
 const units = () => S.units.filter(u => !u.archived).sort((a, b) => (a.order || 0) - (b.order || 0));
-export const pmsOf = unitId => ((unitById(unitId) || {}).members || []).map(personById).filter(p => p && p.active && p.access === 'moderator');
+/** Ответственный за юнит (PM или CEO) первым, затем остальные PM из состава. */
+export const pmsOf = unitId => {
+  const u = unitById(unitId) || {};
+  const list = (u.members || []).map(personById).filter(p => p && p.active && p.access === 'moderator');
+  const own = u.pmId ? personById(u.pmId) : null;
+  return own && own.active ? [own, ...list.filter(p => p.id !== own.id)] : list;
+};
 /** Управляет юнитом: CEO — любым, PM — своим (то же правило в базе). */
 const canManage = unitId => isSuper() || (isStaff() && ((unitById(unitId) || {}).members || []).includes(S.meId));
 
