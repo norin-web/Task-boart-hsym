@@ -1,5 +1,5 @@
 import Sortable from 'sortablejs';
-import { S, taskById, appById, personById, activeFields, missingFor, missingNext, priorityOf, priorityField, byPriority, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder, between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, unitById, emptyCounts, freshFilters, saveBoardView, activeDepts, deptById, teamById, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS, me, ownTeamsOnly, visibleLinkFields, KINDS } from '../state.js';
+import { S, taskById, appById, personById, activeFields, missingFor, missingNext, priorityOf, priorityField, byPriority, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder, between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, unitById, emptyCounts, freshFilters, saveBoardView, activeDepts, deptById, teamById, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS, me, ownTeamsOnly, visibleLinkFields, KINDS, LS } from '../state.js';
 import { $, h, icon, avatar, menu, closeMenu, modal, field, confirmDlg, promptDlg, toast, showErr, statusDot, statusIcon, fill, prioMark } from '../ui.js';
 import { call, send } from '../api.js';
 import { navigate, link } from '../router.js';
@@ -153,6 +153,8 @@ function filterRest() {
       on => { f.opts = on ? f.opts.concat(o.id) : f.opts.filter(x => x !== o.id); renderTasks(); drawFilterRest(); },
       h('span', { class: 'dot', style: { background: o.color } })))));
     group('Показывать', [
+      // этапы приложений — отдельными карточками (иначе приложение = одна карточка-запрос с прогрессом)
+      S.board.tasks.some(t => t.kind === 'request') && chk('Этапы приложений отдельно', !foldStages(), v => { LS.set('foldStages', !v); renderTasks(); drawFilterRest(); }),
       !B.dueDate.hidden && chk('Только просроченные', !!f.overdue, v => set('overdue', v)),
       chk('Скрыть выполненные', !!f.open, v => set('open', v)),
       chk('Архив', !!f.archived, v => set('archived', v)),
@@ -202,8 +204,24 @@ function oldDoneToggle(col) {
     icon(shown ? 'eyeOff' : 'eye', 13), shown ? 'Скрыть давние' : `Показать давние выполненные · ${n}`);
 }
 
+/**
+ * «Приложение = одна карточка» (по умолчанию): этапы и их подзадачи прячутся, если на доске виден их запрос —
+ * его карточка с прогрессом «N из M» открывает список этапов. Кто запросов не видит (лид, сотрудник), видит этапы как раньше.
+ * Выключается в «Фильтрах» → «Этапы приложений отдельно» (запоминается в браузере).
+ */
+export const foldStages = () => LS.get('foldStages', true) !== false;
+function foldedChild(t, byId) {
+  let p = t.parentId && byId.get(t.parentId);
+  for (let i = 0; p && i < 3; i++) {
+    if (p.kind === 'request') return true;
+    p = p.parentId && byId.get(p.parentId);
+  }
+  return false;
+}
+
 export function filterTasks(opts = {}) {
   const f = S.filters;
+  const byId = foldStages() ? new Map(S.board.tasks.map(t => [t.id, t])) : null;
   const q = f.q.trim().toLowerCase();
   const today = todayStr();
   const groups = {}; // fieldId → выбранные варианты
@@ -214,6 +232,7 @@ export function filterTasks(opts = {}) {
   const team = teamById(S.route.team);
   const inTeam = team && new Set(teamPeople(team).map(p => p.id));
   return S.board.tasks.filter(t => {
+    if (byId && (t.kind === 'stage' || t.step === 'part') && foldedChild(t, byId)) return false;
     if (inTeam && !inTeam.has(t.assigneeId)) return false;
     if (t.archived && !f.archived) return false;
     if (!opts.withOld && hidingOld() && staleDone(t)) return false;
