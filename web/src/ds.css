@@ -3048,3 +3048,6 @@ a.bug-title:hover { text-decoration: underline; }
 .bug-row.closed .bug-pill { color: var(--muted); background: var(--surface-2); }
 .bug-meta { font-size: 12px; color: var(--muted); }
 .bug-text { font-size: 13px; color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Карточка запроса: «Изменить этапы» под списком этапов (PM/CEO) */
+.rq-edit { display: flex; justify-content: flex-start; margin-top: 6px; }

@@ -183,8 +183,8 @@ export async function runProcess(api, P, U, test) {
       await move(s[cur].id, until === 'review' ? 'review' : 'in_progress', who2).catch(() => null);
       return { app: a.app, request: a.request, s };
     }
-    const keys = until === 'dev' || until === 'ready' ? ['design'] : ['design', 'ios', 'qa', 'meta', 'retext', 'l10n'];
-    for (const k of keys) await close(s[k], s[k].assigneeId ? worker(P, s[k].assigneeId) : pm, pm);
+    const keys = until === 'dev' || until === 'ready' ? ['design'] : ['design', 'ios', 'qa', 'integr', 'meta', 'retext', 'l10n'];
+    for (const k of keys.filter(x => s[x])) await close(s[k], s[k].assigneeId ? worker(P, s[k].assigneeId) : pm, pm);
     if (until === 'ready') return { app: a.app, request: a.request, s };  // дизайн закрыт, iOS ждёт разработчика
     if (until === 'dev') { await move(s.ios.id, 'in_progress', worker(P, s.ios.assigneeId || P[pm].id)); return { app: a.app, request: a.request, s }; }
     await act(who, 'sendToRelease', { taskId: s.release.id });
@@ -241,7 +241,7 @@ export async function runProcess(api, P, U, test) {
     const s = Object.fromEntries((await act(pm, 'decomposeRequest', { taskId: r.id })).map(t => [t.step, t]));
     await close(s.design, s.design.assigneeId ? worker(P, s.design.assigneeId) : pm, pm);
     if (until === 'dev') { await move(s.ios.id, 'in_progress', worker(P, s.ios.assigneeId || P[pm].id)); return; }
-    for (const k of ['ios', 'qa']) await close(s[k], s[k].assigneeId ? worker(P, s[k].assigneeId) : pm, pm);
+    for (const k of ['ios', 'qa', 'integr'].filter(x => s[x])) await close(s[k], s[k].assigneeId ? worker(P, s[k].assigneeId) : pm, pm);
     await act(pm, 'sendToRelease', { taskId: s.release.id });
     await act('sergey', 'saveReleaseValues', { taskId: s.release.id, values: { version: '1.1', build: '210', whatsnew: 'Виджеты и исправления' } });
     await set(s.release.id, { checklist: ['Скриншоты и метаданные', 'Покупки в песочнице', 'Политика и условия'].map(text => ({ text, done: true })) }, 'sergey');

@@ -1368,7 +1368,7 @@ function openCreateRequest(a, type, onDone) {
 
 /* ---------- шаблоны апдейтов ---------- */
 
-const STEP_NAMES = { design: 'Дизайн', ios: 'Разработка iOS', qa: 'Тестирование', meta: 'Тексты OB / PW / ASO', retext: 'Тексты в дизайне', l10n: 'Локализации', release: 'Релиз' };
+const STEP_NAMES = { design: 'Дизайн', ios: 'Разработка iOS', qa: 'Тестирование', integr: 'Интеграция', meta: 'Тексты OB / PW / ASO', retext: 'Тексты в дизайне', l10n: 'Локализации', release: 'Релиз' };
 const updateTemplates = () => S.templates.filter(x => x.kind === 'update').sort((x, y) => (x.order || 0) - (y.order || 0));
 
 /** Шаблоны апдейтов (CEO и PM): название, заголовок задачи, описание, пункты и нужные этапы. */

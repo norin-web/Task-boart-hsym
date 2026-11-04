@@ -26,18 +26,21 @@ export const DEFAULT_FLOWS = {
     { key: 'design', title: 'Дизайн', positionId: 'd_design', dependsOn: [], checklist: ['Онбординг (OB)', 'Пейволл (PW)', 'Скриншоты и иконка (ASO)'] },
     { key: 'ios', title: 'Разработка iOS', positionId: 'd_ios', dependsOn: ['design'] },
     { key: 'qa', title: 'Тестирование', positionId: 'd_qa', dependsOn: ['ios'] },
+    // интеграция (OB, PW, SDK) — iOS-лид после приёмки QA; не нужна — PM снимает галочку при разбивке
+    { key: 'integr', title: 'Интеграция', positionId: 'd_ios', dependsOn: ['qa'] },
     // тексты открываются, когда дизайнер закрыл в чеклисте дизайна OB, PW и ASO; идут параллельно разработке.
     // Готовые тексты ASO возвращает дизайнеру: он ставит их в макеты и выгружает исходники на Google Drive; после — переводы.
     { key: 'meta', title: 'Тексты OB / PW / ASO', positionId: 'd_aso', dependsOn: ['design'], checklist: ['Тексты онбординга', 'Тексты пейволла', 'Название, подзаголовок и описание', 'Ключевые слова'] },
     { key: 'retext', title: 'Тексты в дизайне', positionId: 'd_design', dependsOn: ['meta'], checklist: ['Тексты OB заменены в макетах', 'Тексты PW заменены в макетах', 'Тексты ASO заменены в скриншотах', 'Исходники выгружены на Google Drive'] },
     { key: 'l10n', title: 'Локализации', positionId: 'd_aso', dependsOn: ['retext'], checklist: ['Переводы приложения и пейволла', 'Переводы метаданных', 'Скриншоты на языках'] },
-    { key: 'release', title: 'Релиз', positionId: 'd_release', dependsOn: ['design', 'ios', 'qa', 'meta', 'retext', 'l10n'], release: true },
+    { key: 'release', title: 'Релиз', positionId: 'd_release', dependsOn: ['design', 'ios', 'qa', 'integr', 'meta', 'retext', 'l10n'], release: true },
   ],
   update: [
     { key: 'design', title: 'Дизайн', positionId: 'd_design', dependsOn: [] },
     { key: 'ios', title: 'Разработка iOS', positionId: 'd_ios', dependsOn: ['design'] },
     { key: 'qa', title: 'Тестирование', positionId: 'd_qa', dependsOn: ['ios'] },
-    { key: 'release', title: 'Релиз', positionId: 'd_release', dependsOn: ['design', 'ios', 'qa'], release: true },
+    { key: 'integr', title: 'Интеграция', positionId: 'd_ios', dependsOn: ['qa'] },
+    { key: 'release', title: 'Релиз', positionId: 'd_release', dependsOn: ['design', 'ios', 'qa', 'integr'], release: true },
   ],
   other: [],
 };
@@ -2301,6 +2304,59 @@ export function createBackend(db, opts = {}) {
     },
 
     /**
+     * PM/CEO: добавить этап из флоу в уже разложенный запрос (например, «Интеграция», если решили по ходу).
+     * Ждёт тех, кого ждёт по флоу; кто по флоу ждёт его (релиз) — ждёт и сейчас. Исполнитель — лид позиции, иначе первый.
+     */
+    async addStage(p, ctx) {
+      const r = await findTask(p.requestId);
+      if (r.kind !== 'request') fail('Этап добавляется в запрос');
+      const own = (await flows(r.unit_id))[r.request_type] || [];
+      const base = DEFAULT_FLOWS[r.request_type] && DEFAULT_FLOWS[r.request_type].length ? DEFAULT_FLOWS[r.request_type] : DEFAULT_FLOWS.new_app;
+      const flow = own.some(x => x.key === p.key) ? own : base;
+      const def = flow.find(x => x.key === p.key) || fail('Такого этапа нет во флоу');
+      if (def.release) fail('Релиз уже есть в разложенном запросе');
+      const stages = (await run(T('tasks').select('id,step,status,depends_on,archived').eq('parent_id', r.id).eq('kind', 'stage'))).filter(x => !x.archived);
+      if (!stages.length) fail('Запрос ещё не разложен — этапы выбираются в окне разбивки');
+      if (stages.some(x => x.step === def.key)) fail(`Этап «${def.title}» уже есть`);
+      const byStep = Object.fromEntries(stages.map(x => [x.step, x]));
+      const withPos = (await unitPeople(r.unit_id)).filter(x => x.positionIds.includes(def.positionId));
+      const assigneeId = 'assigneeId' in p ? str(p.assigneeId, 40) : (withPos.find(x => x.access === 'lead') || withPos[0] || {}).id || '';
+      await fitsAssignee(r.unit_id, { kind: 'stage', step: def.key, departmentId: def.positionId }, assigneeId);
+      const prio = (json(r.fields, {}) || {})[PRIORITY_FIELD];
+      const t = await methods.createTask({
+        unitId: r.unit_id, title: `${def.title} · ${r.title.replace(/^New App:\s*/, '')}`, parentId: r.id, kind: 'stage', step: def.key,
+        appId: r.app_id, departmentId: def.positionId, assigneeId, dueDate: r.due_date,
+        dependsOn: (def.dependsOn || []).map(k => byStep[k] && byStep[k].id).filter(Boolean), test: !!r.is_test,
+        fields: prio ? { [PRIORITY_FIELD]: prio } : {}, checklist: (def.checklist || []).map(text => ({ text })),
+      }, ctx);
+      const st = unitSettings((await findUnit(r.unit_id)).settings);
+      for (const w of flow.filter(x => (x.dependsOn || []).includes(def.key)).map(x => byStep[x.key]).filter(Boolean)) {
+        const deps = json(w.depends_on, []) || [];
+        if (kindOf(st, w.status) !== 'done' && !deps.includes(t.id)) await updateOne('tasks', w.id, { depends_on: [...deps, t.id], updated_at: now() });
+      }
+      return t;
+    },
+
+    /** PM/CEO: убрать незакрытый этап запроса (в архив). Кто его ждал — теперь ждёт то, что ждал он. Релиз не убирается. */
+    async removeStage(p) {
+      const t = await findTask(p.taskId);
+      if (t.kind !== 'stage' || !t.parent_id) fail('Убрать можно только этап запроса');
+      if (t.step === 'release') fail('Релиз убрать нельзя');
+      const st = unitSettings((await findUnit(t.unit_id)).settings);
+      if (kindOf(st, t.status) === 'done') fail('Этап уже закрыт');
+      const mine = json(t.depends_on, []) || [];
+      const sib = await run(T('tasks').select('id,depends_on').eq('parent_id', t.parent_id).eq('kind', 'stage'));
+      for (const x of sib) {
+        const deps = json(x.depends_on, []) || [];
+        if (x.id !== t.id && deps.includes(t.id)) {
+          await updateOne('tasks', x.id, { depends_on: [...deps.filter(d => d !== t.id), ...mine.filter(d => !deps.includes(d))], updated_at: now() });
+        }
+      }
+      await updateOne('tasks', t.id, { archived: true, updated_at: now() });
+      return true;
+    },
+
+    /**
      * Передать в релиз (PM): этап release получает исполнителя-RM (rmId или первый RM юнита) — только когда
      * закрыты все этапы, от которых он зависит. Статус приложения — «Релиз».
      */
@@ -2454,7 +2510,10 @@ export function createBackend(db, opts = {}) {
       const t = await findTask(p.taskId);
       const rows = (await rpc('release_team', { p_task: t.id })) || [];
       const out = { pm: [], design: [], ios: [], qa: [], meta: [] };
-      for (const r of Array.isArray(rows) ? rows : [rows]) if (r && out[r.step] && r.person_id && !out[r.step].includes(r.person_id)) out[r.step].push(r.person_id);
+      for (const r of Array.isArray(rows) ? rows : [rows]) {
+        const k = r && (r.step === 'integr' ? 'ios' : r.step); // интеграция — в «Разработке»
+        if (k && out[k] && r.person_id && !out[k].includes(r.person_id)) out[k].push(r.person_id);
+      }
       return out;
     },
 

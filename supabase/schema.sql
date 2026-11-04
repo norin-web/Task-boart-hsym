@@ -1687,11 +1687,11 @@ language sql stable security definer set search_path = public as $$
   select 'pm', q.assignee_id from r join tasks q on q.id = r.parent_id where q.assignee_id <> ''
   union all
   select s.step, coalesce(nullif(p.review_from, ''), p.assignee_id)
-    from r join tasks s on s.parent_id = r.parent_id and s.step in ('design', 'ios', 'qa', 'meta', 'retext', 'l10n') and r.parent_id <> ''
+    from r join tasks s on s.parent_id = r.parent_id and s.step in ('design', 'ios', 'qa', 'integr', 'meta', 'retext', 'l10n') and r.parent_id <> ''
     join tasks p on p.parent_id = s.id and p.step = 'part' and not p.archived
   union all
   select s.step, coalesce(nullif(s.review_from, ''), s.assignee_id)
-    from r join tasks s on s.parent_id = r.parent_id and s.step in ('design', 'ios', 'qa', 'meta', 'retext', 'l10n') and r.parent_id <> ''
+    from r join tasks s on s.parent_id = r.parent_id and s.step in ('design', 'ios', 'qa', 'integr', 'meta', 'retext', 'l10n') and r.parent_id <> ''
    where s.assignee_id <> '' and not exists (select 1 from tasks p where p.parent_id = s.id and p.step = 'part' and not p.archived);
 $$;
 

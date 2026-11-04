@@ -243,11 +243,34 @@ function flowBlock(t) {
             h('span', { class: 'rq-stitle muted' }, expanded ? 'Свернуть' : `Ещё ${hidden} ${plural(hidden, ['этап', 'этапа', 'этапов'])}`),
             h('span', { class: 'muted rq-state' }, expanded ? '' : 'Показать'))];
       })()),
+      t.kind === 'request' && stages.length > 0 && manage && h('div', { class: 'rq-edit' },
+        h('button', { class: 'btn ghost sm', 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); editStages(e.currentTarget, stages); } }, icon('tree', 13), 'Изменить этапы')),
       t.kind === 'request' && !stages.length && h('div', { class: 'rq-empty' },
         h('span', { class: 'muted' }, manage ? 'Разложите задачу по этапам: дизайн → тексты → iOS и тестирование → релиз.' : 'PM ещё не разложил задачу по этапам.'),
         manage && h('button', { class: 'btn primary sm', onclick: () => import('./apps.js')
           .then(m => m.openDecomposeDialog({ id: t.id, unitId: t.unitId, type: t.requestType, title: t.title, dueDate: t.dueDate })).then(ok => ok && reload()) },
         icon('tree', 13), 'Разложить по флоу')));
+  }
+  // PM/CEO: добавить этап из флоу (например, «Интеграция», если решили по ходу) или убрать незакрытый
+  async function editStages(anchor, stages) {
+    let flow = [];
+    try { flow = (await call('getFlows', { unitId: t.unitId }))[t.requestType] || []; } catch (e) { return showErr(e); }
+    if (!flow.some(x => x.key === 'integr')) flow = [...flow, { key: 'integr', title: 'Интеграция' }];
+    const has = new Set(stages.map(n => n.step));
+    const add = flow.filter(x => !x.release && !has.has(x.key));
+    const del = stages.filter(n => n.step !== 'release' && n.statusKind !== 'done');
+    const name = n => n.title.split(' · ')[0];
+    menu(anchor, [
+      add.length > 0 && { title: 'Добавить этап' },
+      ...add.map(x => ({ label: x.title, icon: 'plus', action: () => send('addStage', { requestId: t.id, key: x.key })
+        .then(() => { toast(`Этап «${x.title}» добавлен`); reload(); }).catch(showErr) })),
+      del.length > 0 && { title: 'Убрать этап' },
+      ...del.map(n => ({ label: name(n), icon: 'x', action: async () => {
+        if (!(await confirmDlg('Этап уйдёт в архив, следующие этапы перестанут его ждать.', { title: `Убрать этап «${name(n)}»?`, ok: 'Убрать', danger: true }))) return;
+        send('removeStage', { taskId: n.id }).then(() => { toast(`Этап «${name(n)}» убран`); reload(); }).catch(showErr);
+      } })),
+      !add.length && !del.length && h('p', { class: 'muted', style: { padding: '4px 10px', margin: 0 } }, 'Менять нечего'),
+    ], { align: 'left' });
   }
   load();
   return box;

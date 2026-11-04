@@ -58,7 +58,7 @@ const check = async (label, fn) => { try { await fn(); } catch (e) { failed.push
 const mustFail = (p, re) => p.then(() => { throw new Error('ожидали отказ, а действие прошло'); }, e => { if (re) assert.match(e.message, re); });
 const stagesOf = async (api, pm, req) => Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: req.id }))).map(t => [t.step, t]));
 const toRelease = async (api, who, st) => {
-  for (const [k, p] of [['design', who.lead], ['ios', who.ios], ['qa', who.qa], ['meta', who.aso], ['retext', who.lead], ['l10n', who.aso]]) await finish(api, p, who.pm, st[k].id);
+  for (const [k, p] of [['design', who.lead], ['ios', who.ios], ['qa', who.qa], ['integr', who.ios], ['meta', who.aso], ['retext', who.lead], ['l10n', who.aso]]) await finish(api, p, who.pm, st[k].id);
   return api.as(who.pm, () => api('sendToRelease', { taskId: st.release.id }));
 };
 const ready = (api, who, st) => api.as(who.rm, async () => {
@@ -104,7 +104,7 @@ test('крайние случаи: реджекты, перенос, уход л
   const noRm = await team(api, lone, false, true);
   const a2 = await api.as(ceo, () => api('createApp', { name: 'B', unitId: lone.id }));
   const s2 = await stagesOf(api, noRm.pm, a2.request);
-  for (const [k, p] of [['design', noRm.lead], ['ios', noRm.ios], ['qa', noRm.qa], ['meta', noRm.aso], ['retext', noRm.lead], ['l10n', noRm.aso]]) await finish(api, p, noRm.pm, s2[k].id);
+  for (const [k, p] of [['design', noRm.lead], ['ios', noRm.ios], ['qa', noRm.qa], ['integr', noRm.ios], ['meta', noRm.aso], ['retext', noRm.lead], ['l10n', noRm.aso]]) await finish(api, p, noRm.pm, s2[k].id);
   await check('юнит без RM: понятный отказ', () => mustFail(api.as(noRm.pm, () => api('sendToRelease', { taskId: s2.release.id })), /нет релиз-менеджера/));
 
   // юнит без PM: запрос никому не уходит — это видно
