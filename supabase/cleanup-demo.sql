@@ -1,6 +1,6 @@
 -- Full cleanup of demo/test data (pure ASCII, safe to paste). Run in Supabase -> SQL Editor.
 -- Deletes: all test tasks and apps (is_test), the "Demo" unit (key DEMO) with its tasks/fields/members,
--- and the demo people (names starting with the Russian word "Demo" + " · ", e.g. "Demo · Release Manager").
+-- and the demo people (names that start with the Russian word for "Demo", a space, a middle dot and a space).
 -- Real data is not touched. The last query shows what is left (all zeros = clean).
 
 do $$
