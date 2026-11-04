@@ -458,9 +458,10 @@ function panelMenu(anchor, t, staff) {
     staff && { sep: true },
     staff && { label: 'Дублировать', icon: 'copy', action: () => duplicateTask(t) },
     staff && others.length > 0 && { label: 'Перенести в другой юнит…', icon: 'arrow', action: () => moveTaskDialog(t) },
-    staff && { label: t.archived ? 'Вернуть из архива' : 'В архив', icon: 'archive', action: () => { patchTask(t, { archived: !t.archived }); refreshPanel(t); } },
+    staff && (t.kind !== 'request' || isSuper()) && { label: t.archived ? 'Вернуть из архива' : 'В архив', icon: 'archive', action: () => { patchTask(t, { archived: !t.archived }); refreshPanel(t); } },
     staff && { sep: true },
-    staff && { label: 'Удалить', icon: 'trash', danger: true, action: () => deleteTaskUndoable(t) },
+    // запрос CEO и этапы приложения удаляет только CEO
+    staff && (!['request', 'stage'].includes(t.kind) || isSuper()) && { label: 'Удалить', icon: 'trash', danger: true, action: () => deleteTaskUndoable(t) },
   ]);
 }
 

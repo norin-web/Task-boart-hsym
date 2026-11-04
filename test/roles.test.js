@@ -879,3 +879,19 @@ test('уведомления: история — прочитанные оста
   await api.pg.query('update people set is_dev = true where id = $1', [admin.id]);
   await api.as(admin, async () => assert.ok((await api('getNotifications', { personId: designer.id })).some(n => n.taskId === t1.id && n.read)));
 });
+
+test('запрос CEO и этапы удаляет и убирает в архив только CEO; PM — нет', async () => {
+  const api = await setup();
+  const { admin, mod, A } = await team(api);
+  const { app, request } = await api('createApp', { unitId: A.id, name: 'Пульт 9' });
+  const stages = await api.as(mod, () => api('decomposeRequest', { taskId: request.id }));
+  await api.as(mod, async () => {
+    await assert.rejects(() => api('deleteTask', { id: request.id }));
+    await assert.rejects(() => api('deleteTask', { id: stages[0].id }));
+    await assert.rejects(() => api('updateTask', { id: request.id, patch: { archived: true } }));
+    const own = await api('createTask', { unitId: A.id, title: 'Обычная' });
+    assert.equal(await api('deleteTask', { id: own.id }), true); // обычные задачи PM удаляет как раньше
+  });
+  await api.as(admin, () => api('deleteTask', { id: request.id }));
+  assert.ok(app.id);
+});

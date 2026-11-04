@@ -1,5 +1,5 @@
 import Sortable from 'sortablejs';
-import { S, taskById, appById, personById, activeFields, missingFor, missingNext, priorityOf, priorityField, byPriority, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder, between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, unitById, emptyCounts, freshFilters, saveBoardView, activeDepts, deptById, teamById, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS, me, ownTeamsOnly, visibleLinkFields, KINDS, LS } from '../state.js';
+import { S, taskById, appById, personById, activeFields, missingFor, missingNext, priorityOf, priorityField, byPriority, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder, between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, unitById, emptyCounts, freshFilters, saveBoardView, activeDepts, deptById, teamById, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS, me, ownTeamsOnly, visibleLinkFields, KINDS, LS, isSuper } from '../state.js';
 import { $, h, icon, avatar, menu, closeMenu, modal, field, confirmDlg, promptDlg, toast, showErr, statusDot, statusIcon, fill, prioMark } from '../ui.js';
 import { call, send } from '../api.js';
 import { navigate, link } from '../router.js';
@@ -505,9 +505,10 @@ export function cardMenu(anchor, t) {
     !B.assignee.hidden && S.meId && t.assigneeId !== S.meId && { label: 'Назначить на меня', icon: 'user', action: () => patchTask(t, { assigneeId: S.meId }) },
     !B.assignee.hidden && t.assigneeId && { label: 'Снять исполнителя', icon: 'x', action: () => patchTask(t, { assigneeId: '' }) },
     { label: 'Дублировать', icon: 'copy', action: () => duplicateTask(t) },
-    { label: t.archived ? 'Вернуть из архива' : 'В архив', icon: 'archive', action: () => patchTask(t, { archived: !t.archived }) },
+    // запрос CEO и этапы приложения удаляет (и запрос убирает в архив) только CEO
+    (t.kind !== 'request' || isSuper()) && { label: t.archived ? 'Вернуть из архива' : 'В архив', icon: 'archive', action: () => patchTask(t, { archived: !t.archived }) },
     { sep: true },
-    { label: 'Удалить', icon: 'trash', danger: true, action: () => deleteTaskUndoable(t) },
+    (!['request', 'stage'].includes(t.kind) || isSuper()) && { label: 'Удалить', icon: 'trash', danger: true, action: () => deleteTaskUndoable(t) },
   ]);
 }
 

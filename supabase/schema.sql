@@ -1800,7 +1800,8 @@ create policy tasks_read on tasks for select to authenticated using ((not is_tes
 drop policy if exists tasks_insert on tasks;
 create policy tasks_insert on tasks for insert to authenticated with check (can_manage(unit_id));
 drop policy if exists tasks_delete on tasks;
-create policy tasks_delete on tasks for delete to authenticated using (can_manage(unit_id));
+-- запрос CEO и этапы приложения удаляет только CEO (PM убирает лишний этап через «Изменить этапы» — в архив)
+create policy tasks_delete on tasks for delete to authenticated using (can_manage(unit_id) and (kind not in ('request', 'stage') or is_superadmin()));
 drop policy if exists tasks_update on tasks;
 -- После переноса в ревью/из ревью исполнитель меняется триггером — строка остаётся «своей» через review_from / reviewer_id
 create policy tasks_update on tasks for update to authenticated
@@ -2116,6 +2117,17 @@ language sql stable security definer set search_path = public as $$
    where is_dev() and person_id = p_person and (read_at = '' or (p_since <> '' and at >= p_since))
    order by at desc limit 150;
 $$;
+
+-- Запрос CEO в архив отправляет только CEO (PM его разбирает, но не убирает).
+create or replace function guard_request_archive() returns trigger language plpgsql set search_path = public as $$
+begin
+  if new.kind = 'request' and new.archived and not old.archived and not (app_system() or is_superadmin()) then
+    raise exception 'Запрос CEO убрать в архив может только CEO' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+drop trigger if exists tasks_guard_request_archive on tasks;
+create trigger tasks_guard_request_archive before update of archived on tasks for each row execute function guard_request_archive();
 
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
