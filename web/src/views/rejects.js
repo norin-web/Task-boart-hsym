@@ -8,6 +8,7 @@ import { $, h, icon, fill, topbar, toast, showErr, confirmDlg, emptyBlock, skele
 import { call, send } from '../api.js';
 import { peekTask } from './task.js';
 import { appIcon, openAppById } from './apps.js';
+import { openShots } from './shots.js';
 
 const DAY = 864e5;
 const daysAgo = iso => (iso ? Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / DAY)) : 0);
@@ -74,9 +75,11 @@ export async function renderRejects() {
           h('span', { class: late ? 'danger-text' : '' }, `Apple вернул ${fmtDate((x.at || '').slice(0, 10))} · ${agoText(x.at)}`),
           pm && h('span', null, 'PM: ' + nameFrom(pm.name)),
           x.version && h('span', null, x.version),
-          x.shot && h('a', { class: 'rj-shot', href: x.shot, target: '_blank', rel: 'noopener', title: x.shot }, icon('link', 13), 'скриншот'))),
+          x.shots > 0 && h('button', { class: 'link-btn rj-shot', onclick: () => call('getTaskFiles', { taskId: x.taskId, tag: 'reject:' + x.rejectNo }).then(f => openShots(f)).catch(showErr) },
+            icon('eye', 13), `${x.shots} ${plural(x.shots, ['скриншот', 'скриншота', 'скриншотов'])}`),
+          x.shot && h('a', { class: 'rj-shot', href: x.shot, target: '_blank', rel: 'noopener', title: x.shot }, icon('link', 13), 'ссылка на скрин'))),
       h('div', { class: 'rj-side' },
-        h('span', { class: 'rj-state ' + (x.fixed ? 'ok' : x.open ? 'wait' : 'done') }, x.fixed ? 'Исправлен — отправьте снова' : x.open ? 'У PM на исправлении' : 'Закрыт'),
+        h('span', { class: 'rj-state ' + (x.fixed ? 'ok' : x.open ? 'wait' : 'done') }, x.fixed ? 'Исправлен — отправьте снова' : x.open ? 'У PM на исправлении' : x.selfClosed ? 'Закрыл RM сам' : 'Закрыт'),
         h('div', { class: 'rj-actions' },
           h('button', { class: 'btn sm', onclick: openCard }, isSuper() && x.requestId ? 'Открыть' : 'Релиз'),
           isSuper() && x.requestId && h('button', { class: 'btn sm', title: 'Карточка релиза', onclick: () => peekTask(x.unitId, x.taskId) }, 'Релиз'),

@@ -468,7 +468,7 @@ test('RM: релиз — поля, свой чеклист, отправка в 
   });
   // вышло в стор — уведомление PM, лиду юнита и CEO (не RM, который нажал)
   for (const who of [pm, ceo]) assert.ok((await api.as(who, () => api('getNotifications', {}))).some(n => n.taskId === st.release.id && n.kinds.includes('store_live')), who.name);
-  assert.ok((await api.as(lead, () => api('getNotifications', {}))).some(n => n.taskId === st.design.id && n.kinds.includes('store_live')));
+  assert.ok(!(await api.as(lead, () => api('getNotifications', {}))).some(n => n.kinds.includes('store_live'))); // «в сторе» — только CEO и PM
   assert.ok(!(await api.as(rm, () => api('getNotifications', {}))).some(n => n.kinds.includes('store_live')));
   // команда релиза для RM: PM, дизайн, разработка, тестирование
   const team = await api.as(rm, () => api('getReleaseTeam', { taskId: st.release.id }));

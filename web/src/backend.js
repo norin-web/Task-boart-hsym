@@ -244,6 +244,8 @@ const taskOut = r => ({
   createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at,
 });
 
+const fileOut = r => ({ id: r.id, taskId: r.task_id, tag: r.tag || '', name: r.name || '', data: r.data, by: r.created_by || '', at: r.created_at });
+
 const fieldOut = r => ({
   id: r.id, unitId: r.unit_id || '', global: !r.unit_id, name: r.name, type: r.type, options: json(r.options, []),
   showOnCard: !!r.show_on_card, required: !!r.required, requiredFrom: r.required_from || '',
@@ -2538,8 +2540,46 @@ export function createBackend(db, opts = {}) {
     async releaseStep(p) {
       if (!['submit', 'live', 'reject', 'resubmit', 'close_reject'].includes(p.action)) fail('Неизвестный шаг релиза');
       const t = await findTask(p.taskId);
-      const id = await rpc('release_step', { p_task: t.id, p_action: p.action, p_reason: str(p.reason, 2000), p_shot: linkUrl(p.shot) });
+      const id = await rpc('release_step', { p_task: t.id, p_action: p.action, p_reason: str(p.reason, 2000), p_shot: linkUrl(p.shot), p_self: p.action === 'reject' && !!p.self });
       return { task: taskOut(await findTask(t.id)), rejectRequestId: p.action === 'reject' ? id : '' };
+    },
+
+    /** Картинки к задаче (скриншоты реджекта): data:image/…, до 6 штук, каждая до ~1,5 МБ (сжимает браузер). */
+    async addTaskFiles(p, ctx) {
+      const t = await findTask(p.taskId);
+      const files = (Array.isArray(p.files) ? p.files : []).slice(0, 6);
+      if (!files.length) fail('Нет файлов');
+      const me = actor(ctx);
+      const rows = files.map(f => {
+        const data = String((f && f.data) || '');
+        if (!/^data:image\/(png|jpe?g|webp|gif);base64,/.test(data)) fail('Можно только картинки');
+        if (data.length > 2000000) fail('Картинка слишком большая');
+        return { id: uid('f'), task_id: t.id, tag: str(p.tag, 40), name: str(f.name, 120), data, created_by: me, created_at: now() };
+      });
+      await run(T('task_files').insert(rows));
+      return rows.map(fileOut);
+    },
+
+    /** Картинки задачи по метке. Для задачи «Реджект №N» (запрос PM) — скриншоты из релиза, к которому она относится. */
+    async getTaskFiles(p) {
+      let t = await findTask(p.taskId);
+      let tag = str(p.tag, 40);
+      if (t.kind === 'request' && t.app_id) {
+        const rels = await run(T('tasks').select('id,release').eq('app_id', t.app_id).eq('step', 'release'));
+        for (const r of rels) {
+          const rel = json(r.release, {}) || {};
+          const hit = (rel.history || []).find(x => x.requestId === t.id) || (rel.rejectRequestId === t.id ? rel : null);
+          if (hit) { t = { id: r.id }; tag = 'reject:' + (hit.rejectNo || 0); break; }
+        }
+      }
+      let q = T('task_files').select('*').eq('task_id', t.id);
+      if (tag) q = q.eq('tag', tag);
+      return (await run(q.order('created_at'))).map(fileOut);
+    },
+
+    async deleteTaskFile(p) {
+      await run(T('task_files').delete().eq('id', String(p.id || '')));
+      return true;
     },
 
     /** Опросник разработчика перед релизом: только этап iOS, все обязательные ответы; при «Нет» уточнение не хранится. */
@@ -2571,13 +2611,16 @@ export function createBackend(db, opts = {}) {
      * Сводка за период: вышло в стор, из них с 1-го раза (%), реджектов, отправок, среднее время ревью Apple (дней).
      */
     async getReleaseHistory(p) {
-      const [rows, units, apps] = await Promise.all([
+      const [rows, units, apps, files] = await Promise.all([
         all(() => T('tasks').select('id,unit_id,num,title,app_id,release,assignee_id').eq('step', 'release').order('created_at').order('id')),
         all(() => T('units').select('id,key,name,color').order('id')),
         all(() => T('apps').select('id,name,color,icon_url,unit_id').order('id')),
+        all(() => T('task_files').select('id,task_id,tag').neq('tag', '').order('id')),
       ]);
       const U = Object.fromEntries(units.map(u => [u.id, u]));
       const A = Object.fromEntries(apps.map(a => [a.id, { id: a.id, name: a.name, color: a.color, iconUrl: a.icon_url || '', unitId: a.unit_id }]));
+      const shots = {}; // скриншоты реджекта: «релиз|reject:N» → сколько
+      for (const f of files) shots[f.task_id + '|' + f.tag] = (shots[f.task_id + '|' + f.tag] || 0) + 1;
       const day = iso => String(iso || '').slice(0, 10);
       const list = [];
       for (const t of rows) {
@@ -2590,7 +2633,7 @@ export function createBackend(db, opts = {}) {
           list.push({
             taskId: t.id, unitId: t.unit_id, key: `${U[t.unit_id].key}-${t.num}`, app: A[t.app_id] || null, rmId: t.assignee_id,
             version: [(rel.values || {}).version, (rel.values || {}).build].filter(Boolean).join(' · '),
-            n: x.n || 1, submittedAt: x.submittedAt || '', result: x.result || 'pending', at: x.at || '', reason: x.reason || '', rejectNo: x.rejectNo || 0, shot: x.shot || '', requestId: x.requestId || '',
+            n: x.n || 1, submittedAt: x.submittedAt || '', result: x.result || 'pending', at: x.at || '', reason: x.reason || '', rejectNo: x.rejectNo || 0, shot: x.shot || '', requestId: x.requestId || '', shots: shots[t.id + '|reject:' + (x.rejectNo || 0)] || 0, selfClosed: !!x.self,
             reviewDays: x.at && x.submittedAt ? Math.max(0, (Date.parse(x.at) - Date.parse(x.submittedAt)) / 864e5) : null,
           });
         }

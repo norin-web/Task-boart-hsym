@@ -8,6 +8,7 @@ import { S, me, canEditTask, fmtDateTime, relTime, personById, plural } from '..
 import { h, icon, fill, modal, toast, showErr, field, confirmDlg } from '../ui.js';
 import { DEV_QUESTIONS, answerText } from '../devform.js';
 import { brandIcon, brandOf } from './brand.js';
+import { shotsInput, shotsStrip } from './shots.js';
 import { call, send } from '../api.js';
 
 const linkIcon = kind => (['figma', 'github', 'drive', 'meta'].includes(kind) ? kind : 'link');
@@ -49,25 +50,41 @@ const fmtD = iso => (iso ? new Date(iso).toLocaleDateString('ru-RU', { day: 'num
 const daysSince = iso => Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 864e5));
 
 /**
- * Форма реджекта: № (присваивается сам, по приложению), описание из письма Apple, ссылка на скрин.
- * onDone() — после успешного шага.
+ * Форма реджекта: № (присваивается сам, по приложению), описание из письма Apple, скриншоты (файлы) или ссылка,
+ * кто исправляет: команда (задача PM юнита) или RM сам (реджект записан, релиз сразу в очереди). onDone() — после шага.
  */
 export function openRejectForm(t, appName, no, onDone) {
   const desc = h('textarea', { class: 'inp', rows: 5, maxlength: 2000, placeholder: 'Guideline 3.1.2 — нет условий подписки на пейволле…' });
-  const shot = h('input', { class: 'inp', type: 'url', maxlength: 2000, placeholder: 'https://… ссылка на скриншот' });
+  const shot = h('input', { class: 'inp', type: 'url', maxlength: 2000, placeholder: 'https://… или ссылка, если скрин лежит в другом месте' });
+  const shots = shotsInput();
+  let self = false;
+  const hint = h('p', { class: 'hint' });
+  const seg = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Кто исправляет' });
+  const paint = () => {
+    fill(seg, [[false, 'Команда'], [true, 'Закрою сам']].map(([v, label]) =>
+      h('button', { type: 'button', class: self === v ? 'on' : '', role: 'radio', 'aria-checked': String(self === v), onclick: () => { self = v; paint(); } }, label)));
+    hint.textContent = self
+      ? 'Реджект запишется (№, причина, скрины, уведомление CEO и PM), а релиз сразу вернётся к вам в очередь — задачи для команды не будет.'
+      : `PM юнита получит задачу «Реджект №${no || '…'}» на исправление. Когда её закроют, релиз вернётся к вам в очередь.`;
+  };
+  paint();
   modal({
     title: `Реджект №${no || '…'} · ${appName || t.title}`,
     cls: 'dlg',
     body: [
-      h('p', { class: 'hint' }, 'PM юнита получит задачу «Реджект №' + (no || '…') + '» на исправление. Когда её закроют, релиз вернётся к вам в очередь.'),
+      field('Кто исправляет', seg), hint,
       field('Описание', desc, 'Из письма Apple: guideline и что не так'),
-      field('Скрин реджекта', shot),
+      field('Скриншоты', shots.el),
+      field('Ссылка на скрин', shot, 'Необязательно'),
     ],
     actions: [{ label: 'Отмена' }, { label: 'Записать реджект', danger: true, action: async close => {
       if (!desc.value.trim()) { desc.focus(); return; }
-      await send('releaseStep', { taskId: t.id, action: 'reject', reason: desc.value.trim(), shot: shot.value.trim() });
+      const res = await send('releaseStep', { taskId: t.id, action: 'reject', reason: desc.value.trim(), shot: shot.value.trim(), self });
+      const n = ((res && res.task && res.task.release) || {}).rejectNo || no;
+      const files = shots.value();
+      if (files.length) await send('addTaskFiles', { taskId: t.id, tag: 'reject:' + n, files }).catch(e => showErr(e));
       close();
-      toast(`Реджект №${no || ''}: задача на исправление ушла PM`);
+      toast(self ? `Реджект №${n || ''} записан, релиз снова в очереди` : `Реджект №${n || ''}: задача на исправление ушла PM`);
       if (onDone) onDone();
     } }],
   });
@@ -174,6 +191,7 @@ export function releaseBlock(t, onChange) {
           h('span', { class: 'muted' }, '· ' + relTime(rel.rejectedAt)),
           rel.shot && h('a', { class: 'rl-shot', href: rel.shot, target: '_blank', rel: 'noopener' }, 'скрин', icon('arrowUpRight', 12))),
         h('p', { class: 'rl-reason' }, rel.reason),
+        shotsStrip(t.id, 'reject:' + (rel.rejectNo || 0)),
         h('p', { class: 'rl-line muted rl-small' }, `Исправляет ${pm ? pm.name : 'PM юнита'}; закроет задачу — релиз вернётся в очередь.`)),
       phase === 'live' && h('div', { class: 'rl-now' }, h('p', { class: 'rl-line' }, h('span', { class: 'phase-pill live' }, icon('check', 14), 'В App Store'),
         h('span', { class: 'muted' }, '· ' + fmtD(rel.liveAt) + (hist.length > 1 ? ` · с ${hist.length}-й попытки` : ' · с первой попытки'))))),

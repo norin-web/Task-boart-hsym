@@ -17,6 +17,7 @@ import { isWatched, toggleWatch, canWatch } from './watch.js';
 import { reviewButtons } from './review.js';
 import { clTemplates, templateSelect, openTemplatesEditor } from './cltemplates.js';
 import { attachMentions } from './mention.js';
+import { shotsStrip } from './shots.js';
 
 /* ================= Панель задачи ================= */
 
@@ -118,6 +119,7 @@ function buildPanel(t) {
       h('span', null, 'Есть баги?'), h('span', { class: 'spacer' }),
       h('button', { class: 'btn sm', onclick: () => openQaReturn(t) }, icon('back', 13), 'Вернуть в разработку')),
     (t.bugs || []).length > 0 && bugsBlock(t),
+    t.kind === 'request' && /^Реджект №/.test(t.title) && shotsStrip(t.id, '', 'Скриншоты реджекта'),
     t.step === 'ios' && devFormBlock(t, t.assigneeId === S.meId || isStaff()),
     t.step === 'release' && t.assigneeId && releaseBlock(t, () => reloadBoard().catch(() => {})),
     t.kind === 'request' || t.kind === 'stage' ? [flowBlock(t), t.kind === 'stage' && treeBlock(t, { noParents: true })] : treeBlock(t),

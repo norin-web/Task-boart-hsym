@@ -1445,7 +1445,8 @@ begin
    where p.active and p.id <> v_me
      and (p.access = 'superadmin'
           or (p.access = 'moderator' and exists (select 1 from unit_members m where m.unit_id = t.unit_id and m.person_id = p.id)));
-  -- лидам — на этап этого приложения их позиции (релиз им не виден)
+  -- «вышло в стор» — только CEO и PM (решение заказчика); о реджекте — ещё лидам, на этап их позиции (релиз им не виден)
+  if p_kind = 'store_live' then return; end if;
   insert into notifications (id, person_id, task_id, kind, actor_id, at)
   select distinct on (p.id) 'n_' || substr(md5(random()::text || clock_timestamp()::text || p.id), 1, 12), p.id, s.id, p_kind, v_me, at_
     from people p
@@ -1525,7 +1526,9 @@ end $$;
 -- Статус этапа «Релиз» на доске следует за фазой (очередь — в работе, ревью Apple — колонка ревью, в сторе — готово).
 -- rel.history — попытки: [{ n, submittedAt, result: live | reject, at, reason, shot, rejectNo }]; номер реджекта — по приложению.
 drop function if exists release_step(text, text, text);
-create or replace function release_step(p_task text, p_action text, p_reason text default '', p_shot text default '') returns text
+drop function if exists release_step(text, text, text, text);
+-- p_self (реджект): RM закрывает его сам — реджект записан (№, история, уведомление CEO и PM), но задачи PM нет, релиз снова в очереди.
+create or replace function release_step(p_task text, p_action text, p_reason text default '', p_shot text default '', p_self boolean default false) returns text
 language plpgsql security definer set search_path = public as $$
 declare
   t tasks;
@@ -1593,16 +1596,23 @@ begin
     values (v_id, t.unit_id, next_task_num(t.unit_id), left('Реджект №' || v_no || ': ' || trim(p_reason), 500),
             'Apple отклонил релиз «' || coalesce(a.name, '') || '» (реджект №' || v_no || ').' || chr(10) || trim(p_reason)
               || case when coalesce(trim(p_shot), '') <> '' then chr(10) || 'Скрин: ' || trim(p_shot) else '' end,
-            u.settings -> 'columns' -> 0 ->> 'id', coalesce(pm, ''), '', '', 0,
+            u.settings -> 'columns' -> 0 ->> 'id', case when p_self then v_actor else coalesce(pm, '') end, '', '', 0,
             case when coalesce(a.priority, '') <> '' then jsonb_build_object('f_priority', a.priority) else '{}'::jsonb end, '[]'::jsonb,
             false, '', v_actor, at_, at_, '', 'request', 'other', t.app_id, t.is_test, coalesce(trim(p_shot), ''));
-    last := coalesce(hist -> -1, '{}'::jsonb) || jsonb_build_object('result', 'reject', 'at', at_, 'reason', trim(p_reason), 'shot', coalesce(trim(p_shot), ''), 'rejectNo', v_no, 'requestId', v_id);
+    last := coalesce(hist -> -1, '{}'::jsonb) || jsonb_build_object('result', 'reject', 'at', at_, 'reason', trim(p_reason), 'shot', coalesce(trim(p_shot), ''), 'rejectNo', v_no, 'requestId', v_id, 'self', p_self);
     hist := case when jsonb_array_length(hist) > 0 then jsonb_set(hist, array[(jsonb_array_length(hist) - 1)::text], last) else jsonb_build_array(last) end;
     rel := rel || jsonb_build_object('phase', 'rejected', 'rejectedAt', at_, 'reason', trim(p_reason), 'shot', coalesce(trim(p_shot), ''),
                                      'rejectNo', v_no, 'rejectRequestId', v_id, 'pmId', coalesce(pm, ''), 'history', hist);
     select c ->> 'id' into col from jsonb_array_elements(u.settings -> 'columns') c where c ->> 'kind' = 'progress' limit 1;
     update tasks set release = rel, updated_at = at_, status = coalesce(col, status), done_at = '' where id = t.id;
     select x ->> 'id' into v_status from jsonb_array_elements(st) x where x ->> 'kind' = 'reject' limit 1;
+    if p_self then
+      -- как close_reject: сначала фаза (иначе сработает release_fixed), потом задача реджекта — готово
+      select c ->> 'id' into col from jsonb_array_elements(u.settings -> 'columns') c where c ->> 'kind' = 'done' limit 1;
+      rel := rel || jsonb_build_object('phase', '', 'fixedAt', at_, 'closedBy', v_actor, 'selfClosed', true);
+      update tasks set release = rel, updated_at = at_ where id = t.id;
+      update tasks set status = coalesce(col, status), done_at = at_, updated_at = at_ where id = v_id;
+    end if;
   elsif p_action = 'live' then
     if coalesce(rel ->> 'phase', '') <> 'submitted' then raise exception 'В стор — после отправки в Apple' using errcode = 'P0001'; end if;
     last := coalesce(hist -> -1, '{}'::jsonb) || jsonb_build_object('result', 'live', 'at', at_);
@@ -1958,6 +1968,28 @@ begin
 end $$;
 drop trigger if exists tasks_bugs_guard on tasks;
 create trigger tasks_bugs_guard before update on tasks for each row execute function task_bugs_guard();
+
+-- Файлы задачи (скриншоты реджекта): сжатая картинка data:image/… прямо в базе — без отдельного хранилища.
+-- tag — к чему относится ('reject:3'). Видит тот, кто видит задачу; добавляет её исполнитель, PM/CEO; удаляет автор или CEO.
+create table if not exists task_files (
+  id         text primary key,
+  task_id    text not null references tasks(id) on delete cascade,
+  tag        text not null default '',
+  name       text not null default '',
+  data       text not null,
+  created_by text not null default '',
+  created_at text not null
+);
+create index if not exists task_files_task on task_files(task_id, tag);
+alter table task_files enable row level security;
+drop policy if exists task_files_read on task_files;
+create policy task_files_read on task_files for select to authenticated using (exists (select 1 from tasks t where t.id = task_id));
+drop policy if exists task_files_insert on task_files;
+create policy task_files_insert on task_files for insert to authenticated with check (
+  data like 'data:image/%' and length(data) <= 2000000
+  and exists (select 1 from tasks t where t.id = task_id and (can_manage(t.unit_id) or t.assignee_id = my_person_id())));
+drop policy if exists task_files_delete on task_files;
+create policy task_files_delete on task_files for delete to authenticated using (is_superadmin() or created_by = my_person_id());
 
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;

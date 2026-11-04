@@ -169,3 +169,35 @@ test('статусы приложений во времени: ряд по дн�
   assert.deepEqual(s.counts.dev.slice(0, 6), [0, 0, 0, 0, 0, 0]);
   assert.ok(app.id);
 });
+
+test('реджект: RM закрывает сам (задачи PM нет, релиз в очереди), скриншоты файлами видны CEO и PM', async () => {
+  const api = await setup();
+  const ceo = await person(api, 'CEO', 'superadmin', 'd_po');
+  const gold = await api('createUnit', { name: 'Gold', key: 'GLD' });
+  const who = await team(api, gold);
+  const { request } = await api.as(ceo, () => api('createApp', { name: 'A', unitId: gold.id }));
+  const st = await stagesOf(api, who.pm, request);
+  await toRelease(api, who, st);
+  await ready(api, who, st);
+  await api.as(who.rm, () => api('releaseStep', { taskId: st.release.id, action: 'submit' }));
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  const r = await api.as(who.rm, async () => {
+    const res = await api('releaseStep', { taskId: st.release.id, action: 'reject', reason: 'Метаданные', self: true });
+    await api('addTaskFiles', { taskId: st.release.id, tag: 'reject:1', files: [{ name: 'a.png', data: png }] });
+    await assert.rejects(() => api('addTaskFiles', { taskId: st.release.id, tag: 'reject:1', files: [{ name: 'x', data: 'data:text/html,<b>' }] }), /только картинки/);
+    return res;
+  });
+  assert.equal(r.task.release.rejectNo, 1);
+  assert.equal(r.task.release.phase, ''); // релиз снова в очереди
+  // задачи «Реджект №1» у PM нет в работе: она закрыта и назначена на RM, PM уведомлений о ней не получил
+  const req = (await api.pg.query("select assignee_id, done_at from tasks where id = $1", [r.rejectRequestId])).rows[0];
+  assert.ok(req.done_at && req.assignee_id === who.rm.id);
+  assert.ok(!(await api.as(who.pm, () => api('getNotifications', {}))).some(n => n.taskId === r.rejectRequestId));
+  // история и скриншоты
+  const hist = await api.as(ceo, () => api('getReleaseHistory', { result: 'reject' }));
+  const row = hist.rows.find(x => x.rejectNo === 1);
+  assert.ok(row.selfClosed && row.shots === 1);
+  assert.equal((await api.as(who.pm, () => api('getTaskFiles', { taskId: st.release.id, tag: 'reject:1' }))).length, 1);
+  // и снова можно отправить
+  await api.as(who.rm, () => api('releaseStep', { taskId: st.release.id, action: 'resubmit' }));
+});
