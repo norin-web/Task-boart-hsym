@@ -2931,7 +2931,7 @@ a.bug-title:hover { text-decoration: underline; }
 .dqe-opts input.inp { flex: 1 1 160px; min-width: 0; }
 .dqe-opt { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); }
 .dqe-act { display: flex; gap: 2px; }
-.dqe-act .icon-btn:first-child svg { transform: rotate(-90deg); }
+.dqe-act .icon-btn:first-child svg { transform: rotate(180deg); }
 /* ---------- Замещения (настройки, CEO) ---------- */
 .dep-list { display: grid; gap: 6px; }
 .dep-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; border: 1px solid var(--border); border-radius: 14px; }
@@ -2962,3 +2962,9 @@ a.bug-title:hover { text-decoration: underline; }
 .rl-links { grid-template-columns: minmax(0, 1fr); }
 .rl-link, .rl-link > * { min-width: 0; }
 .rl-link-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Шапка запроса в карточке релиза: длинное название обрезается, полоска прогресса сжимается — без наездов в узкой панели */
+.fc-names b, .fc-names small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-compact { flex-wrap: wrap; row-gap: 8px; }
+.flow-compact .fc-names { flex: 1 1 140px; }
+.flow-compact .progress { flex: 1 1 90px; max-width: 130px; }
