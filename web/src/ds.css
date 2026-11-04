@@ -2968,3 +2968,34 @@ a.bug-title:hover { text-decoration: underline; }
 .flow-compact { flex-wrap: wrap; row-gap: 8px; }
 .flow-compact .fc-names { flex: 1 1 140px; }
 .flow-compact .progress { flex: 1 1 90px; max-width: 130px; }
+
+/* Узкие места (проверка на 950 px): этапы запроса в карточке не распирают панель; правила юнитов — карточками, когда таблице тесно */
+.rq-stages { grid-template-columns: minmax(0, 1fr); }
+.rq-stitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@container main (max-width: 860px) {
+  .ur-row, .ur-row.ur-head { grid-template-columns: minmax(0, 1fr); gap: 6px; min-height: 0; padding: 10px 0; }
+  .ur-row.ur-head { display: none; }
+  .ur-mobile { display: inline; }
+  .ur-cell { justify-content: space-between; }
+}
+
+/* Телефон (проверка на 375 px): без горизонтальной прокрутки страницы */
+@container main (max-width: 560px) {
+  .cs-row.unit-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rj-row { grid-template-columns: 40px minmax(0, 1fr); padding: 14px 12px; }
+  .rj-side { grid-column: 1 / -1; justify-items: start; }
+  .rj-actions { flex-wrap: wrap; }
+  /* таблицы приложений юнита и команды — прокрутка внутри карточки, а не всей страницы */
+  #main:has(.unit-tabs) .apps-page .ap-list, .card-box.team-table { overflow-x: auto; }
+  #main:has(.unit-tabs) .apps-page .ap-row { min-width: 420px; }
+  .team-head, .team-table .team-row { min-width: 600px; }
+  .people-tools { flex-wrap: wrap; }
+  .people-tools .apps-search { flex: 1 1 100%; }
+  .wip-brief-bar { width: 44px; }
+  .wip-brief-main, .wip-brief-main small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+@media (max-width: 560px) {
+  /* шапка: кнопки одним потоком (колокольчик, действия, настройки), а не каждая на своей строке */
+  .topbar .tb-right { gap: 8px; }
+  .topbar .tb-right > .row { display: contents; }
+}
