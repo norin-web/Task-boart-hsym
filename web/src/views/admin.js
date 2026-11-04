@@ -517,10 +517,64 @@ function peopleTab() {
 function automationsTab() {
   // как в макете: правила юнитов, ниже шаблоны и «Уведомления работают сами»; поля и ссылки карточки — после них
   return h('div', { class: 'auto-page' },
+    isSuper() && h('div', { class: 'card-box' }, deputiesManager()),
     h('div', { class: 'card-box' }, unitRules()),
     h('div', { class: 'an-grid an-grid-32' }, h('div', { class: 'card-box' }, templatesManager()), h('div', { class: 'card-box' }, autoNotes())),
     h('div', { class: 'an-grid auto-fields' + (isSuper() ? '' : ' one') }, h('div', { class: 'card-box' }, globalFieldsManager()),
       isSuper() && h('div', { class: 'card-box' }, linkFieldsManager())));
+}
+
+/**
+ * Замещения (только CEO): на период болезни или отпуска заместитель получает ревью и задачи PM юнита за человека.
+ * Исключение, а не правило — поэтому строка с датами и всё.
+ */
+function deputiesManager() {
+  const box = h('div');
+  let list = [];
+  const name = id => (personById(id) || {}).name || '—';
+  const fmt = d => (d ? new Date(d + 'T00:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : '');
+  const today = todayStr();
+  const draw = () => fill(box,
+    h('div', { class: 'section-head' }, h('h2', { style: { margin: 0, fontSize: '16px' } }, 'Замещения'),
+      h('button', { class: 'btn sm', onclick: () => edit() }, icon('plus', 14), 'Замещение')),
+    h('p', { class: 'hint', style: { margin: '0 0 10px' } }, 'На время болезни или отпуска: ревью и задачи PM юнита идут заместителю. Заместитель должен быть в составе нужных юнитов.'),
+    list.length
+      ? h('div', { class: 'dep-list' }, list.map(x => {
+        const now = x.from <= today && today <= x.to;
+        return h('div', { class: 'dep-row' + (now ? ' now' : x.to < today ? ' past' : '') },
+          h('span', { class: 'dep-who' }, h('b', null, name(x.personId)), ' → ', name(x.deputyId)),
+          h('span', { class: 'muted' }, `${fmt(x.from)} – ${fmt(x.to)}` + (x.note ? ' · ' + x.note : '')),
+          now && h('span', { class: 'dep-pill' }, 'сейчас'),
+          h('button', { class: 'icon-btn sm', title: 'Изменить', onclick: () => edit(x) }, icon('edit', 13)),
+          h('button', { class: 'icon-btn sm', title: 'Удалить', onclick: async () => {
+            if (!(await confirmDlg('Замещение перестанет действовать.', { title: 'Удалить замещение?', ok: 'Удалить', danger: true }))) return;
+            try { list = await send('deleteDeputy', { id: x.id }); draw(); } catch (e) { showErr(e); }
+          } }, icon('trash', 13)));
+      }))
+      : h('p', { class: 'muted', style: { margin: 0 } }, 'Замещений нет'));
+  const edit = (x = {}) => {
+    const people = S.people.filter(p => p.active).sort((a, b) => a.name.localeCompare(b.name));
+    const sel = (v, label) => h('select', { class: 'inp', 'aria-label': label }, h('option', { value: '' }, '— выбрать —'),
+      people.map(p => h('option', { value: p.id, selected: p.id === v }, p.name)));
+    const who = sel(x.personId, 'Кого замещают'), dep = sel(x.deputyId, 'Заместитель');
+    const from = h('input', { class: 'inp', type: 'date', value: x.from || today });
+    const to = h('input', { class: 'inp', type: 'date', value: x.to || '' });
+    const note = h('input', { class: 'inp', value: x.note || '', maxlength: 200, placeholder: 'Отпуск, больничный…' });
+    modal({
+      title: x.id ? 'Замещение' : 'Новое замещение',
+      cls: 'dlg',
+      body: [h('div', { class: 'grid2' }, field('Кого замещают', who), field('Заместитель', dep)),
+        h('div', { class: 'grid2' }, field('С', from), field('По', to)), field('Причина', note)],
+      actions: [{ label: 'Отмена' }, { label: 'Сохранить', primary: true, action: async close => {
+        list = await send('saveDeputy', { id: x.id, personId: who.value, deputyId: dep.value, from: from.value, to: to.value, note: note.value });
+        close();
+        draw();
+      } }],
+    });
+  };
+  call('listDeputies', {}).then(r => { list = r; draw(); }).catch(showErr);
+  draw();
+  return box;
 }
 
 /** Настройка ревью юнита окном (колонка, ревьюеры по позиции, по умолчанию). */

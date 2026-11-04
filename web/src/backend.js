@@ -551,13 +551,9 @@ export function createBackend(db, opts = {}) {
     const list = (await people()).filter(x => x.active && ids.includes(x.id));
     return role ? list.filter(x => x.access === role) : list;
   }
-  /** Ответственный за юнит: заданный (PM или CEO), иначе первый PM из состава. */
+  /** Ответственный за юнит: заданный (PM или CEO), иначе первый PM из состава; в замещение — заместитель (unit_pm в базе). */
   async function responsiblePm(unitId) {
-    const u = await one('units', unitId);
-    const own = u && u.pm_id ? await one('people', u.pm_id) : null;
-    if (own && own.active) return own.id;
-    const pms = await unitPeople(unitId, 'moderator');
-    return pms.length ? pms[0].id : '';
+    return (await rpc('unit_pm', { p_unit: String(unitId || '') })) || '';
   }
   async function setting(key) {
     const r = await run(T('app_settings').select('value').eq('key', key).maybeSingle());
@@ -2569,6 +2565,29 @@ export function createBackend(db, opts = {}) {
       const t = await findTask(p.taskId);
       const id = await rpc('release_step', { p_task: t.id, p_action: p.action, p_reason: str(p.reason, 2000), p_shot: linkUrl(p.shot), p_self: p.action === 'reject' && !!p.self });
       return { task: taskOut(await findTask(t.id)), rejectRequestId: p.action === 'reject' ? id : '' };
+    },
+
+    /** Замещения (CEO): кто за кого и с какого по какое число. */
+    async listDeputies() {
+      return (await run(T('deputies').select('*').order('date_from'))).map(r => ({ id: r.id, personId: r.person_id, deputyId: r.deputy_id, from: r.date_from, to: r.date_to, note: r.note || '' }));
+    },
+
+    async saveDeputy(p) {
+      const person = (await one('people', p.personId)) || fail('Кого замещают — не выбран');
+      const deputy = (await one('people', p.deputyId)) || fail('Заместитель не выбран');
+      if (person.id === deputy.id) fail('Человек не может замещать сам себя');
+      const from = date(p.from) || fail('Укажите дату начала');
+      const to = date(p.to) || fail('Укажите дату конца');
+      if (to < from) fail('Дата конца раньше начала');
+      const row = { person_id: person.id, deputy_id: deputy.id, date_from: from, date_to: to, note: str(p.note, 200) };
+      if (p.id) await updateOne('deputies', String(p.id), row);
+      else await run(T('deputies').insert({ id: uid('dp'), ...row, created_at: now() }));
+      return methods.listDeputies();
+    },
+
+    async deleteDeputy(p) {
+      await run(T('deputies').delete().eq('id', String(p.id || '')));
+      return methods.listDeputies();
     },
 
     /** Картинки к задаче (скриншоты реджекта): data:image/…, до 6 штук, каждая до ~1,5 МБ (сжимает браузер). */

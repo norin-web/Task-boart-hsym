@@ -221,7 +221,13 @@ function flowBlock(t) {
         h('span', { class: 'uc-icon', style: { background: app.color } }, app.name.slice(0, 1).toUpperCase()),
         h('span', { class: 'fc-names' }, h('b', null, app.name), h('small', { class: 'muted' }, req.title.replace(/^New App:\s*/, ''))),
         h('span', { class: 'progress' }, h('div', { style: { width: Math.round(done / Math.max(1, stages.length) * 100) + '%' } })),
-        h('span', { class: 'fc-count' }, `${done} из ${stages.length}`)));
+        h('span', { class: 'fc-count' }, `${done} из ${stages.length}`)),
+        // что держит релиз: незакрытые этапы (кроме самого релиза)
+        (() => {
+          const wait = stages.filter(n => n.step !== 'release' && stateOf(n, stages) !== 'done');
+          return wait.length > 0 && h('div', { class: 'fb-wait rl-waits' }, icon('lock', 14), h('span', null, 'Ждём: ',
+            wait.map((n, i) => [i > 0 && ', ', h('button', { class: 'link-btn', onclick: () => peekTask(n.unit.id, n.id) }, n.title.split(' · ')[0])])));
+        })());
     }
     // макет 15: шапка — значок приложения, запрос (клик — открыть), полоска прогресса и «N из M»;
     // этап ждёт предыдущих (макет 57) — жёлтая плашка с замком «Сначала закройте …»

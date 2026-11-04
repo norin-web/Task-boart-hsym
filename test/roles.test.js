@@ -801,3 +801,30 @@ test('PM собирает команду своего юнита: добавля
   // сотрудник состав не меняет
   await api.as(designer, () => assert.rejects(() => api('setMember', { unitId: A.id, personId: extra.id })));
 });
+
+test('замещение: на период запросы PM и ревью идут заместителю; ставит только CEO', async () => {
+  const api = await setup();
+  const { admin, mod, designer, dev, A, link } = await team(api);
+  await api('updateField', { id: link.id, required: false }).catch(() => api.pg.query('update fields set required = false where id = $1', [link.id]));
+  const today = new Date().toISOString().slice(0, 10);
+  // PM не ставит замещение
+  await api.as(mod, async () => await assert.rejects(() => api('saveDeputy', { personId: mod.id, deputyId: admin.id, from: today, to: today })));
+  await assert.rejects(() => api('saveDeputy', { personId: mod.id, deputyId: mod.id, from: today, to: today }), /сам себя/);
+  await api('setUnitPm', { unitId: A.id, personId: mod.id });
+  // PM в отпуске — за него CEO: новый запрос по приложению — CEO
+  const list = await api('saveDeputy', { personId: mod.id, deputyId: admin.id, from: today, to: today, note: 'Отпуск' });
+  assert.equal(list.length, 1);
+  const { request } = await api('createApp', { unitId: A.id, name: 'Пульт 3' });
+  assert.equal(request.assigneeId, admin.id);
+  // ревьюер (дизайнер-лид условно: designer) в отпуске — ревью уходит заместителю (dev)
+  const st = (await api('getBoard', { unitId: A.id })).unit.settings;
+  await api('updateUnit', { id: A.id, settings: { ...st, review: { column: 'review', byPosition: { d_ios: designer.id }, default: '' } } });
+  await api('saveDeputy', { personId: designer.id, deputyId: mod.id, from: today, to: today });
+  const t = await api('createTask', { unitId: A.id, title: 'Экран', assigneeId: dev.id, departmentId: 'd_ios' });
+  const moved = await api.as(dev, () => api('updateTask', { id: t.id, patch: { status: 'review' } }));
+  assert.equal(moved.assigneeId, mod.id);
+  // замещение закончилось — снова сам PM
+  await api('deleteDeputy', { id: list[0].id });
+  const r2 = await api('createRequest', { appId: (await api.pg.query("select id from apps where name = 'Пульт 3'")).rows[0].id, type: 'other', title: 'x' });
+  assert.equal(r2.assigneeId, mod.id);
+});

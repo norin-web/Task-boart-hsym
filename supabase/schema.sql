@@ -822,6 +822,7 @@ begin
   if new.status = col then
     -- ревьюер задаётся только в настройках юнита: по позиции задачи, иначе по умолчанию
     who := coalesce(nullif(rv -> 'byPosition' ->> new.department_id, ''), nullif(rv ->> 'default', ''), '');
+    if who <> '' then who := deputy_for(who); end if; -- ревьюер в отпуске — ревью у заместителя
     if who <> '' and who <> new.assignee_id and new.assignee_id = old.assignee_id
        and exists (select 1 from people where id = who and active) then
       new.review_from := old.assignee_id;
@@ -1933,14 +1934,36 @@ create policy activity_insert on activity for insert to authenticated with check
     and (can_manage(t.unit_id) or my_person_id() in (t.assignee_id, t.review_from, t.reviewer_id)
          or in_lead_zone(t.unit_id, t.department_id, t.assignee_id)))));
 
+-- Замещение на период (болезнь, отпуск): ставит только CEO. Пока действует — ревью и задачи PM юнита идут заместителю.
+create table if not exists deputies (
+  id         text primary key,
+  person_id  text not null references people(id) on delete cascade,
+  deputy_id  text not null references people(id) on delete cascade,
+  date_from  text not null,
+  date_to    text not null,
+  note       text not null default '',
+  created_at text not null
+);
+alter table deputies enable row level security;
+drop policy if exists deputies_read on deputies;
+create policy deputies_read on deputies for select to authenticated using (true);
+drop policy if exists deputies_write on deputies;
+create policy deputies_write on deputies for all to authenticated using (is_superadmin()) with check (is_superadmin());
+-- Кто сейчас за человека: заместитель на сегодня (активный), иначе он сам.
+create or replace function deputy_for(p_person text) returns text language sql stable security definer set search_path = public as $$
+  select coalesce((select d.deputy_id from deputies d join people p on p.id = d.deputy_id and p.active
+                    where d.person_id = p_person and to_char((now() at time zone 'utc')::date, 'YYYY-MM-DD') between d.date_from and d.date_to
+                    order by d.date_from desc, d.created_at desc limit 1), p_person);
+$$;
+
 -- Ответственный за юнит (роль PM): PM или CEO. Пусто — первый PM из состава. Менять может только CEO.
 alter table units add column if not exists pm_id text not null default '';
 create or replace function unit_pm(p_unit text) returns text language sql stable set search_path = public as $$
-  select coalesce(
+  select case when x = '' then '' else deputy_for(x) end from (select coalesce(
     (select u.pm_id from units u join people p on p.id = u.pm_id and p.active where u.id = p_unit and u.pm_id <> ''),
     (select m.person_id from unit_members m join people p on p.id = m.person_id
       where m.unit_id = p_unit and p.access = 'moderator' and p.active order by m.created_at limit 1),
-    '');
+    '') as x) s;
 $$;
 create or replace function guard_unit_pm() returns trigger language plpgsql set search_path = public as $$
 begin

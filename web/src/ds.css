@@ -3080,3 +3080,12 @@ a.bug-title:hover { text-decoration: underline; }
 .dqe-opt { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); }
 .dqe-act { display: flex; gap: 2px; }
 .dqe-act .icon-btn:first-child svg { transform: rotate(-90deg); }
+
+/* ---------- Замещения (настройки, CEO) ---------- */
+.dep-list { display: grid; gap: 6px; }
+.dep-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; border: 1px solid var(--border); border-radius: 14px; }
+.dep-row.past { opacity: .55; }
+.dep-who { flex: 1 1 220px; min-width: 0; }
+.dep-pill { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; color: var(--accent-text); background: var(--surface-2); }
+.rl-waits { margin-top: 8px; }
+.rl-waits .link-btn { font-weight: 600; }
