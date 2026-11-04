@@ -8,6 +8,7 @@ import { link } from '../router.js';
 
 import { openCreateTask, peekTask } from './task.js';
 import { isStaff } from '../state.js';
+import { unitHeader } from './unitnav.js';
 
 const DAY = 864e5;
 const WEEKS = 4;

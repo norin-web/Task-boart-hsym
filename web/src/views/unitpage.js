@@ -12,6 +12,7 @@ import { attention, inProgress, recent } from './ceo.js';
 
 import { addMemberDialog, applyMembers } from './people.js';
 import { sparkline, openSeries } from './charts.js';
+import { unitHeader } from './unitnav.js';
 
 export async function renderUnitPage() {
   const u = S.board.unit;

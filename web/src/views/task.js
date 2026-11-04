@@ -1,4 +1,4 @@
-import { S, LS, todayStr, me, priorityOf, taskById, personById, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDate, fmtDateTime, relTime, addDays, unitById, safeUrl, visibleLinkFields, plural, appById, isSuper, ceoDefault, KIND_COLORS, whoName, colById, colColor, taskDone, isStaff, canEditTask, inMyZone, fmtValue } from '../state.js';
+import { S, LS, todayStr, me, priorityOf, taskById, personById, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDate, fmtDateTime, relTime, addDays, unitById, safeUrl, visibleLinkFields, plural, appById, isSuper, ceoDefault, KIND_COLORS, whoName, colById, colColor, taskDone, isStaff, canEditTask, inMyZone, fmtValue, activeFields } from '../state.js';
 import { $, h, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, statusIcon, fill, prioMark, prioSelect } from '../ui.js';
 import { call, send } from '../api.js';
 import { navigate, rerender } from '../router.js';
@@ -181,7 +181,6 @@ function flowBlock(t) {
   const box = h('div', { class: 'tree-block flow-block' });
   const app = appById(t.appId);
   const manage = isSuper() || (isStaff() && (S.board.members || []).some(m => m.personId === S.meId)); // CEO или PM юнита
-  const appTag = app && h('span', { class: 'flow-app' }, h('span', { class: 'uc-icon xs', style: { background: app.color } }, app.name.slice(0, 2).toUpperCase()), app.name);
   const reload = () => { load(); reloadBoard().catch(() => {}); };
   const stateOf = (n, all) => {
     if (n.statusKind === 'done') return 'done';
@@ -586,7 +585,6 @@ function checklistBlock(t, editable) {
   const draw = focusAdd => {
     const items = t.checklist || [];
     const done = items.filter(i => i.done).length;
-    const pct = items.length ? Math.round((done / items.length) * 100) : 0;
     const add = h('input', {
       class: 'inp cl-add', placeholder: 'Добавить пункт и нажать Enter', maxlength: 300,
       onkeydown: e => {

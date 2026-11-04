@@ -74,7 +74,6 @@ export async function renderAnalytics(tile) {
     };
     const shipped = byId.shipped;
     // как в макете: два графика рядом, ниже — «Команда и KPI» и «Выпущено за 30 дней»
-    const idx = defs.findIndex(b => b.id === 'statuses');
     const rest = defs.filter(b => !['statuses', 'byunit', 'shipped'].includes(b.id));
     const out = [];
     for (const b of rest) {

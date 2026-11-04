@@ -7,6 +7,7 @@ import { renderSidebar } from './sidebar.js';
 import { archiveUnit, deleteUnit } from './units.js';
 import { flowSection } from './flows.js';
 import { addMemberDialog, applyMembers, openDepartments, positionChips } from './people.js';
+import { unitHeader } from './unitnav.js';
 
 export function renderSettings() {
   const b = S.board;
@@ -62,7 +63,6 @@ export function renderSettings() {
   };
 
   const own = b.fields.filter(f => !f.global);
-  const globals = b.fields.filter(f => f.global && !f.archived).sort(byOrder);
   const active = own.filter(f => !f.archived).sort(byOrder);
   const archived = own.filter(f => f.archived);
   const editField = f => openFieldEditor(f, {

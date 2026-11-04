@@ -35,7 +35,6 @@ export async function renderCeoHome() {
     if (currentView() !== 'home') return;
     S.apps = apps.map(({ requests, active, ...a }) => a);
     const total = apps.length;
-    const person = me();
     // без юнитов показывать нечего; юниты есть, а приложений нет — дашборд целиком, сверху подсказка
     if (!units().length) {
       // первый вход (макет 44): «Новое для вас» пустой строкой, карточка пустого состояния и три шага

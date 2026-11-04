@@ -57,5 +57,5 @@ export function openPersonCard(anchor, p) {
       t && line('clock', t.time, t.sub),
       p.telegram && line('message', '@' + p.telegram, 'Telegram', '@' + p.telegram),
       !p.email && !t && !p.telegram && h('p', { class: 'muted pc-empty' }, 'Контакты ещё не заполнены')));
-  const m = menu(anchor, [box], { cls: 'pc-menu', align: 'left' });
+  menu(anchor, [box], { cls: 'pc-menu', align: 'left' });
 }

@@ -47,7 +47,6 @@ export function openReleaseCardSettings(onDone) {
   });
 }
 const fmtD = iso => (iso ? new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : '');
-const daysSince = iso => Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 864e5));
 
 /**
  * Форма реджекта: № (присваивается сам, по приложению), описание из письма Apple, скриншоты (файлы) или ссылка,

@@ -57,8 +57,6 @@ const NEWS_BLOCK = {
   render: () => newsBlock(),
 };
 
-const NEWS_WHAT = { assigned: 'новое', review: 'ревью', returned: 'вернули', approved: 'закрыта по ревью', task_done: 'выполнено', unblocked: 'можно начинать', overdue: 'просрочено', due_soon: 'срок', handoff: 'новое приложение',
-  mention: 'вас отметили', store_live: 'вышло в App Store', store_reject: 'реджект Apple' };
 const NEWS_DANGER = ['overdue', 'returned', 'store_reject'];
 
 export function newsBlock() {
@@ -510,7 +508,6 @@ async function renderMemberHome() {
   if (d.teams) S.teams = d.teams;
   renderSidebar();
 
-  const person = me();
   const units = d.units.filter(u => !u.archived);
   const open = tasks.filter(t => t.statusKind !== 'done');
   const overdue = open.filter(t => t.dueDate && t.dueDate < new Date().toISOString().slice(0, 10)).length;
