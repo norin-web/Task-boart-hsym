@@ -218,7 +218,21 @@ export async function renderReady() {
   const sheet = sheetOf();
   const tools = h('div', { class: 'row rd-tools', style: { gap: '8px' } });
   const body = h('div', { class: 'page ceo-page' }, skeleton());
-  fill(main, topbar([h('h1', null, 'Сводка')], [tools]), h('div', { class: 'view-body' }, body));
+  // на весь экран: кнопка справа внизу; Esc или та же кнопка возвращает обратно
+  const FS_IN = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>';
+  const FS_OUT = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 10l7-7M3 21l7-7M20 14h-6v6M4 10h6V4"/></svg>';
+  // настоящий полноэкранный режим браузера: на экране остаётся только страница «Сводка»; Esc или та же кнопка — назад
+  const isFs = () => document.fullscreenElement === main;
+  const fsBtn = h('button', { class: 'rd-fs', type: 'button' });
+  const paintFs = () => {
+    fsBtn.innerHTML = isFs() ? FS_OUT : FS_IN;
+    fsBtn.title = fsBtn['aria-label'] = isFs() ? 'Свернуть таблицу' : 'Таблица на весь экран';
+  };
+  fsBtn.onclick = () => { (isFs() ? document.exitFullscreen() : main.requestFullscreen()).catch(() => toast('Браузер не разрешил полноэкранный режим')); };
+  const onFsChange = () => (fsBtn.isConnected ? paintFs() : document.removeEventListener('fullscreenchange', onFsChange));
+  document.addEventListener('fullscreenchange', onFsChange);
+  paintFs();
+  fill(main, topbar([h('h1', null, 'Сводка')], [tools]), h('div', { class: 'view-body' }, body), fsBtn);
   let rows = [];
   let unit = '';
   let onlyReady = false;

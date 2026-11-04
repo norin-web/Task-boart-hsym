@@ -2994,3 +2994,10 @@ button.rd-check.on { background: var(--text); border-color: transparent; }
 
 /* Быстрое создание — сразу под последней карточкой, а не прижато к низу колонки */
 .board:not(.lanes) > .col > .col-list { flex: 0 0 auto; }
+
+/* Сводка на весь экран */
+.rd-fs { position: absolute; right: 20px; bottom: 20px; z-index: 5; width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 999px; background: var(--surface); color: var(--text); box-shadow: var(--shadow, 0 2px 10px rgba(0, 0, 0, .12)); cursor: pointer; }
+.rd-fs:hover { background: var(--surface-3); }
+#main:fullscreen { height: 100vh; background: var(--bg); padding: 12px 16px 0; }
+#main:fullscreen .rd-table { max-height: calc(100vh - 150px); }
+#main:has(> .rd-fs) { position: relative; }
