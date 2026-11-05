@@ -46,7 +46,7 @@ CEO переключается между режимами Default (только
 1. Создайте проект на [supabase.com](https://supabase.com).
 2. **SQL Editor → New query**: вставьте содержимое [`supabase/schema.sql`](supabase/schema.sql) и нажмите **Run**. Скрипт создаёт таблицы, функции и правила доступа; его можно запускать повторно.
 3. **Authentication → Sign In / Providers → Email**: оставьте Email включённым. В настройках Auth выключите **Allow new users to sign up** — в команду попадают только приглашённые.
-4. **Authentication → URL Configuration**: в **Site URL** и **Redirect URLs** укажите адрес сайта, например `https://task-boart-hsym.norinnort4.workers.dev/**` (и `http://localhost:5177/` для разработки).
+4. **Authentication → URL Configuration**: в **Site URL** и **Redirect URLs** укажите адрес сайта, например `https://taskmanager.cam/**` (и `http://localhost:5177/` для разработки).
 5. **Authentication → Policies (пароли)**: минимальная длина — 8.
 6. Создайте себе вход: **Authentication → Users → Add user → Create new user** (email, пароль, Auto Confirm). При первом входе в пустой сервис вы станете CEO; режим разработчика включается SQL (см. ниже); остальных людей добавляйте уже из приложения.
 7. **Project Settings → API**: скопируйте **Project URL** и ключ **publishable** (anon).
