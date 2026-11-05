@@ -66,14 +66,23 @@ async function start() {
   boot();
 }
 
+/**
+ * Форма входа заменяет каркас страницы — после входа возвращаем его (сайдбар, подложка меню, основная область)
+ * с серыми блоками загрузки, как в index.html. Без каркаса дашборду некуда нарисоваться: висела загрузка до обновления.
+ */
+export function restoreShell() {
+  fill($('#shell'),
+    h('aside', { id: 'sidebar' }),
+    h('div', { class: 'nav-scrim', onclick: closeNav }),
+    h('div', { id: 'main' }, h('div', { class: 'first-load' }, h('div', { class: 'skel', role: 'status', 'aria-label': 'Загрузка' },
+      h('i', { class: 'skel-t' }), h('i'), h('i'), h('i', { class: 'skel-s' })))));
+}
+
 let booted = false;
 async function boot() {
   if (booted) return;
   booted = true;
-  // Пока грузятся данные, форма входа не должна торчать в сетке приложения (сжималась в узкую колонку)
-  if (document.body.classList.contains('login-page')) {
-    fill($('#shell'), h('div', { class: 'boot', style: { gridColumn: '1 / -1' } }, 'Загружаем…'));
-  }
+  if (document.body.classList.contains('login-page')) restoreShell();
   document.body.classList.remove('login-page');
   // После входа по ссылке в адресе остаётся ?code=… — убираем
   if (location.search) history.replaceState(null, '', location.pathname + location.hash);
