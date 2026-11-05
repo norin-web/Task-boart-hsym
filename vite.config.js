@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   root: 'web',
+  plugins: [],             // пустой список: wrangler (Cloudflare) не пытается сам переписывать конфиг
   envDir: '..',            // .env.local лежит в корне проекта
   base: './',              // относительные пути — работает на github.io/<repo>/
   build: { outDir: '../dist', emptyOutDir: true, target: 'es2022' },
