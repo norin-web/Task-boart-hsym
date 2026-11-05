@@ -5,6 +5,8 @@
 import { h } from '../ui.js';
 
 const NS = 'http://www.w3.org/2000/svg';
+// цвет в SVG-разметке — только безопасный формат (#hex, var(--…), rgb()), иначе текущий: цвет из базы мог записать кто угодно
+const col = c => (/^(#[0-9a-fA-F]{3,8}|var\(--[a-z0-9-]+\)|rgba?\([0-9., %]+\))$/.test(String(c || '').trim()) ? c : 'currentColor');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888';
 
@@ -64,7 +66,7 @@ export function statusLines({ days, series, height = 220, aria = '' }) {
     // ступенчатые линии: число приложений меняется скачком в день события
     const path = s => s.values.map((v, i) => (i ? `H${x(i)}V${y(v)}` : `M${x(i)} ${y(v)}`)).join('');
     for (const s of [...live].sort((a, b) => !!a.strong - !!b.strong)) {
-      g += `<path d="${path(s)}" fill="none" stroke="${s.color}" stroke-width="${s.strong ? 2.5 : 2}" stroke-linejoin="round" opacity="${s.strong ? 1 : .85}"/>`;
+      g += `<path d="${path(s)}" fill="none" stroke="${col(s.color)}" stroke-width="${s.strong ? 2.5 : 2}" stroke-linejoin="round" opacity="${s.strong ? 1 : .85}"/>`;
     }
     // подписи справа от последней точки; близкие разводим
     const ends = live.map(s => ({ s, y: y(s.values[s.values.length - 1]) })).sort((a, b) => a.y - b.y);
@@ -72,7 +74,7 @@ export function statusLines({ days, series, height = 220, aria = '' }) {
     for (const e of ends) {
       const txt = `${e.s.label} · ${e.s.values[e.s.values.length - 1]}`;
       const wd = Math.min(R - 12, txt.length * 6.6 + 18);
-      g += `<g><rect x="${L + iw + 10}" y="${e.y - 11}" width="${wd}" height="22" rx="11" fill="${e.s.strong ? e.s.color : css('--surface-3')}"/><text x="${L + iw + 10 + wd / 2}" y="${e.y + 4}" text-anchor="middle" font-size="12" font-weight="600" fill="${e.s.strong ? css('--on-accent') : css('--text-2')}">${esc(txt)}</text></g>`;
+      g += `<g><rect x="${L + iw + 10}" y="${e.y - 11}" width="${wd}" height="22" rx="11" fill="${e.s.strong ? col(e.s.color) : css('--surface-3')}"/><text x="${L + iw + 10 + wd / 2}" y="${e.y + 4}" text-anchor="middle" font-size="12" font-weight="600" fill="${e.s.strong ? css('--on-accent') : css('--text-2')}">${esc(txt)}</text></g>`;
     }
     g += '<g class="hv"></g>';
     svg.innerHTML = g;
@@ -83,7 +85,7 @@ export function statusLines({ days, series, height = 220, aria = '' }) {
       const px = ev.clientX - r.left;
       const i = Math.max(0, Math.min(days.length - 1, Math.round(((px - L) / iw) * (days.length - 1))));
       hv.innerHTML = `<line x1="${x(i)}" x2="${x(i)}" y1="${T}" y2="${T + ih}" stroke="${css('--text')}" stroke-dasharray="3 3"/>` +
-        live.map(s => `<circle cx="${x(i)}" cy="${y(s.values[i])}" r="4" fill="${css('--surface')}" stroke="${s.color}" stroke-width="2"/>`).join('');
+        live.map(s => `<circle cx="${x(i)}" cy="${y(s.values[i])}" r="4" fill="${css('--surface')}" stroke="${col(s.color)}" stroke-width="2"/>`).join('');
       tip.hidden = false;
       tip.replaceChildren(h('b', null, fmtDay(days[i])), ...live.map(s => h('span', { class: 'chart-row' }, h('i', { style: { background: s.color } }), h('em', null, s.values[i]), s.label)));
       const tw = tip.offsetWidth;
@@ -119,7 +121,7 @@ export function unitCurves({ categories, units, height = 220, aria = '' }) {
       }
       return d;
     };
-    for (const u of units) g += `<path d="${curve(u.values)}" fill="none" stroke="${u.color}" stroke-width="2.5" stroke-linecap="round"/>`;
+    for (const u of units) g += `<path d="${curve(u.values)}" fill="none" stroke="${col(u.color)}" stroke-width="2.5" stroke-linecap="round"/>`;
     g += '<g class="hv"></g>';
     svg.innerHTML = g;
     svg.setAttribute('aria-label', aria);
@@ -128,7 +130,7 @@ export function unitCurves({ categories, units, height = 220, aria = '' }) {
       const r = svg.getBoundingClientRect();
       const i = Math.max(0, Math.min(n - 1, Math.round(((ev.clientX - r.left - L) / iw) * (n - 1))));
       hv.innerHTML = `<rect x="${x(i) - 18}" y="${T}" width="36" height="${ih}" rx="8" fill="${css('--surface-3')}" opacity=".6"/>` +
-        units.map(u => `<circle cx="${x(i)}" cy="${y(u.values[i])}" r="4" fill="${css('--surface')}" stroke="${u.color}" stroke-width="2"/>`).join('');
+        units.map(u => `<circle cx="${x(i)}" cy="${y(u.values[i])}" r="4" fill="${css('--surface')}" stroke="${col(u.color)}" stroke-width="2"/>`).join('');
       tip.hidden = false;
       tip.replaceChildren(h('b', null, categories[i]), ...units.map(u => h('span', { class: 'chart-row' }, h('i', { style: { background: u.color } }), h('em', null, u.values[i]), u.name)));
       const tw = tip.offsetWidth;
@@ -188,7 +190,7 @@ export function barChart({ labels, series, xColors = [], height = 220, aria = ''
         if (!v) continue;
         const top = y(base + v), bottom = y(base);
         const hh = Math.max(2, bottom - top - (base ? 2 : 0));
-        g += `<rect x="${x(i) - bw / 2}" y="${top}" width="${bw}" height="${hh}" rx="${Math.min(6, bw / 2, hh / 2)}" fill="${(series.length === 1 && xColors[i]) || s.color}"/>`;
+        g += `<rect x="${x(i) - bw / 2}" y="${top}" width="${bw}" height="${hh}" rx="${Math.min(6, bw / 2, hh / 2)}" fill="${col((series.length === 1 && xColors[i]) || s.color)}"/>`;
         base += v;
       }
     });

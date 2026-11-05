@@ -4,7 +4,7 @@
  * Чеклист релиза — обычный чеклист этапа ниже. Настройка релизных полей и чеклиста студии — openReleaseSettings (CEO, RM).
  */
 import Sortable from 'sortablejs';
-import { S, me, canEditTask, relTime, personById, plural } from '../state.js';
+import { S, me, canEditTask, relTime, personById, plural, safeUrl } from '../state.js';
 import { h, icon, fill, modal, toast, showErr, field, confirmDlg } from '../ui.js';
 import { DEV_QUESTIONS, answerText } from '../devform.js';
 import { brandIcon, brandOf } from './brand.js';
@@ -188,7 +188,7 @@ export function releaseBlock(t, onChange) {
       phase === 'rejected' && h('div', { class: 'rl-now bad' },
         h('p', { class: 'rl-line danger-text' }, icon('warnSign', 14), h('b', null, `Реджект №${rel.rejectNo || ''}`),
           h('span', { class: 'muted' }, '· ' + relTime(rel.rejectedAt)),
-          rel.shot && h('a', { class: 'rl-shot', href: rel.shot, target: '_blank', rel: 'noopener' }, 'скрин', icon('arrowUpRight', 12))),
+          rel.shot && h('a', { class: 'rl-shot', href: safeUrl(rel.shot), target: '_blank', rel: 'noopener' }, 'скрин', icon('arrowUpRight', 12))),
         h('p', { class: 'rl-reason' }, rel.reason),
         shotsStrip(t.id, 'reject:' + (rel.rejectNo || 0)),
         h('p', { class: 'rl-line muted rl-small' }, `Исправляет ${pm ? pm.name : 'PM юнита'}; закроет задачу — релиз вернётся в очередь.`)),
@@ -202,7 +202,7 @@ export function releaseBlock(t, onChange) {
       !hide.includes('fields') && data.fields.length > 0 && devAnswers(data.devForm, t, editable, load),
       // ссылки приложения и команды — карточкой
       !hide.includes('links') && links.length > 0 && h('div', { class: 'rl-card rl-list-card' }, h('div', { class: 'rl-card-head' }, h('h3', null, 'Ссылки')),
-        h('div', { class: 'rl-links' }, links.map(l => h('a', { class: 'rl-link', href: l.url, target: '_blank', rel: 'noopener', title: l.url }, l.icon,
+        h('div', { class: 'rl-links' }, links.map(l => h('a', { class: 'rl-link', href: safeUrl(l.url), target: '_blank', rel: 'noopener', title: l.url }, l.icon,
           h('span', { class: 'rl-link-name' }, l.name), h('span', { class: 'muted rl-link-url' }, l.url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/+$/, '')))))),
       // попытки — только если их несколько
       !hide.includes('attempts') && hist.length > 1 && h('div', { class: 'rl-card rl-list-card' }, h('div', { class: 'rl-card-head' }, h('h3', null, `Попытки · ${hist.length}`)),
@@ -272,7 +272,7 @@ function valueRow(f, v, editable, onSave) {
     onclick: e => { if (editable && !e.target.closest('a, button, input, textarea')) edit(); } });
   const show = () => fill(row,
     h('span', { class: 'af-name' }, f.name, f.required && h('span', { class: 'req', title: 'Обязательно для отправки' }, ' *')),
-    v ? (f.kind === 'link' ? h('a', { class: 'af-val', href: v, target: '_blank', rel: 'noopener' }, v.replace(/^https?:\/\//, '')) : h('span', { class: 'af-val' + (f.kind === 'longtext' ? ' pre' : '') }, v))
+    v ? (f.kind === 'link' ? h('a', { class: 'af-val', href: safeUrl(v), target: '_blank', rel: 'noopener' }, v.replace(/^https?:\/\//, '')) : h('span', { class: 'af-val' + (f.kind === 'longtext' ? ' pre' : '') }, v))
       : h('span', { class: 'af-val ' + (editable ? 'af-empty' : 'muted') }, editable ? 'Не заполнено' : '—'),
     editable && h('button', { class: 'icon-btn sm', title: 'Изменить', 'aria-label': 'Изменить ' + f.name, onclick: edit }, icon('edit', 13)));
   const edit = () => {

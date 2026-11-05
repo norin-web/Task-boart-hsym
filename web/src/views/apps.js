@@ -4,7 +4,7 @@
  * справа: статус, юнит, приоритет, поля быстрого доступа, работы (запросы CEO и их этапы).
  */
 import Sortable from 'sortablejs';
-import { S, isSuper, isStaff, seesApps, me, personById, unitById, appStatusById, prioById, REQUEST_TYPES, LS, plural, fmtDate, PALETTE, relTime } from '../state.js';
+import { S, isSuper, isStaff, seesApps, me, personById, unitById, appStatusById, prioById, REQUEST_TYPES, LS, plural, fmtDate, PALETTE, relTime, safeUrl } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, modal, field, toast, menu, closeMenu, confirmDlg, promptDlg, prioMark, prioSelect, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView, navigate, navParent } from '../router.js';
@@ -614,7 +614,7 @@ export function openAppPanel(a, onChange, page = null) {
     h('div', { class: 'aph-names' },
       h('div', { class: 'aph-title' }, h('h2', null, a.name), a.isTest && h('span', { class: 'test-tag' }, 'тест')),
       a.storeName && h('span', { class: 'muted aph-store', title: 'Название в App Store' }, a.storeName),
-      storeUrl && h('a', { class: 'aph-link', href: storeUrl, target: '_blank', rel: 'noopener' },
+      storeUrl && h('a', { class: 'aph-link', href: safeUrl(storeUrl), target: '_blank', rel: 'noopener' },
         h('img', { src: appStoreSvg, alt: '', width: 16, height: 16 }), 'Открыть в App Store', icon('arrowUpRight', 13))),
     h('span', { class: 'spacer' }),
     h('button', { class: 'icon-btn', title: 'Действия', 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); menu(e.currentTarget, actions()); } }, icon('more', 18)),
@@ -643,7 +643,7 @@ export function openAppPanel(a, onChange, page = null) {
   loadNotes();
   if (page) {
     // страница (макет 12б): шапка в topbar, ниже блоки слева и правая колонка
-    const storeA = storeUrl && h('a', { class: 'btn ghost sm aph-store-btn', href: storeUrl, target: '_blank', rel: 'noopener' }, 'Открыть в App Store', icon('arrowUpRight', 13));
+    const storeA = storeUrl && h('a', { class: 'btn ghost sm aph-store-btn', href: safeUrl(storeUrl), target: '_blank', rel: 'noopener' }, 'Открыть в App Store', icon('arrowUpRight', 13));
     const more = h('button', { class: 'icon-btn', title: 'Действия', 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); menu(e.currentTarget, actions()); } }, icon('more', 18));
     const u0 = unitById(a.unitId);
     fill(page, topbar([appIcon(a, 'lg'), h('div', { class: 'app-title' }, h('span', { class: 'app-crumb muted' }, 'Приложения' + (u0 ? ' / ' + u0.name : '')), h('h1', null, a.name, a.isTest && h('span', { class: 'test-tag' }, 'тест')))], [storeA, more]),
@@ -895,7 +895,7 @@ function infoRow(a, f, editable, onSave, { value } = {}) {
     fill(row,
       h('span', { class: 'af-ic' }, brandIcon(brandOf(f.name, f.id, v), 15, fieldIcon(f))),
       h('span', { class: 'af-name' }, f.name),
-      v ? (f.kind === 'link' ? h('a', { class: 'af-val', href: v, target: '_blank', rel: 'noopener', title: v, onclick: e => e.stopPropagation() }, v.replace(/^https?:\/\//, ''))
+      v ? (f.kind === 'link' ? h('a', { class: 'af-val', href: safeUrl(v), target: '_blank', rel: 'noopener', title: v, onclick: e => e.stopPropagation() }, v.replace(/^https?:\/\//, ''))
         : h('span', { class: 'af-val' }, v)) : h('span', { class: 'af-val muted' }, editable ? (f.kind === 'link' ? 'Добавить ссылку' : 'Добавить') : '—'),
       h('span', { class: 'af-acts' },
         v && h('button', { class: 'icon-btn sm', title: 'Скопировать', 'aria-label': 'Скопировать ' + f.name, onclick: copy }, icon('copy', 13))));
@@ -1196,7 +1196,7 @@ const goneRows = (gone, reload) => gone.map(a => h('div', { class: 'sc-row' },
   h('button', { class: 'sc-app', onclick: () => openAppCard(a, reload) }, appIcon(a, 'sm'),
     h('span', { class: 'ap-names' }, h('b', null, a.name), a.storeName && h('small', { class: 'muted' }, a.storeName))),
   h('span', { class: 'muted sc-unit' }, (unitById(a.unitId) || {}).name || ''),
-  h('a', { class: 'btn ghost sm', href: appStoreUrl(a), target: '_blank', rel: 'noopener', title: 'Проверить ссылку вручную' }, 'Открыть ссылку', icon('arrowUpRight', 13))));
+  h('a', { class: 'btn ghost sm', href: safeUrl(appStoreUrl(a)), target: '_blank', rel: 'noopener', title: 'Проверить ссылку вручную' }, 'Открыть ссылку', icon('arrowUpRight', 13))));
 
 /** «Требует внимания» в проверке App Store — сворачивается заголовком, состояние запоминается. */
 function goneList(gone, reload) {

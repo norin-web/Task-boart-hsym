@@ -3,7 +3,7 @@
  * Открытые — у PM на исправлении или уже исправлены и ждут повторной отправки; закрытые — история.
  * Данные: getRmDashboard (что открыто сейчас) + getReleaseHistory (все реджекты).
  */
-import { isSuper, personById, unitById, fmtDate, plural } from '../state.js';
+import { isSuper, personById, unitById, fmtDate, plural, safeUrl } from '../state.js';
 import { $, h, icon, fill, topbar, toast, showErr, confirmDlg, emptyBlock, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { peekTask } from './task.js';
@@ -77,7 +77,7 @@ export async function renderRejects() {
           x.version && h('span', null, x.version),
           x.shots > 0 && h('button', { class: 'link-btn rj-shot', onclick: () => call('getTaskFiles', { taskId: x.taskId, tag: 'reject:' + x.rejectNo }).then(f => openShots(f)).catch(showErr) },
             icon('eye', 13), `${x.shots} ${plural(x.shots, ['скриншот', 'скриншота', 'скриншотов'])}`),
-          x.shot && h('a', { class: 'rj-shot', href: x.shot, target: '_blank', rel: 'noopener', title: x.shot }, icon('link', 13), 'ссылка на скрин'))),
+          x.shot && h('a', { class: 'rj-shot', href: safeUrl(x.shot), target: '_blank', rel: 'noopener', title: x.shot }, icon('link', 13), 'ссылка на скрин'))),
       h('div', { class: 'rj-side' },
         h('span', { class: 'rj-state ' + (x.fixed ? 'ok' : x.open ? 'wait' : 'done') }, x.fixed ? 'Исправлен — отправьте снова' : x.open ? 'У PM на исправлении' : x.selfClosed ? 'Закрыл RM сам' : 'Закрыт'),
         h('div', { class: 'rj-actions' },

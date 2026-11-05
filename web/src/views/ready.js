@@ -5,7 +5,7 @@
  * Как в Google Sheets: свои колонки (флажок, список, текст, число, дата, ссылка, человек), свои строки, скрытие строк,
  * группы колонок и группировка строк со сворачиванием. Всё личное и лежит в prefs.readySheet — схема базы не меняется.
  */
-import { S, isDev, isStaff, ceoDefault, me, personById, unitById, plural } from '../state.js';
+import { S, isDev, isStaff, ceoDefault, me, personById, unitById, plural, safeUrl } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, skeleton, modal, toast, menu, confirmDlg } from '../ui.js';
 import Sortable from 'sortablejs';
 import { call, send } from '../api.js';
@@ -99,7 +99,7 @@ function cell(c, row, ctx) {
     }
     case 'person': { const p = personById(v); return p ? h('span', { class: 'rd-person' }, avatar(p, 'sm'), h('span', null, p.name.split(' ')[0])) : h('span', { class: 'muted' }, '—'); }
     case 'unit': { const u = unitById(v); return u ? h('span', { class: 'rd-unit', style: { '--c': u.color } }, u.name) : h('span', { class: 'muted' }, '—'); }
-    case 'link': return v ? h('a', { class: 'rd-link', href: v, target: '_blank', rel: 'noopener', title: v, onclick: e => e.stopPropagation() }, host(v)) : h('span', { class: 'muted' }, '—');
+    case 'link': return v ? h('a', { class: 'rd-link', href: safeUrl(v), target: '_blank', rel: 'noopener', title: v, onclick: e => e.stopPropagation() }, host(v)) : h('span', { class: 'muted' }, '—');
     case 'check': {
       const id = c.id.slice(3), done = (row.checks && row.checks.done) || [];
       return h('button', { class: 'rd-check' + (v ? ' on' : ''), type: 'button', role: 'checkbox', 'aria-checked': String(!!v), title: v ? 'Да' : 'Нет',
@@ -141,7 +141,7 @@ function customCell(c, row, ctx) {
     case 'number': return input('number');
     case 'link':
       return h('div', { class: 'rd-lcell' }, input('text', { placeholder: 'https://' }),
-        v && /^https?:\/\//i.test(v) && h('a', { href: v, target: '_blank', rel: 'noopener', title: 'Открыть ссылку', 'aria-label': 'Открыть ссылку' }, icon('link', 14)));
+        v && /^https?:\/\//i.test(v) && h('a', { href: safeUrl(v), target: '_blank', rel: 'noopener', title: 'Открыть ссылку', 'aria-label': 'Открыть ссылку' }, icon('link', 14)));
     default: return input('text');
   }
 }
