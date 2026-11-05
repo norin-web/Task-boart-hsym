@@ -25,7 +25,7 @@
 
 ## Где что
 
-- **Репозиторий:** `norin-web/Task-boart-hsym` (GitHub). Сайт: https://taskmanager.cam (домен в Spaceship, DNS в Cloudflare; запасной адрес https://task-boart-hsym.norinnort4.workers.dev) — Cloudflare Worker собирает и выкатывает на push в `main` (тесты + сборка; см. docs/deploy-cloudflare.md). GitHub Pages отключён.
+- **Репозиторий:** `norin-web/Task-boart-hsym` (GitHub). Сайт: https://taskmanager.cam (домен в Spaceship, DNS в Cloudflare; задан в `wrangler.jsonc`, адрес *.workers.dev выключен) — Cloudflare Worker собирает и выкатывает на push в `main` (тесты + сборка; см. docs/deploy-cloudflare.md). GitHub Pages отключён.
 - **Данные:** Supabase, проект `bzjljxozpraiujeboayb`. Нужен доступ в организацию Supabase (пригласить коллегу) — там SQL Editor, Edge Functions, Auth.
 - **Ключи:** в репозитории их нет. Для разработки создать `.env.local` по `.env.example` (URL проекта + publishable/anon ключ из Project Settings → API) — или работать без него в локальном режиме.
 - **Секретный ключ Supabase (service role)** живёт только внутри Edge Function, во фронт/репо не класть.

@@ -34,7 +34,9 @@ Worker → **Settings → Build**:
 - Deploy command: `npx wrangler deploy`
 - **Variables and secrets** (именно у сборки, Build variables): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
 
-Адрес будет `https://task-boart-hsym.<поддомен>.workers.dev`.
+Адрес был `https://task-boart-hsym.<поддомен>.workers.dev`. С 2026-11-05 сайт только на своём домене `taskmanager.cam`:
+он прописан в `wrangler.jsonc` (`routes` с `custom_domain`), а `workers_dev` и `preview_urls` выключены.
+Домен меняется только там: правки доменов в панели Cloudflare следующая выкатка перезапишет.
 
 ## 2. Supabase — новый адрес для входа
 
