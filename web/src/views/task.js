@@ -40,7 +40,7 @@ export function closeTask() {
 export async function peekTask(unitId, taskId) {
   if (S.route.unit === unitId) return navigate({ unit: unitId, mode: S.route.mode === 'settings' ? 'board' : S.route.mode, task: taskId });
   try {
-    if (!S.board || S.board.unit.id !== unitId) await loadBoard(unitId);
+    if (!S.board || S.board.unit.id !== unitId) await loadBoard(unitId, taskId);
   } catch (e) {
     return showErr(e);
   }
@@ -52,8 +52,13 @@ export async function peekTask(unitId, taskId) {
 /** Где открывается карточка задачи: справа (по умолчанию) или по центру. Запоминается в браузере. */
 const cardCenter = () => LS.get('cardMode', 'side') === 'center';
 
-export function openTask(id) {
+export function openTask(id, again = false) {
   const t = taskById(id);
+  // задачи нет на доске: может быть в архиве (он грузится отдельно) — дозагрузить один раз
+  if (!t && !again && S.board) {
+    loadBoard(S.board.unit.id, id).then(() => { if (S.route.unit === S.board.unit.id) renderTasks(); openTask(id, true); }).catch(showErr);
+    return;
+  }
   if (!t) {
     toast('Задача не найдена — возможно, её удалили или перенесли', { type: 'error' });
     return closeTask();

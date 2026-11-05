@@ -264,6 +264,27 @@ test('общие поля: на все юниты, обязательность 
   assert.deepEqual(board.tasks.find(x => x.id === t.id).fields, { f_priority: 'o_high' });
 });
 
+test('доска: архив не грузится, пока не попросили (фильтр «Архив» или ссылка на задачу)', async () => {
+  const api = await setup();
+  const u = await api('createUnit', { name: 'Доска', key: 'brd' });
+  const live = await api('createTask', { unitId: u.id, title: 'Живая' });
+  const old = await api('createTask', { unitId: u.id, title: 'Старая' });
+  await api('updateTask', { id: old.id, patch: { archived: true } });
+  const ids = b => b.tasks.map(t => t.id).sort();
+  const plain = await api('getBoard', { unitId: u.id });
+  assert.deepEqual(ids(plain), [live.id]);
+  assert.equal(plain.withArchived, false);
+  const full = await api('getBoard', { unitId: u.id, archived: true });
+  assert.deepEqual(ids(full), [live.id, old.id].sort());
+  assert.equal(full.withArchived, true);
+  assert.ok(full.tasks.find(t => t.id === old.id).archived);
+  assert.deepEqual(ids(await api('getBoard', { unitId: u.id, taskId: old.id })), [live.id, old.id].sort());
+  // задача другого юнита по taskId не подмешивается
+  const other = await api('createUnit', { name: 'Другой', key: 'oth' });
+  const alien = await api('createTask', { unitId: other.id, title: 'Чужая' });
+  assert.deepEqual(ids(await api('getBoard', { unitId: u.id, taskId: alien.id })), [live.id]);
+});
+
 test('неизвестный метод и внутренние ошибки не падают', async () => {
   const { call } = await setup();
   assert.equal((await call('dropTables', {})).ok, false);

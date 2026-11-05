@@ -20,17 +20,37 @@ import { renderApps, renderAppPage } from './views/apps.js';
 import { renderCeoHome } from './views/ceo.js';
 import { renderPmHome } from './views/pm.js';
 import { renderRmHome } from './views/rm.js';
-import { renderDev } from './views/dev.js';
-import { renderPrefs } from './views/prefs.js';
-import { renderAnalytics } from './views/analytics.js';
 import { renderReady } from './views/ready.js';
 import { renderRejects } from './views/rejects.js';
-import { renderBacklog } from './views/backlog.js';
 import { renderBoardView, loadBoard } from './views/board.js';
 import { renderTimeline } from './views/timeline.js';
 import { renderSettings } from './views/settings.js';
 import { renderUnitPage, renderUnitTeam } from './views/unitpage.js';
 import { openTask, closePanel, peekTask } from './views/task.js';
+
+/**
+ * Редкие экраны (настройки, аналитика, режим разработчика, бэклог) — отдельными файлами: грузятся при первом заходе,
+ * первая загрузка Tasks легче. Пока файл грузится — серые блоки; ушли на другой экран — старый не рисуем.
+ */
+const lazy = (load, name) => {
+  let mod = null;
+  return (...args) => {
+    if (mod) return mod[name](...args);
+    const key = rendered;
+    fill($('#main'), h('div', { class: 'page' }, skeleton()));
+    // m пустой — файл не нашёлся после выкатки, страница уже перезагружается (main.js, vite:preloadError)
+    load().then(m => { if (!m) return; mod = m; if (rendered === key) m[name](...args); }).catch(() => {
+      if (rendered !== key) return;
+      fill($('#main'), h('div', { class: 'page' }, h('div', { class: 'empty-state' },
+        h('p', null, 'Не удалось загрузить экран. Проверьте интернет и обновите страницу.'),
+        h('button', { class: 'btn primary', onclick: () => location.reload() }, 'Обновить'))));
+    });
+  };
+};
+const renderDev = lazy(() => import('./views/dev.js'), 'renderDev');
+const renderPrefs = lazy(() => import('./views/prefs.js'), 'renderPrefs');
+const renderAnalytics = lazy(() => import('./views/analytics.js'), 'renderAnalytics');
+const renderBacklog = lazy(() => import('./views/backlog.js'), 'renderBacklog');
 
 let rendered = null;
 export const currentView = () => rendered;
@@ -200,7 +220,7 @@ export async function render() {
     loadBoardView(r.unit); // фильтры и дорожки этой доски — как оставили
     fill($('#main'), h('div', { class: 'page' }, skeleton()));
     try {
-      await loadBoard(r.unit);
+      await loadBoard(r.unit, r.task);
     } catch (e) {
       showErr(e.code === 'NOT_FOUND' ? new Error('Юнит не найден — возможно, его удалили') : e);
       return navigate({ view: 'home' }, { replace: true });

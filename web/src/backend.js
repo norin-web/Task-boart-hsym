@@ -1034,12 +1034,24 @@ export function createBackend(db, opts = {}) {
       });
     },
 
+    /**
+     * Доска юнита. Архив копится годами, поэтому по умолчанию без него: archived — вместе с архивом (фильтр «Архив»),
+     * taskId — плюс эта задача, даже если она в архиве (открыли по ссылке).
+     */
     async getBoard(p) {
       const unit = await findUnit(p.unitId);
       await autoArchive(unit);
+      const loadTasks = async () => {
+        const rows = await all(() => (p.archived ? T('tasks').select('*').eq('unit_id', unit.id) : T('tasks').select('*').eq('unit_id', unit.id).eq('archived', false)).order('id'));
+        if (!p.archived && p.taskId && !rows.some(t => t.id === p.taskId)) {
+          const t = await run(T('tasks').select('*').eq('id', String(p.taskId)).eq('unit_id', unit.id).maybeSingle());
+          if (t) rows.push(t);
+        }
+        return rows;
+      };
       const [fields, allTasks, counts, units, ppl, depts, members, links, manages] = await Promise.all([
         unitFields(unit.id),
-        all(() => T('tasks').select('*').eq('unit_id', unit.id).order('id')),
+        loadTasks(),
         rpc('comment_counts', { p_unit: unit.id }),
         all(() => T('units').select('id,name,key,color,archived').order('ord').order('id')),
         people(), departments(), unitMembers(unit.id),
@@ -1060,6 +1072,7 @@ export function createBackend(db, opts = {}) {
         people: ppl,
         departments: depts,
         members,
+        withArchived: !!p.archived,
       };
     },
 

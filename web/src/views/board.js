@@ -13,8 +13,12 @@ let sortables = [];
 let quickInput = null;
 const NO_DEPT = '__none';
 
-export async function loadBoard(unitId) {
-  const d = await call('getBoard', { unitId });
+/**
+ * Доска юнита. Архив — только с фильтром «Архив» (его копится много); taskId — открытая задача: подгрузится, даже если в архиве.
+ */
+export async function loadBoard(unitId, taskId = S.panelTaskId) {
+  const archived = !!(S.filters && S.filters.archived) || !!(S.board && S.board.unit.id === unitId && S.board.withArchived);
+  const d = await call('getBoard', { unitId, archived, taskId: taskId || undefined });
   S.board = d;
   S.people = d.people;
   S.departments = d.departments;
@@ -157,7 +161,8 @@ function filterRest() {
       S.board.tasks.some(t => t.kind === 'request') && chk('Этапы приложений отдельно', !foldStages(), v => { LS.set('foldStages', !v); renderTasks(); drawFilterRest(); }),
       !B.dueDate.hidden && chk('Только просроченные', !!f.overdue, v => set('overdue', v)),
       chk('Скрыть выполненные', !!f.open, v => set('open', v)),
-      chk('Архив', !!f.archived, v => set('archived', v)),
+      // архив грузится с сервера только по этому фильтру
+      chk('Архив', !!f.archived, v => (v && !S.board.withArchived ? (f.archived = v, reloadBoard().then(drawFilterRest)) : set('archived', v))),
     ].filter(Boolean));
     menu(anchor, items, { cls: 'fb-menu' });
   };

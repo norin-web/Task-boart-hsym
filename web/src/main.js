@@ -17,6 +17,17 @@ import { initPersonCard } from './views/personcard.js';
 import { initDevForm } from './views/devquiz.js';
 import { initMonitor } from './monitor.js';
 
+// После выкатки старые файлы сборки удаляются: вкладка, открытая до обновления, не найдёт отдельный экран
+// (настройки, аналитика…) — перезагружаем её на новую версию. Не чаще раза в минуту, чтобы не зациклиться.
+window.addEventListener('vite:preloadError', e => {
+  try {
+    if (Date.now() - Number(sessionStorage.getItem('tm.reloadedAt') || 0) < 60000) return;
+    sessionStorage.setItem('tm.reloadedAt', String(Date.now()));
+  } catch { return; }
+  e.preventDefault();
+  location.reload();
+});
+
 // «Работать здесь» на экране блокировки — забрать базу у другой вкладки
 let takeOver = false;
 
