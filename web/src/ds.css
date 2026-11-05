@@ -3015,3 +3015,9 @@ a.bug-title:hover { text-decoration: underline; }
 .bug-row.fixed .bug-ic { color: var(--warn, #b7791f); }
 .bug-row.fixed .bug-pill { color: var(--text-2); background: var(--surface-2); }
 .dev-bar { margin-top: 8px; }
+
+/* Список приложений (~1000 px): статусу — место под пилюлю целиком, приоритету — под «Высокий»; сжимаются название и «сейчас в работе» */
+@media (min-width: 901px) {
+  .ap-row { grid-template-columns: minmax(0, 318fr) minmax(132px, 150fr) minmax(84px, 120fr) minmax(0, 250fr) minmax(86px, 110fr) 40px 16px; }
+  .ap-row > :nth-child(4) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
