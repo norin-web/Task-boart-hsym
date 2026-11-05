@@ -27,6 +27,34 @@ const ticksFor = max => { const step = niceStep(max); return Array.from({ length
 const fmtDay = iso => new Date(iso + 'T00:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
 const fmtTick = iso => new Date(iso + 'T00:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }).replace('.', '');
 
+/**
+ * Подписи оси X без наложений: ширина подписи оценивается заранее, ставим только те, что не задевают соседнюю
+ * (последняя — в приоритете), крайние не вылезают за край. truncate — длинные названия укорачиваются до шага
+ * между точками (полное — во всплывающей подсказке): для статусов, где важна каждая подпись.
+ */
+function axisLabels(labels, xAt, { left, right, y, fill, truncate = false }) {
+  const n = labels.length;
+  if (!n) return '';
+  const CH = 6.9, GAP = 10;
+  const span = n > 1 ? (xAt(n - 1) - xAt(0)) / (n - 1) : right - left;
+  const full = labels.map(String);
+  const max = Math.max(4, Math.floor((span - GAP) / CH));
+  const text = full.map(t => (truncate && t.length > max ? t.slice(0, max - 1) + '…' : t));
+  const box = i => {
+    const w = text[i].length * CH;
+    const cx = Math.min(Math.max(xAt(i), left + w / 2), right - w / 2);
+    return { i, cx, a: cx - w / 2, b: cx + w / 2 };
+  };
+  const shown = [];
+  for (let i = 0; i < n; i++) {
+    const bx = box(i);
+    const prev = shown[shown.length - 1];
+    if (!prev || bx.a >= prev.b + GAP) shown.push(bx);
+    else if (i === n - 1) { shown.pop(); const p2 = shown[shown.length - 1]; if (!p2 || bx.a >= p2.b + GAP) shown.push(bx); }
+  }
+  return shown.map(({ i, cx }) => `<text x="${cx}" y="${y}" text-anchor="middle" font-size="12" fill="${fill}">${text[i] !== full[i] ? `<title>${esc(full[i])}</title>` : ''}${esc(text[i])}</text>`).join('');
+}
+
 /** Контейнер, который перерисовывается по ширине. */
 function responsive(height, draw) {
   const box = h('div', { class: 'chart', style: { height: height + 'px' } });
@@ -61,8 +89,7 @@ export function statusLines({ days, series, height = 220, aria = '' }) {
     const grid = css('--border'), muted = css('--muted');
     let g = '';
     for (const t of ticksFor(maxV)) g += `<line x1="${L}" x2="${L + iw}" y1="${y(t)}" y2="${y(t)}" stroke="${grid}" stroke-dasharray="3 4"/><text x="${L - 10}" y="${y(t) + 4}" text-anchor="end" font-size="12" fill="${muted}">${t}</text>`;
-    const step = Math.max(1, Math.round(days.length / 5));
-    days.forEach((d, i) => { if (i % step === 0 || i === days.length - 1) g += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle" font-size="12" fill="${muted}">${esc(fmtTick(d))}</text>`; });
+    g += axisLabels(days.map(fmtTick), x, { left: 4, right: L + iw, y: H - 8, fill: muted });
     // ступенчатые линии: число приложений меняется скачком в день события
     const path = s => s.values.map((v, i) => (i ? `H${x(i)}V${y(v)}` : `M${x(i)} ${y(v)}`)).join('');
     for (const s of [...live].sort((a, b) => !!a.strong - !!b.strong)) {
@@ -110,7 +137,7 @@ export function unitCurves({ categories, units, height = 220, aria = '' }) {
     const grid = css('--border'), muted = css('--muted');
     let g = '';
     for (const t of ticksFor(maxV)) g += `<line x1="${L}" x2="${L + iw}" y1="${y(t)}" y2="${y(t)}" stroke="${grid}" stroke-dasharray="3 4"/><text x="${L - 10}" y="${y(t) + 4}" text-anchor="end" font-size="12" fill="${muted}">${t}</text>`;
-    categories.forEach((c, i) => { g += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle" font-size="12" fill="${muted}">${esc(c)}</text>`; });
+    g += axisLabels(categories, x, { left: 4, right: w - 4, y: H - 8, fill: muted, truncate: true });
     // плавная кривая через точки (Catmull-Rom → Безье)
     const curve = vals => {
       const pts = vals.map((v, i) => [x(i), y(v)]);
@@ -180,9 +207,7 @@ export function barChart({ labels, series, xColors = [], height = 220, aria = ''
     const grid = css('--border'), muted = css('--muted');
     let g = '';
     for (const t of ticksFor(maxV)) g += `<line x1="${L}" x2="${L + iw}" y1="${y(t)}" y2="${y(t)}" stroke="${grid}" stroke-dasharray="3 4"/><text x="${L - 10}" y="${y(t) + 4}" text-anchor="end" font-size="12" fill="${muted}">${t}</text>`;
-    // подписи: не больше ~6, крайние — всегда
-    const every = Math.max(1, Math.ceil(n / Math.max(1, Math.floor(iw / 72))));
-    labels.forEach((lb, i) => { if (i % every === 0 || i === n - 1) g += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle" font-size="12" fill="${muted}">${esc(lb)}</text>`; });
+    g += axisLabels(labels, x, { left: 4, right: w - 4, y: H - 8, fill: muted, truncate: n <= 12 });
     labels.forEach((_, i) => {
       let base = 0;
       for (const s of series) {
