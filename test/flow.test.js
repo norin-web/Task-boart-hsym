@@ -137,7 +137,7 @@ test('New App: CEO → PM юнита → этапы по флоу → блоки
   assert.equal(await api.as(qa, () => api('qaReturn', { taskId: by.qa.id, text: 'Краш на онбординге', url: 'https://docs.google.com/bug1' })), 1);
   await api.as(ios, async () => {
     const b = await api('getBoard', { unitId: gold.id });
-    assert.equal(b.tasks.find(t => t.id === by.ios.id).status, 'in_progress');
+    assert.equal(b.tasks.find(t => t.id === by.ios.id).status, 'rework');
     assert.ok(!b.tasks.some(t => t.id === by.qa.id) || true);
     assert.ok((await api('getTaskExtras', { taskId: by.ios.id })).comments.some(c => /Баг-репорт №1 от QA: https:\/\/docs\.google\.com\/bug1\nКраш/.test(c.text)));
     // баг-репорт №1 открыт в карточке разработчика: номер, кто, ссылка
@@ -923,10 +923,8 @@ test('опросник: RM принимает или возвращает с в�
 test('разработка → тестирование без код-ревью; QA возвращает в «Доработку»; баг-репорт: открыт → исправлен → закрыт', async () => {
   const api = await setup();
   const { ceo, pm, ios, qa, gold } = await studio(api);
-  // на доске есть колонка «Доработка»
-  const st = (await api.as(pm, () => api('getBoard', { unitId: gold.id }))).unit.settings;
-  const cols = [...st.columns]; cols.splice(2, 0, { id: 'rework', name: 'Доработка', kind: 'progress', color: '' });
-  await api.as(pm, () => api('updateUnit', { id: gold.id, settings: { ...st, columns: cols } }));
+  // колонка «Доработка» есть на доске сама (обязательная)
+  assert.ok((await api.as(pm, () => api('getBoard', { unitId: gold.id }))).unit.settings.columns.some(c => c.id === 'rework'));
   const { request } = await api.as(ceo, () => api('createApp', { name: 'NR', unitId: gold.id }));
   const by = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: request.id }))).map(t => [t.step, t]));
   await api.as(pm, () => api('updateTask', { id: by.design.id, patch: { status: 'done' } }));

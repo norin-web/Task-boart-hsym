@@ -3,7 +3,7 @@ import Sortable from 'sortablejs';
 import { AUTO_ARCHIVE, HIDE_DONE } from '../state.js';
 import { reviewSection, openFieldEditor, requiredLabel } from './settings.js';
 import { TYPE_LABELS } from '../state.js';
-import { S, LS, ceoDefault, byOrder, unitById, emptyCounts, personById, todayStr, isSuper, plural, LINK_KINDS, activeDepts, deptById, activeTeams } from '../state.js';
+import { S, LS, byOrder, unitById, emptyCounts, personById, todayStr, isSuper, plural, LINK_KINDS, activeDepts, deptById, activeTeams } from '../state.js';
 import { $, h, icon, avatar, showErr, fill, toast, confirmDlg, menu, modal, field, skeleton, unitIcon } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView, link, rerender } from '../router.js';
@@ -193,7 +193,7 @@ function openUnitPanel(u, onChange) {
       h('div', { class: 'panel-head' },
         unitIcon(u, 'sm'),
         h('b', null, u.name), h('span', { class: 'spacer' }),
-        !ceoDefault() && link({ unit: u.id, mode: 'settings' }, { class: 'btn sm', onclick: () => fill(root) }, 'Настройки'),
+        link({ unit: u.id, mode: 'settings' }, { class: 'btn sm', onclick: () => fill(root) }, 'Настройки'),
         link({ unit: u.id, mode: 'overview' }, { class: 'btn primary sm', onclick: () => fill(root) }, 'Открыть юнит')),
       body));
 }

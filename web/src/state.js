@@ -10,6 +10,8 @@ export const HIDE_DONE = [[0, 'Всегда показывать'], [1, 'Сут�
 /** Тип колонки: определяет цвет по умолчанию и смысл («готово» — для прогресса и просрочек). */
 export const KINDS = ['todo', 'progress', 'done'];
 export const KIND_LABELS = { todo: 'Ожидает', progress: 'В процессе', done: 'Готово' };
+/** Обязательная колонка юнита «Доработка» (то же правило, что isReworkColumn в backend.js). */
+export const isReworkColumn = c => !!c && (c.id === 'rework' || /^доработ/i.test(String(c.name || '').trim()));
 export const KIND_COLORS = { todo: 'var(--st-todo)', progress: 'var(--st-progress)', done: 'var(--st-done)' };
 /** Тип карточки: запрос CEO по приложению (метка на доске); этапы и обычные задачи — без метки. */
 export const TASK_KINDS = {

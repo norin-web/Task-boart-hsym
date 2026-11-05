@@ -21,6 +21,22 @@ create table if not exists units (
 -- Картинка юнита (вместо квадратика с буквами): data:image/webp;base64,… 160×160, пусто — буквы ключа
 alter table units add column if not exists icon text not null default '';
 
+-- Обязательная колонка «Доработка» (сюда QA возвращает задачи с баг-репортом, qa_return): у юнитов без неё —
+-- встаёт перед первой колонкой «готово» (после ревью). Повторный запуск ничего не меняет.
+update units u
+   set settings = jsonb_set(u.settings, '{columns}', (
+         select jsonb_agg(x.c order by x.o) from (
+           select t.c, t.o::numeric as o from jsonb_array_elements(u.settings -> 'columns') with ordinality t(c, o)
+           union all
+           select jsonb_build_object('id', 'rework', 'name', 'Доработка', 'kind', 'progress', 'color', ''),
+                  coalesce((select min(t.o) from jsonb_array_elements(u.settings -> 'columns') with ordinality t(c, o) where t.c ->> 'kind' = 'done') - 0.5,
+                           jsonb_array_length(u.settings -> 'columns') + 1)
+         ) x))
+ where jsonb_typeof(u.settings -> 'columns') = 'array'
+   and jsonb_array_length(u.settings -> 'columns') > 0
+   and not exists (select 1 from jsonb_array_elements(u.settings -> 'columns') c
+                    where c ->> 'id' = 'rework' or lower(btrim(c ->> 'name')) like 'доработ%');
+
 -- Корзина юнитов: когда юнит отправили в архив (для автоудаления)
 alter table units add column if not exists archived_at text not null default '';
 
@@ -1153,10 +1169,10 @@ begin
   v_head := 'Баг-репорт №' || (v_bug ->> 'n') || ' от QA';
   perform set_config('app.system', 'on', true);
   for d in select * from tasks where id in (select jsonb_array_elements_text(t.depends_on)) and task_done(id) loop
-    -- колонка «Доработка», если она есть на доске, иначе первая «в работе»
+    -- обязательная колонка «Доработка» (id rework или по названию), иначе первая «в работе»
     select c ->> 'id' into v_prog from units u, jsonb_array_elements(u.settings -> 'columns') c
      where u.id = d.unit_id and c ->> 'kind' = 'progress'
-     order by (lower(c ->> 'name') like 'доработ%') desc limit 1;
+     order by (c ->> 'id' = 'rework' or lower(btrim(c ->> 'name')) like 'доработ%') desc limit 1;
     update tasks set status = coalesce(v_prog, status), done_at = '', updated_at = at_, bugs = coalesce(bugs, '[]'::jsonb) || jsonb_build_array(v_bug) where id = d.id;
     insert into comments (id, task_id, text, author_id, at)
     values ('c_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), d.id,

@@ -1,5 +1,5 @@
 import Sortable from 'sortablejs';
-import { S, TYPE_LABELS, PALETTE, unitById, byOrder, KINDS, KIND_LABELS, KIND_COLORS, colColor, personById, activeDepts, plural, isSuper } from '../state.js';
+import { S, TYPE_LABELS, PALETTE, unitById, byOrder, KINDS, KIND_LABELS, KIND_COLORS, colColor, personById, activeDepts, plural, isSuper, isReworkColumn } from '../state.js';
 import { $, h, icon, avatar, field, menu, closeMenu, modal, confirmDlg, toast, showErr, colorPicker, fill, personSelect, unitPhotoField } from '../ui.js';
 import { send } from '../api.js';
 import { link } from '../router.js';
@@ -20,7 +20,7 @@ export function renderSettings() {
   const photo = unitPhotoField(u.icon, () => ({ color: color.value(), key: key.value || u.key }));
   key.addEventListener('input', () => photo.refresh());
   const desc = h('textarea', { class: 'inp', rows: 2, value: u.description, maxlength: 1000 });
-  const colEditor = columnsEditor(st.columns);
+  const colEditor = columnsEditor(st.columns, { locked: isReworkColumn });
   const builtinRows = Object.entries(st.builtins).map(([k, bi]) => {
     const label = h('input', { class: 'inp', value: bi.label, maxlength: 40, 'aria-label': 'Название поля' });
     // переключатель включён — поле показывается
@@ -260,7 +260,8 @@ export function openFieldEditor(f, { global = !!(f && f.global), columns = [], o
 /* ---------- колонки ---------- */
 
 /** Редактор набора колонок: название, тип, цвет, порядок, удаление. Возвращает { el, value() }. */
-export function columnsEditor(initial) {
+/** locked(c) — колонку нельзя удалить и сменить ей тип (в юните — обязательная «Доработка»). */
+export function columnsEditor(initial, { locked = () => false } = {}) {
   let cols = initial.map(c => ({ ...c }));
   const el = h('div');
   const list = h('div', { class: 'col-edit-list' });
@@ -278,8 +279,8 @@ export function columnsEditor(initial) {
         },
       }),
       h('input', { class: 'inp', value: c.name, maxlength: 40, placeholder: 'Название', oninput: e => { c.name = e.target.value; } }),
-      h('select', { class: 'inp', value: c.kind, onchange: e => { c.kind = e.target.value; draw(); } }, KINDS.map(k => h('option', { value: k }, c.id === 'review' && k === 'progress' ? 'Ревью' : KIND_LABELS[k]))),
-      h('button', { class: 'icon-btn sm', title: 'Удалить колонку', disabled: cols.length === 1, onclick: () => { cols.splice(i, 1); draw(); } }, icon('x', 14)))));
+      h('select', { class: 'inp', value: c.kind, disabled: locked(c), title: locked(c) ? 'Обязательная колонка: сюда QA возвращает задачи с баг-репортом' : null, onchange: e => { c.kind = e.target.value; draw(); } }, KINDS.map(k => h('option', { value: k }, c.id === 'review' && k === 'progress' ? 'Ревью' : KIND_LABELS[k]))),
+      h('button', { class: 'icon-btn sm', title: locked(c) ? 'Обязательная колонка: сюда QA возвращает задачи с баг-репортом' : 'Удалить колонку', disabled: cols.length === 1 || locked(c), onclick: () => { cols.splice(i, 1); draw(); } }, icon('x', 14)))));
     if (sortable) sortable.destroy();
     // порядок — перетаскиванием за ручку
     sortable = Sortable.create(list, {

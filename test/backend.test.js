@@ -27,7 +27,7 @@ test('юниты: ключи, настройки, дублирование, уд
   const api = await setup();
   const u1 = await api('createUnit', { name: 'Маркетинг', key: 'mkt' });
   assert.equal(u1.key, 'MKT');
-  assert.deepEqual(u1.settings.columns.map(c => c.name), ['К выполнению', 'В работе', 'В ревью', 'Готово']); // константы досок
+  assert.deepEqual(u1.settings.columns.map(c => c.name), ['К выполнению', 'В работе', 'В ревью', 'Доработка', 'Готово']); // константы досок; «Доработка» — обязательная
   assert.equal(u1.settings.review.column, 'review');
   assert.ok(u1.settings.builtins.dueDate);
   assert.equal(u1.settings.hideDoneDays, 7);
@@ -166,7 +166,12 @@ test('свои колонки, отделы, состав команды', async
   s.columns.splice(2, 0, { id: 'review', name: 'Review', kind: 'progress', color: '#8b5cf6' });
   s.columns.push({ id: 'Bad Id', name: 'x' });
   const u2 = await api('updateUnit', { id: u.id, settings: s });
-  assert.deepEqual(u2.settings.columns.map(c => c.id), ['todo', 'in_progress', 'review', 'done']);
+  assert.deepEqual(u2.settings.columns.map(c => c.id), ['todo', 'in_progress', 'review', 'rework', 'done']);
+  // «Доработку» нельзя убрать и сделать не рабочей: после сохранения она снова на месте, тип — «в процессе»
+  const u3 = await api('updateUnit', { id: u.id, settings: { ...u2.settings, columns: u2.settings.columns.filter(c => c.id !== 'rework') } });
+  assert.deepEqual(u3.settings.columns.map(c => c.id), ['todo', 'in_progress', 'review', 'rework', 'done']);
+  const u4 = await api('updateUnit', { id: u.id, settings: { ...u3.settings, columns: u3.settings.columns.map(c => (c.id === 'rework' ? { ...c, kind: 'done', name: 'Доработка' } : c)) } });
+  assert.equal(u4.settings.columns.find(c => c.id === 'rework').kind, 'progress');
 
   const t = await api('createTask', { unitId: u.id, title: 'A', status: 'review', dueDate: '2020-01-01' });
   assert.equal(t.status, 'review');
@@ -297,6 +302,23 @@ test('картинка юнита: при создании и в настрой�
   assert.equal((await api('updateUnit', { id: u.id, name: 'Без смены картинки' })).icon, pic, 'другие правки картинку не трогают');
   assert.equal((await api('createUnit', { name: 'Без картинки', key: 'nopic' })).icon, '');
   assert.equal((await api('duplicateUnit', { id: u.id })).icon, pic, 'копия юнита — с той же картинкой');
+});
+
+test('схема: старым юнитам без «Доработки» она добавляется перед «Готово», повторный запуск ничего не меняет', async () => {
+  const api = await setup();
+  const u = await api('createUnit', { name: 'Старый', key: 'old' });
+  const old = [{ id: 'todo', name: 'К выполнению', kind: 'todo', color: '' }, { id: 'in_progress', name: 'В работе', kind: 'progress', color: '' },
+    { id: 'review', name: 'В ревью', kind: 'progress', color: '' }, { id: 'done', name: 'Готово', kind: 'done', color: '' }];
+  const manual = await api('createUnit', { name: 'Вручную', key: 'man' });
+  const own = [old[0], { id: 'c_fix', name: 'Доработка', kind: 'progress', color: '#ff0000' }, old[3]];
+  await api.pg.query(`update units set settings = jsonb_set(settings, '{columns}', $2::jsonb) where id = $1`, [u.id, JSON.stringify(old)]);
+  await api.pg.query(`update units set settings = jsonb_set(settings, '{columns}', $2::jsonb) where id = $1`, [manual.id, JSON.stringify(own)]);
+  const cols = async id => (await api.pg.query('select settings from units where id = $1', [id])).rows[0].settings.columns.map(c => c.id);
+  await api.pg.exec(SCHEMA);
+  assert.deepEqual(await cols(u.id), ['todo', 'in_progress', 'review', 'rework', 'done']);
+  assert.deepEqual(await cols(manual.id), ['todo', 'c_fix', 'done'], 'своя «Доработка» остаётся, вторую не добавляем');
+  await api.pg.exec(SCHEMA);
+  assert.deepEqual(await cols(u.id), ['todo', 'in_progress', 'review', 'rework', 'done']);
 });
 
 test('неизвестный метод и внутренние ошибки не падают', async () => {

@@ -53,12 +53,20 @@ export const APP_STATUS_KINDS = ['dev', 'release', 'review', 'live', 'reject', '
 const PRIORITY_FIELD = 'f_priority';
 export const PALETTE = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6', '#14b8a6', '#64748b', '#84cc16'];
 
+/**
+ * Обязательная колонка «Доработка»: сюда QA возвращает задачи разработчика с баг-репортом (qa_return в schema.sql).
+ * Есть в каждом юните, удалить нельзя; узнаём по id или по названию (у старых юнитов её добавляли вручную).
+ */
+export const REWORK_COLUMN = { id: 'rework', name: 'Доработка', kind: 'progress', color: '' };
+export const isReworkColumn = c => !!c && (c.id === REWORK_COLUMN.id || /^доработ/i.test(String(c.name || '').trim()));
+
 export function defaultSettings() {
   return {
     columns: [
       { id: 'todo', name: 'К выполнению', kind: 'todo', color: '' },
       { id: 'in_progress', name: 'В работе', kind: 'progress', color: '' },
       { id: 'review', name: 'В ревью', kind: 'progress', color: '' },
+      { ...REWORK_COLUMN },
       { id: 'done', name: 'Готово', kind: 'done', color: '' },
     ],
     builtins: {
@@ -156,6 +164,14 @@ export function unitSettings(raw) {
     };
   }).filter(Boolean);
   if (!columns.length) columns = d.columns;
+  // «Доработка» обязательна: нет — встаёт перед первой «готово» (после ревью: возврат с ревью идёт в колонку перед ревью,
+  // а в «Доработку» — только возвраты от QA); тип всегда «в процессе»
+  const rework = columns.find(isReworkColumn);
+  if (rework) rework.kind = 'progress';
+  else {
+    const at = columns.findIndex(c => c.kind === 'done');
+    columns.splice(at < 0 ? columns.length : at, 0, { ...REWORK_COLUMN });
+  }
   return {
     columns,
     builtins: Object.fromEntries(Object.entries(d.builtins).map(([k, def]) => {

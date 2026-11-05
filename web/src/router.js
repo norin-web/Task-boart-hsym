@@ -189,9 +189,9 @@ export async function render() {
   renderSidebar();
 
   // CEO в режиме Default: дашборд, приложения и страницы юнитов — личные доски и «мои задачи» не показываем; задача — поверх
-  if (ceoDefault() && ((r.unit && r.mode === 'settings') || ['my', 'myboard'].includes(r.view))) {
+  // настройки юнита открываются и в «Обзоре»: CEO меняет ревьюеров, колонки и картинку, не переключая режим
+  if (ceoDefault() && ['my', 'myboard'].includes(r.view)) {
     navigate({ view: 'home' }, { replace: true });
-    if (r.unit && r.task) peekTask(r.unit, r.task);
     return;
   }
   if (!r.unit) {

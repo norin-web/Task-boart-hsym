@@ -3,7 +3,7 @@
  * Обзор · Приложения · Задачи · Доска · Команда (· Настройки у руководителей). Каждая вкладка — свой адрес #/u/:id/<mode>,
  * поэтому «назад» браузера и крошки возвращают туда, откуда пришли.
  */
-import { S, me, isStaff, seesApps, ownTeamsOnly, ceoDefault } from '../state.js';
+import { S, me, isStaff, seesApps, ownTeamsOnly } from '../state.js';
 import { h, icon, topbar, unitIcon } from '../ui.js';
 import { link } from '../router.js';
 
@@ -16,7 +16,7 @@ function tabs(u) {
     ['list', 'Задачи', 'list'],
     ['board', 'Доска', 'board'],
     !ownTeamsOnly() && (me() || {}).access !== 'rm' && ['team', 'Команда', 'users', S.board ? S.board.members.length : 0],
-    isStaff() && !ceoDefault() && ['settings', 'Настройки', 'settings'],
+    isStaff() && ['settings', 'Настройки', 'settings'],
   ].filter(Boolean);
 }
 
