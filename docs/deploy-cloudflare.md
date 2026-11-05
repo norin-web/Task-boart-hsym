@@ -22,6 +22,16 @@ Tasks — статичный сайт (Vite), база и вход — в Supaba
    - `VITE_SUPABASE_ANON_KEY`
 5. **Save and Deploy**. Через 1–2 минуты сайт будет на `https://<имя-проекта>.pages.dev`.
 
+## 1б. Если Cloudflare создал Worker, а не Pages
+
+Новый мастер «Create application» по умолчанию делает Worker со статикой — это тоже подходит. Настройки берутся из `wrangler.jsonc` (лежит в репозитории: папка `dist`, имя `task-boart-hsym`).
+Worker → **Settings → Build**:
+- Build command: `npm test && npm run build`
+- Deploy command: `npx wrangler deploy`
+- **Variables and secrets** (именно у сборки, Build variables): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+
+Адрес будет `https://task-boart-hsym.<поддомен>.workers.dev`.
+
 ## 2. Supabase — новый адрес для входа
 
 Supabase → **Authentication → URL Configuration**:
