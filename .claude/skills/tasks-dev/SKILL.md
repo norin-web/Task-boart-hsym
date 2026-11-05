@@ -42,7 +42,7 @@ description: Работа над Tasks — таск-трекером студи�
 
 ## 5. Git и прод
 - Коммить после проверки; сообщения по-русски, коротко; без Co-Authored-By и пометок ИИ.
-- **Не пушить без команды владельца.** Push в `main` = деплой сайта на GitHub Pages. Прод — Tasks 2.0 (с 2026-10-29); если менялась схема — сначала владелец выполняет `supabase/schema.sql` в Supabase SQL Editor, потом push (порядок — `HANDOFF.md` → «Выкатка на прод»).
+- **Не пушить без команды владельца.** Push в `main` = деплой сайта на Cloudflare (task-boart-hsym.norinnort4.workers.dev; GitHub Pages отключён). Прод — Tasks 2.0 (с 2026-10-29); если менялась схема — сначала владелец выполняет `supabase/schema.sql` в Supabase SQL Editor, потом push (порядок — `HANDOFF.md` → «Выкатка на прод»).
 - Секретный ключ Supabase (service role) — только в Edge Function, не во фронт и не в репо.
 
 ## 6. После работы
