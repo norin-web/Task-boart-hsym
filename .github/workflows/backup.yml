@@ -1,0 +1,62 @@
+# Ежедневный бэкап базы Supabase (бесплатный тариф без восстановления на момент времени).
+# Выгрузка: схема public целиком (таблицы, функции, права, данные) + учётки входа (auth.users, auth.identities).
+# Файл шифруется паролем BACKUP_PASSPHRASE и хранится в Actions → Бэкап базы → Artifacts 30 дней.
+# Секреты (Settings → Secrets and variables → Actions → Secrets):
+#   SUPABASE_DB_URL     — строка подключения «Session pooler» (Supabase → Connect), с паролем базы
+#   BACKUP_PASSPHRASE   — пароль шифрования бэкапа (храните отдельно: без него бэкап не открыть)
+# Как восстановить — docs/backup.md.
+name: Бэкап базы
+
+on:
+  schedule:
+    - cron: '0 3 * * *'   # каждый день в 06:00 по Москве
+  workflow_dispatch: {}    # и вручную: Actions → Бэкап базы → Run workflow
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Проверить секреты
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ] || [ -z "$BACKUP_PASSPHRASE" ]; then
+            echo "::error::Нет секретов SUPABASE_DB_URL и/или BACKUP_PASSPHRASE — см. docs/backup.md"; exit 1
+          fi
+
+      - name: Выгрузить базу
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          mkdir -p backup
+          # pg_dump 17 читает Postgres 15 и 17 (Supabase)
+          docker run --rm -v "$PWD/backup:/out" -e DB="$SUPABASE_DB_URL" postgres:17-alpine sh -c '
+            set -e
+            pg_dump "$DB" --schema=public --no-owner --no-privileges --format=custom --file=/out/public.dump
+            pg_dump "$DB" --data-only --table=auth.users --table=auth.identities --no-owner --file=/out/auth-users.sql
+          '
+          ls -la backup
+          test -s backup/public.dump
+
+      - name: Зашифровать
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          name="tasks-backup-$(date -u +%Y-%m-%d)"
+          tar -czf - -C backup . | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:BACKUP_PASSPHRASE -out "$name.tar.gz.enc"
+          rm -rf backup
+          echo "NAME=$name" >> "$GITHUB_ENV"
+          ls -la "$name.tar.gz.enc"
+
+      - name: Сохранить
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.NAME }}
+          path: ${{ env.NAME }}.tar.gz.enc
+          retention-days: 30
+          if-no-files-found: error
