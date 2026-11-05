@@ -298,7 +298,8 @@ do $$ begin
     alter table people add column team_ids jsonb not null default '[]';
     update people set team_ids = jsonb_build_array(case position_id
       when 'd_po' then 't_product' when 'd_design' then 't_design' when 'd_ios' then 't_ios'
-      when 'd_qa' then 't_qa' when 'd_release' then 't_release' else 't_other' end);
+      when 'd_qa' then 't_qa' when 'd_release' then 't_release' else 't_other' end)
+     where true; -- Supabase (safeupdate) не даёт UPDATE без WHERE
   end if;
 end $$;
 alter table tasks add column if not exists team_id text not null default '';
