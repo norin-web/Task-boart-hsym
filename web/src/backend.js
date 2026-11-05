@@ -2549,6 +2549,28 @@ export function createBackend(db, opts = {}) {
       return { task: taskOut(await findTask(t.id)), rejectRequestId: p.action === 'reject' ? id : '' };
     },
 
+    /** Мониторинг: ошибка в браузере пользователя (пишет само приложение; человек — тот, кто вошёл). */
+    async logClientError(p) {
+      const me = (await rpc('my_person_id', {})) || '';
+      const message = str(p.message, 1000);
+      if (!message) return false;
+      await run(T('client_errors').insert({ person_id: me, message, stack: str(p.stack, 4000), url: str(p.url, 500), agent: str(p.agent, 300), version: str(p.version, 60) }));
+      return true;
+    },
+
+    /** Режим разработчика: ошибки у пользователей за N дней (новые сверху); старше 30 дней — удаляются. */
+    async getClientErrors(p) {
+      const days = Math.min(30, Math.max(1, Number(p.days) || 7));
+      await run(T('client_errors').delete().lt('at', new Date(Date.now() - 30 * 864e5).toISOString())).catch(() => null);
+      const rows = await run(T('client_errors').select('*').gte('at', new Date(Date.now() - days * 864e5).toISOString()).order('at', { ascending: false }).limit(300));
+      return rows.map(r => ({ id: r.id, personId: r.person_id, at: r.at, message: r.message, stack: r.stack, url: r.url, agent: r.agent, version: r.version }));
+    },
+
+    async clearClientErrors() {
+      await run(T('client_errors').delete().neq('id', ''));
+      return true;
+    },
+
     /** Бэклог (CEO): идеи и ТЗ — новые сверху, запущенные ниже. */
     async listIdeas() {
       return (await run(T('ideas').select('*').order('created_at', { ascending: false }))).map(ideaOut);

@@ -2163,6 +2163,27 @@ create trigger units_guard_test before insert or update of is_test on units for 
 drop trigger if exists people_guard_test on people;
 create trigger people_guard_test before insert or update of is_test on people for each row execute function guard_test_flag();
 
+-- Мониторинг: ошибки в браузерах пользователей. Пишет само приложение (вошедший — только от своего имени),
+-- читают и чистят разработчик и CEO («Режим разработчика → Ошибки у пользователей»). Старше 30 дней удаляются при просмотре.
+create table if not exists client_errors (
+  id        text primary key default 'e_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12),
+  person_id text not null default '',
+  at        text not null default to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+  message   text not null check (length(message) between 1 and 1000),
+  stack     text not null default '' check (length(stack) <= 4000),
+  url       text not null default '' check (length(url) <= 500),
+  agent     text not null default '' check (length(agent) <= 300),
+  version   text not null default '' check (length(version) <= 60)
+);
+create index if not exists client_errors_at on client_errors(at);
+alter table client_errors enable row level security;
+drop policy if exists client_errors_insert on client_errors;
+create policy client_errors_insert on client_errors for insert to authenticated with check (person_id = coalesce(my_person_id(), ''));
+drop policy if exists client_errors_read on client_errors;
+create policy client_errors_read on client_errors for select to authenticated using (is_dev() or is_superadmin());
+drop policy if exists client_errors_delete on client_errors;
+create policy client_errors_delete on client_errors for delete to authenticated using (is_dev() or is_superadmin());
+
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
 revoke execute on all functions in schema public from public, anon;

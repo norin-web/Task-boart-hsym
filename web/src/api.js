@@ -17,6 +17,10 @@ export async function call(method, payload) {
     throw new Error(/fetch|network/i.test(String(e && e.message)) ? 'Нет связи с сервером' : String(e && e.message || e));
   }
   if (r.ok) return r.data;
+  // неожиданные ошибки (база не по правилам, сбой кода) — в мониторинг (monitor.js); отказы по правам и правилам — нет
+  if ((r.code === 'DB' || r.code === 'INTERNAL') && method !== 'logClientError') {
+    document.dispatchEvent(new CustomEvent('tasks:apierror', { detail: { method, error: r.error } }));
+  }
   const e = new Error(/Failed to fetch|NetworkError/i.test(r.error) ? 'Нет связи с сервером' : r.error || 'Ошибка сервера');
   e.code = r.code;
   e.data = r.data;

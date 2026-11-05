@@ -15,6 +15,7 @@ import { openCreateTask, closeTask } from './views/task.js';
 import { openShortcuts } from './views/people.js';
 import { initPersonCard } from './views/personcard.js';
 import { initDevForm } from './views/devquiz.js';
+import { initMonitor } from './monitor.js';
 
 // «Работать здесь» на экране блокировки — забрать базу у другой вкладки
 let takeOver = false;
@@ -116,6 +117,7 @@ async function boot() {
   startPulse();
   initPersonCard();
   initDevForm();
+  initMonitor();
 }
 
 /** Пульс раз в минуту (пока вкладка открыта): «я в сети», кто ещё в сети, сколько новых уведомлений. */

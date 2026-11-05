@@ -895,3 +895,18 @@ test('запрос CEO и этапы удаляет и убирает в арх�
   await api.as(admin, () => api('deleteTask', { id: request.id }));
   assert.ok(app.id);
 });
+
+test('мониторинг: ошибку пишет вошедший (от своего имени), читают и чистят только разработчик и CEO', async () => {
+  const api = await setup();
+  const { admin, designer, dev } = await team(api);
+  await api.as(designer, () => api('logClientError', { message: 'TypeError: x is undefined', stack: 'at board.js:1', url: '#/u/1', version: 'abc' }));
+  // подделать автора нельзя: база проверяет person_id
+  await api.as(designer, () => assert.rejects(() => api.pg.query("insert into client_errors (person_id, message) values ($1, 'fake')", [dev.id])));
+  await api.as(dev, async () => assert.equal((await api('getClientErrors', {})).length, 0)); // сотрудник не видит
+  const list = await api.as(admin, () => api('getClientErrors', { days: 7 }));
+  assert.equal(list.length, 1);
+  assert.equal(list[0].personId, designer.id);
+  assert.equal(list[0].version, 'abc');
+  await api.as(admin, () => api('clearClientErrors', {}));
+  assert.equal((await api.pg.query('select count(*)::int n from client_errors')).rows[0].n, 0);
+});
