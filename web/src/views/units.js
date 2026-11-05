@@ -72,7 +72,7 @@ export function openCreateUnit(onCreated) {
   const desc = h('textarea', { class: 'inp', rows: 2, maxlength: 1000, placeholder: 'Чем занимается юнит (необязательно)' });
   const copy = h('select', { class: 'inp' },
     h('option', { value: '' }, 'Стандартная схема (поле «Приоритет»)'),
-    S.units.map(u => h('option', { value: u.id }, `Как в «${u.name}»`)));
+    S.units.filter(u => !u.archived).map(u => h('option', { value: u.id }, `Как в «${u.name}»`)));
   // PM юнита: из тех, у кого доступ «PM»; если он один — сразу выбран
   const pms = S.people.filter(p => p.active && (p.access === 'moderator' || p.access === 'superadmin'));
   const pmSel = h('select', { class: 'inp', 'aria-label': 'PM юнита' },
