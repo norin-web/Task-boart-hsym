@@ -50,7 +50,7 @@ Pages → проект → **Custom domains → Set up a custom domain** → н�
 
 ## 5. Что с GitHub Pages
 
-Можно оставить параллельно, пока не убедитесь, что Cloudflare работает. Потом отключить: GitHub → Settings → Pages → Unpublish, и удалить `.github/workflows/deploy.yml` (скажите — уберу).
+Отключено: workflow деплоя удалён из репозитория (2026-11-05). Старый сайт на github.io снять: GitHub → Settings → Pages → Unpublish (при переводе репозитория в приватный он и так перестанет работать).
 
 ## Как это работает дальше
 

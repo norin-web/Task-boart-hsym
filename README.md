@@ -2,7 +2,7 @@
 
 Простой таск-трекер — упрощённая Jira. Верхний уровень — **юниты**: это кросс-функциональные команды (внутри работают ASO, Design, iOS и т.д.), у каждой своя доска, задачи и набор полей.
 
-Хостинг — **GitHub Pages**, данные — **Supabase** (Postgres + вход по email). Сервер не нужен.
+Хостинг — **Cloudflare Workers** (статика), данные — **Supabase** (Postgres + вход по email). Сервер не нужен.
 
 **Роли** (концепция — [docs/CONCEPT.md](docs/CONCEPT.md))
 
@@ -39,14 +39,14 @@ CEO переключается между режимами Default (только
 - Глобальный поиск `⌘K`, горячие клавиши (`C` — новая задача, `/` — поиск, `?` — подсказка)
 - Вход по ссылке на email, светлая/тёмная тема, мобильная вёрстка
 
-## Запуск в продакшене: Supabase + GitHub Pages
+## Запуск в продакшене: Supabase + Cloudflare
 
 ### 1. Supabase (≈5 минут, бесплатный тариф подходит)
 
 1. Создайте проект на [supabase.com](https://supabase.com).
 2. **SQL Editor → New query**: вставьте содержимое [`supabase/schema.sql`](supabase/schema.sql) и нажмите **Run**. Скрипт создаёт таблицы, функции и правила доступа; его можно запускать повторно.
 3. **Authentication → Sign In / Providers → Email**: оставьте Email включённым. В настройках Auth выключите **Allow new users to sign up** — в команду попадают только приглашённые.
-4. **Authentication → URL Configuration**: в **Site URL** и **Redirect URLs** укажите адрес сайта, например `https://norin-web.github.io/Task-boart-hsym/` (и `http://localhost:5177/` для разработки).
+4. **Authentication → URL Configuration**: в **Site URL** и **Redirect URLs** укажите адрес сайта, например `https://task-boart-hsym.norinnort4.workers.dev/**` (и `http://localhost:5177/` для разработки).
 5. **Authentication → Policies (пароли)**: минимальная длина — 8.
 6. Создайте себе вход: **Authentication → Users → Add user → Create new user** (email, пароль, Auto Confirm). При первом входе в пустой сервис вы станете CEO; режим разработчика включается SQL (см. ниже); остальных людей добавляйте уже из приложения.
 7. **Project Settings → API**: скопируйте **Project URL** и ключ **publishable** (anon).
@@ -65,17 +65,13 @@ CEO переключается между режимами Default (только
    update people set access = 'superadmin', active = true where lower(email) = 'you@company.com';
    update people set is_dev = true where lower(email) = 'you@company.com';
    ```
-3. Задеплоить фронт (push в `main`). Профили коллег привяжутся к аккаунтам по email при их первом входе; позиции назначьте в «Люди и доступы».
+3. Задеплоить фронт (push в `main` — Cloudflare соберёт сам). Профили коллег привяжутся к аккаунтам по email при их первом входе; позиции назначьте в «Люди и доступы».
 
 > Ключ `anon` публичный по замыслу Supabase — его можно класть во фронт. Доступ к данным закрыт правилами RLS: читать и писать могут только вошедшие пользователи.
 
-### 2. GitHub Pages
+### 2. Cloudflare
 
-1. **Settings → Secrets and variables → Actions → Variables** → добавьте:
-   - `VITE_SUPABASE_URL` — Project URL
-   - `VITE_SUPABASE_ANON_KEY` — ключ anon public
-2. **Settings → Pages → Build and deployment → Source: GitHub Actions**. Готовые шаблоны выбирать не нужно — workflow уже в репозитории: [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
-3. Сделайте push в `main` (или **Actions → Deploy to GitHub Pages → Run workflow**). Через минуту сайт появится по адресу из настроек Pages.
+Сайт собирает и выкатывает Cloudflare (Worker со статикой из `dist`, настройки в [`wrangler.jsonc`](wrangler.jsonc)) на каждый push в `main`. Подробно — [docs/deploy-cloudflare.md](docs/deploy-cloudflare.md): подключение репозитория, переменные `VITE_SUPABASE_URL` и `VITE_SUPABASE_ANON_KEY`, адрес для Supabase Auth, откат в один клик.
 
 При первом входе приложение предложит создать профиль (или выбрать себя, если вас уже добавили в «Люди» без email).
 
