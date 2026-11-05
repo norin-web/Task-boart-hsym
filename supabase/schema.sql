@@ -18,6 +18,9 @@ create table if not exists units (
   updated_at  text not null
 );
 
+-- Картинка юнита (вместо квадратика с буквами): data:image/webp;base64,… 160×160, пусто — буквы ключа
+alter table units add column if not exists icon text not null default '';
+
 -- Корзина юнитов: когда юнит отправили в архив (для автоудаления)
 alter table units add column if not exists archived_at text not null default '';
 

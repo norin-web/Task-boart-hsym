@@ -1,5 +1,5 @@
 import { S, greeting, me, isSuper, personById, plural, emptyCounts, isStaff, deptById, todayStr, fmtDate, activeDepts, ACCESS_LABELS, relTime, dueInfo } from '../state.js';
-import { $, h, icon, avatar, topbar, showErr, fill, toast, menu, closeMenu, modal, emptyBlock, skeleton } from '../ui.js';
+import { $, h, icon, avatar, topbar, showErr, fill, toast, menu, closeMenu, modal, emptyBlock, skeleton, unitIcon } from '../ui.js';
 import { call } from '../api.js';
 import { currentView, link, navigate, taskLink, rerender } from '../router.js';
 import { renderSidebar, renderUnread } from './sidebar.js';
@@ -481,7 +481,7 @@ export function unitCard(u, { apps, to = 'board' } = {}) {
   return link({ unit: u.id, mode: to }, { class: 'unit-card', dataset: { id: u.id },
     title: `К выполнению ${c.todo} · В работе ${c.in_progress} · Готово ${c.done}` },
     h('div', { class: 'uc-head' },
-      h('div', { class: 'uc-icon', style: { background: u.color } }, u.key.slice(0, 2)),
+      unitIcon(u),
       h('div', { class: 'uc-title' }, h('div', { class: 'uc-name' }, u.name),
         h('div', { class: 'uc-key' }, sub, c.overdue > 0 && h('span', { class: 'uc-late' }, ' · ' + c.overdue + ' просрочено'))),
       // действия — по наведению, как в макете 12 (в покое у карточки нет кнопок)

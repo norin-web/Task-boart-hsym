@@ -1,6 +1,6 @@
 import Sortable from 'sortablejs';
 import { S, TYPE_LABELS, PALETTE, unitById, byOrder, KINDS, KIND_LABELS, KIND_COLORS, colColor, personById, activeDepts, plural, isSuper } from '../state.js';
-import { $, h, icon, avatar, field, menu, closeMenu, modal, confirmDlg, toast, showErr, colorPicker, fill, personSelect } from '../ui.js';
+import { $, h, icon, avatar, field, menu, closeMenu, modal, confirmDlg, toast, showErr, colorPicker, fill, personSelect, unitPhotoField } from '../ui.js';
 import { send } from '../api.js';
 import { link } from '../router.js';
 import { renderSidebar } from './sidebar.js';
@@ -16,7 +16,9 @@ export function renderSettings() {
 
   const name = h('input', { class: 'inp', value: u.name, maxlength: 80 });
   const key = h('input', { class: 'inp us-key', value: u.key, maxlength: 10, oninput: e => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); } });
-  const color = colorPicker(u.color);
+  const color = colorPicker(u.color, { onChange: () => photo.refresh() });
+  const photo = unitPhotoField(u.icon, () => ({ color: color.value(), key: key.value || u.key }));
+  key.addEventListener('input', () => photo.refresh());
   const desc = h('textarea', { class: 'inp', rows: 2, value: u.description, maxlength: 1000 });
   const colEditor = columnsEditor(st.columns);
   const builtinRows = Object.entries(st.builtins).map(([k, bi]) => {
@@ -46,13 +48,13 @@ export function renderSettings() {
         if (r.shown) st.builtins[r.k].hidden = !r.shown.checked;
       });
       st.flows = u.settings.flows; // флоу сохраняется отдельно (своя кнопка) — берём свежий
-      const saved = await send('updateUnit', { id: u.id, name: name.value, key: key.value, color: color.value(), description: desc.value, settings: st, statusRemap: remap });
+      const saved = await send('updateUnit', { id: u.id, name: name.value, key: key.value, color: color.value(), icon: photo.value(), description: desc.value, settings: st, statusRemap: remap });
       if (orphans.length) orphans.forEach(t => { t.status = remap[t.status]; });
       Object.assign(u, saved);
       const lu = unitById(u.id);
       if (lu) Object.assign(lu, saved);
       const bu = b.units.find(x => x.id === u.id);
-      if (bu) Object.assign(bu, { name: saved.name, key: saved.key, color: saved.color });
+      if (bu) Object.assign(bu, { name: saved.name, key: saved.key, color: saved.color, icon: saved.icon });
       toast('Настройки сохранены');
       renderSidebar();
       renderSettings();
@@ -86,6 +88,7 @@ export function renderSettings() {
         h('h2', null, 'Основное'),
         h('div', { class: 'grid2' }, field('Название', name), field('Ключ задач', key, 'Номера задач: ' + u.key + '-1, ' + u.key + '-2…')),
         field('Цвет', color.el),
+        field('Картинка', photo.el, 'Необязательно: вместо букв ключа на карточке юнита.'),
         field('Описание', desc)),
 
       h('section', { class: 'card-box' },

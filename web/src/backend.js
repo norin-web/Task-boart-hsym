@@ -234,6 +234,7 @@ const unitOut = r => ({
   id: r.id, name: r.name, key: r.key, color: r.color, description: r.description,
   settings: unitSettings(r.settings), nextNum: r.next_num, order: r.ord, archived: !!r.archived,
   archivedAt: r.archived_at || '', createdAt: r.created_at, updatedAt: r.updated_at, pmId: r.pm_id || '', isTest: !!r.is_test,
+  icon: r.icon || '', // картинка юнита (data:image), пусто — буквы ключа
 });
 
 const taskOut = r => ({
@@ -258,13 +259,13 @@ const fieldOut = r => ({
 
 /** Роли: superadmin — CEO, moderator — PM, rm — релиз-менеджер, lead — лид, member — сотрудник. */
 export const ACCESS = ['superadmin', 'moderator', 'rm', 'lead', 'member'];
-/** Аватар: готовый маскот (preset:ios-3) или фото data:image (webp/jpeg/png, до ~90 КБ). Иначе — пусто (инициалы). */
-const avatarValue = v => {
+/** Фото data:image (webp/jpeg/png, до ~90 КБ; браузер сжимает до 160 px). Иначе — пусто. */
+const photoValue = v => {
   const s = String(v || '');
-  if (/^preset:[a-z]+-\d{1,2}$/.test(s)) return s;
-  if (s.length <= 120000 && /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(s)) return s;
-  return '';
+  return s.length <= 120000 && /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(s) ? s : '';
 };
+/** Аватар: готовый маскот (preset:ios-3) или фото. Иначе — пусто (инициалы). */
+const avatarValue = v => (/^preset:[a-z]+-\d{1,2}$/.test(String(v || '')) ? String(v) : photoValue(v));
 /** Telegram: @username (5–32 символа: буквы, цифры, _) — храним без @; ссылка t.me/… тоже подходит. */
 const telegramValue = v => { const m = /^(?:https?:\/\/)?(?:t\.me\/)?@?([A-Za-z0-9_]{5,32})$/.exec(String(v || '').trim()); return m ? m[1] : ''; };
 /** Часовой пояс IANA: «Europe/Moscow», «Asia/Almaty», «UTC». */
@@ -1100,7 +1101,7 @@ export function createBackend(db, opts = {}) {
       }
       const ts = now();
       const unit = {
-        id: uid('u'), name, key, color: color(p.color, PALETTE[count % PALETTE.length]),
+        id: uid('u'), name, key, color: color(p.color, PALETTE[count % PALETTE.length]), icon: photoValue(p.icon),
         description: str(p.description, 1000), settings, next_num: 1,
         ord: (await maxOrd('units')) + 1, archived: false, created_at: ts, updated_at: ts, is_test: !!p.test,
       };
@@ -1127,6 +1128,7 @@ export function createBackend(db, opts = {}) {
       }
       if ('color' in p) upd.color = color(p.color, u.color);
       if ('description' in p) upd.description = str(p.description, 1000);
+      if ('icon' in p) upd.icon = photoValue(p.icon);
       if ('settings' in p) upd.settings = storedSettings(p.settings);
       if ('archived' in p) {
         upd.archived = !!p.archived;
@@ -1147,7 +1149,7 @@ export function createBackend(db, opts = {}) {
       const src = await findUnit(p.id);
       const ts = now();
       const unit = {
-        id: uid('u'), name: str(src.name + ' (копия)', 80), key: await uniqueKey(src.key), color: src.color,
+        id: uid('u'), name: str(src.name + ' (копия)', 80), key: await uniqueKey(src.key), color: src.color, icon: src.icon || '',
         description: src.description, settings: storedSettings(src.settings), next_num: 1,
         ord: (await maxOrd('units')) + 1, archived: false, created_at: ts, updated_at: ts,
       };

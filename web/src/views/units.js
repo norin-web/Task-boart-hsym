@@ -1,5 +1,5 @@
 import { S, PALETTE, suggestKey, isSuper, activeDepts, ACCESS_LABELS } from '../state.js';
-import { h, field, menu, modal, confirmDlg, promptDlg, toast, showErr, colorPicker, personSelect } from '../ui.js';
+import { h, field, menu, modal, confirmDlg, promptDlg, toast, showErr, colorPicker, personSelect, unitPhotoField } from '../ui.js';
 import { send } from '../api.js';
 import { navigate, rerender } from '../router.js';
 import { renderSidebar } from './sidebar.js';
@@ -68,7 +68,10 @@ export function openCreateUnit(onCreated) {
   const syncHint = () => { keyHint.textContent = (key.value || 'KEY') + '-1'; };
   name.addEventListener('input', () => { if (!keyTouched) { key.value = name.value.trim() ? suggestKey(name.value) : ''; syncHint(); } });
   key.addEventListener('input', () => { keyTouched = true; key.value = key.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); syncHint(); });
-  const color = colorPicker(PALETTE[S.units.length % PALETTE.length]);
+  const color = colorPicker(PALETTE[S.units.length % PALETTE.length], { onChange: () => photo.refresh() });
+  const photo = unitPhotoField('', () => ({ color: color.value(), key: key.value || suggestKey(name.value || 'U') }));
+  key.addEventListener('input', () => photo.refresh());
+  name.addEventListener('input', () => photo.refresh());
   const desc = h('textarea', { class: 'inp', rows: 2, maxlength: 1000, placeholder: 'Чем занимается юнит (необязательно)' });
   const copy = h('select', { class: 'inp' },
     h('option', { value: '' }, 'Стандартная схема (поле «Приоритет»)'),
@@ -91,6 +94,7 @@ export function openCreateUnit(onCreated) {
     body: [
       h('div', { class: 'grid2' }, field('Название', name), field('Ключ задач', key, h('span', null, 'Номера задач: ', keyHint))),
       field('Цвет', color.el),
+      field('Картинка', photo.el, 'Необязательно: вместо букв ключа на карточке юнита.'),
       field('Описание', desc),
       field('Ответственный за юнит', pmSel, 'PM или CEO: ему идут запросы CEO и реджекты. Сменить потом может только CEO.'),
       field('Поля карточки', copy, 'Можно скопировать настройки полей и колонок из существующего юнита.'),
@@ -102,7 +106,7 @@ export function openCreateUnit(onCreated) {
       {
         label: 'Создать юнит', primary: true, action: async close => {
           if (!name.value.trim()) { name.focus(); return; }
-          const u = await send('createUnit', { name: name.value, key: key.value, color: color.value(), description: desc.value, pmId: pmSel.value, copyFieldsFrom: copy.value,
+          const u = await send('createUnit', { name: name.value, key: key.value, color: color.value(), icon: photo.value(), description: desc.value, pmId: pmSel.value, copyFieldsFrom: copy.value,
             review: { byPosition: Object.fromEntries(byDept.filter(x => x.sel.value).map(x => [x.d.id, x.sel.value])), default: dflt.value } });
           S.units.push(u);
           close();

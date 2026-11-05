@@ -1,5 +1,5 @@
 /** UI-примитивы: DOM-хелпер, иконки, модалки, меню, тосты. */
-import { avatarSrc } from './avatars.js';
+import { avatarSrc, photoToAvatar } from './avatars.js';
 import { PACK } from './icons.js';
 import { S, PALETTE, colorFor, initials, safeUrl, isOnline, presenceText, personById } from './state.js';
 
@@ -447,6 +447,36 @@ export function colorPicker(initial, { auto = false, autoColor = '', onChange } 
       h('input', { type: 'color', value: /^#[0-9a-f]{6}$/i.test(value || '') ? value : '#764BF2', 'aria-label': 'Свой цвет', onchange: e => pick(e.target.value) })));
   draw();
   return { el, value: () => value };
+}
+
+/* ---------- картинка юнита ---------- */
+
+/** Значок юнита: своя картинка или квадратик цвета юнита с буквами ключа. cls — размер (sm, md, lg) как у uc-icon. */
+export function unitIcon(u, cls = '') {
+  return u.icon
+    ? h('img', { class: ('uc-icon unit-img ' + cls).trim(), src: u.icon, alt: '' })
+    : h('span', { class: ('uc-icon ' + cls).trim(), style: { background: u.color }, 'aria-hidden': 'true' }, String(u.key || u.name || '').slice(0, 2).toUpperCase());
+}
+
+/**
+ * Поле «Картинка» юнита: миниатюра и тихие ссылки «Загрузить» / «Заменить» / «Убрать». Картинку сжимает браузер (160 px).
+ * look() — как выглядит юнит сейчас (цвет, ключ — для превью без картинки). value() — data:image или ''.
+ */
+export function unitPhotoField(initial, look) {
+  let value = initial || '';
+  const el = h('div', { class: 'unit-photo' });
+  const file = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', hidden: true, onchange: async () => {
+    const f = file.files[0];
+    file.value = '';
+    if (!f) return;
+    try { value = await photoToAvatar(f); draw(); } catch (e) { showErr(e); }
+  } });
+  const draw = () => fill(el, unitIcon({ ...look(), icon: value }, 'md'),
+    h('button', { type: 'button', class: 'link-btn', onclick: () => file.click() }, value ? 'Заменить' : 'Загрузить'),
+    value && h('button', { type: 'button', class: 'link-btn muted', onclick: () => { value = ''; draw(); } }, 'Убрать'),
+    file);
+  draw();
+  return { el, value: () => value, refresh: draw };
 }
 
 /* ---------- приоритет: шевроны как в Jira ---------- */

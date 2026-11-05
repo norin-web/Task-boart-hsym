@@ -4,7 +4,7 @@ import { AUTO_ARCHIVE, HIDE_DONE } from '../state.js';
 import { reviewSection, openFieldEditor, requiredLabel } from './settings.js';
 import { TYPE_LABELS } from '../state.js';
 import { S, LS, ceoDefault, byOrder, unitById, emptyCounts, personById, todayStr, isSuper, plural, LINK_KINDS, activeDepts, deptById, activeTeams } from '../state.js';
-import { $, h, icon, avatar, showErr, fill, toast, confirmDlg, menu, modal, field, skeleton } from '../ui.js';
+import { $, h, icon, avatar, showErr, fill, toast, confirmDlg, menu, modal, field, skeleton, unitIcon } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView, link, rerender } from '../router.js';
 import { renderSidebar } from './sidebar.js';
@@ -98,7 +98,7 @@ function trashTable(settings) {
           const c = u.counts || emptyCounts(), n = c.todo + c.in_progress + c.done;
           return h('div', { class: 'trash-row' },
             h('span', { class: 'trash-unit' },
-              h('span', { class: 'uc-icon', style: { background: u.color } }, u.key.slice(0, 2)),
+              unitIcon(u),
               h('span', null, h('b', null, u.name), h('small', { class: 'muted' }, n + ' ' + plural(n, ['задача', 'задачи', 'задач'])))),
             h('span', { class: 'muted' }, u.archivedAt ? new Date(u.archivedAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : '—'),
             h('span', { class: 'muted' }, until(u)),
@@ -121,7 +121,7 @@ function unitsTable(ov) {
       const people = (u.members || []).map(personById).filter(p => p && p.active);
       const rv = unitReviewers(u);
       return h('div', { class: 'un-row', role: 'row' },
-        h('span', { class: 'un-name' }, h('span', { class: 'uc-icon', style: { background: u.color } }, u.key.slice(0, 2)),
+        h('span', { class: 'un-name' }, unitIcon(u),
           h('span', { class: 'un-title' }, h('b', null, u.name), h('small', { class: 'muted' }, u.description || u.key))),
         h('span', { class: 'un-num', title: noTeam.has(u.id) ? 'В юните никого нет' : '' }, people.length || h('span', { class: 'warn-text' }, '0')),
         h('span', { class: 'un-num' }, (c.todo + c.in_progress) + ' открыто', c.overdue > 0 && h('small', { class: 'warn-text' }, ' · ' + c.overdue + ' просроч.')),
@@ -191,7 +191,7 @@ function openUnitPanel(u, onChange) {
     h('div', { class: 'panel-backdrop center', onclick: close }),
     h('aside', { class: 'panel center unit-panel', role: 'dialog', 'aria-label': u.name },
       h('div', { class: 'panel-head' },
-        h('span', { class: 'uc-icon sm', style: { background: u.color } }, u.key.slice(0, 2)),
+        unitIcon(u, 'sm'),
         h('b', null, u.name), h('span', { class: 'spacer' }),
         !ceoDefault() && link({ unit: u.id, mode: 'settings' }, { class: 'btn sm', onclick: () => fill(root) }, 'Настройки'),
         link({ unit: u.id, mode: 'overview' }, { class: 'btn primary sm', onclick: () => fill(root) }, 'Открыть юнит')),

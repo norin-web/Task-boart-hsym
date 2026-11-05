@@ -285,6 +285,20 @@ test('доска: архив не грузится, пока не попроси
   assert.deepEqual(ids(await api('getBoard', { unitId: u.id, taskId: alien.id })), [live.id]);
 });
 
+test('картинка юнита: при создании и в настройках, только data:image, копируется с юнитом', async () => {
+  const api = await setup();
+  const pic = 'data:image/webp;base64,' + 'A'.repeat(200);
+  const u = await api('createUnit', { name: 'С картинкой', key: 'pic', icon: pic });
+  assert.equal(u.icon, pic);
+  assert.equal((await api('bootstrap', { today: '2026-11-05' })).units.find(x => x.id === u.id).icon, pic);
+  assert.equal((await api('updateUnit', { id: u.id, icon: 'javascript:alert(1)' })).icon, '', 'не картинка — пусто');
+  assert.equal((await api('updateUnit', { id: u.id, icon: 'data:image/png;base64,' + 'A'.repeat(130000) })).icon, '', 'слишком большая — пусто');
+  assert.equal((await api('updateUnit', { id: u.id, icon: pic })).icon, pic);
+  assert.equal((await api('updateUnit', { id: u.id, name: 'Без смены картинки' })).icon, pic, 'другие правки картинку не трогают');
+  assert.equal((await api('createUnit', { name: 'Без картинки', key: 'nopic' })).icon, '');
+  assert.equal((await api('duplicateUnit', { id: u.id })).icon, pic, 'копия юнита — с той же картинкой');
+});
+
 test('неизвестный метод и внутренние ошибки не падают', async () => {
   const { call } = await setup();
   assert.equal((await call('dropTables', {})).ok, false);

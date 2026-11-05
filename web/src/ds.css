@@ -2966,3 +2966,9 @@ a.bug-title:hover { text-decoration: underline; }
 .err-msg { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
 .err-meta { font-size: 12px; }
 .err-stack { margin: 0; padding: 10px 12px; background: var(--surface-2); font-size: 11px; line-height: 16px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; }
+
+/* Картинка юнита: вместо квадратика с буквами — та же форма и размер, фото заполняет её */
+.uc-icon.unit-img { object-fit: cover; background: var(--surface-3); padding: 0; }
+.unit-photo { display: flex; align-items: center; gap: 12px; min-height: 28px; }
+.unit-photo .uc-icon.md { width: 32px; height: 32px; border-radius: 50%; font-size: 12px; font-weight: 600; color: #fff; display: inline-flex; align-items: center; justify-content: center; }
+.unit-photo .link-btn.muted { color: var(--muted); font-weight: 500; }
