@@ -1856,7 +1856,8 @@ body { letter-spacing: -.01em; }
 .news-row .avatar.lg { width: 28px; height: 28px; font-size: 11px; }
 .news-dot { margin-top: 0; }
 .news-more-row { display: flex; justify-content: center; padding: 0; }
-.news-more-row .news-more { height: 32px; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); opacity: .5; }
+.news-more-row .news-more { height: 32px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--text-2); }
+.news-more-row .news-more:hover { color: var(--text); }
 .news-sec .section-head h2 { font-weight: 700; }
 /* P21: Загрузка команды */
 .card-box.load { display: grid; gap: 0; }
@@ -1995,8 +1996,6 @@ table.tasks.unit-list .chips .chip::before { display: none; }
 #main:has(.unit-tabs) .apps-page > .ap-head { border-bottom: 0; background: var(--surface) linear-gradient(var(--border), var(--border)) center bottom / calc(100% - 40px) 1px no-repeat; }
 #main:has(.unit-tabs) .apps-page .ap-sort-ic { display: none; }
 #main:has(.unit-tabs) .apps-page .ap-sort { padding: 0; font-size: 13px; font-weight: 500; }
-#main:has(.unit-tabs) .apps-page .ap-row:not(.ap-head) > :nth-child(2) > :not(.store-badge) { padding: 0; border: 0; background: transparent; color: var(--info); font-size: 12px; line-height: 16px; font-weight: 600; }
-#main:has(.unit-tabs) .apps-page .ap-row:not(.ap-head) > :nth-child(2) > :not(.store-badge) svg { display: none; }
 #main:has(.unit-tabs) .apps-page .store-badge { font-size: 12px; font-weight: 600; color: var(--text); gap: 6px; }
 .unit-panel .up-stat { border: 0; }
 .unit-panel .up-person { padding: 0; }
