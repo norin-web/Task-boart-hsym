@@ -4,7 +4,7 @@
  * поэтому «назад» браузера и крошки возвращают туда, откуда пришли.
  */
 import { S, me, isStaff, seesApps, ownTeamsOnly, ceoDefault } from '../state.js';
-import { h, icon, topbar } from '../ui.js';
+import { h, icon, topbar, unitIcon } from '../ui.js';
 import { link } from '../router.js';
 
 /** Вкладки юнита: [mode, подпись, иконка, число]. Обзор и приложения — тем, кто видит приложения. */
@@ -28,6 +28,8 @@ export function unitHeader(active, right = [], team = null) {
   const sep = () => h('span', { class: 'crumb-sep', 'aria-hidden': 'true' }, '/');
   return [
     topbar([
+      // своя картинка юнита — слева от заголовка (без картинки заголовок как был)
+      u.icon && unitIcon(u, 'lg'),
       h('div', { class: 'unit-head' },
         h('nav', { class: 'crumbs unit-crumbs', 'aria-label': 'Навигация' },
           link({ view: 'home' }, { class: 'crumb' }, (me() || {}).access === 'rm' ? 'Релизы' : 'Дашборд'),
