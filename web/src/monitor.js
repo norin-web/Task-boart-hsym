@@ -33,4 +33,10 @@ export function initMonitor() {
     const r = e.reason;
     report((r && r.message) || String(r), r && r.stack);
   });
+  // CSP (web/public/_headers) что-то заблокировал: новый сервис не добавили в список — увидим, что именно.
+  // Расширения браузера (chrome-extension:…) отсекает NOISE и проверка источника.
+  document.addEventListener('securitypolicyviolation', e => {
+    if (/^(chrome|moz|safari)-extension/.test(e.sourceFile || '')) return;
+    report(`CSP заблокировал ${e.blockedURI || 'inline'} (${e.effectiveDirective})`, 'csp ' + (e.sourceFile || '') + (e.lineNumber ? ':' + e.lineNumber : ''));
+  });
 }

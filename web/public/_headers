@@ -1,4 +1,4 @@
-# Cloudflare Pages: заголовки ответа (на GitHub Pages файл просто лежит и ничего не делает)
+# Cloudflare: заголовки ответа.
 # Сборка — с хешами в именах файлов: их можно кешировать навсегда; index.html — всегда свежий, чтобы обновления доходили сразу.
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
@@ -9,7 +9,12 @@
 /index.html
   Cache-Control: no-cache
 
+# CSP — что странице можно загружать. Скрипты — только свои (встроенных и чужих нет), поэтому внедрённый код не выполнится.
+#   connect-src: база и вход (Supabase), проверка приложения в App Store (iTunes Lookup)
+#   img-src: свои картинки, фото и скриншоты (data:, blob:), иконки приложений из App Store (mzstatic)
+#   style-src 'unsafe-inline': стили первого экрана в index.html и стили элементов из кода
 /*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.mzstatic.com; font-src 'self' data:; connect-src 'self' https://*.supabase.co https://itunes.apple.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: DENY
