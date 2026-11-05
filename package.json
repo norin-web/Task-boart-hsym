@@ -1,7 +1,7 @@
 {
   "name": "tasks",
   "version": "0.3.0",
-  "description": "Простой таск-трекер для кросс-функциональных команд: GitHub Pages + Supabase",
+  "description": "Простой таск-трекер для кросс-функциональных команд: Cloudflare + Supabase",
   "private": true,
   "type": "module",
   "engines": {
@@ -11,7 +11,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test test/*.test.js",
+    "lint": "eslint .",
+    "test": "eslint . && node --test test/*.test.js",
     "design": "node test/design/run.mjs",
     "scenarios": "node test/design/scenarios.mjs"
   },
@@ -22,6 +23,8 @@
     "sortablejs": "^1.15.7"
   },
   "devDependencies": {
+    "eslint": "^9.39.5",
+    "globals": "^17.14.0",
     "pixelmatch": "^7.1.0",
     "playwright": "^1.64.1",
     "pngjs": "^7.0.0",

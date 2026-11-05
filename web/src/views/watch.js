@@ -40,7 +40,7 @@ const snapTask = t => [t.status, t.assigneeId, t.dueDate].join('|');
 export function watchBlock(apps, { openApp, openTask, appIcon, appStatusCell, stageDots, release = false, prioTag = null }) {
   const box = h('section', { class: 'watch' + (release ? ' rel' : '') });
   const prev = new Map();
-  let appsNow = apps, tasks = [], rels = {}, at = Date.now(), timer = null, busy = false;
+  let appsNow = apps, tasks = [], rels = {}, timer = null, busy = false;
 
   async function refresh(force) {
     if (busy || (!force && document.hidden)) return;
@@ -55,7 +55,6 @@ export function watchBlock(apps, { openApp, openTask, appIcon, appStatusCell, st
       ]);
       const appIds = w.filter(x => x.t === 'app').map(x => x.id);
       if (release && appIds.length) rels = await call('getAppReleases', { ids: appIds });
-      at = Date.now();
       draw();
     } catch { /* сеть моргнула — следующая попытка по таймеру */ } finally { busy = false; }
   }

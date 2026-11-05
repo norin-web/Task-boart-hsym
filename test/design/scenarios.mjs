@@ -5,19 +5,13 @@
  * Код выхода 1 — если не сошёлся хоть один размер; процент отличия от макета только показывается.
  */
 import { chromium } from 'playwright';
-import { PNG } from 'pngjs';
-import pixelmatch from 'pixelmatch';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { SCREENS, NOTES } from './screens.mjs';
-import { METRICS } from './metrics.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
-const BASE_DIR = path.join(ROOT, 'test/design/baseline');
 const OUT = path.join(ROOT, 'scenario-report');
 const URL_ = process.env.DESIGN_URL || 'http://localhost:5177/';
-const only = process.argv.slice(2);
 
 const up = async () => { try { return (await fetch(URL_)).ok; } catch { return false; } };
 let server = null;
@@ -53,18 +47,6 @@ await page.evaluate(async () => {
 await page.waitForTimeout(3000);
 await page.reload();
 await page.waitForFunction(() => document.querySelector('#sidebar .nav-item'), null, { timeout: 60000 });
-const ids = await page.evaluate(async () => {
-  const { call } = await import('/src/api.js');
-  const apps = await call('listApps', {});
-  const carrot = apps.find(a => /CARROT/.test(a.name)), streaks = apps.find(a => a.name === 'Streaks');
-  const stage = streaks.requests[0].stages.find(s => /^Дизайн/.test(s.title));
-  const release = carrot.requests[0].stages.find(s => /^Релиз/.test(s.title));
-  const { people } = await call('bootstrap', { today: new Date().toISOString().slice(0, 10) });
-  const pm = people.find(x => x.name === 'Екатерина Соколова'), pm2 = people.find(x => x.name === 'Олег Никитин');
-  const rm = people.find(x => x.access === 'rm');
-  const lead = people.find(x => x.name === 'Мария Иванова'), member = people.find(x => x.name === 'Алексей Морозов'), julia = people.find(x => x.name === 'Юлия Павлова');
-  return { carrot: carrot.id, streaks: streaks.id, mvp: streaks.unitId, rf: carrot.unitId, stage: stage.id, release: release.id, ceo: localStorage.getItem('tm.localActor'), pm: JSON.stringify(pm.id), pm2: JSON.stringify(pm2.id), rm: JSON.stringify(rm.id), lead: JSON.stringify(lead.id), member: JSON.stringify(member.id), julia: JSON.stringify(julia.id) };
-});
 
 // служебное режима разработчика в снимках не нужно: в макетах его нет
 const hideDev = () => page.addStyleTag({ content: '.dev-item, .view-as, .lens-bar { display: none !important; }' });
@@ -95,53 +77,6 @@ const reloadSafe = async () => {
   throw new Error('страница не загрузилась после четырёх попыток');
 };
 
-// вход за роль листа: экраны без `as` — за CEO
-let role = 'ceo', seeded = false, seededLead = false;
-const loginAs = async as => {
-  if (as === role) return;
-  role = as;
-  // входящие от CEO: новые запросы в юнитах PM
-  if (as === 'pm' && !seeded) {
-    seeded = true;
-    await page.evaluate(async unitId => {
-      const { call } = await import('/src/api.js');
-      for (const [name, dueDate] of [['Tide', '2026-12-14'], ['Things Mini', '2026-10-29'], ['Forest Mini', '2026-11-20']]) await call('createApp', { name, unitId, requestTitle: 'New App', priority: 'o_high', dueDate });
-    }, ids.mvp);
-    await page.waitForTimeout(1500);
-  }
-  const actor = async who => {
-    await page.evaluate(id => localStorage.setItem('tm.localActor', id), who);
-    await reloadSafe();
-  };
-  // задачи Lead и сотрудника: в демо их нет, а листы показывают фокус, ревью и «Раздано»
-  if (as === 'lead' && !seededLead) {
-    seededLead = true;
-    await actor(ids.ceo);
-    const made = await page.evaluate(async ({ unitId, lead, member, julia }) => {
-      const { call } = await import('/src/api.js');
-      const { S, todayStr, addDays } = await import('/src/state.js');
-      const st = S.units.find(u => u.id === unitId).settings, prog = st.columns.find(c => c.kind === 'progress').id;
-      const add = (title, assigneeId, dueDate, status) => call('createTask', { unitId, title, assigneeId, dueDate, status });
-      const t1 = await add('Экраны онбординга', lead, todayStr(), prog);
-      await add('Иконка приложения', lead, addDays(1), prog);
-      await add('Экран настроек', lead, addDays(-2), prog);
-      await add('Подключить покупки', member, todayStr(), prog);
-      await add('Исправить вход', member, addDays(1), prog);
-      return { t1: t1.id, review: st.review.column, julia };
-    }, { unitId: ids.mvp, lead: JSON.parse(ids.lead), member: JSON.parse(ids.member), julia: JSON.parse(ids.julia) });
-    await actor(ids.lead);
-    const parts = await page.evaluate(async ({ t1, julia }) => {
-      const { call } = await import('/src/api.js');
-      const { addDays } = await import('/src/state.js');
-      return (await call('splitTask', { taskId: t1, items: [{ title: 'Первый экран', assigneeId: julia, dueDate: addDays(1) }, { title: 'Экран выбора', assigneeId: julia, dueDate: addDays(3) }] })).map(x => x.id);
-    }, made);
-    await actor(ids.julia);
-    await page.evaluate(async ({ id, status }) => { const { call } = await import('/src/api.js'); await call('updateTask', { id, patch: { status } }); }, { id: parts[0], status: made.review });
-    await page.waitForTimeout(800);
-  }
-  await actor(ids[as]);
-  await hideDev();
-};
 
 
 /* ================= Сценарии: живые цепочки работы по ролям ================= */
@@ -153,7 +88,6 @@ const people = await page.evaluate(async () => { const { call } = await import('
 const P = n => people.find(p => p.name === n) || (() => { throw new Error('нет человека ' + n); })();
 const api = (m, x) => page.evaluate(async ([m, x]) => { const { call } = await import('/src/api.js'); return call(m, x); }, [m, x]);
 const as = async name => {
-  role = 'x:' + name;
   await page.evaluate(id => localStorage.setItem('tm.localActor', JSON.stringify(id)), P(name).id);
   await reloadSafe();
   await hideDev();
@@ -214,7 +148,6 @@ const units = await page.evaluate(async () => { const { S } = await import('/src
 const MVP = units.MVP;
 const col = kind => MVP.settings.columns.find(c => c.kind === kind).id;
 const REVIEW = MVP.settings.review.column;
-const today = () => page.evaluate(async () => (await import('/src/state.js')).todayStr());
 const addDays = n => page.evaluate(async n => (await import('/src/state.js')).addDays(n), n);
 await page.setViewportSize({ width: 1440, height: 900 });
 // CEO работает в полном режиме — как владелец; в обзорном нет «Моих задач» и досок
@@ -270,7 +203,7 @@ await audit('CEO · Поставил я', { mobile: true });
 
 /* ---------- 2. Новое приложение: от бэклога до App Store ---------- */
 await scenario('2. CEO заводит новое приложение, PM раскладывает, команда делает, RM выпускает', async () => {
-const { app, request } = await api('createApp', { name: 'Pulse Timer', unitId: MVP.id });
+const { request } = await api('createApp', { name: 'Pulse Timer', unitId: MVP.id });
 must(request.assigneeId === P('Екатерина Соколова').id, 'запрос упал PM юнита');
 await as('Екатерина Соколова');
 await open('#/'); await audit('PM · входящие от CEO');

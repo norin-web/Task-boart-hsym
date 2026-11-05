@@ -92,7 +92,7 @@ test('ответственный за юнит: CEO может им быть, м
   // CEO как ответственный: запросы по приложениям юнита идут ему, а не первому PM
   await api('setUnitPm', { unitId: A.id, personId: admin.id });
   assert.equal((await api.pg.query('select pm_id from units where id = $1', [A.id])).rows[0].pm_id, admin.id);
-  const { app, request } = await api('createApp', { unitId: A.id, name: 'Пульт 1' });
+  const { request } = await api('createApp', { unitId: A.id, name: 'Пульт 1' });
   assert.equal(request.assigneeId, admin.id);
   // обратно на PM — работает
   await api('setUnitPm', { unitId: A.id, personId: mod.id });
@@ -524,7 +524,7 @@ test('личная доска: шаблоны этапов команд, тол�
 
 test('профили: свой профиль, роли меняет только супер-админ', async () => {
   const api = await setup();
-  const { admin, mod, designer, dev, A, B } = await team(api);
+  const { admin, mod, designer, dev, B } = await team(api);
   await api.as(designer, async () => {
     await api('updatePerson', { id: designer.id, name: 'Дизайнер Ира', color: '#ec4899' });
     // аватар — свой: маскот или фото data:image; чужое (ссылки, скрипты) не сохраняется
@@ -666,8 +666,8 @@ test('PM видит только приложения из своего спис
   assert.deepEqual(await api.as(mod, names), ['Первое']);
   assert.deepEqual(await api.as(admin, names), ['Второе', 'Первое']);
   // задача по скрытому приложению PM не видна
-  const hidden = await api.as(admin, () => api('createTask', { unitId: A.id, title: 'Скрытая', appId: a2.id }));
-  const shown = await api.as(admin, () => api('createTask', { unitId: A.id, title: 'Видимая', appId: a1.id }));
+  await api.as(admin, () => api('createTask', { unitId: A.id, title: 'Скрытая', appId: a2.id }));
+  await api.as(admin, () => api('createTask', { unitId: A.id, title: 'Видимая', appId: a1.id }));
   const titles = async () => (await api('getBoard', { unitId: A.id })).tasks.map(t => t.title);
   const seen = await api.as(mod, titles);
   assert.ok(seen.includes('Видимая') && !seen.includes('Скрытая'));
@@ -687,7 +687,7 @@ test('PM видит только приложения из своего спис
 
 test('Lead: видит и ведёт только свою зону — позиции + выданные люди', async () => {
   const api = await setup();
-  const { admin, mod, designer, dev, A, t1, t2, t3 } = await team(api);
+  const { admin, mod, designer, dev, A, t2, t3 } = await team(api);
   const lead = await api('createPerson', { name: 'Лид дизайна', email: 'lead@x.ru', access: 'lead', positionId: 'd_design' });
   await api.pg.query('update people set user_id = $1 where id = $2', [UID(7), lead.id]);
   const L = { ...lead, uid: UID(7) };

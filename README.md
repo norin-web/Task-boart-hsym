@@ -90,7 +90,8 @@ npm run dev                  # http://localhost:5177
 | `npm run dev` | Vite с HMR |
 | `npm run build` | Сборка в `dist/` |
 | `npm run preview` | Просмотр собранной версии |
-| `npm test` | Тесты бизнес-логики и прав доступа на настоящем Postgres (PGlite) с `supabase/schema.sql` |
+| `npm test` | Проверка кода (ESLint) и тесты бизнес-логики и прав доступа на настоящем Postgres (PGlite) с `supabase/schema.sql` |
+| `npm run lint` | Только проверка кода: необъявленные переменные (сломанные импорты), лишний код |
 
 ## Устройство
 

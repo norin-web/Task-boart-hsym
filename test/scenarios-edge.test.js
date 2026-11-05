@@ -70,7 +70,7 @@ test('крайние случаи: реджекты, перенос, уход л
   const ceo = await person(api, 'CEO', 'superadmin', 'd_po');
   const gold = await api('createUnit', { name: 'Gold', key: 'GLD' });
   const who = await team(api, gold);
-  const { app, request } = await api.as(ceo, () => api('createApp', { name: 'A', unitId: gold.id }));
+  const { request } = await api.as(ceo, () => api('createApp', { name: 'A', unitId: gold.id }));
   const st = await stagesOf(api, who.pm, request);
   await toRelease(api, who, st);
   await ready(api, who, st);
@@ -86,7 +86,7 @@ test('крайние случаи: реджекты, перенос, уход л
     const t = (await api.as(who.pm, () => api('getBoard', { unitId: gold.id }))).tasks.find(x => x.id === r1.rejectRequestId);
     assert.ok(t && t.status === 'done', 'статус: ' + (t && t.status));
   });
-  const r2 = await api.as(who.rm, () => api('releaseStep', { taskId: st.release.id, action: 'reject', reason: 'Вторая причина' }));
+  await api.as(who.rm, () => api('releaseStep', { taskId: st.release.id, action: 'reject', reason: 'Вторая причина' }));
   await check('реджект №2', async () => assert.deepEqual(await rejectNos(), [1, 2]));
   await check('история релиза: две попытки с реджектом и третья впереди', async () => {
     const h = await api.as(who.rm, () => api('getRelease', { taskId: st.release.id }));

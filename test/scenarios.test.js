@@ -72,7 +72,7 @@ const mustFail = (promise, re) => promise.then(() => { throw new Error('ожид
 test('сценарии: роли × позиции × жизненный цикл приложения', async () => {
   const api = await setup();
   const S = await studio(api);
-  const { ceo, pm, pmRf, rm, lead, des, ios, qa, aso, out, gold, rf } = S;
+  const { ceo, pm, pmRf, rm, lead, des, ios, qa, aso, out, gold } = S;
 
   // ---------- создание приложения ----------
   await check('участник не создаёт приложение', () => mustFail(api.as(ios, () => api('createApp', { name: 'X', unitId: gold.id }))));

@@ -4,7 +4,7 @@
  * Всё, что создают шорткаты, помечено «тест»: реальные люди этого не видят и уведомлений не получают.
  * Шорткаты добавляются в SHORTCUTS.
  */
-import { S, LS, ACCESS_LABELS, ACCESS_HINTS, personById, unitById, isDev, deptById, activeDepts, relTime, plural } from '../state.js';
+import { S, LS, ACCESS_LABELS, ACCESS_HINTS, personById, unitById, isDev, deptById, activeDepts, relTime } from '../state.js';
 import { $, h, icon, avatar, modal, field, toast, showErr, confirmDlg, fill, topbar } from '../ui.js';
 import { call } from '../api.js';
 import { mode, localLogin, asSystem } from '../data.js';
