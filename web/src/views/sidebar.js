@@ -197,7 +197,7 @@ function drawSidebar() {
       !lite && (staff || (person && person.access === 'rm')) && navLink({ view: 'my' }, 'list', 'Мои задачи', !staff && myCount()),
       // инфо-лист: включает CEO, пункт в меню — сам человек (prefs.infoListNav)
       (S.infoListIds || []).includes(S.meId) && person && (person.prefs || {}).infoListNav &&
-        link({ view: 'settings', tab: 'infolist' }, { class: 'nav-item' + (r.view === 'settings' && r.tab === 'infolist' ? ' active' : '') }, icon('link'), h('span', { class: 'nav-label' }, 'Инфо-лист')),
+        navLink({ view: 'infolist' }, 'link', 'Инфо-лист'),
       sec(staff || (person && person.access === 'rm') ? 'Юниты' : 'Мои юниты', ceo && h('button', { class: 'icon-btn sm', title: 'Новый юнит', onclick: openCreateUnit }, icon('plus', 14))),
       list,
       !units.length && h('div', { class: 'nav-empty' }, 'Юнитов пока нет'),

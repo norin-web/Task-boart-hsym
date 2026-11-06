@@ -3123,3 +3123,6 @@ a.bug-title:hover { text-decoration: underline; }
 .il-fields .il-add-inp { width: 160px; height: 28px; padding: 0 12px; border-radius: 999px; font-size: 12px; font-weight: 600; }
 .prefs-head.il-headrow { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .il-nav { display: inline-flex; align-items: center; gap: 10px; flex-shrink: 0; font-size: 13px; font-weight: 600; cursor: pointer; padding-top: 4px; }
+.il-page { gap: 12px; }
+.il-page .il-sub { margin: -4px 0 4px; font-size: 13px; }
+.il-page .il-q { margin-bottom: 0; }

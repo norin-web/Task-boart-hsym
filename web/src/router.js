@@ -51,6 +51,7 @@ const renderDev = lazy(() => import('./views/dev.js'), 'renderDev');
 const renderPrefs = lazy(() => import('./views/prefs.js'), 'renderPrefs');
 const renderAnalytics = lazy(() => import('./views/analytics.js'), 'renderAnalytics');
 const renderBacklog = lazy(() => import('./views/backlog.js'), 'renderBacklog');
+const renderInfoList = lazy(() => import('./views/infolist.js'), 'renderInfoList');
 
 let rendered = null;
 export const currentView = () => rendered;
@@ -70,6 +71,7 @@ export function parseLocation() {
   if (path === '/ready') return { view: 'ready' };
   if (path === '/rejects') return { view: 'rejects' };
   if (path === '/backlog') return { view: 'backlog' };
+  if (path === '/info') return { view: 'infolist' };
   if (path === '/analytics') return { view: 'analytics' };
   const an = /^\/analytics\/(apps|work|late|shipped|stale)$/.exec(path);
   if (an) return { view: 'analytics', tile: an[1] };
@@ -89,13 +91,13 @@ export function routeUrl(r) {
   }
   if (r.view === 'settings' || r.view === 'admin') return '#/settings' + (r.tab ? '?tab=' + r.tab : '');
   if (r.view === 'app') return '#/app/' + r.id;
-  return r.view === 'my' ? '#/my' : r.view === 'myboard' ? '#/board' : r.view === 'apps' ? '#/apps' : r.view === 'dev' ? '#/dev' : r.view === 'ready' ? '#/ready' : r.view === 'rejects' ? '#/rejects' : r.view === 'backlog' ? '#/backlog' : r.view === 'analytics' ? '#/analytics' + (r.tile ? '/' + r.tile : '') : '#/';
+  return r.view === 'my' ? '#/my' : r.view === 'myboard' ? '#/board' : r.view === 'apps' ? '#/apps' : r.view === 'dev' ? '#/dev' : r.view === 'ready' ? '#/ready' : r.view === 'rejects' ? '#/rejects' : r.view === 'backlog' ? '#/backlog' : r.view === 'infolist' ? '#/info' : r.view === 'analytics' ? '#/analytics' + (r.tile ? '/' + r.tile : '') : '#/';
 }
 
 // Внутренние экраны (карточка приложения, плитка аналитики, настройки): запоминаем, откуда в них зашли.
 // Откуда — в history.state, поэтому «Назад» работает и после перезагрузки; цепочка вложенная (плитка → приложение → …).
 let curFrom = (history.state && history.state.from) || null;
-const LABELS = { home: 'Дашборд', apps: 'Приложения', analytics: 'Аналитика', ready: 'Сводка', rejects: 'Реджекты', backlog: 'Бэклог', my: 'Мои задачи', myboard: 'Моя доска', settings: 'Настройки' };
+const LABELS = { home: 'Дашборд', apps: 'Приложения', analytics: 'Аналитика', ready: 'Сводка', rejects: 'Реджекты', backlog: 'Бэклог', infolist: 'Инфо-лист', my: 'Мои задачи', myboard: 'Моя доска', settings: 'Настройки' };
 const isDetail = r => !r.unit && (r.view === 'app' || r.view === 'settings' || r.view === 'admin' || (r.view === 'analytics' && !!r.tile));
 const homeRoute = () => ({ view: 'home' });
 
@@ -203,11 +205,11 @@ export async function render() {
     if (r.view === 'backlog' && !isSuper()) return navigate({ view: 'home' }, { replace: true });
     if ((r.view === 'apps' || r.view === 'app') && !seesApps()) return navigate({ view: 'home' }, { replace: true });
     const view = r.view;
-    const key = view === 'app' ? 'app:' + r.id : view === 'analytics' ? 'analytics:' + (r.tile || '') : ['my', 'myboard', 'apps', 'dev', 'ready', 'rejects', 'backlog'].includes(view) ? view : view === 'settings' ? 'settings:' + (r.tab || '') : 'home';
+    const key = view === 'app' ? 'app:' + r.id : view === 'analytics' ? 'analytics:' + (r.tile || '') : ['my', 'myboard', 'apps', 'dev', 'ready', 'rejects', 'backlog', 'infolist'].includes(view) ? view : view === 'settings' ? 'settings:' + (r.tab || '') : 'home';
     if (rendered !== key) {
       rendered = key;
-      document.title = ({ my: 'Мои задачи', myboard: 'Моя доска', settings: 'Настройки', analytics: 'Аналитика', apps: 'Приложения', ready: 'Сводка', rejects: 'Реджекты', backlog: 'Бэклог', dev: 'Режим разработчика' }[view] || (isStaff() ? 'Дашборд' : myAccess() === 'rm' ? 'Релизы' : 'Главная')) + ' · Tasks';
-      if (view === 'my') renderMy(); else if (view === 'myboard') renderMyBoard(); else if (view === 'apps') renderApps(); else if (view === 'app') renderAppPage(r.id); else if (view === 'dev') renderDev(); else if (view === 'ready') renderReady(); else if (view === 'rejects') renderRejects(); else if (view === 'backlog') renderBacklog();
+      document.title = ({ my: 'Мои задачи', myboard: 'Моя доска', settings: 'Настройки', analytics: 'Аналитика', apps: 'Приложения', ready: 'Сводка', rejects: 'Реджекты', backlog: 'Бэклог', infolist: 'Инфо-лист', dev: 'Режим разработчика' }[view] || (isStaff() ? 'Дашборд' : myAccess() === 'rm' ? 'Релизы' : 'Главная')) + ' · Tasks';
+      if (view === 'my') renderMy(); else if (view === 'myboard') renderMyBoard(); else if (view === 'apps') renderApps(); else if (view === 'app') renderAppPage(r.id); else if (view === 'dev') renderDev(); else if (view === 'ready') renderReady(); else if (view === 'rejects') renderRejects(); else if (view === 'backlog') renderBacklog(); else if (view === 'infolist') renderInfoList();
       else if (view === 'settings') renderPrefs(r.tab || ''); else if (view === 'analytics') renderAnalytics(r.tile);
       else if (isSuper()) renderCeoHome(); else if (myAccess() === 'moderator') renderPmHome(); else if (myAccess() === 'rm') renderRmHome(); else renderHome();
     }

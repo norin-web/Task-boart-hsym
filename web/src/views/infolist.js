@@ -4,7 +4,8 @@
  * Человек видит его в «Настройках» отдельным разделом.
  */
 import { S, me, unitById, deptById, plural, safeUrl } from '../state.js';
-import { h, icon, avatar, fill, modal, toast, showErr, skeleton } from '../ui.js';
+import { $, h, icon, avatar, fill, modal, toast, showErr, skeleton, topbar } from '../ui.js';
+import { navigate } from '../router.js';
 import { call, send } from '../api.js';
 import { appIcon } from './apps.js';
 import { renderSidebar } from './sidebar.js';
@@ -106,8 +107,8 @@ function cell(f, v) {
     url ? h('a', { href: url, target: '_blank', rel: 'noopener noreferrer', title: v }, shortUrl(v)) : h('span', { title: v }, v), copy);
 }
 
-/** Раздел «Инфо-лист» в настройках человека. */
-export function infoListSection() {
+/** Таблица, поиск и переключатель «В меню слева» — общие для раздела настроек и отдельной страницы. */
+function infoListParts() {
   const body = h('div', { class: 'il-body' }, skeleton());
   const q = h('input', { class: 'inp il-q', type: 'search', placeholder: 'Найти приложение', 'aria-label': 'Найти приложение' });
   let data = null;
@@ -142,12 +143,25 @@ export function infoListSection() {
       .then(() => toast(on ? '«Инфо-лист» добавлен в меню слева' : '«Инфо-лист» убран из меню слева'))
       .catch(e => { nav.checked = !on; p.prefs = { ...(p.prefs || {}), infoListNav: !on }; renderSidebar(); showErr(e); });
   };
+  return { q, body, navSwitch: h('label', { class: 'il-nav' }, h('span', null, 'В меню слева'), nav) };
+}
+const IL_SUB = 'Ссылки по приложениям ваших юнитов. Какие поля здесь — решает CEO';
+
+/** Раздел «Инфо-лист» в настройках человека. */
+export function infoListSection() {
+  const { q, body, navSwitch } = infoListParts();
   return [
-    h('div', { class: 'prefs-head il-headrow' },
-      h('div', null, h('h2', null, 'Инфо-лист'), h('p', { class: 'muted' }, 'Ссылки по приложениям ваших юнитов. Какие поля здесь — решает CEO')),
-      h('label', { class: 'il-nav' }, h('span', null, 'В меню слева'), nav)),
+    h('div', { class: 'prefs-head il-headrow' }, h('div', null, h('h2', null, 'Инфо-лист'), h('p', { class: 'muted' }, IL_SUB)), navSwitch),
     q, body,
   ];
+}
+
+/** Отдельная страница #/info — сюда ведёт пункт «Инфо-лист» в меню слева. */
+export function renderInfoList() {
+  if (!hasInfoList()) { navigate({ view: 'home' }, { replace: true }); return; }
+  const { q, body, navSwitch } = infoListParts();
+  fill($('#main'), topbar([h('h1', null, 'Инфо-лист')], [navSwitch]),
+    h('div', { class: 'view-body' }, h('div', { class: 'page il-page' }, h('p', { class: 'muted il-sub' }, IL_SUB), q, body)));
 }
 
 export const infoListCount = () => { const n = (S.infoListIds || []).length; return n ? `включён у ${n} ${plural(n, ['человека', 'человек', 'человек'])}` : 'пока ни у кого'; };
