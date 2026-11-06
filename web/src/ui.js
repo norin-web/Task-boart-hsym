@@ -353,6 +353,8 @@ export function modal({ title, body, actions, wide, footLeft, onClose, cls }) {
   }
   function onKey(e) {
     if ($('#modal-root').lastElementChild !== wrap) return;
+    // поле с data-esc-local само отменяет ввод по Esc — окно не закрываем
+    if (e.key === 'Escape' && e.target.closest && e.target.closest('[data-esc-local]')) return;
     if (e.key === 'Escape') { e.stopPropagation(); close(); }
     // Tab не уходит из диалога на страницу под ним
     if (e.key === 'Tab') {

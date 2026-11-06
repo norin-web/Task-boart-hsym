@@ -26,6 +26,42 @@ export async function openInfoListsEditor(onDone) {
     })
     .catch(e => { showErr(e); draw(); });
 
+  // «+ Поле»: новое поле-ссылка для всех приложений (как в «Поля приложения») — и сразу в инфо-лист этому человеку
+  const addField = async (p, name) => {
+    name = String(name || '').trim().slice(0, 40);
+    if (!name) { draw(); return; }
+    const same = S.appFields.find(f => f.name.toLowerCase() === name.toLowerCase());
+    try {
+      let id = same && same.id;
+      if (!same) {
+        const before = new Set(S.appFields.map(f => f.id));
+        S.appFields = await send('saveAppFields', { fields: [...S.appFields, { name, kind: 'link' }] });
+        id = (S.appFields.find(f => !before.has(f.id)) || {}).id;
+        toast(`Поле «${name}» добавлено всем приложениям — ссылки заполняются в карточке, в «Быстром доступе»`);
+      }
+      const ids = lists.get(p.id) || [];
+      if (id && !ids.includes(id)) await save(p, true, [...ids, id]); else draw();
+    } catch (e) { showErr(e); }
+  };
+
+  /** «+ Поле» — по клику превращается в поле ввода прямо в строке: Enter — добавить, Esc или пусто — отмена. */
+  const addChip = p => {
+    const btn = h('button', { type: 'button', class: 'fchip il-add', title: 'Новое поле для всех приложений' }, icon('plus', 13), 'Поле');
+    btn.onclick = () => {
+      const inp = h('input', { class: 'inp il-add-inp', maxlength: 40, placeholder: 'Например, GitHub', 'aria-label': 'Название нового поля', 'data-esc-local': '' });
+      let done = false;
+      const finish = ok => { if (done) return; done = true; if (ok) addField(p, inp.value); else draw(); };
+      inp.onkeydown = e => {
+        if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); finish(true); }
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+      };
+      inp.onblur = () => finish(!!inp.value.trim());
+      btn.replaceWith(inp);
+      inp.focus();
+    };
+    return btn;
+  };
+
   const personRow = p => {
     const on = lists.has(p.id);
     const ids = lists.get(p.id) || [];
@@ -37,18 +73,19 @@ export async function openInfoListsEditor(onDone) {
       h('label', { class: 'il-person-head' }, avatar(p, 'sm'),
         h('span', { class: 'il-person-name' }, h('b', null, p.name), pos && h('small', { class: 'muted' }, pos)), sw),
       on && h('div', { class: 'il-fields', role: 'group', 'aria-label': 'Поля инфо-листа: ' + p.name },
-        S.appFields.length ? S.appFields.map(f => {
+        S.appFields.map(f => {
           const has = ids.includes(f.id);
           return h('button', { type: 'button', class: 'fchip' + (has ? ' on' : ''), 'aria-pressed': String(has),
             onclick: () => save(p, true, has ? ids.filter(x => x !== f.id) : [...ids, f.id]) }, f.name);
-        }) : h('span', { class: 'muted' }, 'Полей приложения нет — добавьте их в «Поля приложения»')));
+        }),
+        addChip(p)));
   };
   const draw = () => fill(box, people.map(personRow));
   draw();
   modal({
     title: 'Инфо-лист',
     cls: 'dlg il-dlg',
-    body: [h('p', { class: 'hint', style: { marginTop: 0 } }, 'Ссылки по приложениям своих юнитов — то же, что «Быстрый доступ» в карточке приложения. Включите тем, кому нужно, и отметьте поля. Человек увидит «Инфо-лист» у себя в настройках.'), box],
+    body: [h('p', { class: 'hint', style: { marginTop: 0 } }, 'Ссылки по приложениям своих юнитов — то же, что «Быстрый доступ» в карточке приложения. Включите тем, кому нужно, и отметьте поля; нет нужного — «+ Поле». Человек увидит «Инфо-лист» у себя в настройках.'), box],
     actions: [{ label: 'Готово', primary: true }],
     onClose: () => { if (onDone) onDone(); },
   });
