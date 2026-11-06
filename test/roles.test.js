@@ -1080,3 +1080,20 @@ test('«Поставить в работу»: приложениям без за
   assert.deepEqual(req.map(r => [r.type, r.title, r.assigneeId]), [['new_app', 'New App: Без задач', mod.id]]);
   assert.equal(apps.find(a => a.id === busy.id).requests.length, 1);
 });
+
+test('«Новая задача» от CEO: «Кому» — человек из юнита получает обычную задачу у себя; PM — запрос; апдейт — всегда PM', async () => {
+  const api = await setup();
+  const { admin, mod, designer, A, B } = await team(api);
+  const app = (await api.as(admin, () => api('createApp', { name: 'Кому-тест', unitId: A.id, noRequest: true }))).app;
+  const t = await api.as(admin, () => api('createRequest', { appId: app.id, type: 'other', title: 'Перерисовать иконку', assigneeId: designer.id }));
+  assert.deepEqual([t.kind, t.assigneeId, t.appId], ['', designer.id, app.id]);
+  const mine = await api.as(designer, () => api('getMyBoard', { personId: designer.id }));
+  assert.ok(mine.tasks.some(x => x.id === t.id && x.title === 'Перерисовать иконку'));
+  const r = await api.as(admin, () => api('createRequest', { appId: app.id, type: 'other', title: 'Через PM', pmId: mod.id }));
+  assert.deepEqual([r.kind, r.assigneeId], ['request', mod.id]);
+  const u = await api.as(admin, () => api('createRequest', { appId: app.id, type: 'update', title: 'Виджет', assigneeId: designer.id }));
+  assert.deepEqual([u.kind, u.assigneeId], ['request', mod.id]);
+  const outsider = await api.as(admin, () => api('createPerson', { name: 'Чужой', email: 'z@x.ru', access: 'member' }));
+  await api.as(admin, () => api('setMember', { unitId: B.id, personId: outsider.id }));
+  await api.as(admin, () => assert.rejects(() => api('createRequest', { appId: app.id, type: 'other', title: 'x', assigneeId: outsider.id }), /нет в юните/));
+});

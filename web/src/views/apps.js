@@ -1066,6 +1066,36 @@ function pmPicker(unitId) {
   return { el: sel, hint, setUnit: draw };
 }
 
+/**
+ * «Кому» в окне «Новая задача»: PM юнита сверху, ниже — остальной состав юнита (только для типа «Задача»).
+ * PM получает запрос и раскладывает его; любой другой — обычную задачу прямо себе в «Мои задачи».
+ */
+function assignPicker(unitId) {
+  const sel = h('select', { class: 'inp', 'aria-label': 'Кому' });
+  const hint = document.createTextNode('');
+  let unit = unitId, onlyPm = false;
+  const isPm = id => pmsOf(unit).some(p => p.id === id);
+  const drawHint = () => {
+    const u = unitById(unit);
+    const p = personById(sel.value);
+    hint.textContent = !u || !p ? '' : isPm(p.id) ? `PM юнита «${u.name}» — разложит по этапам.` : "Обычная задача — придёт этому человеку в «Мои задачи».";
+  };
+  const draw = () => {
+    const pms = pmsOf(unit);
+    const rest = onlyPm ? [] : ((unitById(unit) || {}).members || []).map(personById)
+      .filter(p => p && p.active && !pms.some(x => x.id === p.id)).sort((x, y) => x.name.localeCompare(y.name, 'ru'));
+    const keep = sel.value;
+    fill(sel,
+      pms.length ? h('optgroup', { label: 'PM' }, pms.map(p => h('option', { value: p.id }, p.name))) : h('option', { value: '' }, 'Нет PM — добавьте в «Команде»'),
+      rest.length && h('optgroup', { label: 'Команда юнита' }, rest.map(p => h('option', { value: p.id }, p.name))));
+    if (keep && [...sel.options].some(o => o.value === keep)) sel.value = keep;
+    drawHint();
+  };
+  sel.addEventListener('change', drawHint);
+  draw();
+  return { el: sel, hint, setUnit: id => { unit = id; draw(); }, setOnlyPm: v => { onlyPm = v; draw(); }, isPm: () => isPm(sel.value) };
+}
+
 /** Приоритет: от высокого к низкому, «—» — без приоритета. */
 const prioPicker = value => prioSelect(S.priorityOptions, value);
 
@@ -1425,23 +1455,27 @@ export function openNewAppTask(onDone, unitId) {
   const list = S.apps.filter(a => !a.archived && (!unitId || a.unitId === unitId)).sort((x, y) => x.name.localeCompare(y.name));
   const type = h('select', { class: 'inp' }, [['other', 'Задача'], ['update', 'Апдейт']].map(([v, t]) => h('option', { value: v }, t)));
   const title = h('input', { class: 'inp', maxlength: 500, placeholder: 'Что сделать' });
-  const pm = pmPicker(list[0] && list[0].unitId);
-  const app = appPicker({ value: (list[0] || {}).id || '', unitId, onChange: a => pm.setUnit(a.unitId) });
+  const to = assignPicker(list[0] && list[0].unitId);
+  const app = appPicker({ value: (list[0] || {}).id || '', unitId, onChange: a => to.setUnit(a.unitId) });
+  // апдейт раскладывает PM — для него в «Кому» только PM
+  type.addEventListener('change', () => to.setOnlyPm(type.value === 'update'));
   const due = h('input', { class: 'inp', type: 'date' });
   const prio = prioPicker('');
   const desc = h('textarea', { class: 'inp', rows: 3 });
   modal({
     title: 'Новая задача',
     body: [field('Название', title), field('Приложение', app.el), field('Тип', type),
-      h('div', { class: 'grid2' }, field('PM', pm.el, pm.hint), field('Срок', due)), field('Приоритет', prio), field('Описание', desc)],
+      h('div', { class: 'grid2' }, field('Кому', to.el, to.hint), field('Срок', due)), field('Приоритет', prio), field('Описание', desc)],
     actions: [{ label: 'Отмена' }, {
       label: 'Поставить', primary: true,
       action: async close => {
         if (!title.value.trim()) { title.focus(); return; }
         if (!app.value) { toast('Выберите приложение', { type: 'error' }); return; }
-        await send('createRequest', { appId: app.value, type: type.value, title: title.value, pmId: pm.el.value, dueDate: due.value, priority: prio.value, description: desc.value });
+        const pmPicked = to.isPm();
+        const who = personById(to.el.value);
+        await send('createRequest', { appId: app.value, type: type.value, title: title.value, pmId: pmPicked ? to.el.value : '', assigneeId: pmPicked ? '' : to.el.value, dueDate: due.value, priority: prio.value, description: desc.value });
         close();
-        toast('Задача ушла PM');
+        toast(pmPicked || !who ? 'Задача ушла PM' : `Задача ушла: ${who.name}`);
         if (onDone) onDone();
       },
     }],

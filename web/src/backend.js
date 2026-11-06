@@ -2448,6 +2448,16 @@ export function createBackend(db, opts = {}) {
       const respId = await responsiblePm(a.unit_id);
       const pmId = p.pmId && (p.pmId === respId || pms.some(x => x.id === p.pmId)) ? p.pmId : respId;
       const prio = await validPriority('priority' in p ? p.priority : a.priority);
+      // «Кому» — не PM (задача, не апдейт): обычная задача прямо на человека из юнита, видна у него в «Мои задачи»
+      const to = str(p.assigneeId, 40);
+      if (to && type === 'other' && to !== pmId && to !== respId && !pms.some(x => x.id === to)) {
+        if (!(await unitPeople(a.unit_id)).some(x => x.id === to)) fail('Этого человека нет в юните приложения');
+        return methods.createTask({
+          unitId: a.unit_id, title: req(str(p.title, 500), 'Название задачи'), description: p.description || '',
+          assigneeId: to, dueDate: p.dueDate, appId: a.id, test: !!a.is_test,
+          fields: prio ? { [PRIORITY_FIELD]: prio } : {}, specUrl: p.specUrl,
+        }, ctx);
+      }
       // шаблон апдейта: пункты — чеклистом запроса, нужные этапы — запоминаем для разбивки
       const tpl = p.templateId ? await one('task_templates', String(p.templateId)) : null;
       let title = str(p.title, 500) || (tpl && tpl.title) || `${REQUEST_TYPES[type]}: ${a.name}`;
