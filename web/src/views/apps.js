@@ -1333,24 +1333,57 @@ export function openImportApps(onDone, unitId) {
 }
 
 /** «Новая задача» с дашборда CEO: приложение, тип (апдейт / задача) — уходит PM юнита приложения. */
+/**
+ * Выбор приложения: юнит (чипы «Все» и юниты), поиск по названию и названию в сторе, список с иконками.
+ * Вместо длинного выпадающего списка: при сотне приложений нужное находится за пару букв. Возвращает { el, value, focus }.
+ */
+export function appPicker({ value = '', unitId = '', onChange } = {}) {
+  let unit = unitId || ((S.apps.find(a => a.id === value) || {}).unitId) || '';
+  let q = '';
+  let cur = value;
+  const apps = () => S.apps.filter(a => !a.archived).sort((x, y) => x.name.localeCompare(y.name, 'ru'));
+  const chips = h('div', { class: 'ap-pick-units', role: 'group', 'aria-label': 'Юнит' });
+  const search = h('input', { class: 'inp ap-pick-q', type: 'search', placeholder: 'Найти приложение', 'aria-label': 'Найти приложение',
+    oninput: e => { q = e.target.value.trim().toLowerCase(); drawList(); } });
+  const list = h('div', { class: 'ap-pick-list', role: 'listbox', 'aria-label': 'Приложения' });
+  const drawChips = () => fill(chips, [['', 'Все'], ...units().map(u => [u.id, u.name])].map(([id, name]) =>
+    h('button', { type: 'button', class: 'fchip' + (unit === id ? ' on' : ''), 'aria-pressed': String(unit === id), onclick: () => { unit = id; drawChips(); drawList(); } }, name)));
+  const drawList = () => {
+    const rows = apps().filter(a => (!unit || a.unitId === unit) && (!q || a.name.toLowerCase().includes(q) || (a.storeName || '').toLowerCase().includes(q)));
+    fill(list, rows.length ? rows.map(a => h('button', {
+      type: 'button', class: 'ap-pick-row' + (a.id === cur ? ' on' : ''), role: 'option', 'aria-selected': String(a.id === cur),
+      onclick: () => { cur = a.id; drawList(); if (onChange) onChange(a); },
+    }, appIcon(a, 'sm'),
+    h('span', { class: 'ap-pick-name' }, h('b', null, a.name), a.storeName && a.storeName !== a.name && h('small', { class: 'muted' }, a.storeName)),
+    !unit && h('span', { class: 'muted ap-pick-unit' }, (unitById(a.unitId) || {}).name || ''),
+    h('span', { class: 'ap-pick-check' }, a.id === cur && icon('check', 14))))
+      : h('p', { class: 'muted ap-pick-empty' }, q ? 'Ничего не нашлось' : 'В этом юните приложений нет'));
+    const on = list.querySelector('.on');
+    if (on) requestAnimationFrame(() => on.scrollIntoView({ block: 'nearest' }));
+  };
+  drawChips();
+  drawList();
+  return { el: h('div', { class: 'ap-pick' }, chips, search, list), get value() { return cur; }, focus: () => search.focus() };
+}
+
 export function openNewAppTask(onDone, unitId) {
   const list = S.apps.filter(a => !a.archived && (!unitId || a.unitId === unitId)).sort((x, y) => x.name.localeCompare(y.name));
-  const app = h('select', { class: 'inp' }, list.map(a => h('option', { value: a.id }, a.name)));
   const type = h('select', { class: 'inp' }, [['other', 'Задача'], ['update', 'Апдейт']].map(([v, t]) => h('option', { value: v }, t)));
   const title = h('input', { class: 'inp', maxlength: 500, placeholder: 'Что сделать' });
   const pm = pmPicker(list[0] && list[0].unitId);
-  app.addEventListener('change', () => { const a = list.find(x => x.id === app.value); pm.setUnit(a && a.unitId); });
+  const app = appPicker({ value: (list[0] || {}).id || '', unitId, onChange: a => pm.setUnit(a.unitId) });
   const due = h('input', { class: 'inp', type: 'date' });
   const prio = prioPicker('');
   const desc = h('textarea', { class: 'inp', rows: 3 });
   modal({
     title: 'Новая задача',
-    body: [field('Название', title), h('div', { class: 'grid2' }, field('Приложение', app), field('Тип', type)),
+    body: [field('Название', title), field('Приложение', app.el), field('Тип', type),
       h('div', { class: 'grid2' }, field('PM', pm.el, pm.hint), field('Срок', due)), field('Приоритет', prio), field('Описание', desc)],
     actions: [{ label: 'Отмена' }, {
       label: 'Поставить', primary: true,
       action: async close => {
         if (!title.value.trim()) { title.focus(); return; }
+        if (!app.value) { toast('Выберите приложение', { type: 'error' }); return; }
         await send('createRequest', { appId: app.value, type: type.value, title: title.value, pmId: pm.el.value, dueDate: due.value, priority: prio.value, description: desc.value });
         close();
         toast('Задача ушла PM');

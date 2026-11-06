@@ -327,3 +327,17 @@ test('неизвестный метод и внутренние ошибки н�
   assert.equal((await call('toString', {})).ok, false);
   assert.equal((await call('getBoard', null)).code, 'NOT_FOUND');
 });
+
+test('бэклог: у идеи юнит — общий или выбранный; у апдейта — юнит приложения; запуск нового — в юнит идеи', async () => {
+  const api = await setup();
+  const u = await api('createUnit', { name: 'Gold', key: 'GLD' });
+  const { app } = await api('createApp', { name: 'Пульт', unitId: u.id, noRequest: true });
+  const common = await api('saveIdea', { kind: 'new_app', title: 'Общая идея' });
+  assert.equal(common.unitId, '');
+  const mine = await api('saveIdea', { kind: 'new_app', unitId: u.id, title: 'Идея Gold' });
+  assert.equal(mine.unitId, u.id);
+  const upd = await api('saveIdea', { kind: 'update', appId: app.id, title: 'Виджеты' });
+  assert.equal(upd.unitId, u.id);
+  const res = await api('startIdea', { id: mine.id, name: 'Новое' });
+  assert.equal(res.request.unitId, u.id);
+});

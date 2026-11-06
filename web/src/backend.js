@@ -264,7 +264,7 @@ const taskOut = r => ({
   createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at,
 });
 
-const ideaOut = r => ({ id: r.id, title: r.title, description: r.description || '', specUrl: r.spec_url || '', kind: r.kind, appId: r.app_id || '', status: r.status, requestId: r.request_id || '', createdBy: r.created_by || '', createdAt: r.created_at, updatedAt: r.updated_at });
+const ideaOut = r => ({ id: r.id, title: r.title, description: r.description || '', specUrl: r.spec_url || '', kind: r.kind, appId: r.app_id || '', unitId: r.unit_id || '', status: r.status, requestId: r.request_id || '', createdBy: r.created_by || '', createdAt: r.created_at, updatedAt: r.updated_at });
 const fileOut = r => ({ id: r.id, taskId: r.task_id, tag: r.tag || '', name: r.name || '', data: r.data, by: r.created_by || '', at: r.created_at });
 
 const fieldOut = r => ({
@@ -2733,10 +2733,12 @@ export function createBackend(db, opts = {}) {
 
     async saveIdea(p, ctx) {
       const kind = p.kind === 'update' ? 'update' : 'new_app';
+      const app = kind === 'update' ? ((p.appId && (await one('apps', String(p.appId)))) || fail('Выберите приложение для апдейта')) : null;
+      // юнит: у апдейта — юнит приложения; у новой идеи — выбранный ('' — общий бэклог)
+      const unitId = app ? app.unit_id : p.unitId ? (await findUnit(String(p.unitId))).id : '';
       const row = {
         title: req(str(p.title, 200), 'Название'), description: str(p.description, 20000), spec_url: linkUrl(p.specUrl), kind,
-        app_id: kind === 'update' ? ((p.appId && (await one('apps', String(p.appId))) || fail('Выберите приложение для апдейта')).id) : '',
-        updated_at: now(),
+        app_id: app ? app.id : '', unit_id: unitId, updated_at: now(),
       };
       if (p.id) {
         await updateOne('ideas', String(p.id), row);
@@ -2760,7 +2762,7 @@ export function createBackend(db, opts = {}) {
       if (idea.kind === 'update') {
         request = await methods.createRequest({ appId: idea.app_id, type: 'update', title: idea.title, description: idea.description, specUrl: idea.spec_url, templateId: p.templateId }, ctx);
       } else {
-        const made = await methods.createApp({ unitId: p.unitId, name: str(p.name, 120) || idea.title, description: idea.description, specUrl: idea.spec_url, requestTitle: `New App: ${str(p.name, 120) || idea.title}` }, ctx);
+        const made = await methods.createApp({ unitId: p.unitId || idea.unit_id, name: str(p.name, 120) || idea.title, description: idea.description, specUrl: idea.spec_url, requestTitle: `New App: ${str(p.name, 120) || idea.title}` }, ctx);
         request = made.request;
       }
       await updateOne('ideas', idea.id, { status: 'started', request_id: request ? request.id : '', updated_at: now() });

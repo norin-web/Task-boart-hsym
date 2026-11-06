@@ -2132,6 +2132,8 @@ create table if not exists ideas (
   created_at  text not null,
   updated_at  text not null
 );
+-- юнит идеи: '' — общий бэклог; у апдейта — юнит приложения
+alter table ideas add column if not exists unit_id text not null default '';
 alter table ideas enable row level security;
 drop policy if exists ideas_all on ideas;
 create policy ideas_all on ideas for all to authenticated using (is_superadmin()) with check (is_superadmin());
