@@ -2996,3 +2996,9 @@ a.bug-title:hover { text-decoration: underline; }
 .unit-panel:has(.app-panel-head) > .up-body { padding: 20px 24px 32px; gap: 24px; }
 .prefs-risk { display: flex; align-items: flex-start; gap: 6px; margin-top: 4px; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--warn-fill, #B45309); }
 .prefs-risk svg { flex: none; margin-top: 1px; }
+
+/* Списки RM (очередь, ревью, реджекты): строки — ровным списком с разделителями, без скруглений и зазоров;
+   над «Показать ещё / Свернуть» — одна линия, а не две */
+.att-list:has(> .rm-row) { gap: 0; }
+.att-list > .rm-row { border-radius: 0; }
+.att-list > .rm-row:has(+ .rc-more) { border-bottom: 0; }
