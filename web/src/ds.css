@@ -2700,9 +2700,8 @@ button.rd-check.on { background: var(--text); border-color: transparent; }
 .rd-row > :first-child { position: sticky; left: 0; z-index: 1; background: inherit; }
 .rd-band > :first-child { z-index: 4; }
 .rd-head > :first-child { z-index: 3; }
-/* «Требует внимания»: строки без скруглённых линий — ровные разделители */
-.att-list .att-row { border-radius: 0; border: 0; border-bottom: 1px solid var(--border); background: transparent; }
-.att-list .att-row:last-child { border-bottom: 0; }
+/* «Требует внимания»: строки без линий, ховер — светлая скруглённая плашка */
+.att-list .att-row { border: 0; border-radius: 14px; padding: 0 12px; background: transparent; }
 .att-list .att-row:hover { background: var(--surface-2); }
 /* «Новый юнит»: ревьюеры по позициям — ровный список без рамок и серых плашек */
 .rv-plain { border: 0; border-radius: 0; overflow: visible; }
@@ -2997,8 +2996,8 @@ a.bug-title:hover { text-decoration: underline; }
 .prefs-risk { display: flex; align-items: flex-start; gap: 6px; margin-top: 4px; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--warn-fill, #B45309); }
 .prefs-risk svg { flex: none; margin-top: 1px; }
 
-/* Списки RM (очередь, ревью, реджекты): строки — ровным списком с разделителями, без скруглений и зазоров;
-   над «Показать ещё / Свернуть» — одна линия, а не две */
-.att-list:has(> .rm-row) { gap: 0; }
-.att-list > .rm-row { border-radius: 0; }
-.att-list > .rm-row:has(+ .rc-more) { border-bottom: 0; }
+/* Списки RM (очередь, ревью, реджекты): как «Требует внимания» — без линий, ховер — скруглённая плашка */
+.att-list:has(> .rm-row) { gap: 2px; }
+.att-list > .rm-row { border: 0; border-radius: 14px; padding: 8px 12px; }
+.att-list > .rm-row:hover { background: var(--surface-2); }
+.att-list > .rc-more { border-top: 0; }
