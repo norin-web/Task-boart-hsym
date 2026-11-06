@@ -1705,6 +1705,30 @@ begin
   return coalesce(v_id, t.id);
 end $$;
 
+-- Приложение на ревью Apple без релиза в трекере (добавлено сразу со статусом «Ревью Apple»): RM отмечает итог —
+-- «Вышло в стор» или «Реджект» (статус приложения по типу live / reject). Могут RM, CEO и PM юнита.
+create or replace function rm_app_status(p_app text, p_result text) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  a apps;
+  st jsonb;
+  cur text;
+  v_status text;
+  at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+begin
+  select * into a from apps where id = p_app;
+  if a.id is null then raise exception 'Приложение не найдено' using errcode = 'P0001'; end if;
+  if not (can_manage(a.unit_id) or my_access() = 'rm') then raise exception 'Недостаточно прав для этого действия' using errcode = '42501'; end if;
+  if p_result not in ('live', 'reject') then raise exception 'Неизвестный шаг' using errcode = 'P0001'; end if;
+  select value into st from app_settings where key = 'appStatuses';
+  select x ->> 'kind' into cur from jsonb_array_elements(coalesce(st, '[]'::jsonb)) x where x ->> 'id' = a.status limit 1;
+  if coalesce(cur, '') <> 'review' then raise exception 'Приложение уже не на ревью Apple' using errcode = 'P0001'; end if;
+  select x ->> 'id' into v_status from jsonb_array_elements(st) x where x ->> 'kind' = p_result limit 1;
+  if v_status is null then raise exception 'В статусах приложения нет статуса для этого шага' using errcode = 'P0001'; end if;
+  update apps set status = v_status, status_at = at_, updated_at = at_ where id = a.id;
+  return v_status;
+end $$;
+
 -- Реджект исправили (задача «Реджект №N» у PM закрыта) — релиз возвращается RM в очередь на отправку (fixedAt).
 create or replace function release_fixed() returns trigger language plpgsql security definer set search_path = public as $$
 declare

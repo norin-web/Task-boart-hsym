@@ -2847,7 +2847,7 @@ export function createBackend(db, opts = {}) {
       const [rows, units, apps, settings] = await Promise.all([
         all(() => T('tasks').select('*').eq('step', 'release').eq('archived', false).neq('assignee_id', '').order('created_at').order('id')),
         all(() => T('units').select('id,key,settings').order('id')),
-        all(() => T('apps').select('id,name,color,icon_url,unit_id,status,priority,is_test').order('id')),
+        all(() => T('apps').select('id,name,color,icon_url,unit_id,status,priority,is_test,archived,status_at').order('id')),
         methods.getReleaseSettings(),
       ]);
       const U = Object.fromEntries(units.map(u => [u.id, u]));
@@ -2866,11 +2866,21 @@ export function createBackend(db, opts = {}) {
           checklist: { done: cl.filter(i => i.done).length, total: cl.length },
         };
       }).filter(x => x.phase !== 'live');
+      // приложения со статусом «Ревью Apple» без релиза в трекере (добавлены сразу на ревью) — тоже в «На ревью Apple»
+      const reviewSt = new Set((await appStatuses()).filter(x => x.kind === 'review').map(x => x.id));
+      const withRelease = new Set(items.filter(x => x.phase === 'submitted' && x.app).map(x => x.app.id));
+      const appOnly = apps.filter(a => !a.archived && reviewSt.has(a.status) && !withRelease.has(a.id) && U[a.unit_id])
+        .map(a => ({ id: '', appOnly: true, unitId: a.unit_id, title: a.name, app: A[a.id], submittedAt: a.status_at || '' }));
       return {
         queue: items.filter(x => !x.phase),
-        review: items.filter(x => x.phase === 'submitted'),
+        review: [...items.filter(x => x.phase === 'submitted'), ...appOnly],
         rejected: items.filter(x => x.phase === 'rejected'),
       };
+    },
+
+    /** Приложение на ревью Apple без релиза: итог от RM — result live (вышло в стор) или reject. Возвращает новый статус. */
+    async appReviewResult(p) {
+      return { status: await rpc('rm_app_status', { p_app: String(p.appId || ''), p_result: String(p.result || '') }) };
     },
 
     /** Режим разработчика: удалить всё, что создали шорткаты (тестовые задачи и приложения). */

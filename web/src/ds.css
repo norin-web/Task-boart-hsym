@@ -1126,6 +1126,7 @@ section:has(> .section-head + .card-box) > .section-head h2 { font-size: 18px; l
 .app-page .app-team-row { display: flex; flex-direction: column; gap: 0; font-size: 14px; }
 .app-page .app-team-row span { font-size: 12px; font-weight: 500; }
 .app-page .app-dates { display: flex; flex-direction: column; gap: 2px; margin: 0; padding-top: 16px; border-top: 1px solid var(--border); font-size: 12px; }
+.app-page-head { display: contents; }
 .topbar .app-title { display: flex; flex-direction: column; min-width: 0; }
 .topbar .app-title h1 { display: flex; align-items: center; gap: 8px; margin: 0; }
 .topbar .app-crumb { font-size: 12px; line-height: 16px; font-weight: 500; }

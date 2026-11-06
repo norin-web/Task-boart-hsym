@@ -910,3 +910,34 @@ test('мониторинг: ошибку пишет вошедший (от св�
   await api.as(admin, () => api('clearClientErrors', {}));
   assert.equal((await api.pg.query('select count(*)::int n from client_errors')).rows[0].n, 0);
 });
+
+test('RM: приложение со статусом «Ревью Apple» без релиза — в «На ревью Apple», итог меняет статус; участнику нельзя', async () => {
+  const api = await setup();
+  const { admin, designer, A } = await team(api);
+  const mk = async () => {
+    const p = await api('createPerson', { name: 'Релиз', email: 'u9@x.ru', access: 'rm', positionId: 'd_release' });
+    await api.pg.query('update people set user_id = $1 where id = $2', [UID(9), p.id]);
+    return { ...p, uid: UID(9) };
+  };
+  const rm = await mk();
+  await api('setMember', { unitId: A.id, personId: rm.id });
+  const made = await api.as(admin, () => api('createApp', { name: 'Шагомер', unitId: A.id, status: 'review', noRequest: true }));
+  const other = await api.as(admin, () => api('createApp', { name: 'Погода', unitId: A.id, status: 'review', noRequest: true }));
+  await api.as(admin, () => api('updateApp', { id: other.app.id, archived: true }));
+  const d = await api.as(rm, () => api('getRmDashboard', {}));
+  assert.deepEqual(d.review.map(x => [x.appOnly, x.app.name]), [[true, 'Шагомер']]);  // архивное не видно
+  await api.as(designer, () => assert.rejects(() => api('appReviewResult', { appId: made.app.id, result: 'live' }), forbidden));
+  assert.equal((await api.as(rm, () => api('appReviewResult', { appId: made.app.id, result: 'live' }))).status, 'live');
+  assert.equal((await api.as(rm, () => api('getRmDashboard', {}))).review.length, 0);
+  // повторно — уже не на ревью
+  await api.as(rm, () => assert.rejects(() => api('appReviewResult', { appId: made.app.id, result: 'reject' })));
+});
+
+test('переименовать приложение: CEO и PM юнита — да, участник — нет', async () => {
+  const api = await setup();
+  const { admin, mod, designer, A } = await team(api);
+  const { app } = await api.as(admin, () => api('createApp', { name: 'Старое', unitId: A.id, noRequest: true }));
+  assert.equal((await api.as(mod, () => api('updateApp', { id: app.id, name: 'Новое' }))).name, 'Новое');
+  await api.as(designer, () => assert.rejects(() => api('updateApp', { id: app.id, name: 'Чужое' })));
+  assert.equal((await api.as(admin, () => api('listApps', {}))).find(x => x.id === app.id).name, 'Новое');
+});

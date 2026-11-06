@@ -484,6 +484,7 @@ export function openAppPanel(a, onChange, page = null) {
       const i = S.apps.findIndex(x => x.id === a.id);
       if (i >= 0) S.apps[i] = { ...S.apps[i], ...fresh };
       draw();
+      redrawHead();
       if (onChange) onChange();
     } catch (e) { showErr(e); }
   };
@@ -626,6 +627,10 @@ export function openAppPanel(a, onChange, page = null) {
       // два режима: на весь экран (по умолчанию) и панель сбоку; переключение — сразу, карточка остаётся открытой
       { label: page ? 'Открывать сбоку' : 'Открывать на весь экран', icon: page ? 'panelSide' : 'panelCenter',
         action: () => { LS.set('appCardMode', page ? 'side' : 'full'); close(); openAppCard(a, onChange); } },
+      canManage(a.unitId) && { label: 'Переименовать', icon: 'edit', action: async () => {
+        const name = await promptDlg('Переименовать приложение', 'Название', a.name);
+        if (name && name !== a.name) save({ name });
+      } },
       { label: 'Настроить карточку', icon: 'layers', action: () => configure() },
       canWatch() && { label: isWatched('app', a.id) ? 'Не отслеживать на дашборде' : 'Отслеживать на дашборде', icon: 'eye', action: () => toggleWatch('app', a.id, a.unitId, a.name) },
       ceo && { sep: true },
@@ -638,6 +643,13 @@ export function openAppPanel(a, onChange, page = null) {
     ];
   };
   const headBox = h('div', null, head());
+  // шапка страницы: иконка, путь и название — перерисовываются после правки (переименование, иконка из стора)
+  const pageTitle = () => {
+    const u0 = unitById(a.unitId);
+    return [appIcon(a, 'lg'), h('div', { class: 'app-title' }, h('span', { class: 'app-crumb muted' }, 'Приложения' + (u0 ? ' / ' + u0.name : '')), h('h1', null, a.name, a.isTest && h('span', { class: 'test-tag' }, 'тест')))];
+  };
+  const pageHead = h('div', { class: 'app-page-head' }, pageTitle());
+  function redrawHead() { if (page) fill(pageHead, pageTitle()); else fill(headBox, head()); }
   const backdrop = h('div', { class: 'panel-backdrop', onclick: close });
   draw();
   loadNotes();
@@ -645,8 +657,7 @@ export function openAppPanel(a, onChange, page = null) {
     // страница (макет 12б): шапка в topbar, ниже блоки слева и правая колонка
     const storeA = storeUrl && h('a', { class: 'btn ghost sm aph-store-btn', href: safeUrl(storeUrl), target: '_blank', rel: 'noopener' }, 'Открыть в App Store', icon('arrowUpRight', 13));
     const more = h('button', { class: 'icon-btn', title: 'Действия', 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); menu(e.currentTarget, actions()); } }, icon('more', 18));
-    const u0 = unitById(a.unitId);
-    fill(page, topbar([appIcon(a, 'lg'), h('div', { class: 'app-title' }, h('span', { class: 'app-crumb muted' }, 'Приложения' + (u0 ? ' / ' + u0.name : '')), h('h1', null, a.name, a.isTest && h('span', { class: 'test-tag' }, 'тест')))], [storeA, more]),
+    fill(page, topbar([pageHead], [storeA, more]),
       h('div', { class: 'view-body' }, h('div', { class: 'app-page' }, body, side)));
   } else {
     panel.append(headBox, body);

@@ -46,11 +46,14 @@ export async function renderRmHome() {
       h('span', { class: 'rq-line' }, h('b', { class: 'danger-text' }, `№${x.rejectNo || ''} · ${x.reason}`), h('span', { class: 'muted' }, ' · ' + relTime(x.rejectedAt)))],
     x => [h('button', { class: 'btn', title: 'Задача по реджекту закроется, релиз вернётся в очередь', onclick: () => closeReject(x) }, 'Закрыть реджект'),
       h('button', { class: 'btn', onclick: () => step(x, 'resubmit') }, 'Отправил снова')], 0, true) },
+    // приложение без релиза в трекере (добавлено сразу со статусом «Ревью Apple») — срок от смены статуса, итог меняет статус приложения
     { id: 'review', title: 'На ревью Apple', col: 'right', render: () => section('На ревью Apple', 'На ревью ничего', 'Отправленные в Apple релизы появятся здесь', d.review, x => [
-      h('span', { class: 'muted rq-line' }, 'отправлено ' + fmtShort(x.submittedAt) + ' · ждёт ' + (days(x.submittedAt) ? days(x.submittedAt) + ' дн.' : 'с сегодня'))],
+      h('span', { class: 'muted rq-line' }, x.appOnly
+        ? ['статус приложения', x.submittedAt && 'с ' + fmtShort(x.submittedAt), x.submittedAt && 'ждёт ' + (days(x.submittedAt) ? days(x.submittedAt) + ' дн.' : 'с сегодня')].filter(Boolean).join(' · ')
+        : 'отправлено ' + fmtShort(x.submittedAt) + ' · ждёт ' + (days(x.submittedAt) ? days(x.submittedAt) + ' дн.' : 'с сегодня'))],
     x => [
-      h('button', { class: 'btn danger solid', onclick: () => reject(x) }, 'Реджект'),
-      h('button', { class: 'btn success', onclick: () => step(x, 'live') }, 'Вышло в стор')], 1) },
+      h('button', { class: 'btn danger solid', onclick: () => (x.appOnly ? appResult(x, 'reject') : reject(x)) }, 'Реджект'),
+      h('button', { class: 'btn success', onclick: () => (x.appOnly ? appResult(x, 'live') : step(x, 'live')) }, 'Вышло в стор')], 1) },
     { id: 'store', title: 'Релизы в App Store', col: 'right', render: () => storeBlock(live.rows) },
     // свои приложения и задачи «в фокусе» — статус обновляется сам; пустого блока нет
     { id: 'watch', title: 'Мои приложения и задачи', col: 'full', render: () => watchBlock([], { openApp: id => openAppById(id, load), openTask: peekTask, appIcon, appStatusCell, stageDots, release: true }) },
@@ -61,6 +64,14 @@ export async function renderRmHome() {
     try {
       await send('releaseStep', { taskId: x.id, action, reason });
       toast({ close_reject: 'Реджект закрыт — релиз в очереди', live: `«${x.app ? x.app.name : x.title}» в App Store`, resubmit: 'Отправлено снова', reject: 'Реджект: задача ушла PM' }[action]);
+      load();
+    } catch (e) { showErr(e); }
+  }
+  async function appResult(x, result) {
+    if (result === 'reject' && !(await confirmDlg('Статус приложения станет «Реджект». Релиза в трекере нет — задачу на исправление ставит CEO или PM.', { ok: 'Реджект', danger: true, title: `Реджект «${x.app.name}»?` }))) return;
+    try {
+      await send('appReviewResult', { appId: x.app.id, result });
+      toast(result === 'live' ? `«${x.app.name}» в App Store` : `«${x.app.name}»: реджект`);
       load();
     } catch (e) { showErr(e); }
   }
@@ -86,7 +97,7 @@ function section(title, hint, sub, rows, line, actions, limit = 0, below = false
     rows.length
       ? h('div', { class: 'card-box att-list' }, (limit && !all ? rows.slice(0, limit) : rows).map(x => h('div', { class: 'rm-row' + (below ? ' below' : '') },
         x.app ? appIcon(x.app, 'sm') : h('span'),
-        h('button', { class: 'link-btn rm-main', onclick: () => peekTask(x.unitId, x.id) },
+        h('button', { class: 'link-btn rm-main', onclick: () => (x.appOnly ? openAppById(x.app.id) : peekTask(x.unitId, x.id)) },
           h('span', { class: 'rm-title' }, h('b', null, x.app ? x.app.name : x.title, x.version ? ' · ' + x.version : ''), x.app && x.app.isTest && h('span', { class: 'test-tag' }, 'тест')),
           line(x)),
         h('div', { class: 'rm-actions' }, actions(x)))),
