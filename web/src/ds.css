@@ -3001,3 +3001,15 @@ a.bug-title:hover { text-decoration: underline; }
 .att-list > .rm-row { border: 0; border-radius: 14px; padding: 8px 12px; }
 .att-list > .rm-row:hover { background: var(--surface-2); }
 .att-list > .rc-more { border-top: 0; }
+
+/* Список приложений: иконка и название крупнее (иконка 44, название 15/22, название в сторе 13) */
+.apps-page .ap-row .ap-name .uc-icon, #main:has(.unit-tabs) .apps-page .ap-name .uc-icon { width: 44px; height: 44px; border-radius: 11px; font-size: 14px; flex: none; }
+.apps-page .ap-row .ap-name { gap: 12px; }
+.apps-page .ap-row .ap-names b { font-size: 15px; line-height: 22px; }
+.apps-page .ap-row .ap-names small { font-size: 13px; line-height: 18px; }
+.apps-page .ap-group .ap-row, .apps-page > .ap-list .ap-row { min-height: 64px; }
+
+/* «Быстрый доступ» в карточке приложения: без линий, ховер — скруглённая плашка; текст остаётся по краю заголовка */
+.app-page .af-list, .unit-panel .af-list { margin: 0 -12px; }
+.app-page .af-list .af-row, .unit-panel .af-list .af-row { min-height: 44px; padding: 0 12px; border: 0; border-radius: 14px; }
+.app-page .af-list .af-row:hover, .unit-panel .af-list .af-row:hover { background: var(--surface-2); }
