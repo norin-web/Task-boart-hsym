@@ -2439,9 +2439,15 @@ end $$;
 revoke execute on function store_check_tick() from authenticated, public, anon;
 
 -- расписание: каждые 2 минуты (если расширение pg_cron включено); выключатель — у CEO, функция сама молчит при off
+-- ошибка расписания не должна останавливать остальную схему: тогда только предупреждение в выводе SQL Editor
 do $$ begin
   if exists (select 1 from pg_extension where extname = 'pg_cron') then
-    perform cron.schedule('store-check', '*/2 * * * *', 'select public.store_check_tick()');
+    begin
+      perform cron.schedule('store-check', '*/2 * * * *', 'select public.store_check_tick()');
+    exception when others then raise notice 'Автопроверка App Store: расписание не создано — %', sqlerrm;
+    end;
+  else
+    raise notice 'Автопроверка App Store: расширение pg_cron не включено (Database → Extensions)';
   end if;
 end $$;
 
