@@ -3051,3 +3051,12 @@ a.bug-title:hover { text-decoration: underline; }
 .ap-pick-unit { font-size: 12px; }
 .ap-pick-check { display: inline-flex; color: var(--text); }
 .ap-pick-empty { margin: 0; padding: 16px; text-align: center; font-size: 13px; }
+
+/* Обзор юнита → «Приложения»: иконка, название и название в сторе; без линий, ховер — мягкая плашка */
+.app-brief { margin: 0 -12px; }
+.app-brief-row, .app-brief-row + .app-brief-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; min-height: 56px; padding: 6px 12px; border: 0; border-radius: 14px; }
+.app-brief-row:last-child { border-bottom: 0; }
+.app-brief-row:hover { background: var(--surface-2); }
+.app-brief-row .uc-icon { width: 40px; height: 40px; border-radius: 10px; font-size: 13px; }
+.app-brief-name b { font-size: 14px; line-height: 20px; font-weight: 600; }
+.app-brief-name small { font-size: 12px; line-height: 16px; }

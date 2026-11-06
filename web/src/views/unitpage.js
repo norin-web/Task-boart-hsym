@@ -160,7 +160,8 @@ function appsBrief(u, apps, reload, LIMIT = 3) {
       link({ unit: u.id, mode: 'apps' }, { class: 'btn ghost sm' }, 'Все')),
     apps.length
       ? h('div', { class: 'card-box app-brief' }, apps.slice(0, LIMIT).map(a => h('button', { class: 'app-brief-row', onclick: () => openAppCard(a, reload) },
-        h('span', { class: 'app-brief-name' }, a.name),
+        appIcon(a, 'sm'),
+        h('span', { class: 'app-brief-name' }, h('b', null, a.name), a.storeName && a.storeName !== a.name && h('small', { class: 'muted' }, a.storeName)),
         h('span', { class: 'app-brief-st' }, appStatusCell(appStatusById(a.status), a)))))
       : emptyBlock('Приложений пока нет', { ic: 'app' }));
 }
