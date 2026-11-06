@@ -451,6 +451,7 @@ test('RM: релиз — поля, свой чеклист, отправка в 
     assert.equal(s1.task.assigneeId, rm.id); // ревьюеру не переназначили
     d = await api('getRmDashboard', {});
     assert.equal(d.review.length, 1);
+    assert.deepEqual([d.review[0].what.kind, d.review[0].what.label], ['new_app', 'Новое приложение']); // что ушло в Apple
     await assert.rejects(() => api('releaseStep', { taskId: st.release.id, action: 'reject', reason: ' ' }), /Опишите/);
     const rj = await api('releaseStep', { taskId: st.release.id, action: 'reject', reason: 'Guideline 3.1.2', shot: 'drive.google.com/shot1' });
     assert.ok(rj.rejectRequestId);
@@ -469,7 +470,11 @@ test('RM: релиз — поля, свой чеклист, отправка в 
     assert.ok(d.queue[0].fixedAt);
     assert.equal(d.queue[0].rejectNo, 1);
     await api('releaseStep', { taskId: st.release.id, action: 'submit' });
+    assert.equal((await api('getRmDashboard', {})).review[0].what.label, 'Исправления реджекта №1');
   });
+  // карточка приложения: что на ревью — исправления реджекта №1, с задачей реджекта
+  const inReview = (await appNow(app.id)).review;
+  assert.deepEqual([inReview.kind, inReview.label, inReview.requestId, inReview.releaseId], ['reject', 'Исправления реджекта №1', fix.id, st.release.id]);
   // PM закрыл этап «Релиз» на своей доске — у RM он остаётся «на ревью Apple»
   await api.as(pm, () => api('updateTask', { id: st.release.id, patch: { status: 'done' } }));
   await api.as(rm, async () => {

@@ -50,7 +50,7 @@ export async function renderRmHome() {
     { id: 'review', title: 'На ревью Apple', col: 'right', render: () => section('На ревью Apple', 'На ревью ничего', 'Отправленные в Apple релизы появятся здесь', d.review, x => [
       h('span', { class: 'muted rq-line' }, x.appOnly
         ? ['статус приложения', x.submittedAt && 'с ' + fmtShort(x.submittedAt), x.submittedAt && 'ждёт ' + (days(x.submittedAt) ? days(x.submittedAt) + ' дн.' : 'с сегодня')].filter(Boolean).join(' · ')
-        : 'отправлено ' + fmtShort(x.submittedAt) + ' · ждёт ' + (days(x.submittedAt) ? days(x.submittedAt) + ' дн.' : 'с сегодня'))],
+        : [x.what && x.what.label, 'отправлено ' + fmtShort(x.submittedAt), 'ждёт ' + (days(x.submittedAt) ? days(x.submittedAt) + ' дн.' : 'с сегодня')].filter(Boolean).join(' · '))],
     x => [
       h('button', { class: 'btn danger solid', onclick: () => (x.appOnly ? appResult(x, 'reject') : reject(x)) }, 'Реджект'),
       h('button', { class: 'btn success', onclick: () => (x.appOnly ? appResult(x, 'live') : step(x, 'live')) }, 'Вышло в стор')], 1) },

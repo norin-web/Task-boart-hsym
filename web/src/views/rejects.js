@@ -19,7 +19,11 @@ let tab = 'open';
 
 /** Сколько реджектов открыто сейчас — число у пункта меню. */
 export async function openRejectCount() {
-  try { const d = await call('getRmDashboard', {}); return (d.rejected || []).length + (d.rejectedApps || []).length; } catch { return 0; }
+  try {
+    const d = await call('getRmDashboard', {});
+    // открыто = отмечен реджект и ещё не отправлено заново (у PM или исправлен и ждёт отправки)
+    return (d.rejected || []).length + (d.queue || []).filter(x => x.rejectNo && x.fixedAt).length + (d.rejectedApps || []).length;
+  } catch { return 0; }
 }
 
 export async function renderRejects() {
@@ -28,22 +32,29 @@ export async function renderRejects() {
   fill(main, topbar([h('h1', null, 'Реджекты')], []), h('div', { class: 'view-body' }, body));
   let rows = [];
   let appRejects = [];  // приложения со статусом «Реджект» без реджекта релиза (добавлены сразу с этим статусом)
+  let appResent = [];   // такие же, снова в «Ревью Apple» после «Реджекта» — отправлены повторно
   let shelved = [];     // убранные CEO: Design Spam [4.3] и удалённые
 
   const load = async () => {
     try {
       const [dash, hist, gone] = await Promise.all([call('getRmDashboard', {}), call('getReleaseHistory', { result: 'reject' }), call('listApps', { archived: true })]);
       appRejects = dash.rejectedApps || [];
+      appResent = (dash.review || []).filter(x => x.appOnly && x.afterReject).map(x => ({ ...x, at: x.submittedAt }));
       shelved = gone;
-      const active = new Map((dash.rejected || []).map(x => [x.id, x]));
+      // состояние реджекта — по текущей фазе его релиза (если это последний реджект релиза):
+      // rejected (у PM) или '' (исправлен / RM исправляет сам, ждёт отправки) — открыт; submitted — отправлено повторно; иначе закрыт
+      const active = new Map([...(dash.queue || []), ...(dash.review || []).filter(x => !x.appOnly), ...(dash.rejected || [])].map(x => [x.id, x]));
       rows = (hist.rows || []).map(x => {
         const a = active.get(x.taskId);
-        const open = !!a && (a.rejectNo || 0) === (x.rejectNo || 0);
-        return { ...x, open, fixed: open && !!a.fixedAt, pmId: open ? a.pmId : '', shot: x.shot || (open ? a.shot : ''), requestId: x.requestId || (open ? a.rejectRequestId : '') };
+        const latest = !!a && (a.rejectNo || 0) === (x.rejectNo || 0);
+        const state = !latest ? 'closed' : a.phase === 'submitted' ? 'resent' : a.phase === 'rejected' || !a.phase ? 'open' : 'closed';
+        const open = state === 'open';
+        return { ...x, state, open, fixed: open && !a.phase, resentAt: state === 'resent' ? a.submittedAt : '', pmId: open ? a.pmId : '',
+          shot: x.shot || (open ? a.shot : ''), requestId: x.requestId || (open ? a.rejectRequestId : '') };
       });
       // открытый реджект, которого нет в истории (старые данные), всё равно показываем
       for (const a of dash.rejected || []) {
-        if (!rows.some(r => r.taskId === a.id && r.open)) rows.push({ taskId: a.id, requestId: a.rejectRequestId || '', unitId: a.unitId, app: a.app, rejectNo: a.rejectNo, reason: a.reason, at: a.rejectedAt, shot: a.shot, open: true, fixed: !!a.fixedAt, pmId: a.pmId });
+        if (!rows.some(r => r.taskId === a.id && r.open)) rows.push({ taskId: a.id, requestId: a.rejectRequestId || '', unitId: a.unitId, app: a.app, rejectNo: a.rejectNo, reason: a.reason, at: a.rejectedAt, shot: a.shot, state: 'open', open: true, fixed: false, pmId: a.pmId });
       }
       draw();
     } catch (e) { showErr(e); }
@@ -83,7 +94,10 @@ export async function renderRejects() {
             icon('eye', 13), `${x.shots} ${plural(x.shots, ['скриншот', 'скриншота', 'скриншотов'])}`),
           x.shot && h('a', { class: 'rj-shot', href: safeUrl(x.shot), target: '_blank', rel: 'noopener', title: x.shot }, icon('link', 13), 'ссылка на скрин'))),
       h('div', { class: 'rj-side' },
-        h('span', { class: 'rj-state ' + (x.fixed ? 'ok' : x.open ? 'wait' : 'done') }, x.fixed ? 'Исправлен — отправьте снова' : x.open ? 'У PM на исправлении' : x.selfClosed ? 'Закрыл RM сам' : 'Закрыт'),
+        h('span', { class: 'rj-state ' + (x.state === 'resent' || x.fixed ? 'ok' : x.open ? 'wait' : 'done') },
+          x.state === 'resent' ? `Отправлено повторно · ждёт ${daysAgo(x.resentAt) ? daysAgo(x.resentAt) + ' дн.' : 'с сегодня'}`
+            : x.fixed ? (x.selfClosed ? 'Исправляет RM — ждёт отправки' : 'Исправлен — отправьте снова')
+              : x.open ? 'У PM на исправлении' : x.selfClosed ? 'Закрыл RM сам' : 'Закрыт'),
         h('div', { class: 'rj-actions' },
           h('button', { class: 'btn sm', onclick: openCard }, isSuper() && x.requestId ? 'Открыть' : 'Релиз'),
           isSuper() && x.requestId && h('button', { class: 'btn sm', title: 'Карточка релиза', onclick: () => peekTask(x.unitId, x.taskId) }, 'Релиз'),
@@ -103,10 +117,10 @@ export async function renderRejects() {
       h('div', { class: 'rj-main' },
         h('div', { class: 'rj-title' }, h('button', { class: 'link-btn rj-app', onclick: () => openAppById(x.app.id, load) }, x.app.name),
           u && h('span', { class: 'rj-unit', style: { '--c': u.color } }, u.name), x.app.isTest && h('span', { class: 'test-tag' }, 'тест')),
-        h('div', { class: 'rj-reason muted' }, 'Статус приложения «Реджект» — релиза в трекере нет'),
-        x.at && h('div', { class: 'rj-meta' }, h('span', { class: late ? 'danger-text' : '' }, `с ${fmtDate(x.at.slice(0, 10))} · ${agoText(x.at)}`))),
+        h('div', { class: 'rj-reason muted' }, x.afterReject ? 'Снова в «Ревью Apple» после реджекта — релиза в трекере нет' : 'Статус приложения «Реджект» — релиза в трекере нет'),
+        x.at && h('div', { class: 'rj-meta' }, h('span', { class: late && !x.afterReject ? 'danger-text' : '' }, `с ${fmtDate(x.at.slice(0, 10))} · ${agoText(x.at)}`))),
       h('div', { class: 'rj-side' },
-        h('span', { class: 'rj-state wait' }, 'Реджект'),
+        h('span', { class: 'rj-state ' + (x.afterReject ? 'ok' : 'wait') }, x.afterReject ? 'Отправлено повторно' : 'Реджект'),
         isSuper() && h('div', { class: 'rj-actions' },
           h('button', { class: 'btn sm', 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); menu(e.currentTarget, ['spam', 'sale', 'deleted'].map(id => ({
             label: SHELF_ACTION[id], action: () => done('', shelveAppDlg({ id: x.app.id, name: x.app.name }, id)) }))); } }, 'Убрать', icon('chevron', 13)))));
@@ -140,20 +154,25 @@ export async function renderRejects() {
 
   function draw() {
     const open = rows.filter(r => r.open).sort((a, b) => (b.fixed - a.fixed) || String(a.at).localeCompare(String(b.at)));
-    const closed = rows.filter(r => !r.open).sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    const closed = rows.filter(r => r.state === 'closed').sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    const resent = rows.filter(r => r.state === 'resent').sort((a, b) => String(a.resentAt).localeCompare(String(b.resentAt)));
     const apps = [...appRejects].sort((a, b) => String(a.at).localeCompare(String(b.at)));
+    const resentList = [...resent.map(row), ...appResent.map(appRow)];
     const shelf = id => shelved.filter(a => a.shelf === id).sort((a, b) => String(b.shelvedAt).localeCompare(String(a.shelvedAt)));
-    const tabs = [['open', 'Открытые', open.length + apps.length], ...['spam', 'sale', 'deleted'].map(id => [id, SHELVES[id], shelf(id).length]),
-      ['closed', 'Закрытые', closed.length], ['all', 'Все', rows.length + apps.length]];
+    const tabs = [['open', 'Открытые', open.length + apps.length], ['resent', 'Отправлено повторно', resentList.length],
+      ...['spam', 'sale', 'deleted'].map(id => [id, SHELVES[id], shelf(id).length]),
+      ['closed', 'Закрытые', closed.length], ['all', 'Все', rows.length + apps.length + appResent.length]];
     const waiting = open.filter(r => r.fixed).length;
     const shelfTab = tab in SHELVES;
     const list = shelfTab ? shelf(tab).map(shelfRow)
-      : tab === 'open' ? [...open.map(row), ...apps.map(appRow)] : tab === 'closed' ? closed.map(row) : [...open.map(row), ...apps.map(appRow), ...closed.map(row)];
+      : tab === 'open' ? [...open.map(row), ...apps.map(appRow)] : tab === 'resent' ? resentList : tab === 'closed' ? closed.map(row)
+        : [...open.map(row), ...apps.map(appRow), ...resentList, ...closed.map(row)];
     const empty = {
       open: ['Открытых реджектов нет', 'Когда Apple вернёт релиз, он появится здесь, а PM получит задачу на исправление'],
       spam: ['В Design Spam пусто', 'CEO переносит сюда приложения с реджектом 4.3: меню «⋯» в карточке приложения'],
       sale: ['Снятых с продажи нет', 'Приложение снято с продажи, но не удалено: CEO переносит сюда из меню «⋯» в карточке приложения'],
       deleted: ['Удалённых приложений нет', 'CEO переносит сюда приложения из меню «⋯» в карточке; восстановить можно в любой момент'],
+      resent: ['Повторно отправленных нет', 'После исправления реджекта приложение снова уходит в Apple — здесь видно, что ждёт ответа'],
       closed: ['Закрытых реджектов пока нет', ''], all: ['Реджектов пока нет', ''],
     }[tab];
     fill(body,

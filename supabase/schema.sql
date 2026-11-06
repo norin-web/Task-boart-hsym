@@ -2444,3 +2444,13 @@ do $$ begin
     perform cron.schedule('store-check', '*/2 * * * *', 'select public.store_check_tick()');
   end if;
 end $$;
+
+-- Что ушло в Apple с релизом: название и тип запроса-родителя (новое приложение / апдейт №N). RM видит только этап
+-- «Релиз», а не сам запрос, — отдаём лишь эти два поля и только тем, кто ведёт релизы (CEO, PM, RM).
+create or replace function release_parents(p_ids text[]) returns table (id text, title text, request_type text)
+language sql stable security definer set search_path = public as $$
+  select r.id, r.title, r.request_type from tasks r
+   where r.id = any(p_ids) and my_access() in ('superadmin', 'moderator', 'rm')
+     and exists (select 1 from tasks t where t.parent_id = r.id and t.step = 'release');
+$$;
+grant execute on function release_parents(text[]) to authenticated;

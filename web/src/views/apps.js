@@ -556,6 +556,15 @@ export function openAppPanel(a, onChange, page = null) {
         h('div', { class: 'ap-now' },
           h('div', { class: 'ap-now-st' }, statusPill(st), a.statusAt && h('span', { class: 'muted' }, 'с ' + fmtDate(a.statusAt.slice(0, 10))),
             h('span', { class: 'spacer' }), a.lastActivity && h('span', { class: 'muted' }, 'обновлено ' + relTime(a.lastActivity))),
+          // на ревью Apple — что именно отправили: новое приложение, апдейт №N или исправления реджекта №N
+          a.review && h('div', { class: 'ap-sent' },
+            h('span', { class: 'ap-sent-ic' }, icon('send', 14)),
+            h('span', { class: 'ap-sent-main' }, h('span', { class: 'muted' }, 'Отправлено в Apple'),
+              h('b', null, a.review.label),
+              h('small', { class: 'muted' }, [a.review.version, a.review.submittedAt && fmtDate(a.review.submittedAt.slice(0, 10))].filter(Boolean).join(' · '))),
+            a.review.requestId && a.review.kind !== 'new_app' && h('button', { class: 'btn sm', onclick: () => peekTask(a.review.unitId, a.review.requestId) },
+              a.review.kind === 'reject' ? 'Что в реджекте' : 'Что в апдейте'),
+            h('button', { class: 'btn sm', onclick: () => peekTask(a.review.unitId, a.review.releaseId) }, 'Релиз')),
           active.length
             ? active.map(r => {
               const cur = r.stages.find(s => !s.done && !s.blocked) || null;

@@ -324,6 +324,18 @@ const appOut = r => ({
   order: r.ord, archived: !!r.archived, shelf: r.archived ? (r.shelf || 'deleted') : '', shelvedAt: r.shelved_at || '', isTest: !!r.is_test, createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at,
 });
 
+/**
+ * Что ушло в Apple с этим релизом: после реджекта — его исправления (№, задача реджекта), иначе — по запросу-родителю:
+ * новое приложение целиком или апдейт №N. { kind: new_app | update | reject | other, label, requestId }.
+ */
+function releaseWhat(t, parent) {
+  const rel = json(t.release, {}) || {};
+  if (rel.rejectNo) return { kind: 'reject', label: `Исправления реджекта №${rel.rejectNo}`, requestId: rel.rejectRequestId || '' };
+  if (parent && parent.request_type === 'new_app') return { kind: 'new_app', label: 'Новое приложение', requestId: parent.id };
+  if (parent && parent.request_type === 'update') return { kind: 'update', label: parent.title, requestId: parent.id };
+  return { kind: 'other', label: parent ? parent.title : 'Релиз', requestId: parent ? parent.id : '' };
+}
+
 /** Релизные поля: { id, name, kind: text | longtext | link, required }. */
 function cleanReleaseFields(list) {
   const seen = new Set();
@@ -576,6 +588,13 @@ export function createBackend(db, opts = {}) {
     const ids = (await unitMembers(unitId)).map(m => m.personId);
     const list = (await people()).filter(x => x.active && ids.includes(x.id));
     return role ? list.filter(x => x.access === role) : list;
+  }
+  /** Запросы-родители релизов: { id → { id, title, request_type } } (функция базы — RM самих запросов не видит). */
+  async function releaseParents(ids) {
+    const list = [...new Set(ids.filter(Boolean))];
+    if (!list.length) return {};
+    const rows = (await rpc('release_parents', { p_ids: list })) || [];
+    return Object.fromEntries(rows.map(r => [r.id, r]));
   }
   /** Ответственный за юнит: заданный (PM или CEO), иначе первый PM из состава; в замещение — заместитель (unit_pm в базе). */
   async function responsiblePm(unitId) {
@@ -1896,13 +1915,16 @@ export function createBackend(db, opts = {}) {
       const apps = (await run(q.order('ord').order('created_at'))).map(appOut);
       if (!apps.length) return [];
       const [tasks, units] = await Promise.all([
-        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,due_date,archived,kind,request_type,step,parent_id,app_id,depends_on,fields,created_at,updated_at,done_at,flow_steps')
+        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,due_date,archived,kind,request_type,step,parent_id,app_id,depends_on,fields,created_at,updated_at,done_at,flow_steps,release')
           .in('app_id', apps.map(a => a.id)).eq('archived', false).order('created_at').order('id')),
         all(() => T('units').select('id,key,settings').order('id')),
       ]);
       const U = Object.fromEntries(units.map(u => [u.id, { ...u, st: unitSettings(u.settings) }]));
       const kindOfRow = r => (U[r.unit_id] ? kindOf(U[r.unit_id].st, r.status) : 'todo');
       const doneRow = r => kindOfRow(r) === 'done';
+      // запросы-родители релизов на ревью, которых не видно по правам (у RM) — названия из базы
+      const seen = new Set(tasks.map(t => t.id));
+      const RP = await releaseParents(tasks.filter(t => t.step === 'release' && t.parent_id && !seen.has(t.parent_id)).map(t => t.parent_id));
       return apps.map(a => {
         const own = tasks.filter(t => t.app_id === a.id);
         const requests = own.filter(t => t.kind === 'request').map(r => {
@@ -1921,7 +1943,15 @@ export function createBackend(db, opts = {}) {
         });
         // последняя работа с приложением: само приложение, его задачи и этапы — чтобы видеть забытые
         const lastActivity = [a.updatedAt, a.statusAt, ...own.map(t => t.updated_at)].filter(Boolean).sort().pop() || a.createdAt || '';
-        return { ...a, requests, active: requests.filter(r => !r.done).length, lastActivity };
+        // на ревью Apple: какой релиз отправлен и что в нём — новое приложение, апдейт №N или исправления реджекта
+        const sent = own.filter(t => t.step === 'release' && (json(t.release, {}) || {}).phase === 'submitted')
+          .sort((x, y) => String((json(y.release, {}) || {}).submittedAt).localeCompare(String((json(x.release, {}) || {}).submittedAt)))[0];
+        const sr = sent ? json(sent.release, {}) || {} : null;
+        const review = sent ? {
+          releaseId: sent.id, unitId: sent.unit_id, submittedAt: sr.submittedAt || '', version: [(sr.values || {}).version, (sr.values || {}).build].filter(Boolean).join(' · '),
+          ...releaseWhat(sent, own.find(t => t.id === sent.parent_id) || RP[sent.parent_id]),
+        } : null;
+        return { ...a, requests, active: requests.filter(r => !r.done).length, lastActivity, review };
       });
     },
 
@@ -2998,6 +3028,7 @@ export function createBackend(db, opts = {}) {
       const U = Object.fromEntries(units.map(u => [u.id, u]));
       const A = Object.fromEntries(apps.map(a => [a.id, { id: a.id, name: a.name, color: a.color, iconUrl: a.icon_url || '', unitId: a.unit_id, status: a.status, priority: a.priority || '', isTest: !!a.is_test }]));
       const required = settings.fields.filter(f => f.required);
+      const P = await releaseParents(rows.map(t => t.parent_id));
       // у RM релиз живёт по своей фазе: статусы задач на досках (Done у PM) на это не влияют; уходит только «В сторе»
       const items = rows.filter(t => U[t.unit_id]).map(t => {
         const rel = json(t.release, {}) || {};
@@ -3009,6 +3040,7 @@ export function createBackend(db, opts = {}) {
           rejectNo: rel.rejectNo || 0, shot: rel.shot || '', fixedAt: rel.fixedAt || '', attempts: (rel.history || []).length, version: (rel.values || {}).version || '',
           missing: required.filter(f => !(rel.values || {})[f.id]).map(f => f.name),
           checklist: { done: cl.filter(i => i.done).length, total: cl.length },
+          what: releaseWhat(t, P[t.parent_id]),
         };
       }).filter(x => x.phase !== 'live');
       // приложения со статусом «Ревью Apple» без релиза в трекере (добавлены сразу на ревью) — тоже в «На ревью Apple»
@@ -3016,9 +3048,18 @@ export function createBackend(db, opts = {}) {
       const withRelease = new Set(items.filter(x => x.phase === 'submitted' && x.app).map(x => x.app.id));
       const appOnly = apps.filter(a => !a.archived && reviewSt.has(a.status) && !withRelease.has(a.id) && U[a.unit_id])
         .map(a => ({ id: '', appOnly: true, unitId: a.unit_id, title: a.name, app: A[a.id], submittedAt: a.status_at || '' }));
+      // отправлено повторно после реджекта: в «Ревью Apple» перешли из статуса с типом «Реджект»
+      const rejectIds = new Set((await appStatuses()).filter(x => x.kind === 'reject').map(x => x.id));
+      if (appOnly.length) {
+        const logs = await all(() => T('app_status_log').select('app_id,from_status,at').in('app_id', appOnly.map(x => x.app.id)).order('at').order('id'));
+        const last = {};
+        for (const l of logs) last[l.app_id] = l;
+        for (const x of appOnly) x.afterReject = !!(last[x.app.id] && rejectIds.has(last[x.app.id].from_status));
+      }
       // и со статусом «Реджект» без открытого реджекта релиза — на экран «Реджекты»
       const rejectSt = new Set((await appStatuses()).filter(x => x.kind === 'reject').map(x => x.id));
-      const withReject = new Set(items.filter(x => x.phase === 'rejected' && x.app).map(x => x.app.id));
+      // у кого есть релиз в трекере — реджект виден по релизу; «по статусу» — только приложения без релиза
+      const withReject = new Set(items.filter(x => x.app).map(x => x.app.id));
       const rejectedApps = apps.filter(a => !a.archived && rejectSt.has(a.status) && !withReject.has(a.id) && U[a.unit_id])
         .map(a => ({ appOnly: true, unitId: a.unit_id, app: A[a.id], at: a.status_at || '' }));
       return {
