@@ -32,6 +32,7 @@ export async function loadBoard(unitId, taskId = S.panelTaskId) {
 
 export function renderBoardView() {
   const mode = S.route.mode;
+  if (mode === 'list' || mode === 'board') LS.set('tasksMode', mode);  // вкладка «Задачи» откроет этот вид
   const team = teamById(S.route.team);
   fill($('#main'),
     ...unitHeader(team ? '' : mode === 'list' ? 'list' : 'board', [
