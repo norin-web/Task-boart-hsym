@@ -2375,7 +2375,7 @@ declare
   at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
 begin
   select value into cfg from app_settings where key = 'storeAutoCheck';
-  if not coalesce((cfg ->> 'on')::boolean, false) then delete from store_check_job; return 'off'; end if;
+  if not coalesce((cfg ->> 'on')::boolean, false) then delete from store_check_job where key = 'job'; return 'off'; end if;
 
   -- 1) ответ на прошлый запрос
   select * into j from store_check_job where key = 'job';
@@ -2383,7 +2383,7 @@ begin
     execute 'select id, status_code, content, timed_out from net._http_response where id = $1' into r using j.request_id;
     if r.id is null then
       if j.at > to_char((clock_timestamp() - interval '10 minutes') at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') then return 'waiting'; end if;
-      delete from store_check_job;  -- ответа так и нет — берём следующее
+      delete from store_check_job where key = 'job';  -- ответа так и нет — берём следующее
     elsif coalesce(r.status_code, 0) = 200 and not coalesce(r.timed_out, false) then
       begin body := r.content::jsonb; exception when others then body := null; end;
       if coalesce((body ->> 'resultCount')::int, 0) > 0 then
@@ -2392,7 +2392,7 @@ begin
                icon_url = case when coalesce(body -> 'results' -> 0 ->> 'artworkUrl512', '') ~ '^https://[A-Za-z0-9.-]+\.mzstatic\.com/'
                                then left(body -> 'results' -> 0 ->> 'artworkUrl512', 500) else icon_url end
          where id = j.app_id;
-        delete from store_check_job;
+        delete from store_check_job where key = 'job';
         return 'ok';
       elsif j.idx + 1 < jsonb_array_length(j.countries) then
         execute 'select net.http_get($1)' into j.request_id
@@ -2401,13 +2401,13 @@ begin
         return 'next-country';
       else
         update apps set store_ok = false, store_checked_at = at_ where id = j.app_id;
-        delete from store_check_job;
+        delete from store_check_job where key = 'job';
         return 'gone';
       end if;
     else
       -- ошибка или лимит Apple: вердикт не меняем, только отмечаем, что подходили, и идём дальше
       update apps set store_checked_at = at_ where id = j.app_id;
-      delete from store_check_job;
+      delete from store_check_job where key = 'job';
       return 'error';
     end if;
   end if;
