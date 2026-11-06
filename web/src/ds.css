@@ -3013,3 +3013,9 @@ a.bug-title:hover { text-decoration: underline; }
 .app-page .af-list, .unit-panel .af-list { margin: 0 -12px; }
 .app-page .af-list .af-row, .unit-panel .af-list .af-row { min-height: 44px; padding: 0 12px; border: 0; border-radius: 14px; }
 .app-page .af-list .af-row:hover, .unit-panel .af-list .af-row:hover { background: var(--surface-2); }
+
+/* «Настроить карточку»: включённый блок — не серая плашка (общий стиль пунктов меню), без линий между строками;
+   ховер — мягкая скруглённая плашка, как в списках */
+.cs-dlg .card-layout .le-row + .le-row { border-top: 0; }
+.cs-dlg .cl-pick.menu-item, .cs-dlg .cl-pick.menu-item.on { background: transparent; padding: 0 10px; border-radius: 12px; }
+.cs-dlg .cl-pick.menu-item:hover { background: var(--surface-2); }
