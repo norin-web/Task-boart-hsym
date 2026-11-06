@@ -954,6 +954,7 @@ test('Design Spam / удалённые: убирает только CEO, отк�
   assert.ok(!(await api.as(admin, () => api('listApps', {}))).some(a => a.id === app.id));
   assert.equal((await api.as(admin, () => api('listApps', { archived: true }))).find(a => a.id === app.id).shelf, 'spam');
   // на другую полку — без повторного архива задач
+  assert.equal((await api.as(admin, () => api('shelveApp', { id: app.id, shelf: 'sale' }))).shelf, 'sale');
   assert.equal((await api.as(admin, () => api('shelveApp', { id: app.id, shelf: 'deleted' }))).shelf, 'deleted');
   await api.as(mod, () => assert.rejects(() => api('restoreApp', { id: app.id }), forbidden));
   await api.as(admin, () => api('restoreApp', { id: app.id }));

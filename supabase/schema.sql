@@ -616,7 +616,7 @@ alter table tasks add column if not exists spec_url text not null default '';
 -- Этапы флоу, которые нужны запросу (из шаблона апдейта); пусто — все этапы флоу
 alter table tasks add column if not exists flow_steps jsonb not null default '[]';
 alter table apps add column if not exists status_at text not null default '';
--- Полка приложения (переносит CEO): spam — Design Spam [4.3], deleted — удалённые; приложение при этом archived.
+-- Полка приложения (переносит CEO): spam — Design Spam [4.3], sale — снято с продажи, deleted — удалённые; приложение при этом archived.
 -- shelf_tasks — открытые задачи, которые ушли в архив вместе с ним (вернутся при восстановлении).
 alter table apps add column if not exists shelf text not null default '';
 alter table apps add column if not exists shelved_at text not null default '';

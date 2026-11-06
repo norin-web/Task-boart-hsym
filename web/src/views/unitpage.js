@@ -24,10 +24,10 @@ export async function renderUnitPage() {
 
   async function load() {
     const rm = ((me() || {}).access) === 'rm';
-    let apps, d, rd, lv;
+    let apps, d, rd;
     try {
-      [apps, d, rd, lv] = await Promise.all([call('listApps', { unitId: u.id }), rm ? null : call('getCeoDashboard', { today: todayStr() }),
-        rm ? call('getRmDashboard', {}) : null, rm ? call('getReleaseHistory', { result: 'live' }) : null]);
+      [apps, d, rd] = await Promise.all([call('listApps', { unitId: u.id }), rm ? null : call('getCeoDashboard', { today: todayStr() }),
+        rm ? call('getRmDashboard', {}) : null]);
     } catch (e) { return showErr(e); }
     if (currentView() !== key) return;
     // приложения юнита — в общий список (их ищут формы «Новая задача» и счётчик вкладки)
@@ -35,13 +35,15 @@ export async function renderUnitPage() {
     draw();
     if (rm) {
       // релиз-менеджеру в юните нужно только своё: сколько в очереди, на ревью, в реджекте и в сторе; приложения и команда
+      // реджекты и «В App Store» — и по статусу приложений, добавленных сразу с ним (релиза в трекере нет)
       const n = list => (list || []).filter(x => x.unitId === u.id).length;
+      const inStore = apps.filter(a => (appStatusById(a.status) || {}).kind === 'live').length;
       const rel = (label, count, tone) => h('div', { class: 'cs' + (tone && count ? ' ' + tone : '') }, h('div', { class: 'cs-n' }, count), h('div', { class: 'cs-label' }, label));
       fill(page,
         h('div', { class: 'cs-row unit-stats' },
-          rel('В очереди на релиз', n(rd.queue)), rel('На ревью Apple', n(rd.review)), rel('Реджекты', n(rd.rejected), 'danger'), rel('В App Store', n(lv.rows))),
+          rel('В очереди на релиз', n(rd.queue)), rel('На ревью Apple', n(rd.review)), rel('Реджекты', n(rd.rejected) + n(rd.rejectedApps), 'danger'), rel('В App Store', inStore)),
         h('div', { class: 'home-grid' },
-          h('div', { class: 'home-col' }, appsBrief(u, apps, load)),
+          h('div', { class: 'home-col' }, appsBrief(u, [...apps].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))), load, 6)),
           h('div', { class: 'home-col' }, teamBrief(u))));
       return;
     }
@@ -106,10 +108,9 @@ function tasksByColumn(u, open) {
 }
 
 /** Приложения юнита коротко: иконка, название, статус; клик — карточка. Все — на вкладке «Приложения». */
-function appsBrief(u, apps, reload) {
-  const LIMIT = 3;
+function appsBrief(u, apps, reload, LIMIT = 3) {
   return h('section', null,
-    h('div', { class: 'section-head' }, h('h2', null, 'Приложения'),
+    h('div', { class: 'section-head' }, h('h2', null, 'Приложения', apps.length > LIMIT && h('span', { class: 'muted sec-n' }, apps.length)),
       link({ unit: u.id, mode: 'apps' }, { class: 'btn ghost sm' }, 'Все')),
     apps.length
       ? h('div', { class: 'card-box app-brief' }, apps.slice(0, LIMIT).map(a => h('button', { class: 'app-brief-row', onclick: () => openAppCard(a, reload) },

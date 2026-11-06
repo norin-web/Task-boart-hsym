@@ -1968,11 +1968,11 @@ export function createBackend(db, opts = {}) {
     },
 
     /**
-     * Убрать приложение (CEO): shelf spam — Design Spam [4.3], deleted — удалённые. Приложение уходит из работы (archived),
+     * Убрать приложение (CEO): shelf spam — Design Spam [4.3], sale — снято с продажи (Removed from sale), deleted — удалённые. Приложение уходит из работы (archived),
      * его открытые задачи — в архив (запоминаем, чтобы вернуть). Уже убранное — просто переезжает на другую полку.
      */
     async shelveApp(p, ctx) {
-      const shelf = ['spam', 'deleted'].includes(p.shelf) ? p.shelf : fail('Нет такой полки');
+      const shelf = ['spam', 'sale', 'deleted'].includes(p.shelf) ? p.shelf : fail('Нет такой полки');
       const a = (await one('apps', p.id)) || fail('Приложение не найдено', 'NOT_FOUND');
       const ts = now();
       if (a.archived) {

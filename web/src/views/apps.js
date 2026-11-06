@@ -639,8 +639,8 @@ export function openAppPanel(a, onChange, page = null) {
       ceo && { label: 'Реджект', icon: 'plus', action: () => openCreateRequest(a, 'reject', refresh) },
       { label: 'Заметка', icon: 'edit', action: () => { if (noteBox) { noteBox.scrollIntoView({ block: 'center', behavior: 'smooth' }); noteBox.focus({ preventScroll: true }); } } },
       ceo && { sep: true },
-      ceo && { label: 'В Design Spam [4.3]', icon: 'alert', action: async () => { if (await shelveAppDlg(a, 'spam')) { close(); if (onChange) onChange(); } } },
-      ceo && { label: 'В удалённые', icon: 'archive', action: async () => { if (await shelveAppDlg(a, 'deleted')) { close(); if (onChange) onChange(); } } },
+      ...['spam', 'sale', 'deleted'].map(id => ceo && { label: SHELF_ACTION[id], icon: { spam: 'alert', sale: 'eyeOff', deleted: 'archive' }[id],
+        action: async () => { if (await shelveAppDlg(a, id)) { close(); if (onChange) onChange(); } } }),
       ceo && { label: 'Удалить приложение', icon: 'trash', danger: true, action: async () => { if (await deleteAppsDlg([a])) { close(); if (onChange) onChange(); } } },
     ];
   };
@@ -1107,19 +1107,23 @@ export function openCreateApp(onDone, unitId) {
   });
 }
 
-/** Полки убранных приложений (экран «Реджекты»): Design Spam [4.3] и удалённые. */
-export const SHELVES = { spam: 'Design Spam [4.3]', deleted: 'Deleted' };
+/** Полки убранных приложений (экран «Реджекты»): Design Spam [4.3], снято с продажи (не удалено) и удалённые. */
+export const SHELVES = { spam: 'Design Spam [4.3]', sale: 'Removed from sale', deleted: 'Deleted' };
+/** Как действие называется в меню и на кнопках. */
+export const SHELF_ACTION = { spam: 'В Design Spam [4.3]', sale: 'Снять с продажи', deleted: 'В удалённые' };
+const SHELF_DONE = { spam: 'в Design Spam [4.3]', sale: 'снято с продажи', deleted: 'в удалённых' };
+export const shelfDone = shelf => SHELF_DONE[shelf];
 
 /** Убрать приложение на полку (CEO) с подтверждением; открытые задачи уходят в архив. true — убрано. */
 export async function shelveAppDlg(a, shelf) {
   const ok = await confirmDlg(`«${a.name}» уйдёт из работы: пропадёт из списков, дашбордов и сводки, открытые задачи по нему закроются в архив. Найти его можно в «Реджекты» → ${SHELVES[shelf]}; «Восстановить» вернёт приложение и задачи.`,
-    { ok: shelf === 'spam' ? 'В Design Spam' : 'В удалённые', title: `${SHELVES[shelf]}: «${a.name}»` });
+    { ok: SHELF_ACTION[shelf], title: `${SHELVES[shelf]}: «${a.name}»` });
   if (!ok) return false;
   try {
     await send('shelveApp', { id: a.id, shelf });
     const i = S.apps.findIndex(x => x.id === a.id);
     if (i >= 0) S.apps[i] = { ...S.apps[i], archived: true, shelf };
-    toast(`«${a.name}» — ${shelf === 'spam' ? 'в Design Spam [4.3]' : 'в удалённых'}`);
+    toast(`«${a.name}» — ${SHELF_DONE[shelf]}`);
     return true;
   } catch (e) { showErr(e); return false; }
 }
