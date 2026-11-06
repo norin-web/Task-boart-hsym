@@ -3019,3 +3019,6 @@ a.bug-title:hover { text-decoration: underline; }
 .cs-dlg .card-layout .le-row + .le-row { border-top: 0; }
 .cs-dlg .cl-pick.menu-item, .cs-dlg .cl-pick.menu-item.on { background: transparent; padding: 0 10px; border-radius: 12px; }
 .cs-dlg .cl-pick.menu-item:hover { background: var(--surface-2); }
+/* «Настроить карточку» → Быстрый доступ / Info: «+ Поле» не вплотную к последней строке, второй раздел — с отбивкой */
+.cs-dlg .cs-pane .col-edit-list:not(:empty) + .btn { margin-top: 8px; }
+.cs-dlg .cs-pane > .qf-h:not(:first-child) { margin-top: 12px; }
