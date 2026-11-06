@@ -2329,6 +2329,8 @@ create or replace function audit_settings() returns trigger language plpgsql sec
 begin
   if new.key like 'migr_%' then return new; end if;
   if tg_op = 'UPDATE' and new.value is not distinct from old.value then return new; end if;
+  -- автопроверка App Store сама отмечает начало нового круга — это не действие человека
+  if tg_op = 'UPDATE' and new.key = 'storeAutoCheck' and (new.value - 'cycleAt') is not distinct from (old.value - 'cycleAt') then return new; end if;
   perform audit_write('settings_update', '', new.key, new.key, new.key, null, null);
   return new;
 end $$;
@@ -2336,3 +2338,107 @@ drop trigger if exists audit_settings on app_settings;
 create trigger audit_settings after insert or update on app_settings for each row execute function audit_settings();
 -- писать в журнал напрямую нельзя — только триггерами
 revoke execute on function audit_write(text, text, text, text, text, text, text) from authenticated, public, anon;
+
+-- ── Автопроверка ссылок App Store (включает CEO: app_settings.storeAutoCheck = { on, cycleAt }) ──────────────
+-- Раз в 2 минуты (pg_cron) база проверяет ОДНУ ссылку: случайное приложение из ещё не проверенных в этом круге;
+-- запрос в справочник Apple — через pg_net (ответ приходит асинхронно, разбираем на следующем тике).
+-- Нет в стране из ссылки — на следующих тиках другие страны; проверены все — новый круг. Один запрос за тик.
+do $$ begin
+  begin create extension if not exists pg_net; exception when others then null; end;
+  begin create extension if not exists pg_cron; exception when others then null; end;
+end $$;
+
+create table if not exists store_check_job (
+  key        text primary key default 'job',
+  app_id     text not null,
+  store_id   text not null,
+  countries  jsonb not null default '[]',
+  idx        int not null default 0,
+  request_id bigint,
+  at         text not null
+);
+alter table store_check_job enable row level security;  -- политик нет: только функции базы
+
+create or replace function store_check_tick() returns text language plpgsql security definer set search_path = public as $$
+declare
+  cfg jsonb;
+  j store_check_job;
+  r record;
+  fid text;
+  a apps;
+  url text;
+  sid text;
+  own text;
+  ctry jsonb;
+  body jsonb;
+  cyc text;
+  at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+begin
+  select value into cfg from app_settings where key = 'storeAutoCheck';
+  if not coalesce((cfg ->> 'on')::boolean, false) then delete from store_check_job; return 'off'; end if;
+
+  -- 1) ответ на прошлый запрос
+  select * into j from store_check_job where key = 'job';
+  if j.key is not null then
+    execute 'select id, status_code, content, timed_out from net._http_response where id = $1' into r using j.request_id;
+    if r.id is null then
+      if j.at > to_char((clock_timestamp() - interval '10 minutes') at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') then return 'waiting'; end if;
+      delete from store_check_job;  -- ответа так и нет — берём следующее
+    elsif coalesce(r.status_code, 0) = 200 and not coalesce(r.timed_out, false) then
+      begin body := r.content::jsonb; exception when others then body := null; end;
+      if coalesce((body ->> 'resultCount')::int, 0) > 0 then
+        update apps set store_ok = true, store_checked_at = at_,
+               store_name = coalesce(nullif(left(body -> 'results' -> 0 ->> 'trackName', 200), ''), store_name),
+               icon_url = case when coalesce(body -> 'results' -> 0 ->> 'artworkUrl512', '') ~ '^https://[A-Za-z0-9.-]+\.mzstatic\.com/'
+                               then left(body -> 'results' -> 0 ->> 'artworkUrl512', 500) else icon_url end
+         where id = j.app_id;
+        delete from store_check_job;
+        return 'ok';
+      elsif j.idx + 1 < jsonb_array_length(j.countries) then
+        execute 'select net.http_get($1)' into j.request_id
+          using 'https://itunes.apple.com/lookup?id=' || j.store_id || '&country=' || (j.countries ->> (j.idx + 1));
+        update store_check_job set idx = j.idx + 1, request_id = j.request_id, at = at_ where key = 'job';
+        return 'next-country';
+      else
+        update apps set store_ok = false, store_checked_at = at_ where id = j.app_id;
+        delete from store_check_job;
+        return 'gone';
+      end if;
+    else
+      -- ошибка или лимит Apple: вердикт не меняем, только отмечаем, что подходили, и идём дальше
+      update apps set store_checked_at = at_ where id = j.app_id;
+      delete from store_check_job;
+      return 'error';
+    end if;
+  end if;
+
+  -- 2) следующее приложение: случайное из ещё не проверенных в этом круге
+  select x ->> 'id' into fid from app_settings s, jsonb_array_elements(s.value) x
+   where s.key = 'appFields' and x ->> 'kind' = 'link' and x ->> 'name' ~* 'app ?store' and x ->> 'name' !~* 'connect' limit 1;
+  if fid is null then return 'no-field'; end if;
+  cyc := coalesce(cfg ->> 'cycleAt', '');
+  select * into a from apps where not archived and not is_test and coalesce(info ->> fid, '') ~ 'id[0-9]{5,}'
+     and (store_checked_at = '' or store_checked_at < cyc) order by random() limit 1;
+  if a.id is null then
+    update app_settings set value = cfg || jsonb_build_object('cycleAt', at_) where key = 'storeAutoCheck';
+    select * into a from apps where not archived and not is_test and coalesce(info ->> fid, '') ~ 'id[0-9]{5,}' order by random() limit 1;
+    if a.id is null then return 'empty'; end if;
+  end if;
+  url := a.info ->> fid;
+  sid := substring(url from 'id([0-9]{5,})');
+  own := lower(coalesce(substring(url from 'apple\.com/([A-Za-z]{2})/'), 'us'));
+  select jsonb_agg(c order by o) into ctry from (
+    select c, min(o) as o from unnest(array[own, 'us', 'gb', 'de', 'ru', 'fr', 'jp', 'br']) with ordinality t(c, o) group by c) z;
+  insert into store_check_job (key, app_id, store_id, countries, idx, request_id, at) values ('job', a.id, sid, ctry, 0, null, at_);
+  execute 'select net.http_get($1)' into j.request_id using 'https://itunes.apple.com/lookup?id=' || sid || '&country=' || (ctry ->> 0);
+  update store_check_job set request_id = j.request_id where key = 'job';
+  return 'sent';
+end $$;
+revoke execute on function store_check_tick() from authenticated, public, anon;
+
+-- расписание: каждые 2 минуты (если расширение pg_cron включено); выключатель — у CEO, функция сама молчит при off
+do $$ begin
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    perform cron.schedule('store-check', '*/2 * * * *', 'select public.store_check_tick()');
+  end if;
+end $$;

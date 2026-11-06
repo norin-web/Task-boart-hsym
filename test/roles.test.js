@@ -1010,3 +1010,60 @@ test('журнал: события приложений, юнитов, люде�
   // писать в журнал напрямую нельзя
   await api.as(mod, () => assert.rejects(() => api.pg.query("select audit_write('app_create', '', 'x', 'x', '', null, null)")));
 });
+
+test('автопроверка App Store: одна ссылка за тик, другие страны, «нет в сторе», круг; включает только CEO', async () => {
+  const api = await setup();
+  const { admin, mod, A } = await team(api);
+  // заглушка pg_net: запрос записывается, ответ кладёт тест
+  await api.pg.exec(`create schema if not exists net;
+    create table if not exists net._http_response (id bigint primary key, status_code int, content text, timed_out boolean default false);
+    create table if not exists net.reqs (id bigserial primary key, url text);
+    create or replace function net.http_get(url text) returns bigint language sql as $$ insert into net.reqs (url) values (url) returning id $$;`);
+  const tick = async () => (await api.pg.query('select store_check_tick() as r')).rows[0].r;
+  const reqs = async () => (await api.pg.query('select id, url from net.reqs order by id')).rows;
+  const answer = (id, results) => api.pg.query('insert into net._http_response (id, status_code, content) values ($1, 200, $2)', [id, JSON.stringify({ resultCount: results.length, results })]);
+  const a1 = (await api.as(admin, () => api('createApp', { name: 'Есть', unitId: A.id, noRequest: true, storeUrl: 'https://apps.apple.com/de/app/x/id1111111' }))).app;
+  const a2 = (await api.as(admin, () => api('createApp', { name: 'Нет', unitId: A.id, noRequest: true, storeUrl: 'https://apps.apple.com/app/y/id2222222' }))).app;
+  assert.equal(await tick(), 'off');
+  await api.as(mod, () => assert.rejects(() => api('setStoreAutoCheck', { on: true })));
+  assert.equal((await api.as(admin, () => api('setStoreAutoCheck', { on: true }))).total, 2);
+  // круг: каждое приложение — по разу, в случайном порядке
+  const seen = {};
+  for (let round = 0; round < 2; round++) {
+    assert.equal(await tick(), 'sent');
+    let r = (await reqs()).pop();
+    const which = /id=1111111/.test(r.url) ? 'de' : 'none';
+    if (which === 'de') {
+      assert.match(r.url, /country=de$/);  // сначала страна из ссылки
+      assert.equal(await tick(), 'waiting');
+      await answer(r.id, [{ trackName: 'Есть в сторе', artworkUrl512: 'https://is1-ssl.mzstatic.com/x.png' }]);
+      assert.equal(await tick(), 'ok');
+      seen.de = true;
+    } else {
+      // нет нигде: перебирает страны по одной за тик, потом «нет в сторе»
+      let n = 0;
+      for (;;) {
+        await answer(r.id, []);
+        const res = await tick();
+        n++;
+        if (res === 'gone') break;
+        assert.equal(res, 'next-country');
+        r = (await reqs()).pop();
+      }
+      assert.ok(n >= 7);
+      seen.none = true;
+    }
+  }
+  assert.deepEqual(seen, { de: true, none: true });
+  const rows = (await api.pg.query('select id, store_ok, store_name from apps where id in ($1, $2)', [a1.id, a2.id])).rows;
+  assert.deepEqual(Object.fromEntries(rows.map(x => [x.id, [x.store_ok, x.store_name]])), { [a1.id]: [true, 'Есть в сторе'], [a2.id]: [false, ''] });
+  const st = await api.as(admin, () => api('getStoreAutoCheck', {}));
+  assert.equal(st.on, true);
+  // круг закончился — следующий тик начинает новый
+  assert.equal(await tick(), 'sent');
+  assert.equal((await api.as(admin, () => api('getStoreAutoCheck', {}))).checked, 0);
+  await api.as(admin, () => api('setStoreAutoCheck', { on: false }));
+  assert.equal(await tick(), 'off');
+  // вызвать проверку напрямую нельзя
+  await api.as(mod, () => assert.rejects(() => api.pg.query('select store_check_tick()')));
+});

@@ -281,7 +281,7 @@ const SHELF_NAMES = { spam: 'Design Spam [4.3]', sale: 'Removed from sale', dele
 const SETTING_NAMES = {
   appStatuses: 'статусы приложений', appFields: 'поля приложений', appInfoItems: 'пункты Info', releaseFields: 'релизные поля',
   releaseChecklist: 'чеклист релиза', devQuestions: 'опросник разработчика', staleDays: 'срок «без движения»',
-  unitRetentionDays: 'срок хранения корзины', priorityOptions: 'приоритеты',
+  unitRetentionDays: 'срок хранения корзины', priorityOptions: 'приоритеты', storeAutoCheck: 'автопроверка App Store',
 };
 /** Фото data:image (webp/jpeg/png, до ~90 КБ; браузер сжимает до 160 px). Иначе — пусто. */
 const photoValue = v => {
@@ -1960,6 +1960,30 @@ export function createBackend(db, opts = {}) {
       }));
       const saved = items.length ? Number(await rpc('save_store_check', { p_items: items })) || 0 : 0;
       return { saved, at: now() };
+    },
+
+    /**
+     * Автопроверка App Store (база, раз в 2 минуты по одной ссылке, случайный порядок): включена ли, сколько приложений со
+     * ссылкой, сколько проверено в текущем круге, последняя проверка. Включает и выключает CEO.
+     */
+    async getStoreAutoCheck() {
+      const cfg = (await setting('storeAutoCheck')) || {};
+      const sf = (await appFields()).find(f => f.kind === 'link' && /app ?store/i.test(f.name) && !/connect/i.test(f.name));
+      const apps = sf ? (await all(() => T('apps').select('id,name,info,store_checked_at,archived,is_test').eq('archived', false).order('id')))
+        .filter(a => !a.is_test && /id\d{5,}/.test((json(a.info, {}) || {})[sf.id] || '')) : [];
+      const cyc = cfg.cycleAt || '';
+      const last = apps.filter(a => a.store_checked_at).sort((x, y) => String(y.store_checked_at).localeCompare(String(x.store_checked_at)))[0];
+      return {
+        on: !!cfg.on, cycleAt: cyc, total: apps.length,
+        checked: cyc ? apps.filter(a => a.store_checked_at && a.store_checked_at >= cyc).length : 0,
+        lastAt: last ? last.store_checked_at : '', lastApp: last ? last.name : '', everyMin: 2,
+      };
+    },
+
+    async setStoreAutoCheck(p) {
+      const cfg = (await setting('storeAutoCheck')) || {};
+      await run(T('app_settings').upsert({ key: 'storeAutoCheck', value: { ...cfg, on: !!p.on }, updated_at: now() }, { onConflict: 'key' }));
+      return methods.getStoreAutoCheck();
     },
 
     /** Массовая правка приложений: статус, приоритет ('' — снять) и/или юнит (юнит — только CEO, задачи едут вместе). Возвращает обновлённые. */

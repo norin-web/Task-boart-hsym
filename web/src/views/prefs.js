@@ -198,8 +198,32 @@ function appsSection() {
       row('Поля приложения', 'Ссылки и тексты на карточке приложения', act('Настроить', open('openFieldsEditor')), 'link',
         dotChips(S.appFields.map(x => [x.name]))),
       row('Шаблоны апдейтов', 'Название, описание, пункты и нужные этапы' + (updTpl ? ` · ${updTpl} ${plural(updTpl, ['шаблон', 'шаблона', 'шаблонов'])}` : ''),
-        act('Настроить', open('openUpdateTemplates')), 'copy')),
+        act('Настроить', open('openUpdateTemplates')), 'copy'),
+      storeAutoRow()),
   ];
+}
+
+/** Автопроверка ссылок App Store: работает в базе круглосуточно — 1 ссылка раз в 2 минуты, в случайном порядке. */
+function storeAutoRow() {
+  const sub = h('small', { class: 'muted' }, 'Загрузка…');
+  const sw = h('input', { type: 'checkbox', class: 'switch', disabled: true, 'aria-label': 'Автопроверка App Store' });
+  const ago = iso => { const m = Math.round((Date.now() - Date.parse(iso)) / 6e4); return m < 1 ? 'только что' : m < 60 ? `${m} мин назад` : m < 1440 ? `${Math.round(m / 60)} ч назад` : `${Math.round(m / 1440)} дн. назад`; };
+  const draw = st => {
+    sw.checked = st.on;
+    sw.disabled = false;
+    sub.textContent = !st.total ? 'Нет приложений со ссылкой на App Store'
+      : st.on ? [`1 ссылка раз в ${st.everyMin} минуты, в случайном порядке, круглосуточно`, `в этом круге ${st.checked} из ${st.total}`,
+        st.lastAt && `последняя: ${st.lastApp}, ${ago(st.lastAt)}`].filter(Boolean).join(' · ')
+        : `Выключена — ${st.total} ${plural(st.total, ['ссылка', 'ссылки', 'ссылок'])} проверяются только кнопкой «Обновить»`;
+  };
+  sw.onchange = () => {
+    sw.disabled = true;
+    send('setStoreAutoCheck', { on: sw.checked }).then(st => { draw(st); toast(st.on ? 'Автопроверка App Store включена' : 'Автопроверка App Store выключена'); })
+      .catch(e => { sw.checked = !sw.checked; sw.disabled = false; showErr(e); });
+  };
+  call('getStoreAutoCheck', {}).then(draw).catch(() => { sub.textContent = 'Не удалось загрузить'; });
+  return h('label', { class: 'prefs-row' }, h('span', { class: 'prefs-ic' }, icon('refresh', 16)),
+    h('span', { class: 'prefs-row-text' }, h('b', null, 'Автопроверка App Store'), sub), sw);
 }
 
 function releasesSection() {
