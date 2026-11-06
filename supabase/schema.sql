@@ -2470,3 +2470,32 @@ update teams set department_ids = '["d_qa"]'::jsonb where id = 't_qa' and depart
 update teams set department_ids = '["d_release"]'::jsonb where id = 't_release' and department_ids = '[]'::jsonb;
 update teams set department_ids = '["d_aso"]'::jsonb where id = 't_aso' and department_ids = '[]'::jsonb;
 update teams set department_ids = '["d_other"]'::jsonb where id = 't_other' and department_ids = '[]'::jsonb;
+
+-- Инфо-лист: CEO включает выбранным людям и отмечает каждому поля приложения (Figma, GitHub…).
+-- Человек видит приложения своих юнитов только с этими полями — через my_info_list(), сами приложения ему по-прежнему закрыты.
+create table if not exists info_lists (
+  person_id  text primary key references people(id) on delete cascade,
+  field_ids  jsonb not null default '[]',
+  updated_at text not null default ''
+);
+alter table info_lists enable row level security;
+grant select, insert, update, delete on info_lists to authenticated;
+drop policy if exists info_lists_read on info_lists;
+create policy info_lists_read on info_lists for select to authenticated using (is_superadmin() or person_id = my_person_id());
+drop policy if exists info_lists_write on info_lists;
+create policy info_lists_write on info_lists for all to authenticated using (is_superadmin()) with check (is_superadmin());
+
+create or replace function my_info_list() returns table (id text, name text, icon_url text, color text, unit_id text, vals jsonb)
+language sql stable security definer set search_path = public as $$
+  select a.id, a.name, a.icon_url, a.color, a.unit_id,
+         coalesce((select jsonb_object_agg(k, a.info -> k) from jsonb_array_elements_text(l.field_ids) k
+                    where jsonb_typeof(a.info -> k) = 'string'), '{}'::jsonb)
+    from info_lists l
+    join unit_members m on m.person_id = l.person_id
+    join units u on u.id = m.unit_id and not u.archived
+    join apps a on a.unit_id = u.id and not a.archived and (not a.is_test or is_dev())
+   where l.person_id = my_person_id()
+   order by lower(a.name);
+$$;
+revoke execute on function my_info_list() from public, anon;
+grant execute on function my_info_list() to authenticated;

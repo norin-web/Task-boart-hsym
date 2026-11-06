@@ -1110,3 +1110,36 @@ test('позиции команды: стандартные команды св�
   const u = await api.as(admin, () => api('updateTeam', { id: t.id, departmentIds: ['d_ios', 'd_aso'] }));
   assert.deepEqual(u.departmentIds, ['d_ios', 'd_aso']);
 });
+
+test('инфо-лист: CEO включает человеку и выбирает поля; человек видит приложения своих юнитов только с этими полями', async () => {
+  const api = await setup();
+  const { admin, mod, designer, A, B } = await team(api);
+  const fields = await api.as(admin, () => api('saveAppFields', { fields: [{ id: 'figma', name: 'Figma', kind: 'link' }, { id: 'github', name: 'GitHub', kind: 'link' }, { id: 'asc', name: 'App Store Connect', kind: 'link' }] }));
+  assert.equal(fields.length, 3);
+  const a1 = (await api.as(admin, () => api('createApp', { name: 'Бета', unitId: A.id, noRequest: true }))).app;
+  const a2 = (await api.as(admin, () => api('createApp', { name: 'Альфа', unitId: A.id, noRequest: true }))).app;
+  const b1 = (await api.as(admin, () => api('createApp', { name: 'Чужое', unitId: B.id, noRequest: true }))).app;
+  for (const a of [a1, a2, b1]) await api.as(admin, () => api('updateApp', { id: a.id, info: { figma: 'https://figma.com/' + a.id, github: 'https://github.com/x/' + a.id, asc: 'https://appstoreconnect.apple.com/' + a.id } }));
+
+  // выключен — пусто
+  assert.deepEqual(await api.as(designer, () => api('getMyInfoList', { personId: designer.id })), { on: false, fields: [], apps: [] });
+  // настраивает только CEO
+  await api.as(mod, () => assert.rejects(() => api('setInfoList', { personId: designer.id, on: true, fieldIds: ['figma'] }), forbidden));
+  await api.as(designer, () => assert.rejects(() => api('getInfoLists', {}), forbidden));
+
+  const set = await api.as(admin, () => api('setInfoList', { personId: designer.id, on: true, fieldIds: ['figma', 'nope', 'figma'] }));
+  assert.deepEqual(set.fieldIds, ['figma']);
+  const my = await api.as(designer, () => api('getMyInfoList', { personId: designer.id }));
+  assert.deepEqual(my.fields.map(f => f.id), ['figma']);
+  assert.deepEqual(my.apps.map(a => [a.name, a.values]), [['Альфа', { figma: 'https://figma.com/' + a2.id }], ['Бета', { figma: 'https://figma.com/' + a1.id }]]);
+  // в bootstrap человек видит только себя
+  assert.deepEqual((await api.as(designer, () => api('bootstrap', {}))).infoListIds, [designer.id]);
+  // чужую строку не читает, сам себе не включит
+  await api.as(designer, () => assert.rejects(() => api('setInfoList', { personId: designer.id, on: true, fieldIds: ['github'] }), forbidden));
+  assert.deepEqual(await api.as(mod, () => api('getMyInfoList', { personId: designer.id })), { on: false, fields: [], apps: [] });
+
+  await api.as(admin, () => api('setInfoList', { personId: designer.id, on: true, fieldIds: ['figma', 'github'] }));
+  assert.deepEqual((await api.as(admin, () => api('getInfoLists', {}))), [{ personId: designer.id, fieldIds: ['figma', 'github'] }]);
+  await api.as(admin, () => api('setInfoList', { personId: designer.id, on: false }));
+  assert.equal((await api.as(designer, () => api('getMyInfoList', { personId: designer.id }))).on, false);
+});

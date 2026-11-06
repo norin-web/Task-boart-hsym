@@ -3088,3 +3088,33 @@ a.bug-title:hover { text-decoration: underline; }
 .dt-depts { display: grid; gap: 6px; padding: 4px 0 10px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
 .dt-depts > .muted { font-size: 12px; font-weight: 500; }
 .dt-depts .hint { margin: 0; font-size: 12px; }
+
+/* Инфо-лист: окно CEO и раздел в настройках человека */
+.il-dlg .il-people { display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow: auto; }
+.il-person { border-radius: 12px; padding: 4px 8px; }
+.il-person:hover { background: var(--surface-2); }
+.il-person.on { background: var(--surface-2); }
+.il-person-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; }
+.il-person-name { display: flex; flex-direction: column; min-width: 0; }
+.il-person-name b { font-size: 13px; }
+.il-person-name small { font-size: 12px; }
+.il-fields { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 0 10px 42px; }
+.il-fields .fchip { height: 28px; padding: 0 12px; }
+.il-q { max-width: 320px; margin-bottom: 12px; }
+.il-table { padding: 4px 8px; overflow-x: auto; }
+.il-row { display: grid; align-items: center; gap: 12px; min-height: 52px; padding: 6px 8px; border-radius: 10px; }
+.il-row:not(.il-head):hover { background: var(--surface-2); }
+.il-head { min-height: 36px; font-size: 12px; font-weight: 500; color: var(--muted); }
+.il-app { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.il-app-name { display: flex; flex-direction: column; min-width: 0; }
+.il-app-name b, .il-app-name small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.il-app-name b { font-size: 13px; }
+.il-cell { min-width: 0; }
+.il-link { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.il-link a, .il-link > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--text); text-decoration: none; }
+.il-link a:hover { text-decoration: underline; }
+.il-copy { flex-shrink: 0; opacity: 0; }
+.il-row:hover .il-copy, .il-copy:focus-visible { opacity: 1; }
+.il-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.il-empty { color: var(--muted); }
+.il-none { padding: 12px 8px; }

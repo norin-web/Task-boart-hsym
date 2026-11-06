@@ -974,14 +974,17 @@ export function createBackend(db, opts = {}) {
     /* ---------- общие данные, главная, поиск ---------- */
 
     async bootstrap(p) {
-      const [units, ppl, depts, lf, tpl, tm, apps, statuses, afields, gfields, info, manual] = await Promise.all([unitsWithCounts(today(p.today)), people(), departments(), linkFields(), templates(), teams(),
-        all(() => T('apps').select('*').order('ord').order('id')), appStatuses(), appFields(), globalFields(), appInfoItems(), setting('storeManualCheck')]);
+      const [units, ppl, depts, lf, tpl, tm, apps, statuses, afields, gfields, info, manual, infoLists] = await Promise.all([unitsWithCounts(today(p.today)), people(), departments(), linkFields(), templates(), teams(),
+        all(() => T('apps').select('*').order('ord').order('id')), appStatuses(), appFields(), globalFields(), appInfoItems(), setting('storeManualCheck'),
+        run(T('info_lists').select('person_id'))]);
       const prio = gfields.find(f => f.role === 'priority');
       return {
         units: units.map(({ doneWeek, ...u }) => u), people: ppl, departments: depts, linkFields: lf, templates: tpl, teams: tm,
         apps: apps.map(appOut), appStatuses: statuses, appFields: afields, appInfoItems: info, priorityOptions: prio ? prio.options : [],
         // кнопка «Обновить» (проверка App Store из браузера, с адреса человека) — по умолчанию скрыта, показ включает CEO
         storeManualCheck: !!(manual && manual.show),
+        // у кого включён инфо-лист (человеку база отдаёт только его строку, CEO — все)
+        infoListIds: infoLists.map(r => r.person_id),
       };
     },
 
@@ -2016,6 +2019,44 @@ export function createBackend(db, opts = {}) {
         checked: cyc ? apps.filter(a => a.store_checked_at && a.store_checked_at >= cyc).length : 0,
         lastAt: last ? last.store_checked_at : '', lastApp: last ? last.name : '', everyMin: 2,
       };
+    },
+
+    /* ---------- инфо-лист: CEO включает людям, у каждого свои поля приложения ---------- */
+
+    /** Кому включён инфо-лист и какие поля (только CEO). */
+    async getInfoLists() {
+      const who = ((await rpc('whoami', {})) || [])[0] || {};
+      if (who.access !== 'superadmin') fail('Инфо-лист настраивает CEO', 'FORBIDDEN');
+      const rows = await run(T('info_lists').select('person_id,field_ids').order('person_id'));
+      return rows.map(r => ({ personId: r.person_id, fieldIds: json(r.field_ids, []) || [] }));
+    },
+
+    /** Включить/выключить инфо-лист человеку и задать поля. on: false — выключить. Только CEO (и в базе). */
+    async setInfoList(p) {
+      const who = ((await rpc('whoami', {})) || [])[0] || {};
+      if (who.access !== 'superadmin') fail('Инфо-лист настраивает CEO', 'FORBIDDEN');
+      const person = (await one('people', str(p.personId, 40))) || fail('Человек не найден', 'NOT_FOUND');
+      if (!p.on) {
+        await run(T('info_lists').delete().eq('person_id', person.id));
+        return { personId: person.id, on: false, fieldIds: [] };
+      }
+      const known = new Set((await appFields()).map(f => f.id));
+      const fieldIds = [...new Set((Array.isArray(p.fieldIds) ? p.fieldIds : []).map(x => str(x, 40)).filter(x => known.has(x)))];
+      await run(T('info_lists').upsert({ person_id: person.id, field_ids: fieldIds, updated_at: now() }, { onConflict: 'person_id' }));
+      return { personId: person.id, on: true, fieldIds };
+    },
+
+    /** Мой инфо-лист: включён ли, мои поля и приложения моих юнитов только с этими полями. */
+    async getMyInfoList(p) {
+      const me = str(p.personId, 40);
+      const row = me ? (await run(T('info_lists').select('field_ids').eq('person_id', me)))[0] : null;
+      if (!row) return { on: false, fields: [], apps: [] };
+      const ids = json(row.field_ids, []) || [];
+      const fields = (await appFields()).filter(f => ids.includes(f.id));
+      const apps = ((await rpc('my_info_list', {})) || []).map(r => ({
+        id: r.id, name: r.name, iconUrl: r.icon_url || '', color: r.color || '', unitId: r.unit_id, values: json(r.vals, {}) || {},
+      }));
+      return { on: true, fields, apps };
     },
 
     /** Показывать ли кнопку «Обновить» в проверке App Store (проверка идёт из браузера, с адреса человека). Меняет CEO. */

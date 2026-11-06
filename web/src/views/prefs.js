@@ -14,15 +14,17 @@ import { openMyProfile, openActAs, addPersonDialog } from './people.js';
 import { renderStudio, STUDIO_TABS } from './admin.js';
 import { openCreateUnit } from './units.js';
 import { chartsSection, editChart } from './chartsettings.js';
+import { hasInfoList, infoListSection, openInfoListsEditor, infoListCount } from './infolist.js';
 
 const PERSONAL_ALL = [
   ['profile', 'Профиль', 'user'],
   ['notify', 'Уведомления', 'bell'],
   ['boards', 'Доски', 'board'],
   ['charts', 'Графики', 'chart'],
+  ['infolist', 'Инфо-лист', 'link'],
 ];
-/** Личные разделы: «Графики» — у тех, у кого есть аналитика (CEO и PM). */
-const personal = () => PERSONAL_ALL.filter(t => t[0] !== 'charts' || isSuper());
+/** Личные разделы: «Графики» — у тех, у кого есть аналитика (CEO и PM); «Инфо-лист» — кому его включил CEO. */
+const personal = () => PERSONAL_ALL.filter(t => (t[0] !== 'charts' || isSuper()) && (t[0] !== 'infolist' || hasInfoList()));
 
 /** Разделы студии, доступные вошедшему. */
 const studio = () => [
@@ -52,7 +54,7 @@ export function renderPrefs(tab) {
   }
   const navTab = tab === 'trash' ? 'units' : tab;
   const key = currentView();
-  const body = h('div', { class: 'prefs-body' + (PERSONAL.some(t => t[0] === tab) && !['look', 'notify', 'boards', 'charts'].includes(tab) ? ' narrow' : '') });
+  const body = h('div', { class: 'prefs-body' + (PERSONAL.some(t => t[0] === tab) && !['look', 'notify', 'boards', 'charts', 'infolist'].includes(tab) ? ' narrow' : '') });
   const item = ([id, label, ic]) => link({ view: 'settings', tab: id }, { class: 'prefs-tab' + (id === navTab ? ' on' : '') }, icon(ic, 15), label);
   fill($('#main'),
     topbar([h('h1', { class: 'screen-title' }, 'Настройки')],
@@ -66,7 +68,7 @@ export function renderPrefs(tab) {
         studio().length > 0 && [h('div', { class: 'prefs-sec' }, 'Студия'), studio().map(item)]),
       body));
 
-  const SECTIONS = { profile, look, notify, boards, charts: chartsSection, apps: appsSection, releases: releasesSection };
+  const SECTIONS = { profile, look, notify, boards, charts: chartsSection, infolist: infoListSection, apps: appsSection, releases: releasesSection };
   if (SECTIONS[tab]) fill(body, SECTIONS[tab]());
   else renderStudio(body, tab, key);
 }
@@ -199,6 +201,8 @@ function appsSection() {
         dotChips(S.appFields.map(x => [x.name]))),
       row('Шаблоны апдейтов', 'Название, описание, пункты и нужные этапы' + (updTpl ? ` · ${updTpl} ${plural(updTpl, ['шаблон', 'шаблона', 'шаблонов'])}` : ''),
         act('Настроить', open('openUpdateTemplates')), 'copy'),
+      row('Инфо-лист', 'Ссылки по приложениям для выбранных людей, у каждого свои поля · ' + infoListCount(),
+        act('Настроить', () => openInfoListsEditor(rerender)), 'link'),
       storeAutoRow(),
       storeManualRow()),
   ];
