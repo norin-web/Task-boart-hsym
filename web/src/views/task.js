@@ -38,7 +38,10 @@ export function closeTask() {
 
 /** Открыть задачу поверх текущей страницы (главная, панель админа, мои задачи). На доске этого юнита — как обычно. */
 export async function peekTask(unitId, taskId) {
-  if (S.route.unit === unitId) return navigate({ unit: unitId, mode: S.route.mode === 'settings' ? 'board' : S.route.mode, task: taskId });
+  // на доске, в списке и таймлайне юнита карточка — в адресе; на обзоре и вкладке приложений — поверх страницы
+  if (S.route.unit === unitId && ['board', 'list', 'timeline', 'settings'].includes(S.route.mode)) {
+    return navigate({ unit: unitId, mode: S.route.mode === 'settings' ? 'board' : S.route.mode, task: taskId });
+  }
   try {
     if (!S.board || S.board.unit.id !== unitId) await loadBoard(unitId, taskId);
   } catch (e) {

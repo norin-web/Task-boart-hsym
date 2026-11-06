@@ -7,7 +7,8 @@ import { S, me, isSuper, isStaff, todayStr, ACCESS_LABELS, personById, deptById,
 import { $, h, icon, avatar, showErr, fill, menu, toast, emptyBlock, skeleton, modal, confirmDlg } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView, link } from '../router.js';
-import { openCreateApp, openNewAppTask, pmsOf, openAppCard, appStatusCell } from './apps.js';
+import { openCreateApp, openNewAppTask, pmsOf, openAppCard, appStatusCell, appIcon } from './apps.js';
+import { peekTask } from './task.js';
 import { attention, inProgress, recent } from './ceo.js';
 
 import { addMemberDialog, applyMembers } from './people.js';
@@ -36,12 +37,23 @@ export async function renderUnitPage() {
     if (rm) {
       // релиз-менеджеру в юните нужно только своё: сколько в очереди, на ревью, в реджекте и в сторе; приложения и команда
       // реджекты и «В App Store» — и по статусу приложений, добавленных сразу с ним (релиза в трекере нет)
-      const n = list => (list || []).filter(x => x.unitId === u.id).length;
-      const inStore = apps.filter(a => (appStatusById(a.status) || {}).kind === 'live').length;
-      const rel = (label, count, tone) => h('div', { class: 'cs' + (tone && count ? ' ' + tone : '') }, h('div', { class: 'cs-n' }, count), h('div', { class: 'cs-label' }, label));
+      // клик по цифре — список: что именно и где висит (релиз открывается карточкой, приложение без релиза — карточкой приложения)
+      const mine = list => (list || []).filter(x => x.unitId === u.id);
+      const appRow = a => ({ app: a, appOnly: true, unitId: a.unitId, at: a.statusAt });
+      const lists = {
+        queue: mine(rd.queue),
+        review: mine(rd.review),
+        rejected: [...mine(rd.rejected), ...mine(rd.rejectedApps)],
+        store: apps.filter(a => (appStatusById(a.status) || {}).kind === 'live').map(appRow),
+      };
+      const rel = (id, label, tone) => {
+        const count = lists[id].length;
+        return h('button', { class: 'cs' + (tone && count ? ' ' + tone : ''), disabled: !count, title: count ? 'Показать список' : '',
+          onclick: () => openRmList(label, id, lists[id], load) }, h('div', { class: 'cs-n' }, count), h('div', { class: 'cs-label' }, label));
+      };
       fill(page,
         h('div', { class: 'cs-row unit-stats' },
-          rel('В очереди на релиз', n(rd.queue)), rel('На ревью Apple', n(rd.review)), rel('Реджекты', n(rd.rejected) + n(rd.rejectedApps), 'danger'), rel('В App Store', inStore)),
+          rel('queue', 'В очереди на релиз'), rel('review', 'На ревью Apple'), rel('rejected', 'Реджекты', 'danger'), rel('store', 'В App Store')),
         h('div', { class: 'home-grid' },
           h('div', { class: 'home-col' }, appsBrief(u, [...apps].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))), load, 6)),
           h('div', { class: 'home-col' }, teamBrief(u))));
@@ -73,6 +85,40 @@ export async function renderUnitPage() {
   }
 
   load();
+}
+
+/**
+ * Список за цифрой обзора юнита у RM: приложение, что с ним и сколько ждёт. Клик — карточка релиза (поверх)
+ * или карточка приложения, если релиза в трекере нет (добавлено сразу со статусом).
+ */
+function openRmList(title, kind, rows, reload) {
+  const days = iso => (iso ? Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 864e5)) : null);
+  const ago = iso => { const d = days(iso); return d == null ? '' : d === 0 ? 'с сегодня' : `${d} ${plural(d, ['день', 'дня', 'дней'])}`; };
+  const line = x => {
+    if (x.appOnly) return kind === 'store' ? 'в App Store' + (x.at ? ' · ' + ago(x.at) : '') : 'статус приложения, релиза в трекере нет' + (x.at ? ' · ' + ago(x.at) : '');
+    if (kind === 'queue') return x.missing.length ? 'Не заполнено: ' + x.missing.join(', ') : x.checklist.total && x.checklist.done < x.checklist.total ? `чеклист ${x.checklist.done}/${x.checklist.total}` : x.fixedAt ? `Реджект №${x.rejectNo || ''} исправлен — отправить снова` : 'Готово к отправке';
+    if (kind === 'review') return 'отправлено в Apple · ждёт ' + ago(x.submittedAt);
+    if (kind === 'rejected') return `№${x.rejectNo || ''} · ${x.reason || 'причина не указана'} · ${ago(x.rejectedAt)}`;
+    return '';
+  };
+  const warn = x => kind === 'queue' && !x.appOnly && (x.missing.length || (x.checklist.total && x.checklist.done < x.checklist.total));
+  const close = modal({
+    title: `${title} · ${rows.length}`,
+    cls: 'dlg rm-list-dlg',
+    body: h('div', { class: 'rm-list' }, rows.map(x => {
+      const who = !x.appOnly && personById(x.assigneeId);
+      return h('button', {
+        class: 'rm-list-row',
+        onclick: () => { close(); if (x.appOnly) openAppCard(x.app, reload); else peekTask(x.unitId, x.id); },
+      },
+      x.app ? appIcon(x.app, 'sm') : h('span'),
+      h('span', { class: 'rm-list-main' },
+        h('b', null, x.app ? x.app.name : x.title, x.version ? ' · ' + x.version : ''),
+        h('small', { class: kind === 'rejected' ? 'danger-text' : warn(x) ? 'warn-text' : 'muted' }, line(x))),
+      who ? avatar(who, 'sm') : h('span'));
+    })),
+    actions: [{ label: 'Закрыть' }],
+  });
 }
 
 /** Команда на обзоре: кто, позиция и сколько задач в работе; самые загруженные сверху. */
