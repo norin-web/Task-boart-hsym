@@ -3076,3 +3076,5 @@ a.bug-title:hover { text-decoration: underline; }
 .ap-sent-ic { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: #FEF3C7; color: #B45309; }
 .ap-sent-main { display: flex; flex-direction: column; min-width: 0; font-size: 12px; line-height: 16px; }
 .ap-sent-main b { font-size: 13px; line-height: 18px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* «В разработке без задач» над таблицей приложений: отступ до таблицы (на вкладке юнита блоки идут без зазора) */
+.apps-page > .store-check.idle-check { margin-bottom: 12px; }
