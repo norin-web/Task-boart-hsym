@@ -3,10 +3,11 @@
  * Нужен не всем: CEO включает его выбранным людям и каждому отмечает поля (Настройки → Приложения → Инфо-лист).
  * Человек видит его в «Настройках» отдельным разделом.
  */
-import { S, unitById, deptById, plural, safeUrl } from '../state.js';
+import { S, me, unitById, deptById, plural, safeUrl } from '../state.js';
 import { h, icon, avatar, fill, modal, toast, showErr, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { appIcon } from './apps.js';
+import { renderSidebar } from './sidebar.js';
 
 /** Включён ли инфо-лист вошедшему. */
 export const hasInfoList = () => (S.infoListIds || []).includes(S.meId);
@@ -129,9 +130,22 @@ export function infoListSection() {
   };
   q.addEventListener('input', draw);
   call('getMyInfoList', { personId: S.meId }).then(d => { data = d; draw(); }).catch(e => { fill(body); showErr(e); });
+  // пункт «Инфо-лист» в меню слева — личная настройка человека
+  const p = me();
+  const nav = h('input', { type: 'checkbox', class: 'switch', checked: !!(p && (p.prefs || {}).infoListNav), 'aria-label': 'Показывать «Инфо-лист» в меню слева' });
+  nav.onchange = () => {
+    if (!p) return;
+    const on = nav.checked;
+    p.prefs = { ...(p.prefs || {}), infoListNav: on };
+    renderSidebar();
+    send('setMyPrefs', { personId: p.id, prefs: { infoListNav: on } })
+      .then(() => toast(on ? '«Инфо-лист» добавлен в меню слева' : '«Инфо-лист» убран из меню слева'))
+      .catch(e => { nav.checked = !on; p.prefs = { ...(p.prefs || {}), infoListNav: !on }; renderSidebar(); showErr(e); });
+  };
   return [
-    h('div', { class: 'prefs-head' }, h('h2', null, 'Инфо-лист'),
-      h('p', { class: 'muted' }, 'Ссылки по приложениям ваших юнитов. Какие поля здесь — решает CEO')),
+    h('div', { class: 'prefs-head il-headrow' },
+      h('div', null, h('h2', null, 'Инфо-лист'), h('p', { class: 'muted' }, 'Ссылки по приложениям ваших юнитов. Какие поля здесь — решает CEO')),
+      h('label', { class: 'il-nav' }, h('span', null, 'В меню слева'), nav)),
     q, body,
   ];
 }

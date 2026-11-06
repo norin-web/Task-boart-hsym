@@ -3121,3 +3121,5 @@ a.bug-title:hover { text-decoration: underline; }
 .il-fields .il-add { display: inline-flex; align-items: center; gap: 4px; background: transparent; box-shadow: inset 0 0 0 1px var(--border-strong); color: var(--muted); }
 .il-fields .il-add:hover { background: var(--surface); color: var(--text); }
 .il-fields .il-add-inp { width: 160px; height: 28px; padding: 0 12px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.prefs-head.il-headrow { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.il-nav { display: inline-flex; align-items: center; gap: 10px; flex-shrink: 0; font-size: 13px; font-weight: 600; cursor: pointer; padding-top: 4px; }
