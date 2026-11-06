@@ -2991,3 +2991,6 @@ a.bug-title:hover { text-decoration: underline; }
 .rm-list-row + .rm-list-row { border-top: 1px solid var(--border); }
 .rm-list-main { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
 .rm-list-main b, .rm-list-main small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Карточка приложения сбоку: те же отступы, что у шапки (у карточки юнита отступ задаёт сама панель, тут — тело) */
+.unit-panel:has(.app-panel-head) > .up-body { padding: 20px 24px 32px; gap: 24px; }
