@@ -306,7 +306,7 @@ export async function renderApps({ unitId = '' } = {}) {
       .map(u => ({ u, list: rest.filter(a => (a.unitId || '') === u.id || (!u.id && !unitById(a.unitId))) }))
       .filter(g => g.list.length);
     const workOpen = !!q || !collapsed.has('__work');
-    fill(body, !sel && !q && !unitId && storeCheckBlock(apps, reload), sel && pickBar(found), chips, groups.length || work.length ? [appHead(sort, onSort),
+    fill(body, !sel && !q && !unitId && storeCheckBlock(apps, reload), !sel && !q && idleBlock(apps, reload), sel && pickBar(found), chips, groups.length || work.length ? [appHead(sort, onSort),
       work.length > 0 && h('section', { class: 'ap-group ap-work-group' + (workOpen ? ' open' : '') },
         h('button', { class: 'ap-group-head', 'aria-expanded': String(workOpen), onclick: () => toggle('__work') },
           h('span', { class: 'ap-chev' }, icon('chevron', 14)), icon('progress', 14), h('b', null, 'В работе'),
@@ -1105,6 +1105,52 @@ export function openCreateApp(onDone, unitId) {
       },
     }],
   });
+}
+
+/** «В разработке», но без задач (добавлены списком): на доске их нет — CEO ставит в работу. apps — из listApps (с requests). */
+export const idleApps = apps => apps.filter(a => !a.archived && (appStatusById(a.status) || {}).kind === 'dev' && !(a.requests || []).length);
+
+/** Окно «Поставить в работу»: приложения галочками (все отмечены), каждому — запрос New App ответственному PM юнита. */
+export function openStartWork(list, onDone) {
+  const picked = new Set(list.map(a => a.id));
+  const box = h('div', { class: 'sw-list' });
+  const all = h('label', { class: 'sw-all' });
+  const draw = () => {
+    fill(all, h('input', { type: 'checkbox', checked: picked.size === list.length, onchange: e => { list.forEach(a => (e.target.checked ? picked.add(a.id) : picked.delete(a.id))); draw(); } }),
+      `Выбрать все · ${picked.size} из ${list.length}`);
+    fill(box, list.map(a => h('label', { class: 'sw-row' },
+      h('input', { type: 'checkbox', checked: picked.has(a.id), onchange: e => { if (e.target.checked) picked.add(a.id); else picked.delete(a.id); draw(); } }),
+      appIcon(a, 'sm'), h('span', { class: 'sw-name' }, a.name), h('span', { class: 'muted' }, (unitById(a.unitId) || {}).name || ''))));
+  };
+  draw();
+  modal({
+    title: 'Поставить в работу',
+    cls: 'dlg',
+    body: [h('p', { class: 'hint', style: { marginTop: 0 } }, 'У этих приложений статус «В разработке», но задач нет — на доске их не видно. Каждому уйдёт запрос New App ответственному PM юнита, он разложит его по этапам.'),
+      all, box],
+    actions: [{ label: 'Отмена' }, { label: 'Поставить в работу', primary: true, action: async close => {
+      if (!picked.size) return toast('Отметьте приложения', { type: 'error' });
+      const r = await send('startAppsWork', { ids: [...picked] });
+      close();
+      toast(`Запросы New App ушли PM: ${r.made}`);
+      // открытый юнит: задачи доски — заново, иначе новые запросы появятся только после перезагрузки
+      if (S.board && list.some(a => picked.has(a.id) && a.unitId === S.board.unit.id)) await import('./board.js').then(m => m.loadBoard(S.board.unit.id)).catch(() => {});
+      if (onDone) onDone();
+    } }],
+  });
+}
+
+/** Плашка над списком приложений (CEO): сколько «В разработке» без задач и кнопка «Поставить в работу». */
+export function idleBlock(apps, reload) {
+  const list = idleApps(apps);
+  if (!isSuper() || !list.length) return null;
+  return h('section', { class: 'store-check idle-check' },
+    h('div', { class: 'sc-head' },
+      h('span', { class: 'sc-ic' }, icon('alert', 18)),
+      h('span', { class: 'sc-title' }, h('b', null, `В разработке без задач: ${list.length}`),
+        h('span', { class: 'muted sc-sub' }, 'Статус «В разработке», но задач нет — на доске их не видно')),
+      h('span', { class: 'spacer' }),
+      h('button', { class: 'btn sm primary', onclick: () => openStartWork(list, reload) }, 'Поставить в работу')));
 }
 
 /** Полки убранных приложений (экран «Реджекты»): Design Spam [4.3], снято с продажи (не удалено) и удалённые. */

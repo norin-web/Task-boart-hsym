@@ -1067,3 +1067,16 @@ test('автопроверка App Store: одна ссылка за тик, д�
   // вызвать проверку напрямую нельзя
   await api.as(mod, () => assert.rejects(() => api.pg.query('select store_check_tick()')));
 });
+
+test('«Поставить в работу»: приложениям без задач — запрос New App PM; с запросом — пропуск; только CEO', async () => {
+  const api = await setup();
+  const { admin, mod, A } = await team(api);
+  const idle = (await api.as(admin, () => api('createApp', { name: 'Без задач', unitId: A.id, status: 'dev', noRequest: true }))).app;
+  const busy = (await api.as(admin, () => api('createApp', { name: 'С запросом', unitId: A.id }))).app;
+  await api.as(mod, () => assert.rejects(() => api('startAppsWork', { ids: [idle.id] }), forbidden));
+  assert.equal((await api.as(admin, () => api('startAppsWork', { ids: [idle.id, busy.id] }))).made, 1);
+  const apps = await api.as(admin, () => api('listApps', {}));
+  const req = apps.find(a => a.id === idle.id).requests;
+  assert.deepEqual(req.map(r => [r.type, r.title, r.assigneeId]), [['new_app', 'New App: Без задач', mod.id]]);
+  assert.equal(apps.find(a => a.id === busy.id).requests.length, 1);
+});

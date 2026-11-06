@@ -7,7 +7,7 @@ import { S, me, isSuper, isStaff, todayStr, ACCESS_LABELS, personById, deptById,
 import { $, h, icon, avatar, showErr, fill, menu, toast, emptyBlock, skeleton, modal, confirmDlg } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView, link } from '../router.js';
-import { openCreateApp, openNewAppTask, pmsOf, openAppCard, appStatusCell, appIcon } from './apps.js';
+import { openCreateApp, openNewAppTask, pmsOf, openAppCard, appStatusCell, appIcon, idleApps, openStartWork } from './apps.js';
 import { peekTask } from './task.js';
 import { attention, inProgress, recent } from './ceo.js';
 
@@ -155,8 +155,11 @@ function tasksByColumn(u, open) {
 
 /** Приложения юнита коротко: иконка, название, статус; клик — карточка. Все — на вкладке «Приложения». */
 function appsBrief(u, apps, reload, LIMIT = 3) {
+  const idle = isSuper() ? idleApps(apps) : [];
   return h('section', null,
     h('div', { class: 'section-head' }, h('h2', null, 'Приложения', apps.length > LIMIT && h('span', { class: 'muted sec-n' }, apps.length)),
+      idle.length > 0 && h('button', { class: 'btn ghost sm idle-link', title: 'Статус «В разработке», но задач нет — на доске их не видно', onclick: () => openStartWork(idle, reload) },
+        icon('alert', 13), `Без задач: ${idle.length} · Поставить в работу`),
       link({ unit: u.id, mode: 'apps' }, { class: 'btn ghost sm' }, 'Все')),
     apps.length
       ? h('div', { class: 'card-box app-brief' }, apps.slice(0, LIMIT).map(a => h('button', { class: 'app-brief-row', onclick: () => openAppCard(a, reload) },

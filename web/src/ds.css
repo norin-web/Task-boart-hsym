@@ -3060,3 +3060,13 @@ a.bug-title:hover { text-decoration: underline; }
 .app-brief-row .uc-icon { width: 40px; height: 40px; border-radius: 10px; font-size: 13px; }
 .app-brief-name b { font-size: 14px; line-height: 20px; font-weight: 600; }
 .app-brief-name small { font-size: 12px; line-height: 16px; }
+
+/* «Поставить в работу»: приложения галочками */
+.sw-all { display: flex; align-items: center; gap: 10px; padding: 4px 0 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.sw-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow: auto; margin: 0 -8px; }
+.sw-row { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 44px; padding: 4px 8px; border-radius: 12px; cursor: pointer; font-size: 13px; }
+.sw-row:hover { background: var(--surface-2); }
+.sw-row .uc-icon { width: 30px; height: 30px; border-radius: 8px; font-size: 10px; }
+.sw-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.store-check.idle-check .sc-ic { background: #FEF3C7; color: var(--warn-fill, #B45309); }
+.section-head .idle-link { margin-left: auto; margin-right: 8px; color: var(--warn-fill, #B45309); }

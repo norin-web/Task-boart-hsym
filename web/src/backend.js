@@ -2392,6 +2392,25 @@ export function createBackend(db, opts = {}) {
      * Запрос CEO по приложению → PM юнита приложения: type new_app / update / other.
      * Задача лежит в юните приложения, тип request; pmId — конкретный PM (иначе первый PM юнита).
      */
+    /**
+     * «Поставить в работу» (CEO): приложениям без задач (добавлены списком) — запрос New App ответственному PM юнита,
+     * дальше PM раскладывает его по этапам. Приложения, у которых уже есть запрос, пропускаем. Возвращает число запросов.
+     */
+    async startAppsWork(p, ctx) {
+      if ((((await rpc('whoami', {})) || [])[0] || {}).access !== 'superadmin') fail('Ставить приложения в работу может только CEO', 'FORBIDDEN');
+      const ids = (Array.isArray(p.ids) ? p.ids : []).map(x => String(x ?? '')).filter(Boolean).slice(0, 500);
+      let made = 0;
+      for (const id of ids) {
+        const a = await one('apps', id);
+        if (!a || a.archived) continue;
+        const has = await run(T('tasks').select('id').eq('app_id', a.id).eq('kind', 'request').eq('archived', false).limit(1));
+        if (has.length) continue;
+        await methods.createRequest({ appId: a.id, type: 'new_app', title: `New App: ${a.name}` }, ctx);
+        made++;
+      }
+      return { made };
+    },
+
     async createRequest(p, ctx) {
       const a = (await one('apps', p.appId)) || fail('Приложение не найдено', 'NOT_FOUND');
       const type = REQUEST_TYPES[p.type] ? p.type : 'other';
