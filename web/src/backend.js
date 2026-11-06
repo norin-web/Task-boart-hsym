@@ -313,7 +313,7 @@ const appOut = r => ({
   id: r.id, unitId: r.unit_id, name: r.name, color: r.color || '', status: r.status, info: json(r.info, {}) || {},
   priority: r.priority || '', statusAt: r.status_at || '', iconUrl: r.icon_url || '', storeName: r.store_name || '',
   storeOk: r.store_ok == null ? null : !!r.store_ok, storeCheckedAt: r.store_checked_at || '', checks: cleanChecks(r.checks), ownFields: cleanOwnFields(r.own_fields),
-  order: r.ord, archived: !!r.archived, isTest: !!r.is_test, createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at,
+  order: r.ord, archived: !!r.archived, shelf: r.archived ? (r.shelf || 'deleted') : '', shelvedAt: r.shelved_at || '', isTest: !!r.is_test, createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at,
 });
 
 /** Релизные поля: { id, name, kind: text | longtext | link, required }. */
@@ -1968,6 +1968,40 @@ export function createBackend(db, opts = {}) {
     },
 
     /**
+     * Убрать приложение (CEO): shelf spam — Design Spam [4.3], deleted — удалённые. Приложение уходит из работы (archived),
+     * его открытые задачи — в архив (запоминаем, чтобы вернуть). Уже убранное — просто переезжает на другую полку.
+     */
+    async shelveApp(p, ctx) {
+      const shelf = ['spam', 'deleted'].includes(p.shelf) ? p.shelf : fail('Нет такой полки');
+      const a = (await one('apps', p.id)) || fail('Приложение не найдено', 'NOT_FOUND');
+      const ts = now();
+      if (a.archived) {
+        await updateOne('apps', a.id, { shelf, updated_at: ts });
+        return appOut({ ...a, shelf });
+      }
+      const rows = await all(() => T('tasks').select('id,unit_id,status').eq('app_id', a.id).eq('archived', false).order('created_at').order('id'));
+      const units = rows.length ? await run(T('units').select('id,settings').in('id', [...new Set(rows.map(t => t.unit_id))])) : [];
+      const U = Object.fromEntries(units.map(u => [u.id, unitSettings(u.settings)]));
+      const open = rows.filter(t => !U[t.unit_id] || kindOf(U[t.unit_id], t.status) !== 'done').map(t => t.id);
+      // сначала приложение: права проверяет база (только CEO), задачи — потом
+      const upd = { archived: true, shelf, shelved_at: ts, shelf_tasks: open, updated_at: ts };
+      await updateOne('apps', a.id, upd);
+      for (const id of open) await methods.updateTask({ id, patch: { archived: true } }, ctx);
+      return appOut({ ...a, ...upd });
+    },
+
+    /** Вернуть приложение из Design Spam / удалённых (CEO): снова в работе, задачи, ушедшие с ним в архив, — обратно. */
+    async restoreApp(p, ctx) {
+      const a = (await one('apps', p.id)) || fail('Приложение не найдено', 'NOT_FOUND');
+      if (!a.archived) return appOut(a);
+      const back = (json(a.shelf_tasks, []) || []).map(String);
+      const upd = { archived: false, shelf: '', shelved_at: '', shelf_tasks: [], updated_at: now() };
+      await updateOne('apps', a.id, upd);
+      for (const id of back) await methods.updateTask({ id, patch: { archived: false } }, ctx).catch(() => null);
+      return appOut({ ...a, ...upd });
+    },
+
+    /**
      * Дашборд PM по его юнитам (CEO — по всем; видимость решает база): входящие от CEO (запросы без разбивки),
      * приложения по этапам (открытые запросы с этапами), проблемы (просрочено, без движения, без исполнителя,
      * долго на ревью, готово к релизу) и команда с KPI за период (week / month / quarter).
@@ -2871,7 +2905,13 @@ export function createBackend(db, opts = {}) {
       const withRelease = new Set(items.filter(x => x.phase === 'submitted' && x.app).map(x => x.app.id));
       const appOnly = apps.filter(a => !a.archived && reviewSt.has(a.status) && !withRelease.has(a.id) && U[a.unit_id])
         .map(a => ({ id: '', appOnly: true, unitId: a.unit_id, title: a.name, app: A[a.id], submittedAt: a.status_at || '' }));
+      // и со статусом «Реджект» без открытого реджекта релиза — на экран «Реджекты»
+      const rejectSt = new Set((await appStatuses()).filter(x => x.kind === 'reject').map(x => x.id));
+      const withReject = new Set(items.filter(x => x.phase === 'rejected' && x.app).map(x => x.app.id));
+      const rejectedApps = apps.filter(a => !a.archived && rejectSt.has(a.status) && !withReject.has(a.id) && U[a.unit_id])
+        .map(a => ({ appOnly: true, unitId: a.unit_id, app: A[a.id], at: a.status_at || '' }));
       return {
+        rejectedApps,
         queue: items.filter(x => !x.phase),
         review: [...items.filter(x => x.phase === 'submitted'), ...appOnly],
         rejected: items.filter(x => x.phase === 'rejected'),

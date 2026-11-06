@@ -478,7 +478,7 @@ test('RM: релиз — поля, свой чеклист, отправка в 
     assert.equal(done.task.release.phase, 'live');
     assert.equal(done.task.status, 'done');
     assert.deepEqual(done.task.release.history.map(x => x.result), ['reject', 'live']);
-    assert.deepEqual(await api('getRmDashboard', {}), { queue: [], review: [], rejected: [] });
+    assert.deepEqual(await api('getRmDashboard', {}), { rejectedApps: [], queue: [], review: [], rejected: [] });
   });
   // вышло в стор — уведомление PM, лиду юнита и CEO (не RM, который нажал)
   for (const who of [pm, ceo]) assert.ok((await api.as(who, () => api('getNotifications', {}))).some(n => n.taskId === st.release.id && n.kinds.includes('store_live')), who.name);

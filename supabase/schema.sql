@@ -616,6 +616,11 @@ alter table tasks add column if not exists spec_url text not null default '';
 -- Этапы флоу, которые нужны запросу (из шаблона апдейта); пусто — все этапы флоу
 alter table tasks add column if not exists flow_steps jsonb not null default '[]';
 alter table apps add column if not exists status_at text not null default '';
+-- Полка приложения (переносит CEO): spam — Design Spam [4.3], deleted — удалённые; приложение при этом archived.
+-- shelf_tasks — открытые задачи, которые ушли в архив вместе с ним (вернутся при восстановлении).
+alter table apps add column if not exists shelf text not null default '';
+alter table apps add column if not exists shelved_at text not null default '';
+alter table apps add column if not exists shelf_tasks jsonb not null default '[]';
 
 -- Задачи 2.0: приложение; запрос CEO (kind request, request_type new_app / update / other);
 -- этап декомпозиции (kind stage, step — ключ этапа флоу: design / ios / qa / meta / release…);
@@ -1440,6 +1445,9 @@ begin
   end if;
   if new.is_test is distinct from old.is_test and not is_dev() then
     raise exception 'Тестовые данные меняет только режим разработчика' using errcode = '42501';
+  end if;
+  if (new.shelf is distinct from old.shelf or new.archived is distinct from old.archived) and not is_superadmin() then
+    raise exception 'Убирать приложение в Design Spam или удалённые может только CEO' using errcode = '42501';
   end if;
   return new;
 end $$;

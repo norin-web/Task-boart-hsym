@@ -941,3 +941,32 @@ test('переименовать приложение: CEO и PM юнита — 
   await api.as(designer, () => assert.rejects(() => api('updateApp', { id: app.id, name: 'Чужое' })));
   assert.equal((await api.as(admin, () => api('listApps', {}))).find(x => x.id === app.id).name, 'Новое');
 });
+
+test('Design Spam / удалённые: убирает только CEO, открытые задачи — в архив и обратно при восстановлении', async () => {
+  const api = await setup();
+  const { admin, mod, A } = await team(api);
+  const { app, request } = await api.as(admin, () => api('createApp', { name: 'Спам', unitId: A.id }));
+  await api.as(mod, () => assert.rejects(() => api('shelveApp', { id: app.id, shelf: 'spam' }), forbidden));
+  const out = await api.as(admin, () => api('shelveApp', { id: app.id, shelf: 'spam' }));
+  assert.equal(out.shelf, 'spam');
+  const t = async () => (await api.pg.query('select archived from tasks where id = $1', [request.id])).rows[0].archived;
+  assert.equal(await t(), true);
+  assert.ok(!(await api.as(admin, () => api('listApps', {}))).some(a => a.id === app.id));
+  assert.equal((await api.as(admin, () => api('listApps', { archived: true }))).find(a => a.id === app.id).shelf, 'spam');
+  // на другую полку — без повторного архива задач
+  assert.equal((await api.as(admin, () => api('shelveApp', { id: app.id, shelf: 'deleted' }))).shelf, 'deleted');
+  await api.as(mod, () => assert.rejects(() => api('restoreApp', { id: app.id }), forbidden));
+  await api.as(admin, () => api('restoreApp', { id: app.id }));
+  assert.equal(await t(), false);
+  assert.ok((await api.as(admin, () => api('listApps', {}))).some(a => a.id === app.id));
+});
+
+test('реджекты: приложение со статусом «Реджект» без релиза видно на экране реджектов', async () => {
+  const api = await setup();
+  const { admin, A } = await team(api);
+  const { app } = await api.as(admin, () => api('createApp', { name: 'Вернули', unitId: A.id, status: 'reject', noRequest: true }));
+  const d = await api.as(admin, () => api('getRmDashboard', {}));
+  assert.deepEqual(d.rejectedApps.map(x => x.app.id), [app.id]);
+  await api.as(admin, () => api('shelveApp', { id: app.id, shelf: 'spam' }));
+  assert.equal((await api.as(admin, () => api('getRmDashboard', {}))).rejectedApps.length, 0);
+});

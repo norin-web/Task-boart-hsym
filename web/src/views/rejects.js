@@ -7,7 +7,7 @@ import { isSuper, personById, unitById, fmtDate, plural, safeUrl } from '../stat
 import { $, h, icon, fill, topbar, toast, showErr, confirmDlg, emptyBlock, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { peekTask } from './task.js';
-import { appIcon, openAppById } from './apps.js';
+import { appIcon, openAppById, shelveAppDlg, deleteAppsDlg, SHELVES } from './apps.js';
 import { openShots } from './shots.js';
 
 const DAY = 864e5;
@@ -19,7 +19,7 @@ let tab = 'open';
 
 /** Сколько реджектов открыто сейчас — число у пункта меню. */
 export async function openRejectCount() {
-  try { return ((await call('getRmDashboard', {})).rejected || []).length; } catch { return 0; }
+  try { const d = await call('getRmDashboard', {}); return (d.rejected || []).length + (d.rejectedApps || []).length; } catch { return 0; }
 }
 
 export async function renderRejects() {
@@ -27,10 +27,14 @@ export async function renderRejects() {
   const body = h('div', { class: 'page ceo-page rj-page' }, skeleton());
   fill(main, topbar([h('h1', null, 'Реджекты')], []), h('div', { class: 'view-body' }, body));
   let rows = [];
+  let appRejects = [];  // приложения со статусом «Реджект» без реджекта релиза (добавлены сразу с этим статусом)
+  let shelved = [];     // убранные CEO: Design Spam [4.3] и удалённые
 
   const load = async () => {
     try {
-      const [dash, hist] = await Promise.all([call('getRmDashboard', {}), call('getReleaseHistory', { result: 'reject' })]);
+      const [dash, hist, gone] = await Promise.all([call('getRmDashboard', {}), call('getReleaseHistory', { result: 'reject' }), call('listApps', { archived: true })]);
+      appRejects = dash.rejectedApps || [];
+      shelved = gone;
       const active = new Map((dash.rejected || []).map(x => [x.id, x]));
       rows = (hist.rows || []).map(x => {
         const a = active.get(x.taskId);
@@ -88,18 +92,64 @@ export async function renderRejects() {
             : h('button', { class: 'btn sm', title: 'Задача по реджекту закроется, релиз вернётся в очередь', onclick: () => closeReject(x) }, 'Закрыть реджект')))));
   };
 
+  const done = (msg, fn) => fn.then(r => { if (r !== false) { if (msg) toast(msg); load(); } }).catch(showErr);
+
+  /** Приложение со статусом «Реджект» без реджекта релиза: релиза в трекере нет — только статус приложения. */
+  const appRow = x => {
+    const u = unitById(x.unitId);
+    const late = daysAgo(x.at) >= LATE_DAYS;
+    return h('div', { class: 'rj-row' + (late ? ' late' : ''), role: 'button', tabindex: '0', title: 'Открыть приложение', onclick: e => { if (!e.target.closest('button, a')) openAppById(x.app.id, load); }, onkeydown: e => { if (e.key === 'Enter' && e.target === e.currentTarget) openAppById(x.app.id, load); } },
+      appIcon(x.app, 'md'),
+      h('div', { class: 'rj-main' },
+        h('div', { class: 'rj-title' }, h('button', { class: 'link-btn rj-app', onclick: () => openAppById(x.app.id, load) }, x.app.name),
+          u && h('span', { class: 'rj-unit', style: { '--c': u.color } }, u.name), x.app.isTest && h('span', { class: 'test-tag' }, 'тест')),
+        h('div', { class: 'rj-reason muted' }, 'Статус приложения «Реджект» — релиза в трекере нет'),
+        x.at && h('div', { class: 'rj-meta' }, h('span', { class: late ? 'danger-text' : '' }, `с ${fmtDate(x.at.slice(0, 10))} · ${agoText(x.at)}`))),
+      h('div', { class: 'rj-side' },
+        h('span', { class: 'rj-state wait' }, 'Реджект'),
+        isSuper() && h('div', { class: 'rj-actions' },
+          h('button', { class: 'btn sm', onclick: () => done('', shelveAppDlg({ id: x.app.id, name: x.app.name }, 'spam')) }, 'В Design Spam'),
+          h('button', { class: 'btn sm', onclick: () => done('', shelveAppDlg({ id: x.app.id, name: x.app.name }, 'deleted')) }, 'В удалённые'))));
+  };
+
+  /** Убранное приложение (Design Spam [4.3] / удалённые): когда убрали; CEO — вернуть или удалить навсегда. */
+  const shelfRow = a => {
+    const u = unitById(a.unitId);
+    return h('div', { class: 'rj-row closed' },
+      appIcon(a, 'md'),
+      h('div', { class: 'rj-main' },
+        h('div', { class: 'rj-title' }, h('b', { class: 'rj-app' }, a.name), u && h('span', { class: 'rj-unit', style: { '--c': u.color } }, u.name), a.isTest && h('span', { class: 'test-tag' }, 'тест')),
+        a.storeName && a.storeName !== a.name && h('div', { class: 'rj-reason muted' }, a.storeName),
+        h('div', { class: 'rj-meta' }, h('span', null, a.shelvedAt ? `Перенесено ${fmtDate(a.shelvedAt.slice(0, 10))} · ${agoText(a.shelvedAt)}` : 'Убрано из работы'))),
+      isSuper() && h('div', { class: 'rj-side' },
+        h('div', { class: 'rj-actions' },
+          h('button', { class: 'btn sm', title: 'Вернуть в работу вместе с задачами', onclick: () => done(`«${a.name}» снова в работе`, send('restoreApp', { id: a.id })) }, 'Восстановить'),
+          h('button', { class: 'btn sm', title: `Перенести в ${SHELVES[a.shelf === 'spam' ? 'deleted' : 'spam']}`, onclick: () => done(`«${a.name}» — ${a.shelf === 'spam' ? 'в удалённых' : 'в Design Spam [4.3]'}`, send('shelveApp', { id: a.id, shelf: a.shelf === 'spam' ? 'deleted' : 'spam' })) }, a.shelf === 'spam' ? 'В удалённые' : 'В Design Spam'),
+          h('button', { class: 'btn sm danger', onclick: () => done('', deleteAppsDlg([a])) }, 'Удалить навсегда'))));
+  };
+
   function draw() {
     const open = rows.filter(r => r.open).sort((a, b) => (b.fixed - a.fixed) || String(a.at).localeCompare(String(b.at)));
     const closed = rows.filter(r => !r.open).sort((a, b) => String(b.at).localeCompare(String(a.at)));
-    const tabs = [['open', 'Открытые', open.length], ['closed', 'Закрытые', closed.length], ['all', 'Все', rows.length]];
-    const shown = tab === 'open' ? open : tab === 'closed' ? closed : [...open, ...closed];
+    const apps = [...appRejects].sort((a, b) => String(a.at).localeCompare(String(b.at)));
+    const shelf = id => shelved.filter(a => a.shelf === id).sort((a, b) => String(b.shelvedAt).localeCompare(String(a.shelvedAt)));
+    const tabs = [['open', 'Открытые', open.length + apps.length], ['spam', SHELVES.spam, shelf('spam').length], ['deleted', SHELVES.deleted, shelf('deleted').length],
+      ['closed', 'Закрытые', closed.length], ['all', 'Все', rows.length + apps.length]];
     const waiting = open.filter(r => r.fixed).length;
+    const list = tab === 'spam' || tab === 'deleted' ? shelf(tab).map(shelfRow)
+      : tab === 'open' ? [...open.map(row), ...apps.map(appRow)] : tab === 'closed' ? closed.map(row) : [...open.map(row), ...apps.map(appRow), ...closed.map(row)];
+    const empty = {
+      open: ['Открытых реджектов нет', 'Когда Apple вернёт релиз, он появится здесь, а PM получит задачу на исправление'],
+      spam: ['В Design Spam пусто', 'CEO переносит сюда приложения с реджектом 4.3: меню «⋯» в карточке приложения'],
+      deleted: ['Удалённых приложений нет', 'CEO переносит сюда приложения из меню «⋯» в карточке; восстановить можно в любой момент'],
+      closed: ['Закрытых реджектов пока нет', ''], all: ['Реджектов пока нет', ''],
+    }[tab];
     fill(body,
       h('div', { class: 'rj-tabs', role: 'tablist' }, tabs.map(([id, label, n]) => h('button', { class: 'fchip' + (tab === id ? ' on' : ''), role: 'tab', 'aria-selected': String(tab === id), onclick: () => { tab = id; draw(); } }, `${label}: ${n}`))),
-      waiting > 0 && tab !== 'closed' && h('div', { class: 'rj-note' }, icon('check', 14), `${waiting} ${plural(waiting, ['реджект исправлен', 'реджекта исправлено', 'реджектов исправлено'])} — осталось отправить в Apple снова`),
-      shown.length
-        ? h('div', { class: 'card-box rj-list' }, shown.map(row))
-        : emptyBlock(tab === 'closed' ? 'Закрытых реджектов пока нет' : 'Открытых реджектов нет', { ok: true, sub: tab === 'closed' ? '' : 'Когда Apple вернёт релиз, он появится здесь, а PM получит задачу на исправление' }));
+      waiting > 0 && (tab === 'open' || tab === 'all') && h('div', { class: 'rj-note' }, icon('check', 14), `${waiting} ${plural(waiting, ['реджект исправлен', 'реджекта исправлено', 'реджектов исправлено'])} — осталось отправить в Apple снова`),
+      list.length
+        ? h('div', { class: 'card-box rj-list' }, list)
+        : emptyBlock(empty[0], { ok: tab !== 'spam' && tab !== 'deleted', sub: empty[1] }));
   }
   load();
 }
