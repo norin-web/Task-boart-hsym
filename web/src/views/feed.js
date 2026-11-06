@@ -169,11 +169,15 @@ function journalRow(a) {
   const { text, badge, after } = journalPhrase(a);
   const done = badge && /готов/i.test(badge), review = badge && /ревью/i.test(badge);
   const ref = refEl(a.ref);
+  const gone = !a.task && !a.ref && !refPhrase(a); // событие задачи, которой уже нет
   return h('div', { class: 'jr-row' },
     avatar(personById(a.actorId), 'md'),
     h('div', { class: 'jr-text' }, h('b', null, whoName(a.actorId).trim()), ' ', text,
       ref && [' ', ref],
       a.task && a.unit && [' ', taskLink(a.unit.id, a.task.id, { class: 'jr-task' }, '«' + a.task.title + '»')],
+      // задачу потом удалили (например, вместе с приложением): у «создал(а)» — название зачёркнутым, у остального — пометка
+      gone && a.action === 'create' && a.toText && a.toText !== '—' && [' задачу ', h('s', { class: 'muted' }, '«' + cut(a.toText) + '»')],
+      gone && a.action !== 'create' && a.action !== 'delete' && h('span', { class: 'muted' }, ' (задача удалена)'),
       after && h('span', { class: 'muted' }, ' ' + after)),
     badge && h('span', { class: 'jr-badge' + (review ? ' review' : '') }, done && icon('check', 12), badge),
     h('span', { class: 'jr-time', title: fmtDateTime(a.at) }, new Date(a.at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })));
