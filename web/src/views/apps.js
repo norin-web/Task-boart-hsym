@@ -1191,7 +1191,9 @@ export function storeCheckBlock(apps, reload, { compact = false } = {}) {
     !withLink.length ? 'Нет приложений со ссылкой на App Store'
       : last ? `проверено ${relTime(last)} · открываются ${withLink.length - gone.length - unchecked} из ${withLink.length}` + (unchecked ? ` · не проверено ${unchecked}` : '')
         : `${withLink.length} ${plural(withLink.length, ['приложение', 'приложения', 'приложений'])} со ссылкой — ещё не проверяли`);
-  const btn = h('button', { class: 'btn sm', disabled: !withLink.length || !seesApps(), onclick: async () => {
+  // ручная проверка идёт из браузера, с адреса человека, — по умолчанию скрыта, показ включает CEO (Настройки → Приложения)
+  const btn = S.storeManualCheck && h('button', { class: 'btn sm', disabled: !withLink.length || !seesApps(),
+    title: 'Проверка идёт с вашего адреса: Apple видит, какие приложения проверяют с этого IP', onclick: async () => {
     btn.disabled = true;
     try {
       const r = await runStoreCheck(withLink, (d, t) => { fill(btn, h('span', { class: 'spinner' }), `Проверяю ${d}/${t}…`); });
@@ -1255,7 +1257,9 @@ function goneList(gone, reload) {
 const storeMiss = new Set();
 async function fillFromStore(apps, redraw) {
   const sf = storeField();
-  if (!sf) return;
+  // фоновые запросы к Apple из браузера (с адреса человека) — только если CEO разрешил ручную проверку; иначе название
+  // и иконку подтягивает автопроверка с сервера
+  if (!sf || !S.storeManualCheck) return;
   const todo = apps.filter(a => a.info && a.info[sf.id] && (!a.storeName || !a.iconUrl) && !storeMiss.has(a.id));
   for (let i = 0; i < todo.length; i += 6) {
     await Promise.all(todo.slice(i, i + 6).map(async a => {

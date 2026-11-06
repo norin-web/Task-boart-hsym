@@ -2994,3 +2994,5 @@ a.bug-title:hover { text-decoration: underline; }
 
 /* Карточка приложения сбоку: те же отступы, что у шапки (у карточки юнита отступ задаёт сама панель, тут — тело) */
 .unit-panel:has(.app-panel-head) > .up-body { padding: 20px 24px 32px; gap: 24px; }
+.prefs-risk { display: flex; align-items: flex-start; gap: 6px; margin-top: 4px; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--warn-fill, #B45309); }
+.prefs-risk svg { flex: none; margin-top: 1px; }

@@ -281,7 +281,7 @@ const SHELF_NAMES = { spam: 'Design Spam [4.3]', sale: 'Removed from sale', dele
 const SETTING_NAMES = {
   appStatuses: 'статусы приложений', appFields: 'поля приложений', appInfoItems: 'пункты Info', releaseFields: 'релизные поля',
   releaseChecklist: 'чеклист релиза', devQuestions: 'опросник разработчика', staleDays: 'срок «без движения»',
-  unitRetentionDays: 'срок хранения корзины', priorityOptions: 'приоритеты', storeAutoCheck: 'автопроверка App Store',
+  unitRetentionDays: 'срок хранения корзины', priorityOptions: 'приоритеты', storeAutoCheck: 'автопроверка App Store', storeManualCheck: 'кнопка ручной проверки App Store',
 };
 /** Фото data:image (webp/jpeg/png, до ~90 КБ; браузер сжимает до 160 px). Иначе — пусто. */
 const photoValue = v => {
@@ -955,12 +955,14 @@ export function createBackend(db, opts = {}) {
     /* ---------- общие данные, главная, поиск ---------- */
 
     async bootstrap(p) {
-      const [units, ppl, depts, lf, tpl, tm, apps, statuses, afields, gfields, info] = await Promise.all([unitsWithCounts(today(p.today)), people(), departments(), linkFields(), templates(), teams(),
-        all(() => T('apps').select('*').order('ord').order('id')), appStatuses(), appFields(), globalFields(), appInfoItems()]);
+      const [units, ppl, depts, lf, tpl, tm, apps, statuses, afields, gfields, info, manual] = await Promise.all([unitsWithCounts(today(p.today)), people(), departments(), linkFields(), templates(), teams(),
+        all(() => T('apps').select('*').order('ord').order('id')), appStatuses(), appFields(), globalFields(), appInfoItems(), setting('storeManualCheck')]);
       const prio = gfields.find(f => f.role === 'priority');
       return {
         units: units.map(({ doneWeek, ...u }) => u), people: ppl, departments: depts, linkFields: lf, templates: tpl, teams: tm,
         apps: apps.map(appOut), appStatuses: statuses, appFields: afields, appInfoItems: info, priorityOptions: prio ? prio.options : [],
+        // кнопка «Обновить» (проверка App Store из браузера, с адреса человека) — по умолчанию скрыта, показ включает CEO
+        storeManualCheck: !!(manual && manual.show),
       };
     },
 
@@ -1978,6 +1980,12 @@ export function createBackend(db, opts = {}) {
         checked: cyc ? apps.filter(a => a.store_checked_at && a.store_checked_at >= cyc).length : 0,
         lastAt: last ? last.store_checked_at : '', lastApp: last ? last.name : '', everyMin: 2,
       };
+    },
+
+    /** Показывать ли кнопку «Обновить» в проверке App Store (проверка идёт из браузера, с адреса человека). Меняет CEO. */
+    async setStoreManualCheck(p) {
+      await run(T('app_settings').upsert({ key: 'storeManualCheck', value: { show: !!p.show }, updated_at: now() }, { onConflict: 'key' }));
+      return { show: !!p.show };
     },
 
     async setStoreAutoCheck(p) {

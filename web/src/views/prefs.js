@@ -199,8 +199,29 @@ function appsSection() {
         dotChips(S.appFields.map(x => [x.name]))),
       row('Шаблоны апдейтов', 'Название, описание, пункты и нужные этапы' + (updTpl ? ` · ${updTpl} ${plural(updTpl, ['шаблон', 'шаблона', 'шаблонов'])}` : ''),
         act('Настроить', open('openUpdateTemplates')), 'copy'),
-      storeAutoRow()),
+      storeAutoRow(),
+      storeManualRow()),
   ];
+}
+
+/**
+ * Кнопка «Обновить» в блоке «Проверка App Store»: проверяет все ссылки сразу из браузера — с адреса человека,
+ * с которого он же заходит в App Store Connect. По умолчанию скрыта; показ включает CEO, с предупреждением о риске.
+ */
+function storeManualRow() {
+  const sw = h('input', { type: 'checkbox', class: 'switch', checked: !!S.storeManualCheck, 'aria-label': 'Кнопка «Обновить» в проверке App Store' });
+  sw.onchange = () => {
+    sw.disabled = true;
+    send('setStoreManualCheck', { show: sw.checked })
+      .then(r => { S.storeManualCheck = r.show; sw.disabled = false; toast(r.show ? 'Кнопка «Обновить» показана' : 'Кнопка «Обновить» скрыта'); })
+      .catch(e => { sw.checked = !sw.checked; sw.disabled = false; showErr(e); });
+  };
+  return h('label', { class: 'prefs-row' }, h('span', { class: 'prefs-ic' }, icon('eye', 16)),
+    h('span', { class: 'prefs-row-text' }, h('b', null, 'Кнопка «Обновить» в проверке App Store'),
+      h('small', { class: 'muted' }, 'Проверяет все ссылки сразу, из браузера того, кто нажал. По умолчанию скрыта'),
+      h('small', { class: 'prefs-risk' }, icon('alert', 13),
+        'Риск: запросы идут с вашего IP — того же, с которого вы заходите в App Store Connect. Apple может связать этот адрес со списком ваших приложений. Безопаснее автопроверка: она идёт с сервера.')),
+    sw);
 }
 
 /** Автопроверка ссылок App Store: работает в базе круглосуточно — 1 ссылка раз в 2 минуты, в случайном порядке. */
@@ -212,9 +233,9 @@ function storeAutoRow() {
     sw.checked = st.on;
     sw.disabled = false;
     sub.textContent = !st.total ? 'Нет приложений со ссылкой на App Store'
-      : st.on ? [`1 ссылка раз в ${st.everyMin} минуты, в случайном порядке, круглосуточно`, `в этом круге ${st.checked} из ${st.total}`,
+      : st.on ? [`1 ссылка раз в ${st.everyMin} минуты, в случайном порядке, круглосуточно, с сервера (не с вашего адреса)`, `в этом круге ${st.checked} из ${st.total}`,
         st.lastAt && `последняя: ${st.lastApp}, ${ago(st.lastAt)}`].filter(Boolean).join(' · ')
-        : `Выключена — ${st.total} ${plural(st.total, ['ссылка', 'ссылки', 'ссылок'])} проверяются только кнопкой «Обновить»`;
+        : `Выключена · ${st.total} ${plural(st.total, ['ссылка', 'ссылки', 'ссылок'])} на App Store. Включите — база будет проверять по 1 ссылке раз в 2 минуты, с сервера`;
   };
   sw.onchange = () => {
     sw.disabled = true;
