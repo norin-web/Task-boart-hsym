@@ -2239,3 +2239,100 @@ grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
 revoke execute on all functions in schema public from public, anon;
 grant execute on all functions in schema public to authenticated;
+
+-- ── Журнал всего: приложения, юниты, люди, общие настройки ─────────────────────────────────────────────
+-- Пишут триггеры базы — запись появляется при любом способе изменения (экран, функция, импорт).
+-- ref_id / ref_name — о чём запись (приложение, юнит, человек, ключ настройки); имя — снимок, переживает удаление.
+alter table activity add column if not exists ref_id text not null default '';
+alter table activity add column if not exists ref_name text not null default '';
+create index if not exists activity_ref on activity(ref_id);
+
+create or replace function audit_write(p_action text, p_unit text, p_ref text, p_name text, p_field text, p_from text, p_to text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  insert into activity (id, unit_id, task_id, action, field, from_val, to_val, actor_id, at, ref_id, ref_name)
+  values ('a_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12), coalesce(p_unit, ''), '', p_action, coalesce(p_field, ''),
+          case when p_from is null then '' else to_jsonb(p_from)::text end, case when p_to is null then '' else to_jsonb(p_to)::text end,
+          coalesce(my_person_id(), ''), to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'), coalesce(p_ref, ''), coalesce(p_name, ''));
+end $$;
+
+-- Приложение: создано, переименовано, статус, приоритет, перенос в юнит, убрано на полку / возвращено, удалено навсегда.
+create or replace function audit_apps() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    if not new.is_test then perform audit_write('app_create', new.unit_id, new.id, new.name, '', null, new.name); end if;
+    return new;
+  end if;
+  if tg_op = 'DELETE' then
+    if not old.is_test then perform audit_write('app_delete', old.unit_id, old.id, old.name, '', old.name, null); end if;
+    return old;
+  end if;
+  if new.is_test then return new; end if;
+  if new.name is distinct from old.name then perform audit_write('app_update', new.unit_id, new.id, new.name, 'name', old.name, new.name); end if;
+  if new.status is distinct from old.status then perform audit_write('app_update', new.unit_id, new.id, new.name, 'status', old.status, new.status); end if;
+  if new.priority is distinct from old.priority then perform audit_write('app_update', new.unit_id, new.id, new.name, 'priority', old.priority, new.priority); end if;
+  if new.unit_id is distinct from old.unit_id then perform audit_write('app_update', new.unit_id, new.id, new.name, 'unit', old.unit_id, new.unit_id); end if;
+  if new.archived and (not old.archived or new.shelf is distinct from old.shelf) then
+    perform audit_write('app_shelve', new.unit_id, new.id, new.name, '', case when old.archived then coalesce(nullif(old.shelf, ''), 'deleted') end, coalesce(nullif(new.shelf, ''), 'deleted'));
+  elsif old.archived and not new.archived then
+    perform audit_write('app_restore', new.unit_id, new.id, new.name, '', coalesce(nullif(old.shelf, ''), 'deleted'), null);
+  end if;
+  return new;
+end $$;
+drop trigger if exists audit_apps on apps;
+create trigger audit_apps after insert or update or delete on apps for each row execute function audit_apps();
+
+-- Юнит: создан, переименован, настройки (колонки, флоу, ревью…), в корзину / из корзины, удалён навсегда.
+create or replace function audit_units() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    if not new.is_test then perform audit_write('unit_create', new.id, new.id, new.name, '', null, new.name); end if;
+    return new;
+  end if;
+  if tg_op = 'DELETE' then
+    if not old.is_test then perform audit_write('unit_delete', old.id, old.id, old.name, '', old.name, null); end if;
+    return old;
+  end if;
+  if new.is_test then return new; end if;
+  if new.name is distinct from old.name then perform audit_write('unit_update', new.id, new.id, new.name, 'name', old.name, new.name); end if;
+  if new.settings is distinct from old.settings then perform audit_write('unit_update', new.id, new.id, new.name, 'settings', null, null); end if;
+  if new.archived and not old.archived then perform audit_write('unit_archive', new.id, new.id, new.name, '', null, null);
+  elsif old.archived and not new.archived then perform audit_write('unit_restore', new.id, new.id, new.name, '', null, null); end if;
+  return new;
+end $$;
+drop trigger if exists audit_units on units;
+create trigger audit_units after insert or update or delete on units for each row execute function audit_units();
+
+-- Человек: добавлен, имя, роль, позиция, отключён / включён, удалён. Личные настройки и «был в сети» — не пишем.
+create or replace function audit_people() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    if not new.is_test then perform audit_write('person_create', '', new.id, new.name, '', null, new.name); end if;
+    return new;
+  end if;
+  if tg_op = 'DELETE' then
+    if not old.is_test then perform audit_write('person_delete', '', old.id, old.name, '', old.name, null); end if;
+    return old;
+  end if;
+  if new.is_test then return new; end if;
+  if new.name is distinct from old.name then perform audit_write('person_update', '', new.id, new.name, 'name', old.name, new.name); end if;
+  if new.access is distinct from old.access then perform audit_write('person_update', '', new.id, new.name, 'access', old.access, new.access); end if;
+  if new.position_id is distinct from old.position_id then perform audit_write('person_update', '', new.id, new.name, 'position', old.position_id, new.position_id); end if;
+  if new.active is distinct from old.active then perform audit_write('person_update', '', new.id, new.name, 'active', old.active::text, new.active::text); end if;
+  return new;
+end $$;
+drop trigger if exists audit_people on people;
+create trigger audit_people after insert or update or delete on people for each row execute function audit_people();
+
+-- Общие настройки студии (статусы и поля приложений, релиз, сроки…): что поменяли — ключ; служебные метки не пишем.
+create or replace function audit_settings() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.key like 'migr_%' then return new; end if;
+  if tg_op = 'UPDATE' and new.value is not distinct from old.value then return new; end if;
+  perform audit_write('settings_update', '', new.key, new.key, new.key, null, null);
+  return new;
+end $$;
+drop trigger if exists audit_settings on app_settings;
+create trigger audit_settings after insert or update on app_settings for each row execute function audit_settings();
+-- писать в журнал напрямую нельзя — только триггерами
+revoke execute on function audit_write(text, text, text, text, text, text, text) from authenticated, public, anon;

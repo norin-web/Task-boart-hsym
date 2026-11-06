@@ -275,6 +275,14 @@ const fieldOut = r => ({
 
 /** Роли: superadmin — CEO, moderator — PM, rm — релиз-менеджер, lead — лид, member — сотрудник. */
 export const ACCESS = ['superadmin', 'moderator', 'rm', 'lead', 'member'];
+const ACCESS_NAMES = { superadmin: 'CEO', moderator: 'PM', rm: 'RM', lead: 'Lead', member: 'Сотрудник' };
+const SHELF_NAMES = { spam: 'Design Spam [4.3]', sale: 'Removed from sale', deleted: 'Deleted' };
+/** Как назвать в журнале изменённую общую настройку (ключ app_settings). */
+const SETTING_NAMES = {
+  appStatuses: 'статусы приложений', appFields: 'поля приложений', appInfoItems: 'пункты Info', releaseFields: 'релизные поля',
+  releaseChecklist: 'чеклист релиза', devQuestions: 'опросник разработчика', staleDays: 'срок «без движения»',
+  unitRetentionDays: 'срок хранения корзины', priorityOptions: 'приоритеты',
+};
 /** Фото data:image (webp/jpeg/png, до ~90 КБ; браузер сжимает до 160 px). Иначе — пусто. */
 const photoValue = v => {
   const s = String(v || '');
@@ -820,6 +828,14 @@ export function createBackend(db, opts = {}) {
       all(() => T('link_fields').select('id,name').order('id')),
       all(() => T('teams').select('id,name').order('id')),
     ]);
+    // события приложений, юнитов, людей и настроек (пишет база): подписи статусов, приоритетов, ролей; иконки живых приложений
+    const refs = [...new Set(rows.filter(r => /^app_/.test(r.action) && r.ref_id).map(r => r.ref_id))];
+    const [appRows, statuses, prio] = rows.some(r => /^(app|person|settings)_/.test(r.action))
+      ? await Promise.all([refs.length ? run(T('apps').select('id,name,color,icon_url').in('id', refs)) : [], appStatuses(), one('fields', PRIORITY_FIELD)])
+      : [[], [], null];
+    const AP = Object.fromEntries(appRows.map(r => [r.id, r]));
+    const stName = id => (statuses.find(x => x.id === id) || {}).name || id || '';
+    const prioName = id => (((prio && json(prio.options, [])) || []).find(o => o.id === id) || {}).name || (id ? id : 'без приоритета');
     const TM = Object.fromEntries(teamRows.map(r => [r.id, r.name]));
     const LF = Object.fromEntries(lfRows.map(r => [r.id, r]));
     const index = list => Object.fromEntries(list.map(r => [r.id, r]));
@@ -862,9 +878,29 @@ export function createBackend(db, opts = {}) {
             toText = f ? fmtVal(f, to, personName) : '';
           }
       }
+      let ref = null;
+      if (/^(app|unit|person|settings)_/.test(a.action)) {
+        const kind = a.action.split('_')[0];
+        const live = kind === 'app' ? AP[a.ref_id] : null;
+        ref = { kind, id: a.ref_id, name: (live && live.name) || a.ref_name || '', color: live ? live.color || '' : '', iconUrl: live ? live.icon_url || '' : '', gone: kind === 'app' && !live };
+        const unitName = id => (U[id] ? U[id].name : id ? 'удалённый юнит' : '—');
+        switch (`${kind}:${a.field}`) {
+          case 'app:status': label = 'Статус'; fromText = stName(from); toText = stName(to); break;
+          case 'app:priority': label = 'Приоритет'; fromText = prioName(from); toText = prioName(to); break;
+          case 'app:unit': label = 'Юнит'; fromText = unitName(from); toText = unitName(to); break;
+          case 'app:name': case 'unit:name': case 'person:name': label = 'Название'; break;
+          case 'person:access': label = 'Роль'; fromText = ACCESS_NAMES[from] || from; toText = ACCESS_NAMES[to] || to; break;
+          case 'person:position': label = 'Позиция'; fromText = from && D[from] ? D[from].name : '—'; toText = to && D[to] ? D[to].name : '—'; break;
+          case 'person:active': label = 'Доступ'; fromText = from === 'true' ? 'включён' : 'отключён'; toText = to === 'true' ? 'включён' : 'отключён'; break;
+          case 'unit:settings': label = 'Настройки юнита'; break;
+          default:
+            if (kind === 'settings') label = SETTING_NAMES[a.field] || a.field;
+            if (a.action === 'app_shelve' || a.action === 'app_restore') { fromText = SHELF_NAMES[from] || from; toText = SHELF_NAMES[to] || to; }
+        }
+      }
       const text = v => (v === null || v === undefined || v === '' ? '—' : String(v));
       return {
-        id: a.id, action: a.action, field: a.field, actorId: a.actor_id, at: a.at,
+        id: a.id, action: a.action, field: a.field, actorId: a.actor_id, at: a.at, ref,
         label, fromText: text(fromText), toText: text(toText),
         unit: u ? { id: u.id, name: u.name, key: u.key, color: u.color } : null,
         task: t ? { id: t.id, title: t.title, key: `${U[t.unit_id] ? U[t.unit_id].key : '?'}-${t.num}`, departmentId: t.department_id || '' } : null,
@@ -950,7 +986,8 @@ export function createBackend(db, opts = {}) {
 
     /**
      * Лента событий с фильтрами: unitId, actorId, departmentId (позиция задачи), kind, since (скрыть старее), before (страница).
-     * kind: create | status | assign | comment | fields | move | delete | archive.
+     * kind: create | status | assign | comment | fields | move | delete | archive | release; приложения — app_create | app_status | app_name |
+     * app_unit | app_priority | app_shelve | app_restore | app_delete; units, people, settings_update. appId — всё по приложению и его задачам.
      */
     async getActivity(p) {
       const limit = Math.min(Math.max(Number(p.limit) || 30, 1), 100);
@@ -959,6 +996,14 @@ export function createBackend(db, opts = {}) {
         if (p.unitId) q = q.eq('unit_id', String(p.unitId));
         if (p.actorId) q = q.eq('actor_id', String(p.actorId));
         switch (p.kind) {
+          case 'app_create': case 'app_delete': case 'app_shelve': case 'app_restore': case 'settings_update': q = q.eq('action', p.kind); break;
+          case 'app_status': q = q.eq('action', 'app_update').eq('field', 'status'); break;
+          case 'app_name': q = q.eq('action', 'app_update').eq('field', 'name'); break;
+          case 'app_unit': q = q.eq('action', 'app_update').eq('field', 'unit'); break;
+          case 'app_priority': q = q.eq('action', 'app_update').eq('field', 'priority'); break;
+          case 'units': q = q.in('action', ['unit_create', 'unit_update', 'unit_archive', 'unit_restore', 'unit_delete', 'unit_pm']); break;
+          case 'people': q = q.in('action', ['person_create', 'person_update', 'person_delete']); break;
+          case 'release': q = q.eq('field', 'release'); break;
           case 'create': case 'comment': case 'move': case 'delete': q = q.eq('action', p.kind); break;
           case 'archive': q = q.in('action', ['archive', 'unarchive']); break;
           case 'status': q = q.eq('action', 'update').eq('field', 'status'); break;
@@ -970,6 +1015,19 @@ export function createBackend(db, opts = {}) {
         if (p.before) q = q.lt('at', String(p.before));
         return q.order('at', { ascending: false });
       };
+      // По приложению: события самого приложения (ref_id) и его задач — два запроса, сливаем по времени
+      if (p.appId) {
+        const appId = String(p.appId);
+        const taskIds = (await all(() => T('tasks').select('id').eq('app_id', appId).order('id'))).map(t => t.id);
+        const [own, ofTasks] = await Promise.all([
+          run(build().eq('ref_id', appId).limit(limit + 1)),
+          taskIds.length ? run(build().in('task_id', taskIds).limit(limit + 1)) : [],
+        ]);
+        const merged = [...own, ...ofTasks].sort((a, b) => String(b.at).localeCompare(String(a.at)));
+        let items = await enrichActivity(merged.slice(0, limit + 1));
+        if (p.departmentId) items = items.filter(a => a.task && a.task.departmentId === p.departmentId);
+        return { items: items.slice(0, limit), more: merged.length > limit };
+      }
       // Позиция задачи известна только после обогащения — берём с запасом и фильтруем
       const rows = await run(build().limit(p.departmentId ? limit * 4 : limit + 1));
       let items = await enrichActivity(rows);

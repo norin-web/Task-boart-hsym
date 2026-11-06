@@ -971,3 +971,42 @@ test('реджекты: приложение со статусом «Редже�
   await api.as(admin, () => api('shelveApp', { id: app.id, shelf: 'spam' }));
   assert.equal((await api.as(admin, () => api('getRmDashboard', {}))).rejectedApps.length, 0);
 });
+
+test('журнал: события приложений, юнитов, людей и настроек пишет база, с автором; фильтры по типу и приложению', async () => {
+  const api = await setup();
+  const { admin, mod, A, B } = await team(api);
+  const { app, request } = await api.as(admin, () => api('createApp', { name: 'Журнал', unitId: A.id }));
+  await api.as(mod, () => api('updateApp', { id: app.id, name: 'Журнал 2' }));
+  await api.as(admin, async () => {
+    await api('updateApp', { id: app.id, status: 'review' });
+    await api('updateApp', { id: app.id, unitId: B.id });
+    await api('shelveApp', { id: app.id, shelf: 'sale' });
+    await api('restoreApp', { id: app.id });
+    await api('updateUnit', { id: B.id, name: 'Bravo 2' });
+    await api('createPerson', { name: 'Новичок', email: 'new@x.ru', access: 'member', positionId: 'd_qa' });
+  });
+  const all = (await api.as(admin, () => api('getActivity', { limit: 100 }))).items;
+  const of = (action, field) => all.filter(a => a.action === action && (field === undefined || a.field === field));
+  assert.equal(of('app_create')[0].actorId, admin.id);
+  const ren = of('app_update', 'name')[0];
+  assert.deepEqual([ren.actorId, ren.fromText, ren.toText], [mod.id, 'Журнал', 'Журнал 2']);
+  assert.deepEqual([of('app_update', 'status')[0].fromText, of('app_update', 'status')[0].toText], ['В разработке', 'Ревью Apple']);
+  assert.deepEqual([of('app_update', 'unit')[0].fromText, of('app_update', 'unit')[0].toText], ['Alpha', 'Bravo 2']);
+  assert.equal(of('app_shelve')[0].toText, 'Removed from sale');
+  assert.equal(of('app_restore')[0].fromText, 'Removed from sale');
+  assert.equal(of('unit_update', 'name')[0].toText, 'Bravo 2');
+  assert.equal(of('person_create')[0].ref.name, 'Новичок');
+  assert.equal(of('app_create')[0].ref.name, 'Журнал 2');  // имя — живое
+  // фильтры
+  const st = (await api.as(admin, () => api('getActivity', { kind: 'app_status', limit: 50 }))).items;
+  assert.ok(st.length >= 1 && st.every(a => a.action === 'app_update' && a.field === 'status'));
+  const byApp = (await api.as(admin, () => api('getActivity', { appId: app.id, limit: 100 }))).items;
+  assert.ok(byApp.some(a => a.action === 'app_create') && byApp.some(a => a.task && a.task.id === request.id));
+  assert.ok(byApp.every(a => (a.ref && a.ref.id === app.id) || (a.task && a.task.id === request.id) || a.task));
+  // удалено навсегда — запись остаётся с именем
+  await api.as(admin, () => api('deleteApps', { ids: [app.id] }));
+  const del = (await api.as(admin, () => api('getActivity', { kind: 'app_delete', limit: 5 }))).items[0];
+  assert.deepEqual([del.ref.name, del.ref.gone], ['Журнал 2', true]);
+  // писать в журнал напрямую нельзя
+  await api.as(mod, () => assert.rejects(() => api.pg.query("select audit_write('app_create', '', 'x', 'x', '', null, null)")));
+});

@@ -5,9 +5,63 @@ import { call } from '../api.js';
 import { taskLink } from '../router.js';
 
 const KINDS = [
-  ['status', 'Смена статуса'], ['assign', 'Назначения'], ['comment', 'Комментарии'], ['create', 'Создание'],
-  ['fields', 'Изменения полей'], ['move', 'Переносы'], ['archive', 'Архив'], ['delete', 'Удаление'],
+  { title: 'Задачи' },
+  ['create', 'Создание задачи'], ['status', 'Смена статуса'], ['assign', 'Назначения'], ['comment', 'Комментарии'],
+  ['fields', 'Изменения полей'], ['move', 'Переносы'], ['archive', 'Архив'], ['delete', 'Удаление задачи'],
+  { title: 'Релизы' },
+  ['release', 'Отправка в Apple, стор, реджект'],
+  { title: 'Приложения' },
+  ['app_create', 'Новое приложение'], ['app_status', 'Статус приложения'], ['app_name', 'Переименование'], ['app_unit', 'Перенос в другой юнит'],
+  ['app_priority', 'Приоритет'], ['app_shelve', 'Design Spam / снято с продажи / удалено'], ['app_restore', 'Восстановлено'], ['app_delete', 'Удалено навсегда'],
+  { title: 'Студия' },
+  ['units', 'Юниты'], ['people', 'Люди и роли'], ['settings_update', 'Общие настройки'],
 ];
+
+/** О чём событие приложения / юнита / человека: иконка и название; живое приложение открывается по клику. */
+function refEl(r) {
+  if (!r) return null;
+  if (r.kind === 'app') {
+    const ic = r.iconUrl ? h('img', { class: 'jr-ref-ic', src: r.iconUrl, alt: '' })
+      : h('span', { class: 'jr-ref-ic', style: { background: r.color || 'var(--border-strong)' } }, (r.name || '?').slice(0, 2).toUpperCase());
+    return r.gone ? h('span', { class: 'jr-ref gone', title: 'Приложение удалено' }, ic, '«' + r.name + '»')
+      : h('button', { class: 'link-btn jr-ref', onclick: () => import('./apps.js').then(m => m.openAppById(r.id)) }, ic, '«' + r.name + '»');
+  }
+  if (r.kind === 'settings') return null;
+  return h('b', { class: 'jr-ref' }, r.kind === 'unit' ? 'юнит ' + r.name : r.name);
+}
+
+/** События приложений, юнитов, людей и настроек: { text, after, badge }. */
+function refPhrase(a) {
+  const f = a.field;
+  switch (a.action) {
+    case 'app_create': return { text: 'добавил(а) приложение' };
+    case 'app_delete': return { text: 'удалил(а) навсегда приложение' };
+    case 'app_shelve': return a.fromText !== '—' ? { text: `перенёс(ла) из ${a.fromText} в ${a.toText}` } : { text: 'убрал(а) в ' + a.toText };
+    case 'app_restore': return { text: `вернул(а) в работу из ${a.fromText}` };
+    case 'app_update':
+      if (f === 'status') return { text: 'сменил(а) статус приложения', badge: a.toText, after: `(было: ${a.fromText})` };
+      if (f === 'name') return { text: `переименовал(а) «${a.fromText}» в` };
+      if (f === 'priority') return { text: `поставил(а) приоритет «${a.toText}»`, after: `(было: ${a.fromText})` };
+      if (f === 'unit') return { text: `перенёс(ла) из ${a.fromText} в ${a.toText}` };
+      return { text: 'изменил(а)' };
+    case 'unit_create': return { text: 'создал(а)' };
+    case 'unit_delete': return { text: 'удалил(а) навсегда' };
+    case 'unit_archive': return { text: 'убрал(а) в корзину' };
+    case 'unit_restore': return { text: 'вернул(а) из корзины' };
+    case 'unit_update': return f === 'name' ? { text: `переименовал(а) «${a.fromText}» в` } : { text: 'изменил(а) настройки:' };
+    case 'unit_pm': return { text: 'назначил(а) ответственным ' + a.toText + ' за' };
+    case 'person_create': return { text: 'добавил(а) человека' };
+    case 'person_delete': return { text: 'удалил(а) человека' };
+    case 'person_update':
+      if (f === 'access') return { text: `сменил(а) роль ${a.fromText} → ${a.toText}:` };
+      if (f === 'position') return { text: `сменил(а) позицию ${a.fromText} → ${a.toText}:` };
+      if (f === 'active') return { text: a.toText === 'отключён' ? 'отключил(а) доступ' : 'включил(а) доступ' };
+      if (f === 'name') return { text: `переименовал(а) «${a.fromText}» в` };
+      return { text: 'изменил(а)' };
+    case 'settings_update': return { text: 'изменил(а) общие настройки: ' + a.label };
+    default: return null;
+  }
+}
 
 /** Период ленты: границы в ISO (локальные сутки). to — не включительно. */
 const dayStart = (offset = 0) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + offset); return d; };
@@ -29,6 +83,8 @@ const isoDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '
 const cut = (s, n = 90) => { s = String(s ?? ''); return s.length > n ? s.slice(0, n) + '…' : s; };
 
 export function activityText(a) {
+  const rp = refPhrase(a);
+  if (rp) return [rp.text, a.ref && a.ref.kind !== 'settings' && a.ref.name, rp.badge && '→ ' + rp.badge].filter(Boolean).join(' ');
   switch (a.action) {
     case 'create': return 'создание задачи';
     case 'comment': return 'комментарий: «' + (a.toText.length > 90 ? a.toText.slice(0, 90) + '…' : a.toText) + '»';
@@ -80,6 +136,8 @@ const RELEASE_PHASES = { submitted: ['отправил(а) в Apple', 'Ревь�
 /** Журнал (F10): что сделал человек, одной фразой; значок статуса — только там, где статус сменился. */
 function journalPhrase(a) {
   const q = t => '«' + cut(t) + '»';
+  const rp = refPhrase(a);
+  if (rp) return rp;
   switch (a.action) {
     case 'create': return { text: 'создал(а)' };
     case 'comment': return { text: 'оставил(а) комментарий в' };
@@ -108,12 +166,15 @@ function journalPhrase(a) {
 
 /** Строка журнала (F10): аватар, «Имя что сделал — задача», значок нового статуса, время справа. */
 function journalRow(a) {
-  const { text, badge } = journalPhrase(a);
+  const { text, badge, after } = journalPhrase(a);
   const done = badge && /готов/i.test(badge), review = badge && /ревью/i.test(badge);
+  const ref = refEl(a.ref);
   return h('div', { class: 'jr-row' },
     avatar(personById(a.actorId), 'md'),
     h('div', { class: 'jr-text' }, h('b', null, whoName(a.actorId).trim()), ' ', text,
-      a.task && a.unit && [' ', taskLink(a.unit.id, a.task.id, { class: 'jr-task' }, '«' + a.task.title + '»')]),
+      ref && [' ', ref],
+      a.task && a.unit && [' ', taskLink(a.unit.id, a.task.id, { class: 'jr-task' }, '«' + a.task.title + '»')],
+      after && h('span', { class: 'muted' }, ' ' + after)),
     badge && h('span', { class: 'jr-badge' + (review ? ' review' : '') }, done && icon('check', 12), badge),
     h('span', { class: 'jr-time', title: fmtDateTime(a.at) }, new Date(a.at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })));
 }
@@ -126,7 +187,7 @@ const dayLabel = iso => {
 };
 
 export function activityFeed({ limit = 15, title = 'Последние события', journal = false } = {}) {
-  const f = { kind: '', actorId: '', unitId: '', departmentId: '' };
+  const f = { kind: '', actorId: '', unitId: '', appId: '', departmentId: '' };
   let period = null; // { label, from?: Date, to?: Date }
   let items = [];
   let more = false;
@@ -145,9 +206,10 @@ export function activityFeed({ limit = 15, title = 'Последние собы�
     ['kind', 'Тип события', 'Все события', () => KINDS],
     ['actorId', 'Человек', 'Все люди', () => S.people.map(p => [p.id, p.name])],
     ['unitId', 'Юнит', 'Все юниты', () => S.units.filter(u => !u.archived).sort(byOrder).map(u => [u.id, u.name])],
+    ['appId', 'Приложение', 'Все приложения', () => (S.apps || []).filter(a => !f.unitId || a.unitId === f.unitId).sort((x, y) => x.name.localeCompare(y.name, 'ru')).map(a => [a.id, a.name + (a.archived ? ' (убрано)' : '')])],
     ['departmentId', 'Позиция', 'Все позиции', () => activeDepts().map(d => [d.id, d.name])],
   ];
-  const valueText = (key, v) => { const g = GROUPS.find(x => x[0] === key); const o = g[3]().find(x => x[0] === v); return o ? o[1] : v; };
+  const valueText = (key, v) => { const g = GROUPS.find(x => x[0] === key); const o = g[3]().find(x => Array.isArray(x) && x[0] === v); return o ? o[1] : v; };
   const set = (key, v) => { f[key] = v; drawFilters(); load(); };
 
   const setPeriod = p => { period = p; drawFilters(); load(); };
@@ -184,7 +246,7 @@ export function activityFeed({ limit = 15, title = 'Последние собы�
   const pickMenu = (anchor, [key, label, all, options]) => menu(anchor, [
     { title: label },
     { label: all, icon: f[key] ? null : 'check', action: () => set(key, '') },
-    ...options().map(([v, t]) => ({ label: t, icon: f[key] === v ? 'check' : null, action: () => set(key, v) })),
+    ...options().map(o => (Array.isArray(o) ? { label: o[1], icon: f[key] === o[0] ? 'check' : null, action: () => set(key, o[0]) } : o)),
   ]);
 
   const filterMenu = anchor => menu(anchor, [
@@ -192,7 +254,7 @@ export function activityFeed({ limit = 15, title = 'Последние собы�
     { label: h('span', { class: 'fm-row' }, 'Период', h('span', { class: 'muted' }, period ? period.label : 'всё время')), icon: 'calendar', action: () => setTimeout(() => periodMenu(anchor), 0) },
     ...GROUPS.map(g => ({
       label: h('span', { class: 'fm-row' }, g[1], h('span', { class: 'muted' }, f[g[0]] ? valueText(g[0], f[g[0]]) : 'все')),
-      icon: g[0] === 'kind' ? 'layers' : g[0] === 'actorId' ? 'user' : g[0] === 'unitId' ? 'board' : 'filter',
+      icon: g[0] === 'kind' ? 'layers' : g[0] === 'actorId' ? 'user' : g[0] === 'unitId' ? 'board' : g[0] === 'appId' ? 'app' : 'filter',
       action: () => setTimeout(() => pickMenu(anchor, g), 0),
     })),
     (period || Object.values(f).some(Boolean)) && { label: 'Сбросить фильтры', icon: 'x', action: () => { Object.keys(f).forEach(k => { f[k] = ''; }); period = null; drawFilters(); load(); } },
