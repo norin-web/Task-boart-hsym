@@ -3,7 +3,7 @@
  * Открытые — у PM на исправлении или уже исправлены и ждут повторной отправки; закрытые — история.
  * Данные: getRmDashboard (что открыто сейчас) + getReleaseHistory (все реджекты).
  */
-import { isSuper, personById, unitById, fmtDate, plural, safeUrl } from '../state.js';
+import { isSuper, personById, unitById, fmtDate, plural, safeUrl, appStatusById } from '../state.js';
 import { $, h, icon, fill, topbar, toast, showErr, confirmDlg, emptyBlock, skeleton, menu } from '../ui.js';
 import { call, send } from '../api.js';
 import { peekTask } from './task.js';
@@ -123,9 +123,18 @@ export async function renderRejects() {
         h('div', { class: 'rj-meta' }, h('span', null, a.shelvedAt ? `Перенесено ${fmtDate(a.shelvedAt.slice(0, 10))} · ${agoText(a.shelvedAt)}` : 'Убрано из работы'))),
       isSuper() && h('div', { class: 'rj-side' },
         h('div', { class: 'rj-actions' },
-          h('button', { class: 'btn sm', title: 'Вернуть в работу вместе с задачами', onclick: () => done(`«${a.name}» снова в работе`, send('restoreApp', { id: a.id })) }, 'Восстановить'),
-          h('button', { class: 'btn sm', 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); menu(e.currentTarget, ['spam', 'sale', 'deleted'].filter(id => id !== a.shelf).map(id => ({
-            label: SHELF_ACTION[id], action: () => done(`«${a.name}» — ${shelfDone(id)}`, send('shelveApp', { id: a.id, shelf: id })) }))); } }, 'Перенести', icon('chevron', 13)),
+          h('button', { class: 'btn sm', 'aria-haspopup': 'menu', onclick: e => {
+            e.stopPropagation();
+            // вернуть = снова в работе с задачами; со статусом «Реджект» приложение встаёт в «Открытые»
+            const isReject = (appStatusById(a.status) || {}).kind === 'reject';
+            menu(e.currentTarget, [
+              { label: isReject ? 'В открытые реджекты' : 'Вернуть в работу', icon: 'back',
+                action: () => done(isReject ? `«${a.name}» — в открытых реджектах` : `«${a.name}» снова в работе`, send('restoreApp', { id: a.id })) },
+              { sep: true },
+              ...['spam', 'sale', 'deleted'].filter(id => id !== a.shelf).map(id => ({
+                label: SHELF_ACTION[id], action: () => done(`«${a.name}» — ${shelfDone(id)}`, send('shelveApp', { id: a.id, shelf: id })) })),
+            ]);
+          } }, 'Перенести', icon('chevron', 13)),
           h('button', { class: 'btn sm danger', onclick: () => done('', deleteAppsDlg([a])) }, 'Удалить навсегда'))));
   };
 
