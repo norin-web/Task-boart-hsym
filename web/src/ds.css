@@ -3085,3 +3085,6 @@ a.bug-title:hover { text-decoration: underline; }
 .modal:has(.title-field) .field > textarea.inp:not(.title-field) { height: 72px !important; padding: 10px 12px; line-height: 20px; font-weight: 500; }
 .modal .store-preview:empty { display: none; }
 .modal:has(.title-field) .inp:focus, .modal:has(.title-field) .field > .inp.title-field:focus, .modal:has(.title-field) .field > .inp:not(.title-field):focus { background-color: var(--surface); box-shadow: 0 0 0 2px var(--focus); }
+.dt-depts { display: grid; gap: 6px; padding: 4px 0 10px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
+.dt-depts > .muted { font-size: 12px; font-weight: 500; }
+.dt-depts .hint { margin: 0; font-size: 12px; }

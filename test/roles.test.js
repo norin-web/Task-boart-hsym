@@ -1097,3 +1097,16 @@ test('«Новая задача» от CEO: «Кому» — человек из
   await api.as(admin, () => api('setMember', { unitId: B.id, personId: outsider.id }));
   await api.as(admin, () => assert.rejects(() => api('createRequest', { appId: app.id, type: 'other', title: 'x', assigneeId: outsider.id }), /нет в юните/));
 });
+
+test('позиции команды: стандартные команды связаны с позициями, CEO меняет; неизвестные позиции отбрасываются', async () => {
+  const api = await setup();
+  const { admin } = await team(api);
+  const boot = await api.as(admin, () => api('bootstrap', {}));
+  const byId = Object.fromEntries(boot.teams.map(t => [t.id, t.departmentIds]));
+  assert.deepEqual([byId.t_product, byId.t_design, byId.t_ios, byId.t_qa, byId.t_release], [['d_po'], ['d_design'], ['d_ios'], ['d_qa'], ['d_release']]);
+  assert.deepEqual(byId.t_other, ['d_other']);
+  const t = await api.as(admin, () => api('createTeam', { name: 'Growth', departmentIds: ['d_design', 'd_nope', 'd_design'] }));
+  assert.deepEqual(t.departmentIds, ['d_design']);
+  const u = await api.as(admin, () => api('updateTeam', { id: t.id, departmentIds: ['d_ios', 'd_aso'] }));
+  assert.deepEqual(u.departmentIds, ['d_ios', 'd_aso']);
+});

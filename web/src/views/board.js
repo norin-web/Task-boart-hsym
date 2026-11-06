@@ -237,9 +237,12 @@ export function filterTasks(opts = {}) {
   }
   const team = teamById(S.route.team);
   const inTeam = team && new Set(teamPeople(team).map(p => p.id));
+  // у команды заданы позиции — только задачи этих позиций (задача без позиции — по человеку)
+  const teamDepts = team && (team.departmentIds || []).length ? new Set(team.departmentIds) : null;
   return S.board.tasks.filter(t => {
     if (byId && (t.kind === 'stage' || t.step === 'part') && foldedChild(t, byId)) return false;
     if (inTeam && !inTeam.has(t.assigneeId)) return false;
+    if (teamDepts && t.departmentId && !teamDepts.has(t.departmentId)) return false;
     if (t.archived && !f.archived) return false;
     if (!opts.withOld && hidingOld() && staleDone(t)) return false;
     if (f.assignees.length && !f.assignees.includes(t.assigneeId || NO_DEPT)) return false;

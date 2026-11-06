@@ -726,12 +726,28 @@ const setTeam = async (p, teamId, on) => {
   p.teamIds = teamIds;
 };
 
-/** Состав команды под строкой: кто в ней, убрать, добавить. */
+/** Позиции команды чипами: какие задачи попадают на доску команды. onChange(ids) — после каждого клика. */
+function teamDeptChips(ids, onChange) {
+  const picked = new Set(ids || []);
+  const box = h('div', { class: 'ap-pick-units team-depts', role: 'group', 'aria-label': 'Позиции команды' });
+  const draw = () => fill(box, activeDepts().map(d => {
+    const on = picked.has(d.id);
+    return h('button', { type: 'button', class: 'fchip' + (on ? ' on' : ''), 'aria-pressed': String(on),
+      onclick: () => { if (on) picked.delete(d.id); else picked.add(d.id); draw(); onChange([...picked]); } }, d.name);
+  }));
+  draw();
+  return box;
+}
+const TEAM_DEPTS_HINT = 'На доске команды — задачи этих позиций у людей команды. Ничего не выбрано — все задачи людей команды.';
+
+/** Состав команды под строкой: позиции на доске, кто в ней, убрать, добавить. */
 function teamPanel(d, redraw) {
   const inTeam = S.people.filter(p => p.active && (p.teamIds || []).includes(d.id));
   const rest = S.people.filter(p => p.active && !(p.teamIds || []).includes(d.id));
   const change = (p, on) => setTeam(p, d.id, on).then(() => { renderSidebar(); redraw(); }).catch(showErr);
+  const saveDepts = ids => send('updateTeam', { id: d.id, departmentIds: ids }).then(t => { d.departmentIds = t.departmentIds; }).catch(showErr);
   return h('div', { class: 'dt-team' },
+    h('div', { class: 'dt-depts' }, h('span', { class: 'muted' }, 'Позиции на доске команды'), teamDeptChips(d.departmentIds, saveDepts), h('span', { class: 'hint' }, TEAM_DEPTS_HINT)),
     inTeam.map(p => h('div', { class: 'dt-person' }, avatar(p, 'sm'), h('span', { class: 'dt-person-name' }, p.name),
       h('button', { class: 'icon-btn sm', title: 'Убрать из команды', 'aria-label': 'Убрать ' + p.name, onclick: () => change(p, false) }, icon('x', 14)))),
     rest.length > 0 && h('select', { class: 'inp dt-person-add', 'aria-label': 'Добавить в команду', onchange: e => { const p = S.people.find(x => x.id === e.target.value); if (p) change(p, true); } },
@@ -742,6 +758,7 @@ function teamPanel(d, redraw) {
 export function openTeamDialog(unit) {
   const name = h('input', { class: 'inp', maxlength: 40, placeholder: 'Например, Growth Team' });
   const picked = new Set();
+  let depts = [];
   const people = S.people.filter(p => p.active).sort((a, b) => Number((unit.members || []).includes(b.id)) - Number((unit.members || []).includes(a.id)) || a.name.localeCompare(b.name));
   const list = h('div', { class: 'td-list' });
   const draw = () => fill(list, people.map(p => {
@@ -753,11 +770,11 @@ export function openTeamDialog(unit) {
   modal({
     title: 'Новая команда · ' + unit.name,
     cls: 'dlg td-dlg',
-    body: [field('Название', name), field('Участники', list)],
+    body: [field('Название', name), field('Позиции на доске', teamDeptChips([], ids => { depts = ids; }), TEAM_DEPTS_HINT), field('Участники', list)],
     actions: [{ label: 'Отмена' }, { label: 'Создать', primary: true, action: async close => {
       if (!name.value.trim()) { name.focus(); return; }
       if (!picked.size) { toast('Выберите хотя бы одного участника', { type: 'error' }); return; }
-      const team = await send('createTeam', { name: name.value, color: PALETTE[S.teams.length % PALETTE.length] });
+      const team = await send('createTeam', { name: name.value, color: PALETTE[S.teams.length % PALETTE.length], departmentIds: depts });
       S.teams = [...S.teams, team];
       for (const id of picked) {
         const p = S.people.find(x => x.id === id);

@@ -302,7 +302,7 @@ const personOut = r => ({
   teamIds: json(r.team_ids, []) || [],
   positionIds: [r.position_id || 'd_other', ...(json(r.extra_positions, []) || [])],
 });
-const teamOut = r => ({ id: r.id, name: r.name, color: r.color, order: r.ord, archived: !!r.archived, boardTemplate: cleanStages(json(r.board_template, [])) });
+const teamOut = r => ({ id: r.id, name: r.name, color: r.color, order: r.ord, archived: !!r.archived, boardTemplate: cleanStages(json(r.board_template, [])), departmentIds: (json(r.department_ids, []) || []).filter(x => typeof x === 'string') });
 
 /** Этапы личной доски: колонки { id, name, kind: todo|progress|done, color }, до 12, хотя бы одна. */
 function cleanStages(list) {
@@ -1677,7 +1677,9 @@ export function createBackend(db, opts = {}) {
 
     async createTeam(p) {
       const n = (await teams()).length;
-      const t = { id: uid('t'), name: req(str(p.name, 40), 'Название команды'), color: color(p.color, PALETTE[n % PALETTE.length]), ord: (await maxOrd('teams')) + 1, archived: false };
+      const known = new Set((await run(T('departments').select('id'))).map(d => d.id));
+      const t = { id: uid('t'), name: req(str(p.name, 40), 'Название команды'), color: color(p.color, PALETTE[n % PALETTE.length]), ord: (await maxOrd('teams')) + 1, archived: false,
+        department_ids: [...new Set((Array.isArray(p.departmentIds) ? p.departmentIds : []).map(x => str(x, 40)).filter(x => known.has(x)))].slice(0, 30) };
       await run(T('teams').insert(t));
       return teamOut(t);
     },
@@ -1688,6 +1690,10 @@ export function createBackend(db, opts = {}) {
       if ('name' in p) upd.name = req(str(p.name, 40), 'Название команды');
       if ('color' in p) upd.color = color(p.color, t.color);
       if ('archived' in p) upd.archived = !!p.archived;
+      if ('departmentIds' in p) {
+        const known = new Set((await run(T('departments').select('id'))).map(d => d.id));
+        upd.department_ids = [...new Set((Array.isArray(p.departmentIds) ? p.departmentIds : []).map(x => str(x, 40)).filter(x => known.has(x)))].slice(0, 30);
+      }
       if ('boardTemplate' in p) {
         upd.board_template = cleanStages(p.boardTemplate);
         if (!upd.board_template.length) fail('Нужен хотя бы один этап');

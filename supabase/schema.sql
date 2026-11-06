@@ -2460,3 +2460,13 @@ language sql stable security definer set search_path = public as $$
      and exists (select 1 from tasks t where t.parent_id = r.id and t.step = 'release');
 $$;
 grant execute on function release_parents(text[]) to authenticated;
+
+-- Позиции команды: доска команды показывает задачи этих позиций у людей команды (пусто — все задачи людей команды)
+alter table teams add column if not exists department_ids jsonb not null default '[]';
+update teams set department_ids = '["d_po"]'::jsonb where id = 't_product' and department_ids = '[]'::jsonb;
+update teams set department_ids = '["d_design"]'::jsonb where id = 't_design' and department_ids = '[]'::jsonb;
+update teams set department_ids = '["d_ios"]'::jsonb where id = 't_ios' and department_ids = '[]'::jsonb;
+update teams set department_ids = '["d_qa"]'::jsonb where id = 't_qa' and department_ids = '[]'::jsonb;
+update teams set department_ids = '["d_release"]'::jsonb where id = 't_release' and department_ids = '[]'::jsonb;
+update teams set department_ids = '["d_aso"]'::jsonb where id = 't_aso' and department_ids = '[]'::jsonb;
+update teams set department_ids = '["d_other"]'::jsonb where id = 't_other' and department_ids = '[]'::jsonb;
