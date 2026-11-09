@@ -77,7 +77,7 @@ export async function renderUnitPage() {
       h('div', { class: 'cs-row unit-stats' },
         stat(apps.length, 'Приложения', 'apps', '', sparkline(openSeries(apps.map(a => ({ createdAt: a.createdAt }))))),
         stat(apps.filter(a => a.active > 0).length, 'В работе', 'apps', '', sparkline(openSeries(apps.flatMap(a => a.requests))), 'working'),
-        stat(open.length, 'Открытых задач', 'list', '', sparkline(openSeries(S.board.tasks.filter(t => !t.archived).map(t => ({ createdAt: t.createdAt, doneAt: t.doneAt })))), 'open'),
+        // «Открытых задач» убрали: считала каждый этап, а список сворачивает этапы в запрос — цифры не сходились
         stat(late, 'Просрочено', 'list', late ? 'danger' : '', sparkline(Array(14).fill(late)), 'late')),
       h('div', { class: 'home-grid' },
         h('div', { class: 'home-col' }, inProgress(ud, load, { brief: true }), appsBrief(u, apps, load), attention(ud, load, { two: true })),
