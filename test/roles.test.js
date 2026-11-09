@@ -1207,3 +1207,39 @@ test('обратная связь: пишет любой, видит своё; �
   await api.as(admin, () => api('deleteFeedback', { id: f2.id }));
   assert.equal((await api.as(admin, () => api('getFeedback', {}))).length, 1);
 });
+
+test('разнести по этапам: пройденные — готово, текущий — в работе, релиз — RM; уведомлений о прошлом нет; только CEO', async () => {
+  const api = await setup();
+  const { admin, mod, designer, dev, A } = await team(api);
+  const qa = await api.as(admin, () => api('createPerson', { name: 'Тестер', email: 'qa@x.ru', access: 'member', positionId: 'd_qa' }));
+  const rm = await api.as(admin, () => api('createPerson', { name: 'Релизный', email: 'rm@x.ru', access: 'rm', positionId: 'd_release' }));
+  for (const p of [qa, rm]) await api.as(admin, () => api('setMember', { unitId: A.id, personId: p.id }));
+  const mk = async name => (await api.as(admin, () => api('createApp', { name, unitId: A.id, noRequest: true }))).app;
+  const [aDev, aRel, aStore, aDesign] = [await mk('В разработке'), await mk('К релизу'), await mk('В сторе'), await mk('Дизайн идёт')];
+  await api.as(mod, () => assert.rejects(() => api('placeApps', { items: [{ id: aDev.id, stage: 'dev' }] }), forbidden));
+  const r = await api.as(admin, () => api('placeApps', { designerId: designer.id, items: [
+    { id: aDev.id, stage: 'dev' }, { id: aRel.id, stage: 'release' }, { id: aStore.id, stage: 'store' }, { id: aDesign.id, stage: 'design' }] }));
+  assert.deepEqual([r.made, r.skipped, r.errors], [4, 0, []]);
+  const board = (await api.as(admin, () => api('getBoard', { unitId: A.id }))).tasks;
+  const unit = (await api.as(admin, () => api('bootstrap', {}))).units.find(u => u.id === A.id);
+  const kind = t => (unit.settings.columns.find(c => c.id === t.status) || {}).kind;
+  const stagesOf = app => Object.fromEntries(board.filter(t => t.appId === app.id && t.kind === 'stage').map(t => [t.step, kind(t)]));
+  const sDev = stagesOf(aDev);
+  assert.deepEqual([sDev.design, sDev.art, sDev.ios, sDev.qa], ['done', 'done', 'progress', 'todo']);
+  assert.equal(board.find(t => t.appId === aDev.id && t.step === 'design').assigneeId, designer.id);
+  assert.equal(board.find(t => t.appId === aDev.id && t.step === 'ios').assigneeId, dev.id);
+  const sRel = stagesOf(aRel);
+  assert.ok(Object.entries(sRel).every(([k, v]) => (k === 'release' ? v !== 'done' : v === 'done')));
+  assert.equal(board.find(t => t.appId === aRel.id && t.step === 'release').assigneeId, rm.id);
+  assert.equal(stagesOf(aDesign).design, 'progress');
+  const sStore = stagesOf(aStore);
+  assert.ok(Object.values(sStore).length && Object.values(sStore).every(v => v === 'done'));
+  assert.equal(kind(board.find(t => t.appId === aStore.id && t.kind === 'request')), 'done');
+  // дизайнеру — только о текущем дизайне (не о пройденных), PM — ничего о запросах
+  const dn = await api.as(designer, () => api('heartbeat', { personId: designer.id }));
+  const pmN = await api.as(mod, () => api('heartbeat', { personId: mod.id }));
+  assert.ok(dn.unread >= 1 && dn.unread <= 2, 'дизайнер: ' + dn.unread);
+  assert.equal(pmN.unread, 0);
+  // повторно — пропускает (запрос уже есть)
+  assert.equal((await api.as(admin, () => api('placeApps', { items: [{ id: aDev.id, stage: 'dev' }] }))).skipped, 1);
+});

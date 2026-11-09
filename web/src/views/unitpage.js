@@ -158,8 +158,8 @@ function appsBrief(u, apps, reload, LIMIT = 3) {
   const idle = isSuper() ? idleApps(apps) : [];
   return h('section', null,
     h('div', { class: 'section-head' }, h('h2', null, 'Приложения', apps.length > LIMIT && h('span', { class: 'muted sec-n' }, apps.length)),
-      idle.length > 0 && h('button', { class: 'btn ghost sm idle-link', title: 'Статус «В разработке», но задач нет — на доске их не видно', onclick: () => openStartWork(idle, reload) },
-        icon('alert', 13), `Без задач: ${idle.length} · Поставить в работу`),
+      idle.length > 0 && h('button', { class: 'btn ghost sm idle-link', title: 'Нет задач — на досках, в Сводке и у людей их не видно', onclick: () => openStartWork(idle, reload) },
+        icon('alert', 13), `Без задач: ${idle.length} · Разнести по этапам`),
       link({ unit: u.id, mode: 'apps' }, { class: 'btn ghost sm' }, 'Все')),
     apps.length
       ? h('div', { class: 'card-box app-brief' }, apps.slice(0, LIMIT).map(a => h('button', { class: 'app-brief-row', onclick: () => openAppCard(a, reload) },

@@ -42,8 +42,10 @@ function allColumns(sheet) {
     { id: 'due', name: 'Срок', type: 'date', get: r => r.dueDate },
     { id: 'priority', name: 'Приоритет', type: 'text', get: r => r.priority },
   ].map(c => ({ ...c, group: 'Основные' }));
+  const prodUpd = S.appFields.find(f => /^prod upd/i.test(f.name));
   const stages = [...STAGES.map(([k, name]) => ({ id: 'st:' + k, name, type: 'stage', group: 'Этапы', get: r => ({ t: r.stages[k], ready: k === 'ios' && r.ready }) })),
-    { id: 'upd', name: 'Апдейт', type: 'upd', group: 'Этапы', get: r => r.update }];
+    // апдейт: запрос «Апдейт», а пока его нет — поле приложения Prod UPD (импорт таблицы)
+    { id: 'upd', name: 'Апдейт', type: 'upd', group: 'Этапы', get: r => r.update || (prodUpd && (r.info || {})[prodUpd.id] ? { text: r.info[prodUpd.id] } : null) }];
   // ссылка этапа; нет в задачах — из «Быстрого доступа» приложения (поле с тем же смыслом: Figma, Drive, Мета/Meta)
   const kindOf = name => (/figma/i.test(name) ? 'figma' : /drive/i.test(name) ? 'drive' : /^(meta|мета)/i.test(name) ? 'meta' : '');
   const appFieldFor = f => { const k = kindOf(f.name); return k ? S.appFields.find(x => x.kind === 'link' && kindOf(x.name) === k) : null; };
@@ -95,7 +97,8 @@ function cell(c, row, ctx) {
       const [text, cls] = v.t.done ? STAGE_CHIP.done : v.ready ? ['В очереди', 'wait'] : v.t.blocked ? ['Ждёт', 'hold'] : STAGE_CHIP[v.t.kind] || STAGE_CHIP.todo;
       return pick(text, cls, a => stageMenu(row, c.id.slice(3), a, ctx.reload));
     }
-    case 'upd': return v ? h('span', { class: 'rd-cell ' + (v.done ? 'ok' : 'go'), title: v.title }, h('span', { class: 'rd-cell-t' }, v.done ? 'Готово' : `В работе · ${v.progress}%`)) : h('span', { class: 'muted' }, '—');
+    case 'upd': return v ? (v.text ? h('span', { class: 'rd-text', title: 'Prod UPD' }, v.text)
+      : h('span', { class: 'rd-cell ' + (v.done ? 'ok' : 'go'), title: v.title }, h('span', { class: 'rd-cell-t' }, v.done ? 'Готово' : `В работе · ${v.progress}%`))) : h('span', { class: 'muted' }, '—');
     case 'status': {
       const st = S.appStatuses.find(x => x.id === v); if (!st) return h('span', { class: 'muted' }, '—');
       const el = pick(st.name, 'stat', an => menu(an, [{ title: 'Статус приложения' }, ...S.appStatuses.map(x => ({ label: x.name, icon: x.id === v ? 'check' : 'blank',

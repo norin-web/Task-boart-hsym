@@ -1123,6 +1123,8 @@ export function openCreateApp(onDone, unitId) {
   const due = h('input', { class: 'inp', type: 'date' });
   const prio = prioPicker('');
   const desc = h('textarea', { class: 'inp', rows: 3, placeholder: 'Что за приложение, рынки, важное для команды' });
+  // уже в работе или в сторе — сразу разносим по этапам (пройденные «Готово», текущий «В работе»)
+  const place = h('select', { class: 'inp', 'aria-label': 'Где сейчас' }, PLACE.map(([id, label]) => h('option', { value: id }, label)));
   modal({
     title: 'Новое приложение',
     body: [
@@ -1130,6 +1132,7 @@ export function openCreateApp(onDone, unitId) {
       field('Название', name),
       h('div', { class: 'grid2' }, field('Юнит', unit), field('PM', pm.el, pm.hint)),
       h('div', { class: 'grid2' }, field('Срок', due), field('Приоритет', prio)),
+      field('Где сейчас', place, 'Новое — запрос PM. Уже в работе — этапы появятся сразу: пройденные «Готово», текущий «В работе»'),
       field('Ссылка в App Store', store, preview),
       field('Описание', desc),
     ],
@@ -1137,9 +1140,15 @@ export function openCreateApp(onDone, unitId) {
       label: 'Создать', primary: true,
       action: async close => {
         if (!name.value.trim()) { name.focus(); return; }
-        await send('createApp', { name: name.value, unitId: unit.value, pmId: pm.el.value, dueDate: due.value, priority: prio.value, description: desc.value, storeUrl: store.value.trim(), iconUrl, storeName });
+        const stage = place.value;
+        const made = await send('createApp', { name: name.value, unitId: unit.value, pmId: pm.el.value, dueDate: due.value, priority: prio.value, description: desc.value, storeUrl: store.value.trim(), iconUrl, storeName, noRequest: stage !== 'new' });
+        if (stage !== 'new') {
+          const meP = personById(S.meId);
+          const r = await send('placeApps', { items: [{ id: made.app.id, stage }], designerId: meP && (meP.positionIds || []).includes('d_design') ? meP.id : '' });
+          if (r.errors.length) toast(r.errors[0].error, { type: 'error' });
+        }
         close();
-        toast(`«${name.value.trim()}» создано — задача ушла PM`);
+        toast(stage === 'new' ? `«${name.value.trim()}» создано — задача ушла PM` : `«${name.value.trim()}» создано и разнесено по этапам`);
         if (onDone) onDone();
       },
     }],
@@ -1147,32 +1156,72 @@ export function openCreateApp(onDone, unitId) {
 }
 
 /** «В разработке», но без задач (добавлены списком): на доске их нет — CEO ставит в работу. apps — из listApps (с requests). */
-export const idleApps = apps => apps.filter(a => !a.archived && (appStatusById(a.status) || {}).kind === 'dev' && !(a.requests || []).length);
+/** Приложения без задач (добавлены уже в работе или в сторе): на досках и у людей их нет — CEO разносит по этапам. apps — из listApps (с requests). */
+export const idleApps = apps => apps.filter(a => !a.archived && !(a.requests || []).length);
 
-/** Окно «Поставить в работу»: приложения галочками (все отмечены), каждому — запрос New App ответственному PM юнита. */
+/** Где сейчас приложение: этапы для «Разнести по этапам». */
+const PLACE = [['new', 'Новое — PM разложит'], ['design', 'Дизайн'], ['ready', 'Готово к разработке'], ['dev', 'Разработка'], ['qa', 'Тесты'], ['release', 'Релиз — передать RM'], ['store', 'Уже в сторе — всё готово']];
+/** Этап по умолчанию: из поля Development (импорт таблицы), иначе по статусу приложения. */
+function guessPlace(a) {
+  const f = S.appFields.find(x => /^development$/i.test(x.name));
+  const v = String((f && a.info && a.info[f.id]) || '').toLowerCase();
+  const kind = (appStatusById(a.status) || {}).kind;
+  if (kind === 'live') return 'store';
+  if (['release', 'review', 'reject'].includes(kind)) return 'release';
+  if (/ux|ui|design/.test(v)) return 'design';
+  if (/ready for dev/.test(v)) return 'ready';
+  if (/ios|in progress/.test(v)) return 'dev';
+  if (/done/.test(v)) return 'qa';
+  return 'new';
+}
+
+/**
+ * Окно «Разнести по этапам»: у каждого приложения «где сейчас» (по умолчанию — из Development / статуса), дизайнер этапов дизайна.
+ * Каждому — запрос New App, этапы по флоу юнита: пройденные — «Готово», текущий — «В работе», релиз — RM.
+ */
 export function openStartWork(list, onDone) {
   const picked = new Set(list.map(a => a.id));
+  const where = new Map(list.map(a => [a.id, guessPlace(a)]));
   const box = h('div', { class: 'sw-list' });
   const all = h('label', { class: 'sw-all' });
+  const designers = S.people.filter(p => p.active && (p.positionIds || [p.positionId]).includes('d_design')).sort((x, y) => x.name.localeCompare(y.name, 'ru'));
+  const meP = personById(S.meId);
+  const designer = h('select', { class: 'inp', 'aria-label': 'Дизайнер' },
+    h('option', { value: '' }, 'Как в юните (лид дизайна)'), designers.map(p => h('option', { value: p.id }, p.name)));
+  if (meP && designers.some(p => p.id === meP.id)) designer.value = meP.id;
   const draw = () => {
     fill(all, h('input', { type: 'checkbox', checked: picked.size === list.length, onchange: e => { list.forEach(a => (e.target.checked ? picked.add(a.id) : picked.delete(a.id))); draw(); } }),
       `Выбрать все · ${picked.size} из ${list.length}`);
-    fill(box, list.map(a => h('label', { class: 'sw-row' },
-      h('input', { type: 'checkbox', checked: picked.has(a.id), onchange: e => { if (e.target.checked) picked.add(a.id); else picked.delete(a.id); draw(); } }),
-      appIcon(a, 'sm'), h('span', { class: 'sw-name' }, a.name), h('span', { class: 'muted' }, (unitById(a.unitId) || {}).name || ''))));
+    fill(box, list.map(a => {
+      const sel = h('select', { class: 'inp sw-stage', 'aria-label': 'Где сейчас: ' + a.name, onchange: e => where.set(a.id, e.target.value) },
+        PLACE.map(([id, label]) => h('option', { value: id }, label)));
+      sel.value = where.get(a.id);
+      return h('div', { class: 'sw-row sw-row-stage' },
+        h('input', { type: 'checkbox', 'aria-label': a.name, checked: picked.has(a.id), onchange: e => { if (e.target.checked) picked.add(a.id); else picked.delete(a.id); draw(); } }),
+        appIcon(a, 'sm'), h('span', { class: 'sw-name' }, a.name), h('span', { class: 'muted' }, (unitById(a.unitId) || {}).name || ''), sel);
+    }));
   };
   draw();
   modal({
-    title: 'Поставить в работу',
-    cls: 'dlg',
-    body: [h('p', { class: 'hint', style: { marginTop: 0 } }, 'У этих приложений статус «В разработке», но задач нет — на доске их не видно. Каждому уйдёт запрос New App ответственному PM юнита, он разложит его по этапам.'),
+    title: 'Разнести по этапам',
+    cls: 'dlg sw-dlg',
+    body: [h('p', { class: 'hint', style: { marginTop: 0 } }, 'Приложения без задач не видны на досках и у людей. Укажите, где каждое сейчас: появится запрос New App и этапы по флоу юнита — пройденные «Готово», текущий «В работе», дальше по очереди; исполнители — по позициям. Уведомления придут только о текущих этапах.'),
+      h('div', { class: 'grid2' }, h('label', { class: 'field' }, h('span', null, 'Дизайнер этапов дизайна'), designer)),
       all, box],
-    actions: [{ label: 'Отмена' }, { label: 'Поставить в работу', primary: true, action: async close => {
+    actions: [{ label: 'Отмена' }, { label: 'Разнести', primary: true, action: async close => {
       if (!picked.size) return toast('Отметьте приложения', { type: 'error' });
-      const r = await send('startAppsWork', { ids: [...picked] });
+      const items = list.filter(a => picked.has(a.id)).map(a => ({ id: a.id, stage: where.get(a.id) }));
+      // пачками по 5: каждое приложение — запрос и десяток этапов; на кнопке — сколько готово
+      const btn = [...document.querySelectorAll('.sw-dlg .btn.primary')].pop();
+      const r = { made: 0, skipped: 0, errors: [] };
+      for (let i = 0; i < items.length; i += 5) {
+        if (btn) btn.textContent = `Разношу… ${i} из ${items.length}`;
+        const part = await send('placeApps', { items: items.slice(i, i + 5), designerId: designer.value });
+        r.made += part.made; r.skipped += part.skipped; r.errors.push(...part.errors);
+      }
       close();
-      toast(`Запросы New App ушли PM: ${r.made}`);
-      // открытый юнит: задачи доски — заново, иначе новые запросы появятся только после перезагрузки
+      toast(`Разнесено: ${r.made}` + (r.skipped ? ` · пропущено: ${r.skipped}` : '') + (r.errors.length ? ` · ошибок: ${r.errors.length}` : ''), r.errors.length ? { type: 'error' } : undefined);
+      if (r.errors.length) console.warn('placeApps', r.errors);
       if (S.board && list.some(a => picked.has(a.id) && a.unitId === S.board.unit.id)) await import('./board.js').then(m => m.loadBoard(S.board.unit.id)).catch(() => {});
       if (onDone) onDone();
     } }],
@@ -1186,10 +1235,10 @@ export function idleBlock(apps, reload) {
   return h('section', { class: 'store-check idle-check' },
     h('div', { class: 'sc-head' },
       h('span', { class: 'sc-ic' }, icon('alert', 18)),
-      h('span', { class: 'sc-title' }, h('b', null, `В разработке без задач: ${list.length}`),
-        h('span', { class: 'muted sc-sub' }, 'Статус «В разработке», но задач нет — на доске их не видно')),
+      h('span', { class: 'sc-title' }, h('b', null, `Без задач: ${list.length}`),
+        h('span', { class: 'muted sc-sub' }, 'Нет задач — на досках, в Сводке и у людей эти приложения не видны')),
       h('span', { class: 'spacer' }),
-      h('button', { class: 'btn sm primary', onclick: () => openStartWork(list, reload) }, 'Поставить в работу')));
+      h('button', { class: 'btn sm primary', onclick: () => openStartWork(list, reload) }, 'Разнести по этапам')));
 }
 
 /** Полки убранных приложений (экран «Реджекты»): Design Spam [4.3], снято с продажи (не удалено) и удалённые. */

@@ -3147,3 +3147,6 @@ a.bug-title:hover { text-decoration: underline; }
 .fb-in-acts { display: flex; align-items: center; gap: 6px; }
 .fb-kind { padding: 2px 8px; border-radius: 999px; background: var(--surface-2); font-size: 12px; font-weight: 600; }
 .prefs-head.fb-headrow { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.sw-dlg { width: min(720px, calc(100vw - 32px)); }
+.sw-row-stage { grid-template-columns: auto auto minmax(0, 1fr) auto 210px; }
+.sw-row-stage .sw-stage { height: 32px; padding: 0 8px; font-size: 12px; }

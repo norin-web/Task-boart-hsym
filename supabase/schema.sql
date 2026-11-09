@@ -2649,3 +2649,35 @@ drop policy if exists feedback_delete on feedback;
 create policy feedback_delete on feedback for delete to authenticated using (is_dev());
 drop trigger if exists block_view_as_writes on feedback;
 create trigger block_view_as_writes before insert or update or delete on feedback for each statement execute function block_view_as_writes();
+
+-- Приложение добавили уже в работе: разложенный запрос «перематывается» на текущий этап.
+-- p_done — шаги флоу, которые уже пройдены («Готово», чеклист закрыт), p_progress — текущий шаг («В работе»).
+-- Уведомления о пройденных этапах и о самом запросе убираются — людям приходит только то, что сейчас на них.
+-- Только CEO. Проверки этапов (чеклист, опросник разработчика) для пройденного не нужны — служебный режим.
+create or replace function fast_forward_request(p_request text, p_done text[], p_progress text) returns integer
+language plpgsql security definer set search_path = public as $$
+declare
+  r record; st jsonb; c_done text; c_prog text; at_ text := to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+  n integer := 0;
+begin
+  if not is_superadmin() then raise exception 'Недостаточно прав: разносить приложения по этапам может CEO' using errcode = '42501'; end if;
+  select * into r from tasks where id = p_request and kind = 'request';
+  if r.id is null then raise exception 'Запрос не найден' using errcode = 'P0001'; end if;
+  select settings into st from units where id = r.unit_id;
+  select x ->> 'id' into c_done from jsonb_array_elements(st -> 'columns') x where x ->> 'kind' = 'done' limit 1;
+  select x ->> 'id' into c_prog from jsonb_array_elements(st -> 'columns') x where x ->> 'kind' = 'progress' limit 1;
+  perform set_config('app.system', 'on', true);
+  update tasks set status = c_done, done_at = at_, started_at = case when started_at = '' then at_ else started_at end, updated_at = at_,
+         checklist = coalesce((select jsonb_agg(i || jsonb_build_object('done', true)) from jsonb_array_elements(checklist) i), '[]'::jsonb)
+   where parent_id = p_request and kind = 'stage' and not archived and step = any(coalesce(p_done, '{}')) and c_done is not null;
+  get diagnostics n = row_count;
+  if coalesce(p_progress, '') <> '' and c_prog is not null then
+    update tasks set status = c_prog, started_at = case when started_at = '' then at_ else started_at end, updated_at = at_
+     where parent_id = p_request and kind = 'stage' and not archived and step = p_progress;
+  end if;
+  delete from notifications where read_at = '' and (task_id = p_request
+    or task_id in (select id from tasks where parent_id = p_request and step = any(coalesce(p_done, '{}'))));
+  return n;
+end $$;
+revoke execute on function fast_forward_request(text, text[], text) from public, anon;
+grant execute on function fast_forward_request(text, text[], text) to authenticated;

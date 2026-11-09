@@ -318,6 +318,7 @@ function cleanStages(list) {
 /** Иконка приложения — только картинка Apple (mzstatic.com) по https; иначе пусто. */
 const iconUrl = v => { const s = String(v || '').trim().slice(0, 500); return /^https:\/\/[\w.-]+\.mzstatic\.com\//.test(s) ? s : ''; };
 const FEEDBACK_KINDS = ['idea', 'inconvenient', 'bug'];
+const PLACE_STAGES = ['new', 'design', 'ready', 'dev', 'qa', 'release', 'store'];
 const feedbackOut = r => ({ id: r.id, personId: r.person_id, kind: r.kind, text: r.text, status: r.status, createdAt: r.created_at, doneAt: r.done_at || '' });
 
 const appOut = r => ({
@@ -2489,6 +2490,58 @@ export function createBackend(db, opts = {}) {
         made++;
       }
       return { made };
+    },
+
+    /**
+     * Разнести приложения по этапам (CEO): приложение уже в работе — запрос New App, раскладка по флоу юнита
+     * и «перемотка»: пройденные этапы — «Готово», текущий — «В работе», релиз — RM. items: [{ id, stage }],
+     * stage: new | design | ready | dev | qa | release | store (все этапы пройдены). designerId — исполнитель этапов дизайна.
+     */
+    async placeApps(p, ctx) {
+      if ((((await rpc('whoami', {})) || [])[0] || {}).access !== 'superadmin') fail('Разносить приложения по этапам может только CEO', 'FORBIDDEN');
+      const items = (Array.isArray(p.items) ? p.items : []).slice(0, 500);
+      const designerId = str(p.designerId, 40);
+      const out = { made: 0, skipped: 0, errors: [] };
+      for (const it of items) {
+        const a = await one('apps', str(it && it.id, 40));
+        const stage = PLACE_STAGES.includes(it && it.stage) ? it.stage : 'new';
+        if (!a || a.archived) { out.skipped++; continue; }
+        const has = await run(T('tasks').select('id').eq('app_id', a.id).eq('kind', 'request').eq('archived', false).limit(1));
+        if (has.length) { out.skipped++; continue; }
+        try {
+          const req = await methods.createRequest({ appId: a.id, type: 'new_app', title: `New App: ${a.name}` }, ctx);
+          if (stage !== 'new') {
+            const stages = await methods.decomposeRequest({ taskId: req.id }, ctx);
+            if (designerId) {
+              for (const t of stages.filter(x => x.departmentId === 'd_design' && x.assigneeId !== designerId)) {
+                await methods.updateTask({ id: t.id, patch: { assigneeId: designerId } }, ctx).catch(() => null);
+              }
+            }
+            const steps = stages.map(t => t.step);
+            const plan = {
+              design: [[], 'design'], ready: [['design', 'art'], ''], dev: [['design', 'art'], 'ios'],
+              qa: [['design', 'art', 'ios'], 'qa'], release: [steps.filter(k => k !== 'release'), ''], store: [steps, ''],
+            }[stage];
+            await rpc('fast_forward_request', { p_request: req.id, p_done: plan[0].filter(k => steps.includes(k)), p_progress: steps.includes(plan[1]) ? plan[1] : '' });
+            const rel = stages.find(t => t.step === 'release');
+            if (stage === 'release' && rel) {
+              // RM получает релиз; статус приложения «Ревью Apple» / «Реджект» не сбиваем на «Релиз»
+              const kindBefore = ((await appStatuses()).find(x => x.id === a.status) || {}).kind;
+              await methods.sendToRelease({ taskId: rel.id }, ctx).catch(e => out.errors.push({ name: a.name, error: e.message }));
+              if (['review', 'reject', 'live'].includes(kindBefore)) await methods.updateApp({ id: a.id, status: a.status }).catch(() => null);
+            }
+            if (stage === 'store') {
+              // уже в сторе: все этапы пройдены — и запрос закрыт
+              const col = unitSettings((await findUnit(a.unit_id)).settings).columns.find(c => c.kind === 'done');
+              if (col) await methods.updateTask({ id: req.id, patch: { status: col.id } }, ctx).catch(() => null);
+            }
+          }
+          out.made++;
+        } catch (e) {
+          out.errors.push({ name: a.name, error: e.message });
+        }
+      }
+      return out;
     },
 
     async createRequest(p, ctx) {
