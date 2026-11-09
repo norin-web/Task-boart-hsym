@@ -3174,3 +3174,8 @@ a.bug-title:hover { text-decoration: underline; }
 /* Дашборд: «Показать ещё» в длинных блоках */
 .blk-more { display: block; margin: 8px auto 4px; padding: 6px 16px; border: 0; border-radius: 999px; background: var(--surface-2); font: inherit; font-size: 12px; font-weight: 600; color: var(--text-2); cursor: pointer; }
 .blk-more:hover { background: var(--surface-3); color: var(--text); }
+.fe-card { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); white-space: nowrap; cursor: pointer; }
+/* заглушка иконки приложения: буква по центру, без тесноты */
+.uc-icon.xs:not(.app-img) { font-size: 10px; font-weight: 700; line-height: 1; }
+.uc-icon.sm:not(.app-img) { font-size: 12px; font-weight: 700; line-height: 1; }
+.le-row:has(.fe-card) { grid-template-columns: auto minmax(0, 1fr) 130px auto auto; }

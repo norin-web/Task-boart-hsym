@@ -363,7 +363,8 @@ function cleanAppFields(list) {
     let id = /^[a-z0-9_]{1,40}$/.test((x && x.id) || '') ? x.id : uid('af').toLowerCase();
     if (seen.has(id)) id = uid('af').toLowerCase();
     seen.add(id);
-    return { id, name, kind: x.kind === 'text' ? 'text' : 'link' };
+    // card: false — поле не показывается в «Быстром доступе» карточки (только Сводка, инфо-лист)
+    return { id, name, kind: x.kind === 'text' ? 'text' : 'link', ...(x.card === false ? { card: false } : {}) };
   }).filter(Boolean);
 }
 

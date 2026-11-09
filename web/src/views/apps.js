@@ -40,7 +40,8 @@ export const STATUS_KINDS = { dev: 'В разработке', release: 'Рели
 
 export const appIcon = (a, size = 'sm') => (a.iconUrl
   ? h('img', { class: 'uc-icon app-img ' + size, src: a.iconUrl, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' })
-  : h('span', { class: 'uc-icon ' + size, style: { background: a.color || PALETTE[0] }, 'aria-hidden': 'true' }, a.name.slice(0, 2).toUpperCase()));
+  // заглушка: в маленьких размерах — одна буква (две не помещаются), в больших — две
+  : h('span', { class: 'uc-icon ' + size, style: { background: a.color || PALETTE[0] }, 'aria-hidden': 'true' }, a.name.slice(0, size === 'xs' || size === 'sm' ? 1 : 2).toUpperCase()));
 
 /** Поле «App Store» среди полей приложения (ссылка на стор, не App Store Connect). */
 export const storeField = () => S.appFields.find(f => f.kind === 'link' && /app ?store/i.test(f.name) && !/connect/i.test(f.name)) || null;
@@ -914,7 +915,7 @@ function quickBlock(a, manage, ceo, save, fromStore, redraw, configure) {
       manage && (S.appFields.length > 0 || own.length > 0) && h('button', { class: 'btn ghost sm', onclick: configure }, icon('plus', 14), 'Поле')),
     S.appFields.length || own.length
       ? h('div', { class: 'af-list' },
-        S.appFields.map(f => infoRow(a, f, manage, v => (f === storeField() && v ? fromStore(v, { info: { [f.id]: v } }) : save({ info: { [f.id]: v } })))),
+        S.appFields.filter(f => f.card !== false).map(f => infoRow(a, f, manage, v => (f === storeField() && v ? fromStore(v, { info: { [f.id]: v } }) : save({ info: { [f.id]: v } })))),
         own.map(f => infoRow(a, f, manage, v => putOwn(own.map(x => (x.id === f.id ? { ...x, value: v } : x))), { value: f.value })))
       : h('div', { class: 'card-empty' },
         h('span', { class: 'muted' }, 'Ссылки под рукой: App Store, Figma, Google Drive…'),
@@ -1725,6 +1726,8 @@ export function openFieldsEditor(onDone) {
     h('input', { class: 'inp', value: x.name, maxlength: 40, placeholder: 'Например, RevenueCat', 'aria-label': 'Название поля', oninput: e => { x.name = e.target.value; } }),
     h('select', { class: 'inp', 'aria-label': 'Тип поля', onchange: e => { x.kind = e.target.value; } },
       [['link', 'Ссылка'], ['text', 'Текст']].map(([k, label]) => h('option', { value: k, selected: k === x.kind }, label))),
+    h('label', { class: 'fe-card', title: 'Показывать поле в «Быстром доступе» карточки приложения' },
+      h('input', { type: 'checkbox', checked: x.card !== false, onchange: e => { x.card = e.target.checked ? undefined : false; } }), 'В карточке'),
     h('button', { class: 'icon-btn sm', title: 'Удалить (значения у приложений сотрутся)', onclick: () => { items.splice(i, 1); redraw(); } }, icon('x', 14)),
   ];
   modal({
