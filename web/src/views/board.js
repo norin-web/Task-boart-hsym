@@ -98,13 +98,28 @@ function filterBar() {
       oninput: e => { S.filters.q = e.target.value; renderTasks(); drawFilterRest(); },
       onkeydown: e => { if (e.key === 'Escape') { e.target.value = ''; S.filters.q = ''; e.target.blur(); renderTasks(); drawFilterRest(); } },
     }));
+  requestAnimationFrame(fitChips);
   return h('div', { class: 'filterbar' }, search, h('div', { id: 'fb-rest', class: 'row' }, filterRest()));
 }
 
 function drawFilterRest() {
   const el = $('#fb-rest');
-  if (el) fill(el, filterRest());
+  if (el) { fill(el, filterRest()); fitChips(); }
 }
+
+/** Чипы позиций — одной лентой: не влезают — прокрутка (и колесом мыши) с затуханием у края. */
+function fitChips() {
+  const c = $('#fb-rest .dept-chips');
+  if (!c) return;
+  const upd = () => {
+    c.classList.toggle('fade-r', c.scrollLeft + c.clientWidth < c.scrollWidth - 2);
+    c.classList.toggle('fade-l', c.scrollLeft > 2);
+  };
+  c.onscroll = upd;
+  c.onwheel = e => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && c.scrollWidth > c.clientWidth) { c.scrollLeft += e.deltaY; e.preventDefault(); } };
+  upd();
+}
+window.addEventListener('resize', () => fitChips());
 
 const toggleIn = (arr, v) => (arr.includes(v) ? arr.filter(x => x !== v) : arr.concat(v));
 
@@ -182,14 +197,14 @@ function filterRest() {
     h('button', { class: 'fchip' + (filterN ? ' on' : ''), onclick: e => { e.stopPropagation(); filtersMenu(e.currentTarget); } },
       icon('filter', 14), 'Фильтры', filterN > 0 && h('span', { class: 'n' }, filterN)),
     canLanes && laneOpts.length > 1 && h('button', { class: 'fchip' + (S.lanes ? ' on' : ''), title: 'Как разложить задачи на доске', onclick: e => { e.stopPropagation(); lanesMenu(e.currentTarget); } },
-      icon('rows', 14), S.lanes ? (laneOpts.find(([v]) => v === S.lanes) || [])[1] || 'Группировка' : 'Группировка')),
+      icon('rows', 14), S.lanes ? (laneOpts.find(([v]) => v === S.lanes) || [])[1] || 'Группировка' : 'Группировка'),
     active && h('button', {
-      class: 'link-btn', onclick: () => {
+      class: 'link-btn fb-reset', onclick: () => {
         S.filters = freshFilters();
         const s = $('#board-search'); if (s) s.value = '';
         renderTasks(); drawFilterRest();
       },
-    }, 'Сбросить'),
+    }, 'Сбросить')),
   ];
 }
 
