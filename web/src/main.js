@@ -9,7 +9,7 @@ import { initBackend, mode, supabase, localLogin } from './data.js';
 import { LS, isStaff } from './state.js';
 import { parseLocation, render } from './router.js';
 import { openPalette, isPaletteOpen } from './views/palette.js';
-import { renderUnread } from './views/sidebar.js';
+import { renderUnread, renderSidebar } from './views/sidebar.js';
 import { refreshNews } from './views/home.js';
 import { openCreateTask, closeTask } from './views/task.js';
 import { openShortcuts } from './views/people.js';
@@ -99,37 +99,22 @@ async function boot() {
       setMe(await localLogin(LS.get('localActor', '')).catch(() => localLogin('')));
       LS.set('localActor', S.meId);
     }
-    const d = await call('bootstrap', { today: new Date().toISOString().slice(0, 10) });
-    S.units = d.units;
-    S.people = d.people;
-    S.departments = d.departments;
-    S.leadPeople = (S.people.find(p => p.id === S.meId) || {}).access === 'lead' ? (await call('getLeadPeople', {}).catch(() => ({})))[S.meId] || [] : [];
-    if (d.teams) S.teams = d.teams;
-    S.linkFields = d.linkFields || [];
-    S.templates = d.templates || [];
-    S.apps = d.apps || [];
-    S.appStatuses = (d.appStatuses || []).map(s => (s.kind === 'live' ? { ...s, name: 'App Store' } : s)); // статус «в продаже» всегда называется App Store
-    S.appFields = d.appFields || [];
-    S.appInfoItems = d.appInfoItems || [];
-    S.priorityOptions = d.priorityOptions || [];
-    S.storeManualCheck = !!d.storeManualCheck;
-    S.infoListIds = d.infoListIds || [];
-    // часовой пояс для карточки сотрудника — из браузера, пока человек не указал свой
-    const self = S.people.find(p => p.id === S.meId);
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (self && !self.timezone && tz && S.meId === (S.realMeId || S.meId)) {
-      self.timezone = tz;
-      call('updatePerson', { id: self.id, timezone: tz }).catch(() => {});
-    }
-    if (mode === 'local') {
-      // локально «Войти как» меняет и права; режим разработчика остаётся за тем, у кого он включён
-      const dev = S.people.find(p => p.isDev);
-      S.realMeId = dev ? dev.id : S.meId;
-    } else if (S.meId !== S.realMeId) {
-      const lens = S.people.find(p => p.id === S.meId && p.active);
-      if (!lens) { call('setViewAs', { personId: '' }).catch(() => {}); setMe(S.realMeId); }
-      // интерфейс — как у него: только его юниты (CEO видит все)
-      else if (lens.access !== 'superadmin') S.units = S.units.filter(u => (u.members || []).includes(lens.id));
+    // мгновенный старт (Supabase): сначала данные прошлого входа из браузера, свежие догружаются следом и тихо заменяют их
+    const bootKey = mode === 'supabase' ? 'boot:' + S.realMeId + ':' + S.meId : '';
+    const cached = bootKey ? LS.get(bootKey, null) : null;
+    const fresh = call('bootstrap', { today: new Date().toISOString().slice(0, 10) });
+    if (cached) {
+      await applyBootstrap(cached, false);
+      // экраны свои данные грузят сами — после свежего bootstrap обновляем меню (юниты, цифры), экран не перерисовываем
+      fresh.then(async d => {
+        await applyBootstrap(d, true);
+        LS.set(bootKey, d);
+        if (S.started) renderSidebar();
+      }).catch(() => {});
+    } else {
+      const d = await fresh;
+      await applyBootstrap(d, true);
+      if (bootKey) LS.set(bootKey, d);
     }
   } catch (e) {
     return fatal('Не удалось загрузить данные', e.message);
@@ -141,6 +126,41 @@ async function boot() {
   initPersonCard();
   initDevForm();
   initMonitor();
+}
+
+/** Разложить ответ bootstrap по S (юниты, люди, приложения, настройки). live — свежие данные с сервера (можно сохранять часовой пояс). */
+async function applyBootstrap(d, live) {
+  S.units = d.units;
+  S.people = d.people;
+  S.departments = d.departments;
+  S.leadPeople = (S.people.find(p => p.id === S.meId) || {}).access === 'lead' ? (await call('getLeadPeople', {}).catch(() => ({})))[S.meId] || [] : [];
+  if (d.teams) S.teams = d.teams;
+  S.linkFields = d.linkFields || [];
+  S.templates = d.templates || [];
+  S.apps = d.apps || [];
+  S.appStatuses = (d.appStatuses || []).map(s => (s.kind === 'live' ? { ...s, name: 'App Store' } : s)); // статус «в продаже» всегда называется App Store
+  S.appFields = d.appFields || [];
+  S.appInfoItems = d.appInfoItems || [];
+  S.priorityOptions = d.priorityOptions || [];
+  S.storeManualCheck = !!d.storeManualCheck;
+  S.infoListIds = d.infoListIds || [];
+  // часовой пояс для карточки сотрудника — из браузера, пока человек не указал свой
+  const self = S.people.find(p => p.id === S.meId);
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (live && self && !self.timezone && tz && S.meId === (S.realMeId || S.meId)) {
+    self.timezone = tz;
+    call('updatePerson', { id: self.id, timezone: tz }).catch(() => {});
+  }
+  if (mode === 'local') {
+    // локально «Войти как» меняет и права; режим разработчика остаётся за тем, у кого он включён
+    const dev = S.people.find(p => p.isDev);
+    S.realMeId = dev ? dev.id : S.meId;
+  } else if (S.meId !== S.realMeId) {
+    const lens = S.people.find(p => p.id === S.meId && p.active);
+    if (!lens) { call('setViewAs', { personId: '' }).catch(() => {}); setMe(S.realMeId); }
+    // интерфейс — как у него: только его юниты (CEO видит все)
+    else if (lens.access !== 'superadmin') S.units = S.units.filter(u => (u.members || []).includes(lens.id));
+  }
 }
 
 /** Пульс раз в минуту (пока вкладка открыта): «я в сети», кто ещё в сети, сколько новых уведомлений. */

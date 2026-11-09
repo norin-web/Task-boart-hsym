@@ -2,7 +2,7 @@
  * Дашборд CEO (главная CEO в обоих режимах): портфель приложений по статусам и юнитам, что требует внимания,
  * работы в ходу (запросы и текущий этап), что недавно вышло. Клик — карточка приложения или задача поверх.
  */
-import { S, isSuper, personById, unitById, REQUEST_TYPES, greeting, me, plural, fmtDate, relTime, todayStr, appStatusById } from '../state.js';
+import { S, LS, isSuper, personById, unitById, REQUEST_TYPES, greeting, me, plural, fmtDate, relTime, todayStr, appStatusById } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, menu, modal, field, emptyBlock, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView, link } from '../router.js';
@@ -29,10 +29,21 @@ export async function renderCeoHome() {
       isSuper() && S.apps.some(a => !a.archived) && h('button', { class: 'btn', onclick: () => openNewAppTask(load) }, h('span', { class: 'btn-label' }, 'Новая задача')),
       isSuper() && units().length > 0 && h('button', { class: 'btn primary', onclick: () => openCreateApp(load) }, h('span', { class: 'btn-label' }, 'Новое приложение'))]),
     h('div', { class: 'view-body' }, page));
+  // мгновенный показ (Supabase): дашборд прошлого раза — сразу, свежий — когда придёт
+  const dashKey = 'ceoDash:' + S.meId;
+  let firstLoad = true;
   async function load() {
-    let d, apps;
-    try { [d, apps] = await Promise.all([call('getCeoDashboard', { today: todayStr() }), call('listApps', {}), loadNotes()]); } catch (e) { return showErr(e); }
+    const cached = mode === 'supabase' && firstLoad ? LS.get(dashKey, null) : null;
+    firstLoad = false;
+    if (cached) show(cached);
+    let d;
+    try { [d] = await Promise.all([call('getCeoDashboard', { today: todayStr() }), loadNotes()]); } catch (e) { if (!cached) showErr(e); return; }
     if (currentView() !== 'home') return;
+    if (mode === 'supabase') LS.set(dashKey, d);
+    show(d);
+  }
+  function show(d) {
+    const apps = d.apps || [];
     S.apps = apps.map(({ requests, active, ...a }) => a);
     const total = apps.length;
     // без юнитов показывать нечего; юниты есть, а приложений нет — дашборд целиком, сверху подсказка

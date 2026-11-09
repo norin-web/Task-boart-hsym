@@ -807,15 +807,20 @@ export function createBackend(db, opts = {}) {
   }
 
   async function unitsWithCounts(day, weekAgo) {
-    const [units, rows, members, staff] = await Promise.all([
+    const [units, members, agg] = await Promise.all([
       all(() => T('units').select('*').order('ord').order('id')),
-      all(() => T('tasks').select('id,unit_id,status,due_date,done_at,depends_on').eq('archived', false).order('id')),
       all(() => T('unit_members').select('unit_id,person_id').order('created_at').order('person_id')),
-      rpc('is_staff', {}),
+      // цифры считает база (unit_task_counts) — в браузер не тянем все задачи; нет функции (старая схема) — считаем по-старому
+      rpc('unit_task_counts', { p_day: day, p_week: weekAgo || '' }).catch(() => null),
     ]);
-    // числа в сайдбаре — то, что человек видит на доске: ждущие этапы у участников скрыты и не считаются
-    const tasks = staff ? rows : await hideWaiting(rows);
-    const counts = countTasks(units, tasks, day, weekAgo);
+    let counts;
+    if (Array.isArray(agg)) {
+      counts = Object.fromEntries(agg.map(r => [r.unit_id, { todo: r.todo, in_progress: r.in_progress, done: r.done, overdue: r.overdue, ...(r.review ? { review: r.review } : {}), doneWeek: r.done_week }]));
+    } else {
+      const [rows, staff] = await Promise.all([all(() => T('tasks').select('id,unit_id,status,due_date,done_at,depends_on').eq('archived', false).order('id')), rpc('is_staff', {})]);
+      // числа в сайдбаре — то, что человек видит на доске: ждущие этапы у участников скрыты и не считаются
+      counts = countTasks(units, staff ? rows : await hideWaiting(rows), day, weekAgo);
+    }
     const byUnit = {};
     for (const m of members) (byUnit[m.unit_id] = byUnit[m.unit_id] || []).push(m.person_id);
     return units.map(r => {
@@ -2466,7 +2471,8 @@ export function createBackend(db, opts = {}) {
       const rank = { reject: 0, overdue: 1, nopm: 2, waiting: 3, stale: 4 };
       attention.sort((x, y) => rank[x.type] - rank[y.type] || String(x.at).localeCompare(String(y.at)));
       recent.sort((x, y) => String(y.at).localeCompare(String(x.at)));
-      return { portfolio, attention, inProgress, recent: recent.slice(0, 200), staleDays, statuses };
+      // apps — тот же список, что у listApps: экрану не нужно запрашивать его второй раз
+      return { portfolio, attention, inProgress, recent: recent.slice(0, 200), staleDays, statuses, apps };
     },
 
     /**

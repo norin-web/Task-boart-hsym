@@ -1243,3 +1243,20 @@ test('разнести по этапам: пройденные — готово,
   // повторно — пропускает (запрос уже есть)
   assert.equal((await api.as(admin, () => api('placeApps', { items: [{ id: aDev.id, stage: 'dev' }] }))).skipped, 1);
 });
+
+test('цифры юнитов из базы совпадают со старым подсчётом — у CEO и у сотрудника (ждущие этапы не считаются)', async () => {
+  const api = await setup();
+  const { admin, designer, dev, A } = await team(api);
+  await api.pg.query('update people set is_dev = true where id = $1', [admin.id]);
+  const app = (await api.as(admin, () => api('createApp', { name: 'Счёт', unitId: A.id, noRequest: true }))).app;
+  await api.as(admin, () => api('placeApps', { items: [{ id: app.id, stage: 'dev' }] }));
+  await api.as(admin, () => api('createTask', { unitId: A.id, title: 'Просрочка', assigneeId: designer.id, dueDate: '2020-01-01' }));
+  const pick = b => Object.fromEntries(b.units.map(u => [u.id, { ...u.counts, doneWeek: u.doneWeek }]));
+  const today = '2026-11-09';
+  const snap = async who => pick(await api.as(who, () => api('bootstrap', { today })));
+  const fresh = { admin: await snap(admin), designer: await snap(designer), dev: await snap(dev) };
+  await api.pg.query('drop function unit_task_counts(text, text)');
+  const old = { admin: await snap(admin), designer: await snap(designer), dev: await snap(dev) };
+  assert.deepEqual(fresh, old);
+  assert.ok(fresh.admin[A.id].overdue >= 1);
+});

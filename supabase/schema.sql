@@ -2681,3 +2681,29 @@ begin
 end $$;
 revoke execute on function fast_forward_request(text, text[], text) from public, anon;
 grant execute on function fast_forward_request(text, text[], text) to authenticated;
+
+-- Цифры по юнитам для меню и карточек (вместо выгрузки всех задач в браузер): по колонкам, просрочено, на ревью, закрыто за неделю.
+-- Права — как на доске (RLS): сотрудник считает только видимое ему; этапы, которые ждут предыдущих, у не-администраторов не считаются.
+create or replace function unit_task_counts(p_day text, p_week text) returns table (unit_id text, todo int, in_progress int, done int, overdue int, review int, done_week int)
+language sql stable set search_path = public as $$
+  with st as (select is_staff() as staff),
+  t as (
+    select t.unit_id, t.status, t.due_date, t.done_at,
+           coalesce((select c ->> 'kind' from jsonb_array_elements(u.settings -> 'columns') c where c ->> 'id' = t.status limit 1),
+                    u.settings -> 'columns' -> 0 ->> 'kind',
+                    case t.status when 'todo' then 'todo' when 'done' then 'done' else 'progress' end) as kind,
+           u.settings -> 'review' ->> 'column' as rcol
+      from tasks t join units u on u.id = t.unit_id, st
+     where not t.archived
+       and (st.staff or t.depends_on = '[]'::jsonb or open_deps(t.depends_on) is null)
+  )
+  select unit_id,
+         count(*) filter (where kind = 'todo')::int,
+         count(*) filter (where kind = 'progress')::int,
+         count(*) filter (where kind = 'done')::int,
+         count(*) filter (where kind <> 'done' and due_date <> '' and due_date < p_day)::int,
+         count(*) filter (where rcol is not null and status = rcol)::int,
+         count(*) filter (where kind = 'done' and coalesce(p_week, '') <> '' and done_at >= p_week)::int
+    from t group by unit_id;
+$$;
+grant execute on function unit_task_counts(text, text) to authenticated;
