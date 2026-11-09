@@ -33,7 +33,8 @@ export function closeTask() {
     if (changed) rerender();
     return;
   }
-  if (S.board) navigate({ unit: S.board.unit.id, mode: S.route.mode === 'settings' ? 'board' : S.route.mode });
+  // закрыли — остаёмся там же, где открыли: доска юнита или доска команды
+  if (S.board) navigate({ unit: S.board.unit.id, mode: S.route.mode === 'settings' ? 'board' : S.route.mode, ...(S.route.team ? { team: S.route.team } : {}) });
 }
 
 /** Открыть задачу поверх текущей страницы (главная, панель админа, мои задачи). На доске этого юнита — как обычно. */

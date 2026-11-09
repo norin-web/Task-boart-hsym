@@ -103,6 +103,9 @@ const homeRoute = () => ({ view: 'home' });
 
 export function navigate(r, { replace = false, back = false } = {}) {
   if (r.unit && !r.mode) r = { ...r, mode: 'board' };
+  // карточка задачи на доске команды открывается поверх неё же: команда из адреса не теряется
+  const cur0 = S.route;
+  if (r.task && !('team' in r) && cur0 && cur0.team && cur0.unit === r.unit && r.mode === 'board') r = { ...r, team: cur0.team };
   let from = r.from || null;
   if (r.from) { r = { ...r }; delete r.from; }
   else if (isDetail(r) && !back) {
