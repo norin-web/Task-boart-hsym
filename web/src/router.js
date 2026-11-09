@@ -22,7 +22,7 @@ import { renderPmHome } from './views/pm.js';
 import { renderRmHome } from './views/rm.js';
 import { renderReady } from './views/ready.js';
 import { renderRejects } from './views/rejects.js';
-import { renderBoardView, loadBoard } from './views/board.js';
+import { renderBoardView, loadBoard, foldStages } from './views/board.js';
 import { renderTimeline } from './views/timeline.js';
 import { renderSettings } from './views/settings.js';
 import { renderUnitPage, renderUnitTeam } from './views/unitpage.js';
@@ -216,7 +216,7 @@ export async function render() {
     return;
   }
 
-  if (!S.board || S.board.unit.id !== r.unit) {
+  if (!S.board || S.board.unit.id !== r.unit || (S.board.foldDone && !foldStages())) {
     rendered = 'loading';
     closePanel();
     loadBoardView(r.unit); // фильтры и дорожки этой доски — как оставили

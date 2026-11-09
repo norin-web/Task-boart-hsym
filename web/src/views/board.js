@@ -20,8 +20,10 @@ export async function loadBoard(unitId, taskId = S.panelTaskId) {
   const archived = !!(S.filters && S.filters.archived) || !!(S.board && S.board.unit.id === unitId && S.board.withArchived);
   const doneLimit = (S.boardDoneLimit && S.boardDoneLimit[unitId]) || undefined;
   // foldDone: выполненные этапы открытых запросов свёрнуты в карточку запроса — экрану доски их не грузим
-  const d = await call('getBoard', { unitId, archived, taskId: taskId || undefined, doneLimit, foldDone: foldStages() });
+  const foldDone = foldStages();
+  const d = await call('getBoard', { unitId, archived, taskId: taskId || undefined, doneLimit, foldDone });
   S.board = d;
+  d.foldDone = foldDone; // доске команды (этапы отдельно) нужны и выполненные этапы — при переходе догружаем
   S.people = d.people;
   S.departments = d.departments;
   if (d.teams) S.teams = d.teams;
@@ -161,7 +163,7 @@ function filterRest() {
       h('span', { class: 'dot', style: { background: o.color } })))));
     group('Показывать', [
       // этапы приложений — отдельными карточками (иначе приложение = одна карточка-запрос с прогрессом)
-      S.board.tasks.some(t => t.kind === 'request') && chk('Этапы приложений отдельно', !foldStages(), v => { LS.set('foldStages', !v); loadBoard(S.board.unit.id).catch(showErr).then(() => { renderTasks(); drawFilterRest(); }); }),
+      !S.route.team && S.board.tasks.some(t => t.kind === 'request') && chk('Этапы приложений отдельно', !foldStages(), v => { LS.set('foldStages', !v); loadBoard(S.board.unit.id).catch(showErr).then(() => { renderTasks(); drawFilterRest(); }); }),
       !B.dueDate.hidden && chk('Только просроченные', !!f.overdue, v => set('overdue', v)),
       chk('Скрыть выполненные', !!f.open, v => set('open', v)),
       // архив грузится с сервера только по этому фильтру
@@ -217,7 +219,8 @@ function oldDoneToggle(col) {
  * его карточка с прогрессом «N из M» открывает список этапов. Кто запросов не видит (лид, сотрудник), видит этапы как раньше.
  * Выключается в «Фильтрах» → «Этапы приложений отдельно» (запоминается в браузере).
  */
-export const foldStages = () => LS.get('foldStages', true) !== false;
+// на доске команды — всегда отдельно: запрос (позиция PM) на неё не попадает, и свёрнутые в него этапы пропали бы
+export const foldStages = () => !S.route.team && LS.get('foldStages', true) !== false;
 function foldedChild(t, byId) {
   let p = t.parentId && byId.get(t.parentId);
   for (let i = 0; p && i < 3; i++) {
@@ -240,11 +243,12 @@ export function filterTasks(opts = {}) {
   const team = teamById(S.route.team);
   const inTeam = team && new Set(teamPeople(team).map(p => p.id));
   // у команды заданы позиции — только задачи этих позиций (задача без позиции — по человеку);
-  // задача её позиции без исполнителя тоже здесь — видно, что ждёт людей
+  // задача её позиции без исполнителя тоже здесь — видно, что ждёт людей; CEO видит все задачи позиции команды, чьи бы ни были
+  const ceo = isSuper();
   const teamDepts = team && (team.departmentIds || []).length ? new Set(team.departmentIds) : null;
   return S.board.tasks.filter(t => {
     if (byId && (t.kind === 'stage' || t.step === 'part') && foldedChild(t, byId)) return false;
-    if (inTeam && !inTeam.has(t.assigneeId) && !(!t.assigneeId && teamDepts && teamDepts.has(t.departmentId))) return false;
+    if (inTeam && !inTeam.has(t.assigneeId) && !((ceo || !t.assigneeId) && teamDepts && teamDepts.has(t.departmentId))) return false;
     if (teamDepts && t.departmentId && !teamDepts.has(t.departmentId)) return false;
     if (t.archived && !f.archived) return false;
     if (!opts.withOld && hidingOld() && staleDone(t)) return false;
