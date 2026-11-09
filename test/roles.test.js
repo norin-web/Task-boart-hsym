@@ -1297,3 +1297,26 @@ test('обратная связь: новое предложение — уве�
   const after = (await api.as(admin, () => api('getNotifications', { personId: admin.id }))).filter(x => x.kind === 'feedback');
   assert.equal(after[0].read, true);
 });
+
+test('«Работы в ходу»: отправленное в Apple (Ревью Apple, открыт только релиз) — не в ходу и не «зависло»', async () => {
+  const api = await setup();
+  const { admin, A } = await team(api);
+  const rm = await api.as(admin, () => api('createPerson', { name: 'Релизный', email: 'rm@x.ru', access: 'rm', positionId: 'd_release' }));
+  await api.as(admin, () => api('setMember', { unitId: A.id, personId: rm.id }));
+  const mk = async name => (await api.as(admin, () => api('createApp', { name, unitId: A.id, noRequest: true }))).app;
+  const [aDev, aApple] = [await mk('Пилим'), await mk('В Apple')];
+  await api.as(admin, () => api('placeApps', { items: [{ id: aDev.id, stage: 'dev' }, { id: aApple.id, stage: 'release' }] }));
+  const day = '2026-11-10';
+  const before = await api.as(admin, () => api('getCeoDashboard', { today: day }));
+  assert.ok(before.inProgress.some(x => x.app.id === aApple.id), 'релиз ещё у RM — в ходу');
+  const review = before.statuses.find(s => s.kind === 'review');
+  await api.as(admin, () => api('updateApp', { id: aApple.id, status: review.id }));
+  const d = await api.as(admin, () => api('getCeoDashboard', { today: '2027-06-01' }));
+  assert.ok(d.inProgress.some(x => x.app.id === aDev.id));
+  assert.ok(!d.inProgress.some(x => x.app.id === aApple.id), 'ждём Apple — не в ходу');
+  assert.ok(!d.attention.some(x => x.app.id === aApple.id && ['stale', 'overdue'].includes(x.type)), 'ждём Apple — не зависло');
+  // плитка и фильтр «В работе» в приложениях юнита
+  const list = await api.as(admin, () => api('listApps', { unitId: A.id }));
+  assert.equal(list.find(a => a.id === aDev.id).active, 1);
+  assert.equal(list.find(a => a.id === aApple.id).active, 0);
+});

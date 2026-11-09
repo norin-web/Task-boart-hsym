@@ -406,7 +406,7 @@ const sortVal = (a, key) => {
     // как в колонке: «Нет в App Store» — отдельное состояние после всех статусов (по убыванию — сверху)
     case 'status': return a.storeOk === false ? S.appStatuses.length : S.appStatuses.findIndex(x => x.id === a.status);
     case 'prio': return S.priorityOptions.findIndex(o => o.id === a.priority);
-    case 'work': { const r = (a.requests || []).find(x => !x.done); return r ? 1 + (r.progress || 0) / 1000 : 0; }
+    case 'work': { const r = a.active !== 0 && (a.requests || []).find(x => !x.done); return r ? 1 + (r.progress || 0) / 1000 : 0; }
     case 'updated': return a.lastActivity || '';
     case 'pm': return ((personById(appPm(a)) || {}).name || '').toLowerCase();
     default: return 0;
@@ -437,7 +437,8 @@ export function appTable(apps, reload, sel, onPick, withUnit, sort) {
         h('span', null, appStatusCell(st, a)),
         // приоритет — своей колонкой: шеврон и название, как в Jira
         h('span', { class: 'ap-prio' }, po ? [prioTag(a.priority), h('span', null, po.name)] : h('span', { class: 'muted' }, '—')),
-        h('span', { class: 'ap-work' }, req ? workSummary(req) : h('span', { class: 'muted' }, '—')),
+        // запрос открыт, а работы нет (active 0) — отправлено в Apple, ждём ответа
+        h('span', { class: 'ap-work' }, req && a.active === 0 ? h('span', { class: 'muted' }, 'Ждём ответа Apple') : req ? workSummary(req) : h('span', { class: 'muted' }, '—')),
         h('span', { class: 'muted ap-upd', title: a.lastActivity ? fmtDate(a.lastActivity.slice(0, 10)) : '' }, a.lastActivity ? relTime(a.lastActivity) : '—'),
         h('span', null, pm ? avatar(pm, 'sm') : h('span', { class: 'muted' }, '—')),
         icon('chevron', 15));

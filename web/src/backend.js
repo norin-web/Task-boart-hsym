@@ -1996,6 +1996,7 @@ export function createBackend(db, opts = {}) {
       // запросы-родители релизов на ревью, которых не видно по правам (у RM) — названия из базы
       const seen = new Set(tasks.map(t => t.id));
       const RP = await releaseParents(tasks.filter(t => t.step === 'release' && t.parent_id && !seen.has(t.parent_id)).map(t => t.parent_id));
+      const reviewIds = new Set((await appStatuses()).filter(x => x.kind === 'review').map(x => x.id));
       return apps.map(a => {
         const own = tasks.filter(t => t.app_id === a.id);
         const requests = own.filter(t => t.kind === 'request').map(r => {
@@ -2022,7 +2023,9 @@ export function createBackend(db, opts = {}) {
           releaseId: sent.id, unitId: sent.unit_id, submittedAt: sr.submittedAt || '', version: [(sr.values || {}).version, (sr.values || {}).build].filter(Boolean).join(' · '),
           ...releaseWhat(sent, own.find(t => t.id === sent.parent_id) || RP[sent.parent_id]),
         } : null;
-        return { ...a, requests, active: requests.filter(r => !r.done).length, lastActivity, review };
+        // «в работе» — открытая работа студии; отправленное в Apple (Ревью Apple, открыт только релиз) — ждём ответа, не в работе
+        const atApple = r => reviewIds.has(a.status) && r.stages.length > 0 && r.stages.every(s => s.done || s.step === 'release');
+        return { ...a, requests, active: requests.filter(r => !r.done && !atApple(r)).length, lastActivity, review };
       });
     },
 
@@ -2502,6 +2505,9 @@ export function createBackend(db, opts = {}) {
             if (r.doneAt >= recentFrom) recent.push({ type: 'done', app: brief(a), request: r, at: r.doneAt });
             continue;
           }
+          // отправлено в Apple (статус «Ревью Apple», открыт только релиз) — работа студии сделана, ждём ответа: не «в ходу» и не «зависло»
+          const atApple = kindOfStatus(a.status) === 'review' && r.stages.length > 0 && r.stages.every(s => s.done || s.step === 'release');
+          if (atApple) continue;
           const open = [r, ...r.stages.filter(s => !s.done)];
           for (const t of open) {
             const ref = { id: t.id, title: t.title, assigneeId: t.assigneeId, dueDate: t.dueDate, updatedAt: t.updatedAt };
