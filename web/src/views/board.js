@@ -239,11 +239,12 @@ export function filterTasks(opts = {}) {
   }
   const team = teamById(S.route.team);
   const inTeam = team && new Set(teamPeople(team).map(p => p.id));
-  // у команды заданы позиции — только задачи этих позиций (задача без позиции — по человеку)
+  // у команды заданы позиции — только задачи этих позиций (задача без позиции — по человеку);
+  // задача её позиции без исполнителя тоже здесь — видно, что ждёт людей
   const teamDepts = team && (team.departmentIds || []).length ? new Set(team.departmentIds) : null;
   return S.board.tasks.filter(t => {
     if (byId && (t.kind === 'stage' || t.step === 'part') && foldedChild(t, byId)) return false;
-    if (inTeam && !inTeam.has(t.assigneeId)) return false;
+    if (inTeam && !inTeam.has(t.assigneeId) && !(!t.assigneeId && teamDepts && teamDepts.has(t.departmentId))) return false;
     if (teamDepts && t.departmentId && !teamDepts.has(t.departmentId)) return false;
     if (t.archived && !f.archived) return false;
     if (!opts.withOld && hidingOld() && staleDone(t)) return false;
@@ -662,11 +663,12 @@ function submitQuick(status, dept) {
   if (!title) return;
   S.quick.text = '';
   const unitId = S.board.unit.id;
-  const departmentId = dept || (S.filters.depts.length === 1 ? S.filters.depts[0] : '');
-  // на доске команды видны только задачи её людей: новая достаётся мне (если я в команде) или первому человеку команды
+  // на доске команды видны только задачи её людей: новая достаётся мне (если я в команде) или первому человеку команды;
+  // людей нет — задача без исполнителя с позицией команды (такие тоже видны на её доске)
   const team = teamById(S.route.team);
   const crew = team ? teamPeople(team) : [];
   const assignee = team ? (crew.find(p => p.id === S.meId) || crew[0] || {}).id || '' : '';
+  const departmentId = dept || (S.filters.depts.length === 1 ? S.filters.depts[0] : '') || (team && !assignee && (team.departmentIds || [])[0]) || '';
   const t = {
     id: 'tmp_' + Math.random().toString(36).slice(2), _temp: true, unitId, num: 0, title, description: '',
     status, assigneeId: assignee, departmentId, dueDate: '', fields: {}, checklist: [], archived: false, updatedAt: '', commentCount: 0,
