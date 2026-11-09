@@ -290,9 +290,17 @@ export async function renderApps({ unitId = '' } = {}) {
     class: 'apps-search-inp', type: 'search', placeholder: 'Поиск приложения', 'aria-label': 'Поиск приложения',
     oninput: e => { q = e.target.value.trim().toLowerCase(); drawList(); },
   });
+  // при поиске и фильтре группы раскрыты, но свернуть их можно — это не запоминается (tmpClosed)
+  const tmpClosed = new Set();
+  const forced = () => !!q || active() > 0;
+  const isOpen = id => (forced() ? !tmpClosed.has(id) : !collapsed.has(id));
   const toggle = id => {
-    if (collapsed.has(id)) collapsed.delete(id); else collapsed.add(id);
-    LS.set('appsCollapsed', [...collapsed]);
+    if (forced()) {
+      if (tmpClosed.has(id)) tmpClosed.delete(id); else tmpClosed.add(id);
+    } else {
+      if (collapsed.has(id)) collapsed.delete(id); else collapsed.add(id);
+      LS.set('appsCollapsed', [...collapsed]);
+    }
     drawList();
   };
   const drawList = () => {
@@ -305,8 +313,9 @@ export async function renderApps({ unitId = '' } = {}) {
     const groups = (unitId ? units().filter(u => u.id === unitId) : [...units(), { id: '', name: 'Без юнита', color: 'var(--border-strong)' }])
       .map(u => ({ u, list: rest.filter(a => (a.unitId || '') === u.id || (!u.id && !unitById(a.unitId))) }))
       .filter(g => g.list.length);
-    const workOpen = !!q || !collapsed.has('__work');
-    fill(body, !sel && !q && !unitId && storeCheckBlock(apps, reload), !sel && !q && idleBlock(apps, reload), sel && pickBar(found), chips, groups.length || work.length ? [appHead(sort, onSort),
+    const workOpen = isOpen('__work');
+    // «Без задач» — по тому, что сейчас в списке (с фильтром и юнитом)
+    fill(body, !sel && !q && !unitId && storeCheckBlock(apps, reload), !sel && !q && idleBlock(found, reload), sel && pickBar(found), chips, groups.length || work.length ? [appHead(sort, onSort),
       work.length > 0 && h('section', { class: 'ap-group ap-work-group' + (workOpen ? ' open' : '') },
         h('button', { class: 'ap-group-head', 'aria-expanded': String(workOpen), onclick: () => toggle('__work') },
           h('span', { class: 'ap-chev' }, icon('chevron', 14)), icon('progress', 14), h('b', null, 'В работе'),
@@ -315,7 +324,7 @@ export async function renderApps({ unitId = '' } = {}) {
       ...groups.map(({ u, list }) => {
       // во вкладке юнита группа одна — без заголовка
       if (unitId) return appTable(list, reload, sel, pick, false, sort);
-      const open = !!q || active() > 0 || !collapsed.has(u.id);
+      const open = isOpen(u.id);
       return h('section', { class: 'ap-group' + (open ? ' open' : '') },
         h('button', { class: 'ap-group-head', 'aria-expanded': String(open), onclick: () => toggle(u.id) },
           h('span', { class: 'ap-chev' }, icon('chevron', 14)),
