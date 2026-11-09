@@ -70,7 +70,7 @@ function feedbackRow(n, history) {
     : by ? [h('b', null, by.name.split(' ')[0]), ' предложил(а) улучшение'] : ['Новое предложение по улучшению'];
   return h('button', {
     class: 'news-row' + (n.read ? ' read' : ''), dataset: history ? { histTask: 'feedback' } : { noteTask: 'feedback' },
-    onclick: () => { readFeedbackNotes(); navigate({ view: 'settings', tab: 'feedback' }); },
+    onclick: () => { readFeedbackNotes(); navigate({ view: 'dev' }); },
   },
   by ? avatar(by, 'lg') : h('span', { class: 'news-noapp' }),
   h('span', { class: 'news-body' }, h('span', { class: 'news-sentence' }, text), h('span', { class: 'news-sub' }, ['Обратная связь', relTime(n.at)].join(' · '))),

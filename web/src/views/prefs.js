@@ -15,7 +15,7 @@ import { renderStudio, STUDIO_TABS } from './admin.js';
 import { openCreateUnit } from './units.js';
 import { chartsSection, editChart } from './chartsettings.js';
 import { hasInfoList, infoListSection, openInfoListsEditor, infoListCount } from './infolist.js';
-import { feedbackSection, feedbackInboxSection } from './feedback.js';
+import { feedbackSection } from './feedback.js';
 
 const PERSONAL_ALL = [
   ['profile', 'Профиль', 'user'],
@@ -25,7 +25,7 @@ const PERSONAL_ALL = [
   ['infolist', 'Инфо-лист', 'link'],
   ['feedback', 'Обратная связь', 'message'],
 ];
-/** Разработчик (из своего аккаунта): «Обратная связь» — входящие предложения людей, в «Студии». */
+/** Разработчик (из своего аккаунта) предложения не шлёт — входящие у него на странице режима разработчика. */
 const devInbox = () => isDev() && S.meId === S.realMeId;
 /** Личные разделы: «Графики» — у тех, у кого есть аналитика (CEO и PM); «Инфо-лист» — кому его включил CEO. */
 const personal = () => PERSONAL_ALL.filter(t => (t[0] !== 'charts' || isSuper()) && (t[0] !== 'infolist' || hasInfoList()) && (t[0] !== 'feedback' || !devInbox()));
@@ -36,7 +36,6 @@ const studio = () => [
   ...(isSuper() ? STUDIO_TABS : isStaff() ? STUDIO_TABS.filter(t => t[0] === 'automations') : []),
   isSuper() && ['apps', 'Приложения', 'app'],
   (isSuper() || myAccess() === 'rm') && ['releases', 'Релизы', 'rocket'],
-  devInbox() && ['feedback', 'Обратная связь', 'message'],
 ].filter(Boolean);
 
 /** События уведомлений: группа → виды (prefs.notifyOff — выключенные виды). */
@@ -74,7 +73,7 @@ export function renderPrefs(tab) {
         studio().length > 0 && [h('div', { class: 'prefs-sec' }, 'Студия'), studio().map(item)]),
       body));
 
-  const SECTIONS = { profile, look, notify, boards, charts: chartsSection, infolist: infoListSection, feedback: () => (devInbox() ? feedbackInboxSection() : feedbackSection()), apps: appsSection, releases: releasesSection };
+  const SECTIONS = { profile, look, notify, boards, charts: chartsSection, infolist: infoListSection, feedback: feedbackSection, apps: appsSection, releases: releasesSection };
   if (SECTIONS[tab]) fill(body, SECTIONS[tab]());
   else renderStudio(body, tab, key);
 }

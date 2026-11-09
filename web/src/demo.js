@@ -9,8 +9,6 @@
  *   R  релиз-менеджер                         (очередь, заполняет, на ревью Apple, реджект, 3 в сторе)
  *   флоу реджекта (реджект → правка → отправили снова) и флоу апдейта (запрос «Апдейт» у вышедшего приложения)
  *   seedDemo()    — пустая локальная база: юниты Gold / RF / MVP, люди и процесс (обычные данные).
- *   seedProcess() — режим разработчика: тот же процесс поверх текущей базы, всё с пометкой «тест»
- *                   (недостающих людей и юниты добавляет). Только локальный режим.
  */
 import { getBackend, asSystem } from './data.js';
 import { LS } from './state.js';
@@ -76,28 +74,12 @@ export async function seedDemo() {
   LS.set('localActor', annaId);
 }
 
-/**
- * Режим разработчика: демо-процесс поверх текущей базы — тестовые приложения и задачи (удаляются кнопкой
- * «Удалить тестовые данные»). Недостающих людей и юниты Gold / RF / MVP добавляет. Возвращает число приложений.
- */
 /** Ответы демо-разработчика на опросник перед релизом. */
 const DEV_ANSWERS = {
   backend: { v: 'Да' }, firebase: { v: 'Да' }, analytics: { v: 'Да', note: 'Amplitude' }, permissions: { v: 'Photos, Camera' },
   ai_providers: { v: 'OpenAI, gpt-image-2' }, ai_data: { v: 'Текстовые prompts и изображения' }, ai_storage: { v: 'Только локально' },
   ugc: { v: 'Нет' }, identifiers: { v: 'Да', note: 'device ID, IP' }, push: { v: 'Да' }, sharing: { v: 'Да' }, diagnostics: { v: 'Да', note: 'Crashlytics' },
 };
-
-export async function seedProcess() {
-  return asSystem(async () => {
-    const api = makeApi();
-    const P = await addPeople(api);
-    const have = Object.fromEntries((await api('bootstrap', {})).units.filter(u => !u.archived).map(u => [u.key, u]));
-    const U = {};
-    for (const def of UNITS) U[def.key] = have[def.key] || await api('createUnit', def);
-    await setupUnits(api, P, U);
-    return runProcess(api, P, U, true);
-  });
-}
 
 /** Люди процесса: существующие (по email) берутся как есть, недостающие создаются. { ключ → человек } */
 async function addPeople(api) {

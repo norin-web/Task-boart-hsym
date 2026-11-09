@@ -54,8 +54,8 @@ export function feedbackSection() {
   ];
 }
 
-/** Раздел разработчика: все предложения людей. */
-export function feedbackInboxSection() {
+/** Карточка на странице режима разработчика: все предложения людей. */
+export function feedbackInboxCard() {
   const box = h('div', { class: 'fb-list' }, skeleton());
   let list = [];
   let show = 'new';
@@ -88,8 +88,7 @@ export function feedbackInboxSection() {
   call('getFeedback', {}).then(l => { list = l; draw(); }).catch(e => { fill(box); showErr(e); });
   // открыли входящие — уведомления о предложениях прочитаны
   import('./home.js').then(m => m.readFeedbackNotes()).catch(() => {});
-  return [
-    h('div', { class: 'prefs-head fb-headrow' }, h('div', null, h('h2', null, 'Обратная связь'), h('p', { class: 'muted' }, 'Предложения людей по улучшению сервиса · видно только в режиме разработчика')), seg),
-    box,
-  ];
+  return h('section', { class: 'card-box dev-card' },
+    h('div', { class: 'dev-head fb-dev-head' }, h('h3', null, 'Обратная связь'), h('span', { class: 'muted' }, 'предложения людей по улучшению'), seg),
+    box);
 }
