@@ -1187,3 +1187,23 @@ test('«Смотреть как»: права в базе — как у выбр
   assert.equal((await api.as(admin, () => api('listApps', {}))).length, 1);
   await api.as(admin, () => api('updateApp', { id: app.id, name: 'Снова можно' }));
 });
+
+test('обратная связь: пишет любой, видит своё; все предложения — только режим разработчика', async () => {
+  const api = await setup();
+  const { admin, mod, designer } = await team(api);
+  await api.pg.query('update people set is_dev = true where id = $1', [admin.id]);
+  const f1 = await api.as(designer, () => api('sendFeedback', { kind: 'bug', text: 'Не открывается карточка' }));
+  const f2 = await api.as(mod, () => api('sendFeedback', { kind: 'zzz', text: 'Хочу тёмную тему' }));
+  assert.deepEqual([f1.kind, f2.kind, f1.status], ['bug', 'idea', 'new']);
+  await api.as(designer, () => assert.rejects(() => api('sendFeedback', { text: '  ' }), /Текст/));
+  // своё видит, чужое — нет; разобрать не может
+  assert.deepEqual((await api.as(designer, () => api('getMyFeedback', {}))).map(f => f.id), [f1.id]);
+  assert.deepEqual((await api.as(designer, () => api('getFeedback', {}))).map(f => f.id), [f1.id]);
+  await api.as(designer, () => assert.rejects(() => api('setFeedbackStatus', { id: f1.id, status: 'done' }), forbidden));
+  // разработчик видит всё, отмечает и удаляет
+  assert.equal((await api.as(admin, () => api('getFeedback', {}))).length, 2);
+  await api.as(admin, () => api('setFeedbackStatus', { id: f1.id, status: 'done' }));
+  assert.equal((await api.as(designer, () => api('getMyFeedback', {})))[0].status, 'done');
+  await api.as(admin, () => api('deleteFeedback', { id: f2.id }));
+  assert.equal((await api.as(admin, () => api('getFeedback', {}))).length, 1);
+});

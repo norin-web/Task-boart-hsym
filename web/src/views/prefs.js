@@ -4,7 +4,7 @@
  *   Студия: CEO и PM — люди и доступы, юниты, автоматизации, журнал; CEO — приложения; CEO и RM — релизы.
  * Раздел студии рисует admin.js (renderStudio), редакторы приложений и релизов открываются своими окнами.
  */
-import { S, LS, me, isStaff, isSuper, myAccess, ACCESS_LABELS, deptById, plural } from '../state.js';
+import { S, LS, me, isStaff, isSuper, isDev, myAccess, ACCESS_LABELS, deptById, plural } from '../state.js';
 import { $, h, icon, avatar, topbar, fill, showErr, toast } from '../ui.js';
 import { send, call } from '../api.js';
 import { link, currentView, rerender, navigate } from '../router.js';
@@ -15,6 +15,7 @@ import { renderStudio, STUDIO_TABS } from './admin.js';
 import { openCreateUnit } from './units.js';
 import { chartsSection, editChart } from './chartsettings.js';
 import { hasInfoList, infoListSection, openInfoListsEditor, infoListCount } from './infolist.js';
+import { feedbackSection, feedbackInboxSection } from './feedback.js';
 
 const PERSONAL_ALL = [
   ['profile', 'Профиль', 'user'],
@@ -22,9 +23,12 @@ const PERSONAL_ALL = [
   ['boards', 'Доски', 'board'],
   ['charts', 'Графики', 'chart'],
   ['infolist', 'Инфо-лист', 'link'],
+  ['feedback', 'Обратная связь', 'message'],
 ];
+/** Разработчик (из своего аккаунта): «Обратная связь» — входящие предложения людей, в «Студии». */
+const devInbox = () => isDev() && S.meId === S.realMeId;
 /** Личные разделы: «Графики» — у тех, у кого есть аналитика (CEO и PM); «Инфо-лист» — кому его включил CEO. */
-const personal = () => PERSONAL_ALL.filter(t => (t[0] !== 'charts' || isSuper()) && (t[0] !== 'infolist' || hasInfoList()));
+const personal = () => PERSONAL_ALL.filter(t => (t[0] !== 'charts' || isSuper()) && (t[0] !== 'infolist' || hasInfoList()) && (t[0] !== 'feedback' || !devInbox()));
 
 /** Разделы студии, доступные вошедшему. */
 const studio = () => [
@@ -32,6 +36,7 @@ const studio = () => [
   ...(isSuper() ? STUDIO_TABS : isStaff() ? STUDIO_TABS.filter(t => t[0] === 'automations') : []),
   isSuper() && ['apps', 'Приложения', 'app'],
   (isSuper() || myAccess() === 'rm') && ['releases', 'Релизы', 'rocket'],
+  devInbox() && ['feedback', 'Обратная связь', 'message'],
 ].filter(Boolean);
 
 /** События уведомлений: группа → виды (prefs.notifyOff — выключенные виды). */
@@ -68,7 +73,7 @@ export function renderPrefs(tab) {
         studio().length > 0 && [h('div', { class: 'prefs-sec' }, 'Студия'), studio().map(item)]),
       body));
 
-  const SECTIONS = { profile, look, notify, boards, charts: chartsSection, infolist: infoListSection, apps: appsSection, releases: releasesSection };
+  const SECTIONS = { profile, look, notify, boards, charts: chartsSection, infolist: infoListSection, feedback: () => (devInbox() ? feedbackInboxSection() : feedbackSection()), apps: appsSection, releases: releasesSection };
   if (SECTIONS[tab]) fill(body, SECTIONS[tab]());
   else renderStudio(body, tab, key);
 }

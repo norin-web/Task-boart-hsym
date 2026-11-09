@@ -317,6 +317,9 @@ function cleanStages(list) {
 }
 /** Иконка приложения — только картинка Apple (mzstatic.com) по https; иначе пусто. */
 const iconUrl = v => { const s = String(v || '').trim().slice(0, 500); return /^https:\/\/[\w.-]+\.mzstatic\.com\//.test(s) ? s : ''; };
+const FEEDBACK_KINDS = ['idea', 'inconvenient', 'bug'];
+const feedbackOut = r => ({ id: r.id, personId: r.person_id, kind: r.kind, text: r.text, status: r.status, createdAt: r.created_at, doneAt: r.done_at || '' });
+
 const appOut = r => ({
   id: r.id, unitId: r.unit_id, name: r.name, color: r.color || '', status: r.status, info: json(r.info, {}) || {},
   priority: r.priority || '', statusAt: r.status_at || '', iconUrl: r.icon_url || '', storeName: r.store_name || '',
@@ -2829,6 +2832,44 @@ export function createBackend(db, opts = {}) {
 
     async clearClientErrors() {
       await run(T('client_errors').delete().neq('id', ''));
+      return true;
+    },
+
+    /* ---------- обратная связь: предложения людей по улучшению сервиса ---------- */
+
+    /** Отправить предложение (любой). kind: idea | inconvenient | bug. */
+    async sendFeedback(p) {
+      const me = (await rpc('my_person_id', {})) || '';
+      if (!me) fail('Войдите, чтобы отправить предложение', 'FORBIDDEN');
+      const kind = FEEDBACK_KINDS.includes(p.kind) ? p.kind : 'idea';
+      const row = { id: uid('fb'), person_id: me, kind, text: req(str(p.text, 4000), 'Текст предложения'), status: 'new', created_at: now(), done_at: '' };
+      await run(T('feedback').insert(row));
+      return feedbackOut(row);
+    },
+
+    /** Мои предложения — новые сверху. */
+    async getMyFeedback() {
+      const me = (await rpc('my_person_id', {})) || '';
+      if (!me) return [];
+      return (await run(T('feedback').select('*').eq('person_id', me).order('created_at', { ascending: false }).limit(100))).map(feedbackOut);
+    },
+
+    /** Режим разработчика: все предложения — новые сверху. */
+    async getFeedback() {
+      const rows = await run(T('feedback').select('*').order('created_at', { ascending: false }).limit(500));
+      return rows.map(feedbackOut);
+    },
+
+    /** Режим разработчика: отметить «учтено» / вернуть в новые. */
+    async setFeedbackStatus(p) {
+      const status = p.status === 'done' ? 'done' : 'new';
+      await updateOne('feedback', str(p.id, 40), { status, done_at: status === 'done' ? now() : '' });
+      return { id: p.id, status };
+    },
+
+    async deleteFeedback(p) {
+      const gone = await run(T('feedback').delete().eq('id', str(p.id, 40)).select('id'));
+      if (!gone.length) fail('Недостаточно прав для этого действия', 'FORBIDDEN');
       return true;
     },
 

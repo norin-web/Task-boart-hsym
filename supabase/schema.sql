@@ -2625,3 +2625,27 @@ do $$ declare t record; begin
     execute format('create trigger block_view_as_writes before insert or update or delete on public.%I for each statement execute function block_view_as_writes()', t.tablename);
   end loop;
 end $$;
+
+-- Обратная связь: любой человек пишет предложение по улучшению; читает и разбирает — режим разработчика.
+create table if not exists feedback (
+  id         text primary key,
+  person_id  text not null default '',
+  kind       text not null default 'idea',
+  text       text not null,
+  status     text not null default 'new',
+  created_at text not null,
+  done_at    text not null default ''
+);
+create index if not exists feedback_at on feedback(created_at);
+alter table feedback enable row level security;
+grant select, insert, update, delete on feedback to authenticated;
+drop policy if exists feedback_insert on feedback;
+create policy feedback_insert on feedback for insert to authenticated with check (person_id = coalesce(my_person_id(), '') and person_id <> '');
+drop policy if exists feedback_read on feedback;
+create policy feedback_read on feedback for select to authenticated using (person_id = my_person_id() or is_dev());
+drop policy if exists feedback_update on feedback;
+create policy feedback_update on feedback for update to authenticated using (is_dev()) with check (is_dev());
+drop policy if exists feedback_delete on feedback;
+create policy feedback_delete on feedback for delete to authenticated using (is_dev());
+drop trigger if exists block_view_as_writes on feedback;
+create trigger block_view_as_writes before insert or update or delete on feedback for each statement execute function block_view_as_writes();
