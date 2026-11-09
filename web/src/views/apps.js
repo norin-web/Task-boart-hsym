@@ -1329,10 +1329,19 @@ export function storeCheckBlock(apps, reload, { compact = false } = {}) {
   const withLink = apps.filter(a => appStoreUrl(a));
   const gone = withLink.filter(a => a.storeOk === false);
   const last = withLink.map(a => a.storeCheckedAt).filter(Boolean).sort().pop() || '';
-  const unchecked = withLink.filter(a => a.storeOk == null).length;
+  const uncheckedList = withLink.filter(a => a.storeOk == null);
+  const unchecked = uncheckedList.length;
+  // «не проверено N» — кнопка: список с причиной (очередь не дошла / ссылка без номера приложения)
+  const ucBox = h('div', { class: 'sc-gone sc-unchecked', hidden: true });
+  const ucBtn = unchecked > 0 && h('button', { class: 'link-btn sc-uc-btn', 'aria-expanded': 'false', onclick: () => {
+    const open = ucBox.hidden;
+    ucBox.hidden = !open;
+    ucBtn.setAttribute('aria-expanded', String(open));
+    if (open) fill(ucBox, uncheckedRows(uncheckedList, reload));
+  } }, `не проверено ${unchecked}`);
   const status = h('span', { class: 'muted sc-sub' },
     !withLink.length ? 'Нет приложений со ссылкой на App Store'
-      : last ? `проверено ${relTime(last)} · открываются ${withLink.length - gone.length - unchecked} из ${withLink.length}` + (unchecked ? ` · не проверено ${unchecked}` : '')
+      : last ? [`проверено ${relTime(last)} · открываются ${withLink.length - gone.length - unchecked} из ${withLink.length}`, unchecked ? [' · ', ucBtn] : null]
         : `${withLink.length} ${plural(withLink.length, ['приложение', 'приложения', 'приложений'])} со ссылкой — ещё не проверяли`);
   // ручная проверка идёт из браузера, с адреса человека, — по умолчанию скрыта, показ включает CEO (Настройки → Приложения)
   const btn = S.storeManualCheck && h('button', { class: 'btn sm', disabled: !withLink.length || !seesApps(),
@@ -1357,7 +1366,7 @@ export function storeCheckBlock(apps, reload, { compact = false } = {}) {
           gone.length > 0 && h('button', { class: 'sc-gone-chip' + (open ? ' open' : ''), 'aria-expanded': String(open), onclick: () => { LS.set('storeGoneOpenHome', !open); draw(); } },
             icon('alert', 14), 'Нет в App Store: ' + gone.length, h('span', { class: 'sc-chip-chev' }, icon('chevron', 13))),
           btn),
-        open && h('div', { class: 'sc-gone' }, goneRows(gone, reload)));
+        open && h('div', { class: 'sc-gone' }, goneRows(gone, reload)), ucBox);
     };
     draw();
     return h('section', { class: 'sc-section' }, box);
@@ -1367,6 +1376,7 @@ export function storeCheckBlock(apps, reload, { compact = false } = {}) {
       h('img', { src: appStoreSvg, alt: '', width: 22, height: 22 }),
       h('span', { class: 'sc-title' }, h('b', null, 'Проверка App Store'), status),
       h('span', { class: 'spacer' }), btn),
+    ucBox,
     gone.length > 0 && goneList(gone, reload));
 }
 
@@ -1376,6 +1386,17 @@ const goneRows = (gone, reload) => gone.map(a => h('div', { class: 'sc-row' },
     h('span', { class: 'ap-names' }, h('b', null, a.name), a.storeName && h('small', { class: 'muted' }, a.storeName))),
   h('span', { class: 'muted sc-unit' }, (unitById(a.unitId) || {}).name || ''),
   h('a', { class: 'btn ghost sm', href: safeUrl(appStoreUrl(a)), target: '_blank', rel: 'noopener', title: 'Проверить ссылку вручную' }, 'Открыть ссылку', icon('arrowUpRight', 13))));
+
+/** Не проверенные: почему — в ссылке нет номера приложения (автопроверка такие пропускает) или очередь ещё не дошла. */
+const uncheckedRows = (list, reload) => list.map(a => {
+  const noId = !/id\d{5,}/.test(appStoreUrl(a));
+  return h('div', { class: 'sc-row' },
+    h('button', { class: 'sc-app', onclick: () => openAppCard(a, reload) }, appIcon(a, 'sm'),
+      h('span', { class: 'ap-names' }, h('b', null, a.name),
+        h('small', { class: noId ? 'sc-why bad' : 'muted' }, noId ? 'В ссылке нет номера приложения (id…) — автопроверка её пропускает. Исправьте ссылку в карточке' : 'Ещё не дошла очередь автопроверки (по 1 ссылке раз в 2 минуты)'))),
+    h('span', { class: 'muted sc-unit' }, (unitById(a.unitId) || {}).name || ''),
+    h('a', { class: 'btn ghost sm', href: safeUrl(appStoreUrl(a)), target: '_blank', rel: 'noopener', title: appStoreUrl(a) }, 'Открыть ссылку', icon('arrowUpRight', 13)));
+});
 
 /** «Требует внимания» в проверке App Store — сворачивается заголовком, состояние запоминается. */
 function goneList(gone, reload) {
