@@ -1235,6 +1235,7 @@ declare
   v_at text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
   v_tomorrow text;
 begin
+  perform set_config('app.system', 'on', true);  -- напоминания пишет база (и в режиме «Смотреть как»)
   if v_me is null or p_today !~ '^\d{4}-\d{2}-\d{2}$' then return; end if;
   v_tomorrow := to_char(p_today::date + 1, 'YYYY-MM-DD');
   with due as (
@@ -2543,4 +2544,84 @@ do $$ begin
       on conflict do nothing;
     insert into app_settings (key, value, updated_at) values ('pmUnitAppsSeeded', 'true'::jsonb, '') on conflict (key) do nothing;
   end if;
+end $$;
+
+-- «Смотреть как» (режим разработчика): база считает права от выбранного человека, а не от вошедшего.
+-- people.view_as действует, только если вошедший — разработчик. В этом режиме изменения запрещены (только просмотр).
+alter table people add column if not exists view_as text not null default '';
+
+-- Кто я для прав: выбранный в «Смотреть как» (если вошедший — разработчик), иначе вошедший.
+create or replace function my_person_id() returns text
+language sql stable security definer set search_path = public as $$
+  select coalesce(
+    (select v.id from people me join people v on v.id = me.view_as and v.active
+      where me.user_id = auth.uid() and me.active and me.is_dev and me.view_as <> '' limit 1),
+    (select id from people where user_id = auth.uid() and active limit 1));
+$$;
+create or replace function my_access() returns text
+language sql stable security definer set search_path = public as $$
+  select coalesce((select access from people where id = my_person_id()), '');
+$$;
+create or replace function my_position() returns text
+language sql stable security definer set search_path = public as $$
+  select coalesce((select position_id from people where id = my_person_id()), '');
+$$;
+create or replace function my_teams() returns text[]
+language sql stable security definer set search_path = public as $$
+  select coalesce((select array(select jsonb_array_elements_text(team_ids)) from people where id = my_person_id()), '{}');
+$$;
+create or replace function my_positions() returns text[]
+language sql stable security definer set search_path = public as $$
+  select coalesce((select array_remove(array[position_id] || array(select jsonb_array_elements_text(extra_positions)), '')
+                     from people where id = my_person_id()), '{}');
+$$;
+create or replace function is_dev() returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce((select is_dev from people where id = my_person_id()), false);
+$$;
+
+-- Идёт просмотр от имени другого?
+create or replace function viewing_as() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from people where user_id = auth.uid() and active and is_dev and view_as <> '' and view_as <> id);
+$$;
+
+-- Включить/выключить «Смотреть как» (только настоящий разработчик, только себе). '' — вернуться к себе.
+create or replace function set_view_as(p_person text) returns text
+language plpgsql security definer set search_path = public as $$
+declare v_me text;
+begin
+  select id into v_me from people where user_id = auth.uid() and active and is_dev;
+  if v_me is null then raise exception 'Только для режима разработчика' using errcode = '42501'; end if;
+  if coalesce(p_person, '') <> '' and not exists (select 1 from people where id = p_person and active) then
+    raise exception 'Человек не найден' using errcode = 'P0001';
+  end if;
+  perform set_config('app.system', 'on', true);
+  update people set view_as = case when coalesce(p_person, '') = v_me then '' else coalesce(p_person, '') end where id = v_me;
+  return (select view_as from people where id = v_me);
+end $$;
+revoke execute on function set_view_as(text) from public, anon;
+grant execute on function set_view_as(text) to authenticated;
+
+-- «Я в сети» — всегда настоящий вошедший, и в режиме просмотра тоже.
+create or replace function touch_presence() returns void language plpgsql security definer set search_path = public as $$
+begin
+  perform set_config('app.system', 'on', true);
+  update people set last_seen_at = to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+   where user_id = auth.uid() and active;
+end $$;
+
+-- В режиме просмотра любые изменения из интерфейса запрещены (служебные операции базы — можно).
+create or replace function block_view_as_writes() returns trigger language plpgsql set search_path = public as $$
+begin
+  if not app_system() and viewing_as() then
+    raise exception 'Режим «Смотреть как»: только просмотр — изменения не сохраняются' using errcode = 'P0001';
+  end if;
+  return null;
+end $$;
+do $$ declare t record; begin
+  for t in select tablename from pg_tables where schemaname = 'public' loop
+    execute format('drop trigger if exists block_view_as_writes on public.%I', t.tablename);
+    execute format('create trigger block_view_as_writes before insert or update or delete on public.%I for each statement execute function block_view_as_writes()', t.tablename);
+  end loop;
 end $$;

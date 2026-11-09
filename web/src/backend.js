@@ -297,7 +297,7 @@ const timezoneValue = v => { const s = String(v || '').trim(); return /^[A-Za-z_
 const personOut = r => ({
   id: r.id, name: r.name, email: r.email, role: r.role || '', color: r.color || '', active: !!r.active,
   access: r.access || 'member', positionId: r.position_id || '', linked: !!r.user_id, prefs: json(r.prefs, {}) || {},
-  lastSeenAt: r.last_seen_at || '', isDev: !!r.is_dev, isTest: !!r.is_test, avatar: r.avatar || '', telegram: r.telegram || '', timezone: r.timezone || '',
+  lastSeenAt: r.last_seen_at || '', isDev: !!r.is_dev, viewAs: r.view_as || '', isTest: !!r.is_test, avatar: r.avatar || '', telegram: r.telegram || '', timezone: r.timezone || '',
   extraPositionIds: json(r.extra_positions, []) || [],
   teamIds: json(r.team_ids, []) || [],
   positionIds: [r.position_id || 'd_other', ...(json(r.extra_positions, []) || [])],
@@ -3141,6 +3141,11 @@ export function createBackend(db, opts = {}) {
     /* ---------- люди ---------- */
 
     /** Кто я: профиль вошедшего (привязка по email при первом входе). null — доступа нет. */
+    /** «Смотреть как» (разработчик): права в базе — как у выбранного человека, только просмотр. '' — вернуться к себе. */
+    async setViewAs(p) {
+      return { viewAs: (await rpc('set_view_as', { p_person: str(p.personId, 40) })) || '' };
+    },
+
     async whoami() {
       const rows = await rpc('whoami', {});
       const me = Array.isArray(rows) ? rows[0] : rows;

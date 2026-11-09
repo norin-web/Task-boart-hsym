@@ -1161,3 +1161,29 @@ test('PM добавили в юнит — видит все его прилож�
   assert.equal((await api.as(as2, () => api('listApps', {}))).length, 0);
   assert.ok(a2);
 });
+
+test('«Смотреть как»: права в базе — как у выбранного человека, только просмотр; включает только разработчик', async () => {
+  const api = await setup();
+  const { admin, mod, designer, A, B, t1 } = await team(api);
+  await api.pg.query('update people set is_dev = true where id = $1', [admin.id]);
+  const app = (await api.as(admin, () => api('createApp', { name: 'Видно CEO', unitId: B.id, noRequest: true }))).app;
+  const ceoTasks = (await api.as(admin, () => api('getBoard', { unitId: A.id }))).tasks.length;
+  assert.ok(ceoTasks >= 3);
+  // не разработчик включить не может
+  await api.as(mod, () => assert.rejects(() => api('setViewAs', { personId: designer.id }), /прав|разработчик/));
+  assert.deepEqual(await api.as(admin, () => api('setViewAs', { personId: designer.id })), { viewAs: designer.id });
+  // видит как дизайнер: приложений нет, юнит B закрыт, на доске A — только его задачи
+  assert.equal((await api.as(admin, () => api('listApps', {}))).length, 0);
+  assert.deepEqual((await api.as(admin, () => api('getBoard', { unitId: A.id }))).tasks.map(t => t.id), [t1.id]);
+  // изменения запрещены
+  await api.as(admin, () => assert.rejects(() => api('updateApp', { id: app.id, name: 'x' }), /только просмотр|прав|не найдено/));
+  await api.as(admin, () => assert.rejects(() => api('updateTask', { id: t1.id, patch: { title: 'x' } }), /только просмотр|прав/));
+  await api.as(admin, () => assert.rejects(() => api('addComment', { taskId: t1.id, text: 'от чужого имени' }), /только просмотр/));
+  // whoami — по-прежнему настоящий, с отметкой, кого смотрит
+  const me = await api.as(admin, () => api('whoami', {}));
+  assert.deepEqual([me.id, me.viewAs], [admin.id, designer.id]);
+  // вернуться к себе
+  await api.as(admin, () => api('setViewAs', { personId: '' }));
+  assert.equal((await api.as(admin, () => api('listApps', {}))).length, 1);
+  await api.as(admin, () => api('updateApp', { id: app.id, name: 'Снова можно' }));
+});

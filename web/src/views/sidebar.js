@@ -179,7 +179,7 @@ function drawSidebar() {
     h('div', { class: 'nav-top' },
       h('div', { class: 'brand' }, h('div', { class: 'brand-logo' }, icon('check', 16)), h('span', { class: 'brand-name' }, 'Tasks'),
         h('button', { class: 'icon-btn sm sb-toggle', title: collapsed() ? 'Развернуть меню' : 'Свернуть меню', 'aria-label': collapsed() ? 'Развернуть меню' : 'Свернуть меню', onclick: toggleCollapse }, icon(collapsed() ? 'expand' : 'collapse', 16))),
-      lens && h('div', { class: 'lens-bar', role: 'status' }, icon('eye', 14),
+      lens && h('div', { class: 'lens-bar', role: 'status', title: mode === 'supabase' ? 'Права — как у этого человека; только просмотр, изменения не сохраняются' : '' }, icon('eye', 14),
         h('span', null, 'Как ', h('b', null, lens.name)),
         h('button', { class: 'link-btn', onclick: () => import('./dev.js').then(m => m.viewAs('')) }, 'Вернуться')),
       ceo && h('div', { class: 'ceo-mode' }, h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Режим CEO' },

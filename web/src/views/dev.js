@@ -104,7 +104,7 @@ export async function viewAs(personId) {
       await localLogin(id);
       LS.set('localActor', id);
     } else {
-      LS.set('viewAs', personId && personId !== S.realMeId ? personId : '');
+      await call('setViewAs', { personId: personId && personId !== S.realMeId ? personId : '' });
     }
     location.hash = personId ? '#/' : '#/dev';
     location.reload();

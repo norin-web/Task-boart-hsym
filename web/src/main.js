@@ -92,8 +92,9 @@ async function boot() {
       const person = await call('whoami', {});
       if (!person || !person.active) return renderNoAccess();
       S.realMeId = person.id;
-      // режим разработчика: «смотреть как» — интерфейс другого человека (права остаются свои)
-      setMe(person.isDev && LS.get('viewAs', '') || person.id);
+      // режим разработчика: «смотреть как» — интерфейс и права другого человека (выбор хранится в базе, people.view_as)
+      LS.set('viewAs', '');
+      setMe(person.isDev && person.viewAs || person.id);
     } else {
       setMe(await localLogin(LS.get('localActor', '')).catch(() => localLogin('')));
       LS.set('localActor', S.meId);
@@ -126,7 +127,7 @@ async function boot() {
       S.realMeId = dev ? dev.id : S.meId;
     } else if (S.meId !== S.realMeId) {
       const lens = S.people.find(p => p.id === S.meId && p.active);
-      if (!lens) { LS.set('viewAs', ''); setMe(S.realMeId); }
+      if (!lens) { call('setViewAs', { personId: '' }).catch(() => {}); setMe(S.realMeId); }
       // интерфейс — как у него: только его юниты (CEO видит все)
       else if (lens.access !== 'superadmin') S.units = S.units.filter(u => (u.members || []).includes(lens.id));
     }
