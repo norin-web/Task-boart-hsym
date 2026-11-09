@@ -119,7 +119,7 @@ export function attention(d, reload, { two = false } = {}) {
   return h('section', null,
     h('div', { class: 'section-head' }, h('h2', null, 'Требует внимания')),
     rows.length
-      ? h('div', { class: 'card-box att-list' }, rows.slice(0, 12).map(x => {
+      ? h('div', { class: 'card-box att-list' }, paged(rows, x => {
         const a = ATT[x.type];
         const p = who(x);
         if (two) {
@@ -133,11 +133,25 @@ export function attention(d, reload, { two = false } = {}) {
         return h('button', { class: 'att-row', onclick: () => open(x), title: p ? p.name : '' },
           h('span', { class: 'att-main' }, h('b', null, x.app.name), ' · ', h('span', { class: a.cls === 'danger' ? 'danger-text' : '' }, [what(x), a.text(x)].filter(Boolean).join(', '))),
           appStatusCell(appStatusById(x.app.status), x.app));
-      }), rows.length > 12 && h('p', { class: 'muted att-more' }, `и ещё ${rows.length - 12}`))
+      }, 12))
       : emptyBlock('Всё по плану', { ok: true }));
 }
 
 /* ---------- работы в ходу ---------- */
+
+/** Длинный список блока — по step строк, «Показать ещё» дорисовывает следующие на месте (без перерисовки дашборда). */
+function paged(items, renderRow, step = 15, cls = 'blk-more') {
+  const box = h('div', { style: { display: 'contents' } });
+  let n = step;
+  const draw = () => {
+    const rest = items.length - n;
+    fill(box, items.slice(0, n).map(renderRow),
+      rest > 0 && h('button', { class: cls, type: 'button', onclick: e => { e.stopPropagation(); n += step; draw(); } },
+        `Показать ещё ${Math.min(step, rest)}`, rest > step && h('span', { class: 'muted' }, ` · осталось ${rest}`)));
+  };
+  draw();
+  return box;
+}
 
 export function inProgress(d, reload, { brief = false } = {}) {
   const rows = [...d.inProgress].sort((a, b) => prioRank(b.request.priority) - prioRank(a.request.priority)
@@ -147,7 +161,7 @@ export function inProgress(d, reload, { brief = false } = {}) {
   if (brief) return h('section', null,
     h('div', { class: 'section-head' }, h('h2', null, 'Работы в ходу')),
     rows.length
-      ? h('div', { class: 'card-box' }, rows.map(({ app, request: r, current }) => h('button', { class: 'wip-brief', onclick: () => openAppById(app.id, reload) },
+      ? h('div', { class: 'card-box' }, paged(rows, ({ app, request: r, current }) => h('button', { class: 'wip-brief', onclick: () => openAppById(app.id, reload) },
         appIcon(app, 'sm'),
         h('span', { class: 'wip-brief-main' }, app.name, h('small', null, [REQUEST_TYPES[r.type], current && current.title.split(' · ')[0]].filter(Boolean).join(' · '))),
         h('span', { class: 'wip-brief-bar', 'aria-hidden': 'true' }, h('i', { style: { width: (r.progress || 0) + '%' } })),
@@ -159,7 +173,7 @@ export function inProgress(d, reload, { brief = false } = {}) {
       ? h('div', { class: 'card-box wip-list' },
         h('div', { class: 'wip-row wip-head', 'aria-hidden': 'true' },
           h('span', null, 'Приложение'), h('span', null, 'Задача'), h('span', null, 'Сейчас'), h('span', null, 'Этапы'), h('span', null, 'Срок'), h('span', null, 'PM')),
-        rows.map(({ app, request: r, current }) => {
+        paged(rows, ({ app, request: r, current }) => {
           const late = r.dueDate && r.dueDate < today;
           const pm = personById(r.assigneeId);
           return h('button', { class: 'wip-row', onclick: () => openAppById(app.id, reload) },

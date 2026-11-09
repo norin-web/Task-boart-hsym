@@ -3171,3 +3171,6 @@ a.bug-title:hover { text-decoration: underline; }
 .rd-more-row .rd-page-more { position: sticky; left: 16px; }
 .rd-page-more { border: 0; border-radius: 999px; padding: 6px 16px; background: var(--surface-2); font: inherit; font-size: 12px; font-weight: 600; color: var(--text-2); cursor: pointer; }
 .rd-page-more:hover { background: var(--surface-3); color: var(--text); }
+/* Дашборд: «Показать ещё» в длинных блоках */
+.blk-more { display: block; margin: 8px auto 4px; padding: 6px 16px; border: 0; border-radius: 999px; background: var(--surface-2); font: inherit; font-size: 12px; font-weight: 600; color: var(--text-2); cursor: pointer; }
+.blk-more:hover { background: var(--surface-3); color: var(--text); }
