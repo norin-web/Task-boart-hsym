@@ -3161,3 +3161,7 @@ a.bug-title:hover { text-decoration: underline; }
 .sc-gone.sc-unchecked, .store-check.compact .sc-gone.sc-unchecked { margin-top: 10px; background: var(--surface-2); border-top: 0; border-radius: 14px; }
 .sc-why.bad { color: #b45309; }
 .ap-more { display: flex; margin: 8px auto 12px; }
+/* Доска: «Показать ещё» под длинной колонкой */
+.col-more { display: block; width: calc(100% - 16px); margin: 6px 8px 4px; padding: 8px; border: 0; border-radius: 12px; background: var(--surface); color: var(--text-2); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.col-more:hover { color: var(--text); background: var(--surface-3); }
+.col-more:disabled { opacity: .6; cursor: default; }

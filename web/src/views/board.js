@@ -18,7 +18,9 @@ const NO_DEPT = '__none';
  */
 export async function loadBoard(unitId, taskId = S.panelTaskId) {
   const archived = !!(S.filters && S.filters.archived) || !!(S.board && S.board.unit.id === unitId && S.board.withArchived);
-  const d = await call('getBoard', { unitId, archived, taskId: taskId || undefined });
+  const doneLimit = (S.boardDoneLimit && S.boardDoneLimit[unitId]) || undefined;
+  // foldDone: выполненные этапы открытых запросов свёрнуты в карточку запроса — экрану доски их не грузим
+  const d = await call('getBoard', { unitId, archived, taskId: taskId || undefined, doneLimit, foldDone: foldStages() });
   S.board = d;
   S.people = d.people;
   S.departments = d.departments;
@@ -159,7 +161,7 @@ function filterRest() {
       h('span', { class: 'dot', style: { background: o.color } })))));
     group('Показывать', [
       // этапы приложений — отдельными карточками (иначе приложение = одна карточка-запрос с прогрессом)
-      S.board.tasks.some(t => t.kind === 'request') && chk('Этапы приложений отдельно', !foldStages(), v => { LS.set('foldStages', !v); renderTasks(); drawFilterRest(); }),
+      S.board.tasks.some(t => t.kind === 'request') && chk('Этапы приложений отдельно', !foldStages(), v => { LS.set('foldStages', !v); loadBoard(S.board.unit.id).catch(showErr).then(() => { renderTasks(); drawFilterRest(); }); }),
       !B.dueDate.hidden && chk('Только просроченные', !!f.overdue, v => set('overdue', v)),
       chk('Скрыть выполненные', !!f.open, v => set('open', v)),
       // архив грузится с сервера только по этому фильтру
@@ -302,6 +304,35 @@ function colHead(col, count) {
     isStaff() && h('button', { class: 'icon-btn sm col-menu-btn', title: 'Настроить колонку', onclick: e => { e.stopPropagation(); columnMenu(e.currentTarget, col); } }, icon('more', 15)));
 }
 
+/** Сколько карточек показывать в колонке (по 40, «Показать ещё» добавляет): ключ — юнит и колонка. */
+const COL_PAGE = 40;
+const colShown = {};
+const shownKey = colId => S.board.unit.id + ':' + colId;
+
+/**
+ * «Показать ещё» под колонкой: сначала докрываем загруженные карточки; в «Готово» — когда показаны все загруженные,
+ * а в базе их больше, догружаем следующую порцию выполненных.
+ */
+/** Сколько выполненных (не свёрнутых в открытый запрос) загружено на доску — сравниваем с doneTotal из базы. */
+const loadedDone = () => {
+  const open = new Set(S.board.tasks.filter(t => !t.archived && colById(t.status).kind !== 'done').map(t => t.id));
+  return S.board.tasks.filter(t => !t.archived && colById(t.status).kind === 'done' && !open.has(t.parentId)).length;
+};
+function moreButton(col, total, shown) {
+  const serverMore = col.kind === 'done' && S.board.doneTotal != null && S.board.doneTotal > loadedDone();
+  if (shown >= total && !serverMore) return null;
+  const left = shown < total ? total - shown : S.board.doneTotal - loadedDone();
+  return h('button', { class: 'col-more', type: 'button', onclick: async e => {
+    if (shown < total) { colShown[shownKey(col.id)] = shown + COL_PAGE; renderTasks(); return; }
+    e.currentTarget.disabled = true;
+    const unitId = S.board.unit.id;
+    S.boardDoneLimit = { ...(S.boardDoneLimit || {}), [unitId]: (S.board.doneLimit || 150) + 150 };
+    colShown[shownKey(col.id)] = shown + COL_PAGE;
+    try { await loadBoard(unitId); } catch (err) { showErr(err); }
+    renderTasks();
+  } }, `Показать ещё · ${left}`);
+}
+
 function renderColumns(board) {
   const done = beginRender();
   board.classList.remove('lanes');
@@ -310,9 +341,13 @@ function renderColumns(board) {
   fill(board, columns().map(col => {
     const items = tasks.filter(t => colById(t.status).id === col.id).sort(byPriority());
     const quickHere = S.quick.status === col.id && S.quick.dept == null;
+    // по 40 карточек: длинная колонка «Готово» не рисует сотни карточек разом
+    const cap = colShown[shownKey(col.id)] || COL_PAGE;
+    const doneMore = col.kind === 'done' && S.board.doneTotal != null && !filtered ? S.board.doneTotal - loadedDone() : 0;
     return h('section', { class: 'col', style: { '--cc': colColor(col) } },
-      colHead(col, items.length),
-      makeList(items, col.id, null, !quickHere && (S.route.team ? 'Здесь пусто' : filtered ? 'Нет задач по фильтру' : 'Пусто')),
+      colHead(col, items.length + Math.max(0, doneMore)),
+      makeList(items.slice(0, cap), col.id, null, !quickHere && (S.route.team ? 'Здесь пусто' : filtered ? 'Нет задач по фильтру' : 'Пусто')),
+      moreButton(col, items.length, Math.min(cap, items.length)),
       oldDoneToggle(col),
       quickAddEl(col.id, null));
   }));

@@ -1149,8 +1149,36 @@ export function createBackend(db, opts = {}) {
     async getBoard(p) {
       const unit = await findUnit(p.unitId);
       await autoArchive(unit);
+      // выполненные копятся тысячами: грузим последние doneLimit (по дате закрытия), остальные — «Показать ещё»
+      const ust = unitSettings(unit.settings);
+      const doneIds = ust.columns.filter(c => c.kind === 'done').map(c => c.id);
+      const otherIds = ust.columns.filter(c => c.kind !== 'done').map(c => c.id);
+      const doneLimit = Math.min(Math.max(Number(p.doneLimit) || 150, 50), 5000);
+      let doneTotal = null;
       const loadTasks = async () => {
-        const rows = await all(() => (p.archived ? T('tasks').select('*').eq('unit_id', unit.id) : T('tasks').select('*').eq('unit_id', unit.id).eq('archived', false)).order('id'));
+        let rows;
+        if (!p.archived && doneIds.length && otherIds.length) {
+          const [open, doneLight, allIds] = await Promise.all([
+            all(() => T('tasks').select('*').eq('unit_id', unit.id).eq('archived', false).in('status', otherIds).order('id')),
+            all(() => T('tasks').select('id,parent_id,done_at').eq('unit_id', unit.id).eq('archived', false).in('status', doneIds).order('id')),
+            all(() => T('tasks').select('id').eq('unit_id', unit.id).eq('archived', false).order('id')),
+          ]);
+          // выполненные этапы открытых запросов на доске свёрнуты в карточку запроса (её этапы — с сервера) — их не грузим
+          const openIds = new Set(open.map(t => t.id));
+          const cand = doneLight.filter(t => !p.foldDone || !openIds.has(t.parent_id))
+            .sort((x, y) => String(y.done_at || '').localeCompare(String(x.done_at || '')) || String(x.id).localeCompare(String(y.id)));
+          const pick = cand.slice(0, doneLimit).map(t => t.id);
+          const done = [];
+          for (let i = 0; i < pick.length; i += 150) done.push(...(await run(T('tasks').select('*').in('id', pick.slice(i, i + 150)))));
+          // задачи со статусом удалённой колонки (бывает после правки колонок) — тоже на доску
+          const lost = open.length + doneLight.length < allIds.length
+            ? (await all(() => T('tasks').select('*').eq('unit_id', unit.id).eq('archived', false).order('id'))).filter(t => !doneIds.includes(t.status) && !otherIds.includes(t.status))
+            : [];
+          rows = [...open, ...done, ...lost];
+          doneTotal = cand.length;
+        } else {
+          rows = await all(() => (p.archived ? T('tasks').select('*').eq('unit_id', unit.id) : T('tasks').select('*').eq('unit_id', unit.id).eq('archived', false)).order('id'));
+        }
         if (!p.archived && p.taskId && !rows.some(t => t.id === p.taskId)) {
           const t = await run(T('tasks').select('*').eq('id', String(p.taskId)).eq('unit_id', unit.id).maybeSingle());
           if (t) rows.push(t);
@@ -1181,6 +1209,8 @@ export function createBackend(db, opts = {}) {
         departments: depts,
         members,
         withArchived: !!p.archived,
+        // сколько выполненных всего и сколько загружено (null — загружены все)
+        doneTotal, doneLimit: doneTotal == null ? null : doneLimit,
       };
     },
 

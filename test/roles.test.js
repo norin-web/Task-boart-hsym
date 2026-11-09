@@ -1260,3 +1260,22 @@ test('цифры юнитов из базы совпадают со старым
   assert.deepEqual(fresh, old);
   assert.ok(fresh.admin[A.id].overdue >= 1);
 });
+
+test('доска: выполненные — последними порциями (doneLimit), открытые — все; doneTotal — сколько выполненных всего', async () => {
+  const api = await setup();
+  const { admin, A } = await team(api);
+  const board0 = await api.as(admin, () => api('getBoard', { unitId: A.id }));
+  const doneCol = board0.unit.settings.columns.find(c => c.kind === 'done').id;
+  const openBefore = board0.tasks.length;
+  for (let i = 0; i < 60; i++) {
+    const t = await api.as(admin, () => api('createTask', { unitId: A.id, title: 'Готово ' + i }));
+    await api.pg.query('update tasks set status = $1, done_at = $2 where id = $3', [doneCol, '2026-11-' + String(1 + (i % 28)).padStart(2, '0') + 'T00:00:' + String(i).padStart(2, '0') + '.000Z', t.id]);
+  }
+  const b = await api.as(admin, () => api('getBoard', { unitId: A.id, doneLimit: 50 }));
+  const done = b.tasks.filter(t => t.status === doneCol);
+  assert.equal(b.doneTotal, 60);
+  assert.equal(done.length, 50);
+  assert.equal(b.tasks.length - done.length, openBefore);
+  const more = await api.as(admin, () => api('getBoard', { unitId: A.id, doneLimit: 200 }));
+  assert.equal(more.tasks.filter(t => t.status === doneCol).length, 60);
+});
