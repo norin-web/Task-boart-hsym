@@ -2499,3 +2499,48 @@ language sql stable security definer set search_path = public as $$
 $$;
 revoke execute on function my_info_list() from public, anon;
 grant execute on function my_info_list() to authenticated;
+
+-- PM добавили в юнит — ему открываются все приложения юнита (как и новые); убрали из юнита — приложения этого юнита закрываются.
+-- Лишние CEO снимает в «Приложения PM…».
+create or replace function pm_apps_on_member() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    if exists (select 1 from people where id = new.person_id and access = 'moderator' and active) then
+      insert into pm_apps (person_id, app_id)
+        select new.person_id, a.id from apps a where a.unit_id = new.unit_id
+        on conflict do nothing;
+    end if;
+    return new;
+  end if;
+  delete from pm_apps where person_id = old.person_id and app_id in (select id from apps where unit_id = old.unit_id);
+  return old;
+end $$;
+drop trigger if exists pm_apps_on_member on unit_members;
+create trigger pm_apps_on_member after insert or delete on unit_members for each row execute function pm_apps_on_member();
+
+-- Человека сделали PM — открываются приложения его юнитов.
+create or replace function pm_apps_on_access() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.access = 'moderator' and new.active and (old.access is distinct from 'moderator' or not old.active) then
+    insert into pm_apps (person_id, app_id)
+      select new.id, a.id from unit_members m join apps a on a.unit_id = m.unit_id where m.person_id = new.id
+      on conflict do nothing;
+  end if;
+  return new;
+end $$;
+drop trigger if exists pm_apps_on_access on people;
+create trigger pm_apps_on_access after update of access, active on people for each row execute function pm_apps_on_access();
+
+-- Однократно (2026-11-09): PM, которым из их юнита не открыто ни одного приложения, получают все приложения этого юнита.
+do $$ begin
+  if not exists (select 1 from app_settings where key = 'pmUnitAppsSeeded') then
+    insert into pm_apps (person_id, app_id)
+      select m.person_id, a.id
+        from unit_members m
+        join people p on p.id = m.person_id and p.access = 'moderator' and p.active
+        join apps a on a.unit_id = m.unit_id
+       where not exists (select 1 from pm_apps x join apps y on y.id = x.app_id where x.person_id = m.person_id and y.unit_id = m.unit_id)
+      on conflict do nothing;
+    insert into app_settings (key, value, updated_at) values ('pmUnitAppsSeeded', 'true'::jsonb, '') on conflict (key) do nothing;
+  end if;
+end $$;

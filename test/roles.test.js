@@ -1143,3 +1143,21 @@ test('инфо-лист: CEO включает человеку и выбирае
   await api.as(admin, () => api('setInfoList', { personId: designer.id, on: false }));
   assert.equal((await api.as(designer, () => api('getMyInfoList', { personId: designer.id }))).on, false);
 });
+
+test('PM добавили в юнит — видит все его приложения; убрали — не видит; лишние CEO снимает', async () => {
+  const api = await setup();
+  const { admin, A } = await team(api);
+  const a1 = (await api.as(admin, () => api('createApp', { name: 'Раньше-1', unitId: A.id, noRequest: true }))).app;
+  const a2 = (await api.as(admin, () => api('createApp', { name: 'Раньше-2', unitId: A.id, noRequest: true }))).app;
+  const pm2 = await api.as(admin, () => api('createPerson', { name: 'Новый PM', email: 'pm2@x.ru', access: 'moderator' }));
+  await api.pg.query('update people set user_id = $1 where id = $2', [UID(9), pm2.id]);
+  const as2 = { ...pm2, uid: UID(9) };
+  assert.equal((await api.as(as2, () => api('listApps', {}))).length, 0);
+  await api.as(admin, () => api('setMember', { unitId: A.id, personId: pm2.id }));
+  assert.deepEqual((await api.as(as2, () => api('listApps', {}))).map(a => a.name).sort(), ['Раньше-1', 'Раньше-2']);
+  await api.as(admin, () => api('setPmApps', { personId: pm2.id, appIds: [a1.id] }));
+  assert.deepEqual((await api.as(as2, () => api('listApps', {}))).map(a => a.id), [a1.id]);
+  await api.as(admin, () => api('removeMember', { unitId: A.id, personId: pm2.id }));
+  assert.equal((await api.as(as2, () => api('listApps', {}))).length, 0);
+  assert.ok(a2);
+});
