@@ -117,8 +117,10 @@ function draw(page, data) {
 
   const card = ({ t }) => {
     const u = unitById(t.unitId);
-    const due = dueInfo(t.dueDate, groupOf(data, t) === 'done');
-    return h('article', { class: 'card my-card', dataset: { id: t.id }, tabindex: '0', onclick: () => peekTask(t.unitId, t.id) },
+    const isDone = groupOf(data, t) === 'done';
+    const due = dueInfo(t.dueDate, isDone);
+    // готовые — приглушены и зачёркнуты, как на доске юнита
+    return h('article', { class: 'card my-card' + (isDone ? ' done' : ''), dataset: { id: t.id }, tabindex: '0', onclick: () => peekTask(t.unitId, t.id) },
       u && h('div', { class: 'card-sub my-key', title: u.name }, h('span', { class: 'dot', style: { background: u.color } }), u.key + '-' + t.num),
       h('div', { class: 'card-title' }, t.title),
       h('div', { class: 'card-foot' },

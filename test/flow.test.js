@@ -334,10 +334,13 @@ test('дашборд CEO: портфель, требует внимания, р�
   assert.deepEqual(d.portfolio.byStatus.reject, [a2.id]);
   assert.equal(d.portfolio.byUnit[gold.id].dev, 1);
   const types = d.attention.map(x => x.type);
-  assert.equal(types[0], 'reject');
+  // приложение в реджекте ведут во вкладке «Реджекты» — в «Требует внимания» его нет совсем
+  assert.ok(!types.includes('reject'));
+  assert.ok(!d.attention.some(x => x.app.id === a2.id));
+  assert.ok(d.inProgress.some(x => x.app.id === a2.id)); // но работа по нему идёт
   assert.ok(types.includes('overdue')); // срок запроса прошёл
   assert.ok(d.attention.some(x => x.type === 'stale' && x.task.id === st.design.id));
-  assert.ok(d.attention.some(x => x.type === 'waiting')); // запросы Weather и Fit PM ещё не разложил
+  assert.ok(d.attention.some(x => x.type === 'waiting' && x.app.id === a3.id)); // запрос Fit PM ещё не разложил
   const sleep = d.inProgress.find(x => x.app.id === a1.id);
   assert.equal(sleep.current.step, 'design'); // текущий этап — тот, что в работе
   // «Недавнее» — движение по статусам из истории + начало разработки (New App); импорт без смены статуса сюда не попадает

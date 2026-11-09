@@ -1320,3 +1320,20 @@ test('«Работы в ходу»: отправленное в Apple (Ревь�
   assert.equal(list.find(a => a.id === aDev.id).active, 1);
   assert.equal(list.find(a => a.id === aApple.id).active, 0);
 });
+
+test('карточка поверх страницы: getBoard only — одна задача (с комментариями и ссылками), чужая — пусто', async () => {
+  const api = await setup();
+  const { admin, designer, dev, A } = await team(api);
+  const mine = await api.as(admin, () => api('createTask', { unitId: A.id, title: 'Моя', assigneeId: designer.id }));
+  const other = await api.as(admin, () => api('createTask', { unitId: A.id, title: 'Чужая', assigneeId: dev.id }));
+  await api.as(designer, () => api('addComment', { taskId: mine.id, text: 'привет' }));
+  const d = await api.as(designer, () => api('getBoard', { unitId: A.id, only: mine.id }));
+  assert.equal(d.partial, true);
+  assert.deepEqual(d.tasks.map(t => t.id), [mine.id]);
+  assert.equal(d.tasks[0].commentCount, 1);
+  assert.ok(d.unit && d.fields && d.members);
+  const full = await api.as(admin, () => api('getBoard', { unitId: A.id }));
+  assert.ok(full.tasks.length > 1 && !full.partial);
+  // сотрудник чужую задачу не видит и в режиме only
+  assert.deepEqual((await api.as(designer, () => api('getBoard', { unitId: A.id, only: other.id }))).tasks, []);
+});

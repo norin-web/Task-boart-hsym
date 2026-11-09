@@ -1149,7 +1149,9 @@ export function createBackend(db, opts = {}) {
      */
     async getBoard(p) {
       const unit = await findUnit(p.unitId);
-      await autoArchive(unit);
+      // only: id задачи — карточка поверх страницы (с дашборда, «Моей доски»): только она, без всей доски юнита — быстро
+      const only = p.only ? String(p.only) : '';
+      if (!only) await autoArchive(unit);
       // выполненные копятся тысячами: грузим последние doneLimit (по дате закрытия), остальные — «Показать ещё»
       const ust = unitSettings(unit.settings);
       const doneIds = ust.columns.filter(c => c.kind === 'done').map(c => c.id);
@@ -1158,6 +1160,10 @@ export function createBackend(db, opts = {}) {
       let doneTotal = null;
       const loadTasks = async () => {
         let rows;
+        if (only) {
+          const t = await run(T('tasks').select('*').eq('id', only).eq('unit_id', unit.id).maybeSingle());
+          return t ? [t] : [];
+        }
         if (!p.archived && doneIds.length && otherIds.length) {
           const [open, doneLight, allIds] = await Promise.all([
             all(() => T('tasks').select('*').eq('unit_id', unit.id).eq('archived', false).in('status', otherIds).order('id')),
@@ -1189,10 +1195,10 @@ export function createBackend(db, opts = {}) {
       const [fields, allTasks, counts, units, ppl, depts, members, links, manages] = await Promise.all([
         unitFields(unit.id),
         loadTasks(),
-        rpc('comment_counts', { p_unit: unit.id }),
+        only ? run(T('comments').select('task_id').eq('task_id', only)).then(r => [{ task_id: only, n: r.length }]) : rpc('comment_counts', { p_unit: unit.id }),
         all(() => T('units').select('id,name,key,color,archived').order('ord').order('id')),
         people(), departments(), unitMembers(unit.id),
-        all(() => T('task_links').select('task_id,field_id,url').eq('unit_id', unit.id).order('task_id').order('field_id')),
+        only ? run(T('task_links').select('task_id,field_id,url').eq('task_id', only)) : all(() => T('task_links').select('task_id,field_id,url').eq('unit_id', unit.id).order('task_id').order('field_id')),
         rpc('can_manage', { p_unit: unit.id }),
       ]);
       // исполнителям ждущие этапы не показываем; CEO и PM юнита видят всю цепочку (с пометкой «ждёт»)
@@ -1210,6 +1216,7 @@ export function createBackend(db, opts = {}) {
         departments: depts,
         members,
         withArchived: !!p.archived,
+        partial: !!only,
         // сколько выполненных всего и сколько загружено (null — загружены все)
         doneTotal, doneLimit: doneTotal == null ? null : doneLimit,
       };
@@ -2497,7 +2504,8 @@ export function createBackend(db, opts = {}) {
       }
       const attention = [], inProgress = [], recent = [];
       for (const a of apps) {
-        if (kindOfStatus(a.status) === 'reject') attention.push({ type: 'reject', app: brief(a), at: a.statusAt });
+        // приложение в реджекте — его ведут во вкладке «Реджекты»; в «Требует внимания» не дублируем
+        const inReject = kindOfStatus(a.status) === 'reject';
         for (const r of a.requests) {
           // начало разработки — запрос «New App»
           if (r.type === 'new_app' && r.createdAt >= recentFrom) recent.push({ type: 'start', app: brief(a), request: r, at: r.createdAt });
@@ -2508,6 +2516,9 @@ export function createBackend(db, opts = {}) {
           // отправлено в Apple (статус «Ревью Apple», открыт только релиз) — работа студии сделана, ждём ответа: не «в ходу» и не «зависло»
           const atApple = kindOfStatus(a.status) === 'review' && r.stages.length > 0 && r.stages.every(s => s.done || s.step === 'release');
           if (atApple) continue;
+          const current = r.stages.find(s => !s.done && !s.blocked && s.kind !== 'todo') || r.stages.find(s => !s.done && !s.blocked) || null;
+          inProgress.push({ app: brief(a), request: r, current });
+          if (inReject) continue;
           const open = [r, ...r.stages.filter(s => !s.done)];
           for (const t of open) {
             const ref = { id: t.id, title: t.title, assigneeId: t.assigneeId, dueDate: t.dueDate, updatedAt: t.updatedAt };
@@ -2516,8 +2527,6 @@ export function createBackend(db, opts = {}) {
           }
           if (!r.assigneeId) attention.push({ type: 'nopm', app: brief(a), request: r, at: r.createdAt });
           else if (!r.stages.length) attention.push({ type: 'waiting', app: brief(a), request: r, at: r.createdAt });
-          const current = r.stages.find(s => !s.done && !s.blocked && s.kind !== 'todo') || r.stages.find(s => !s.done && !s.blocked) || null;
-          inProgress.push({ app: brief(a), request: r, current });
         }
       }
       // движение по статусам приложений за 30 дней — из истории статусов (импорт и создание сюда не попадают)

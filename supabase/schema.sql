@@ -2742,3 +2742,39 @@ begin
 end $$;
 drop trigger if exists notify_feedback on feedback;
 create trigger notify_feedback after insert on feedback for each row execute function notify_feedback();
+
+-- Скорость: правило чтения задач считало права на каждую строку (my_person_id → my_access → can_manage по нескольку раз),
+-- на тысячах задач это секунды и таймауты. Теперь права — один раз на запрос: (select …) превращается в initPlan,
+-- членство в юнитах и приложения PM — массивами. Логика та же.
+create or replace function my_unit_ids() returns text[]
+language sql stable security definer set search_path = public as $$
+  select coalesce(array(select unit_id from unit_members where person_id = my_person_id()), '{}');
+$$;
+grant execute on function my_unit_ids() to authenticated;
+create or replace function my_pm_app_ids() returns text[]
+language sql stable security definer set search_path = public as $$
+  select coalesce(array(select app_id from pm_apps where person_id = my_person_id()), '{}');
+$$;
+grant execute on function my_pm_app_ids() to authenticated;
+
+drop policy if exists tasks_read on tasks;
+create policy tasks_read on tasks for select to authenticated using (
+  (not is_test or (select is_dev()))
+  and (app_id = '' or (select my_access()) <> 'moderator' or app_id = any(coalesce((select my_pm_app_ids()), '{}')))
+  and (
+    (select is_superadmin())
+    or ((select my_access()) = 'moderator' and unit_id = any(coalesce((select my_unit_ids()), '{}')))
+    or assignee_id = (select my_person_id()) or review_from = (select my_person_id()) or reviewer_id = (select my_person_id())
+    or ((select my_access()) = 'lead' and in_lead_zone(unit_id, department_id, assignee_id))
+    or ((select my_access()) = 'rm' and unit_id = any(coalesce((select my_unit_ids()), '{}'))
+        and ((department_id <> '' and department_id = any(coalesce((select my_positions()), '{}')))
+             or (team_id <> '' and team_id = any(coalesce((select my_teams()), '{}')))))));
+
+drop policy if exists tasks_update on tasks;
+create policy tasks_update on tasks for update to authenticated
+  using ((select is_superadmin()) or ((select my_access()) = 'moderator' and unit_id = any(coalesce((select my_unit_ids()), '{}')))
+         or assignee_id = (select my_person_id())
+         or ((select my_access()) = 'lead' and in_lead_zone(unit_id, department_id, assignee_id)))
+  with check ((select is_superadmin()) or ((select my_access()) = 'moderator' and unit_id = any(coalesce((select my_unit_ids()), '{}')))
+              or assignee_id = (select my_person_id()) or review_from = (select my_person_id()) or reviewer_id = (select my_person_id())
+              or ((select my_access()) = 'lead' and in_lead_zone(unit_id, department_id, assignee_id)));

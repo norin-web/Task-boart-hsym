@@ -219,7 +219,7 @@ export async function render() {
     return;
   }
 
-  if (!S.board || S.board.unit.id !== r.unit || (S.board.foldDone && !foldStages())) {
+  if (!S.board || S.board.unit.id !== r.unit || S.board.partial || (S.board.foldDone && !foldStages())) {
     rendered = 'loading';
     closePanel();
     loadBoardView(r.unit); // фильтры и дорожки этой доски — как оставили

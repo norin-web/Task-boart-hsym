@@ -16,7 +16,16 @@ const NO_DEPT = '__none';
 /**
  * Доска юнита. Архив — только с фильтром «Архив» (его копится много); taskId — открытая задача: подгрузится, даже если в архиве.
  */
-export async function loadBoard(unitId, taskId = S.panelTaskId) {
+export async function loadBoard(unitId, taskId = S.panelTaskId, { only = false } = {}) {
+  // только карточка поверх страницы: одна задача без доски (partial) — экран доски юнита потом догрузит всё
+  if (only && taskId) {
+    const d = await call('getBoard', { unitId, only: taskId });
+    S.board = d;
+    S.people = d.people;
+    S.departments = d.departments;
+    if (d.teams) S.teams = d.teams;
+    return;
+  }
   const archived = !!(S.filters && S.filters.archived) || !!(S.board && S.board.unit.id === unitId && S.board.withArchived);
   const doneLimit = (S.boardDoneLimit && S.boardDoneLimit[unitId]) || undefined;
   // foldDone: выполненные этапы открытых запросов свёрнуты в карточку запроса — экрану доски их не грузим

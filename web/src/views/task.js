@@ -44,7 +44,8 @@ export async function peekTask(unitId, taskId) {
     return navigate({ unit: unitId, mode: S.route.mode === 'settings' ? 'board' : S.route.mode, task: taskId });
   }
   try {
-    if (!S.board || S.board.unit.id !== unitId) await loadBoard(unitId, taskId);
+    // доска этого юнита уже есть — берём её; нет — грузим только эту задачу (вся доска юнита — секунды)
+    if (!S.board || S.board.unit.id !== unitId || (S.board.partial && !taskById(taskId))) await loadBoard(unitId, taskId, { only: true });
   } catch (e) {
     return showErr(e);
   }
@@ -60,7 +61,8 @@ export function openTask(id, again = false) {
   const t = taskById(id);
   // задачи нет на доске: может быть в архиве (он грузится отдельно) — дозагрузить один раз
   if (!t && !again && S.board) {
-    loadBoard(S.board.unit.id, id).then(() => { if (S.route.unit === S.board.unit.id) renderTasks(); openTask(id, true); }).catch(showErr);
+    const partial = !!S.board.partial;
+    loadBoard(S.board.unit.id, id, { only: partial }).then(() => { if (!partial && S.route.unit === S.board.unit.id) renderTasks(); openTask(id, true); }).catch(showErr);
     return;
   }
   if (!t) {
@@ -392,7 +394,7 @@ function templateMenu(anchor, onPick) {
  * рядом — сколько у них открытых задач. ТЗ, описание и ссылки подзадачи берут из этапа; этап закроется, когда закроют все.
  */
 function openSplit(t, people) {
-  const load = id => (S.board && S.board.unit.id === t.unitId ? S.board.tasks.filter(x => !x.archived && !taskDone(x) && x.assigneeId === id).length : null);
+  const load = id => (S.board && !S.board.partial && S.board.unit.id === t.unitId ? S.board.tasks.filter(x => !x.archived && !taskDone(x) && x.assigneeId === id).length : null);
   const rows = h('div', { class: 'split-rows' });
   const lines = [];
   const add = (focus = true) => {
