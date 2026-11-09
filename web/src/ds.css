@@ -2631,7 +2631,8 @@ span.rd-cell { cursor: default; }
 .rd-row.queued > :first-child { box-shadow: inset 3px 0 0 #e8a100; }
 button.rd-check { all: unset; box-sizing: border-box; cursor: pointer; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; border: 1.5px solid var(--border-strong); color: #fff; }
 button.rd-check.on { background: var(--text); border-color: transparent; }
-.rd-row > .rd-check, .rd-row > button.rd-check { margin: 0 auto; border-right: 0; height: 18px; min-height: 0; padding: 0; align-self: center; }
+.rd-row > .rd-check, .rd-row > button.rd-check { margin: 0 auto; border: 1.5px solid var(--border-strong); height: 18px; min-height: 0; padding: 0; align-self: center; }
+.rd-row > .rd-check.on, .rd-row > button.rd-check.on { border-color: transparent; }
 /* Сводка: функции таблицы — правка своих колонок, группы колонок и строк */
 .rd-row { cursor: default; }
 .rd-row:not(.rd-head):hover { background: var(--surface-2); }
