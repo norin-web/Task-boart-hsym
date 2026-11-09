@@ -1981,21 +1981,17 @@ export function createBackend(db, opts = {}) {
       const U = Object.fromEntries(units.map(u => [u.id, { ...u, st: unitSettings(u.settings) }]));
       const kindOfRow = r => (U[r.unit_id] ? kindOf(U[r.unit_id].st, r.status) : 'todo');
       const doneRow = r => kindOfRow(r) === 'done';
-      let tasks;
-      if (p.full) {
-        tasks = await byChunks(appIds, ids => T('tasks').select(COLS).in('app_id', ids).eq('archived', false).order('created_at').order('id'));
-      } else {
-        const [reqs, rels] = await Promise.all([
-          byChunks(appIds, ids => T('tasks').select(COLS).in('app_id', ids).eq('kind', 'request').eq('archived', false).order('created_at').order('id')),
-          byChunks(appIds, ids => T('tasks').select(COLS).in('app_id', ids).eq('step', 'release').eq('archived', false).order('created_at').order('id')),
-        ]);
-        const openIds = reqs.filter(r => !doneRow(r)).map(r => r.id);
-        // этапам тяжёлые поля (данные релиза, флоу, поля задачи) не нужны — без них ответ в разы легче
-        const STAGE_COLS = 'id,unit_id,title,status,assignee_id,due_date,kind,step,parent_id,app_id,depends_on,created_at,updated_at';
-        const kids = openIds.length ? await byChunks(openIds, ids => T('tasks').select(STAGE_COLS).in('parent_id', ids).neq('step', 'release').eq('archived', false).order('created_at').order('id')) : [];
-        const seenIds = new Set();
-        tasks = [...reqs, ...kids, ...rels].filter(t => (seenIds.has(t.id) ? false : seenIds.add(t.id)));
-      }
+      // запросы и релизы — целиком; этапы — без тяжёлых полей (данные релиза, флоу, поля задачи): ответ в разы легче.
+      // Лёгкий режим — этапы только незакрытых запросов; full — всех (Сводка, карточка одного приложения).
+      const [reqs, rels] = await Promise.all([
+        byChunks(appIds, ids => T('tasks').select(COLS).in('app_id', ids).eq('kind', 'request').eq('archived', false).order('created_at').order('id')),
+        byChunks(appIds, ids => T('tasks').select(COLS).in('app_id', ids).eq('step', 'release').eq('archived', false).order('created_at').order('id')),
+      ]);
+      const parentIds = (p.full ? reqs : reqs.filter(r => !doneRow(r))).map(r => r.id);
+      const STAGE_COLS = 'id,unit_id,title,status,assignee_id,due_date,kind,step,parent_id,app_id,depends_on,created_at,updated_at';
+      const kids = parentIds.length ? await byChunks(parentIds, ids => T('tasks').select(STAGE_COLS).in('parent_id', ids).neq('step', 'release').eq('archived', false).order('created_at').order('id')) : [];
+      const seenIds = new Set();
+      const tasks = [...reqs, ...kids, ...rels].filter(t => (seenIds.has(t.id) ? false : seenIds.add(t.id)));
       // запросы-родители релизов на ревью, которых не видно по правам (у RM) — названия из базы
       const seen = new Set(tasks.map(t => t.id));
       const RP = await releaseParents(tasks.filter(t => t.step === 'release' && t.parent_id && !seen.has(t.parent_id)).map(t => t.parent_id));

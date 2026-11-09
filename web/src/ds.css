@@ -3166,3 +3166,8 @@ a.bug-title:hover { text-decoration: underline; }
 .col-more:hover { color: var(--text); background: var(--surface-3); }
 .col-more:disabled { opacity: .6; cursor: default; }
 .grp-more .col-more { width: auto; display: inline-block; margin: 4px 0; padding: 6px 14px; background: var(--surface-2); }
+/* Сводка: «Показать ещё» под строками */
+.rd-more-row { display: flex; justify-content: flex-start; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.rd-more-row .rd-page-more { position: sticky; left: 16px; }
+.rd-page-more { border: 0; border-radius: 999px; padding: 6px 16px; background: var(--surface-2); font: inherit; font-size: 12px; font-weight: 600; color: var(--text-2); cursor: pointer; }
+.rd-page-more:hover { background: var(--surface-3); color: var(--text); }

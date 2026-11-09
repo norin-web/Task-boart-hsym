@@ -346,6 +346,8 @@ export async function renderReady() {
     }
   };
 
+  const ROW_PAGE = 50;
+  const shownRows = new Map();
   const draw = () => {
     const cols = allColumns(sheet);
     const ids = chosenIds(cols);
@@ -435,12 +437,19 @@ export async function renderReady() {
         : h('span', { class: 'rd-fold', title: it.fold }))),
       h('span', { class: 'rd-plus' }, h('button', { class: 'rd-hbtn', type: 'button', title: 'Добавить колонку', 'aria-label': 'Добавить колонку', onclick: () => colDialog(null, def => addCol(def)) }, icon('plus', 15))));
 
+    // строки по 50 («Показать ещё» — следующие 50): сотни строк с цветными ячейками не рисуем разом
+    const page = (key, rs) => {
+      const n = shownRows.get(key) || ROW_PAGE;
+      const rest = rs.length - n;
+      return [...rs.slice(0, n).map(rowEl), rest > 0 && h('div', { class: 'rd-more-row', style: { width: total + 'px' } },
+        h('button', { class: 'rd-page-more', type: 'button', onclick: () => { shownRows.set(key, n + ROW_PAGE); draw(); } }, `Показать ещё ${Math.min(ROW_PAGE, rest)}`, rest > ROW_PAGE && h('span', { class: 'muted' }, ` · осталось ${rest}`)))];
+    };
     const lines = blocks.flatMap(b => {
-      if (!sheet.group) return b.rs.map(rowEl);
+      if (!sheet.group) return page('__all', b.rs);
       const key = sheet.group + ':' + b.name, folded = sheet.foldRows.includes(key);
       return [h('div', { class: 'rd-grp' + (folded ? ' folded' : ''), style: { width: total + 'px' } },
         h('button', { type: 'button', 'aria-expanded': String(!folded), onclick: () => { sheet.foldRows = toggle(sheet.foldRows, key); persist(); draw(); } },
-          h('span', { class: 'rd-fold-ic' }, icon('chevron', 13)), b.name, h('small', null, String(b.rs.length)))), ...(folded ? [] : b.rs.map(rowEl))];
+          h('span', { class: 'rd-fold-ic' }, icon('chevron', 13)), b.name, h('small', null, String(b.rs.length)))), ...(folded ? [] : page(key, b.rs))];
     });
 
     const old = body.querySelector('.rd-table');
