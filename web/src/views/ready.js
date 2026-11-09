@@ -11,6 +11,7 @@ import Sortable from 'sortablejs';
 import { call, send } from '../api.js';
 import { navigate } from '../router.js';
 import { openAppById, appIcon } from './apps.js';
+import { brandIcon, brandOf } from './brand.js';
 
 const DAY = 86400000;
 const daysSince = iso => (iso ? Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / DAY)) : 0);
@@ -108,7 +109,9 @@ function cell(c, row, ctx) {
     }
     case 'person': { const p = personById(v); return p ? h('span', { class: 'rd-person' }, avatar(p, 'sm'), h('span', null, p.name.split(' ')[0])) : h('span', { class: 'muted' }, '—'); }
     case 'unit': { const u = unitById(v); return u ? h('span', { class: 'rd-unit', style: { '--c': u.color } }, u.name) : h('span', { class: 'muted' }, '—'); }
-    case 'link': return v ? h('a', { class: 'rd-link', href: safeUrl(v), target: '_blank', rel: 'noopener', title: v, onclick: e => e.stopPropagation() }, host(v)) : h('span', { class: 'muted' }, '—');
+    // ссылка — чипом: значок сервиса (по адресу, иначе по названию колонки) и название колонки; полный адрес — в подсказке
+    case 'link': return v ? h('span', { class: 'rd-lchip' }, h('a', { class: 'rd-link rd-link-chip', href: safeUrl(v), target: '_blank', rel: 'noopener', title: v, onclick: e => e.stopPropagation() },
+      brandIcon(brandOf(v) || brandOf(c.name), 14, 'link'), h('span', null, String(c.name || host(v)).replace(/^Google\s+/i, '')))) : h('span', { class: 'muted' }, '—');
     case 'check': {
       const id = c.id.slice(3), done = (row.checks && row.checks.done) || [];
       return h('button', { class: 'rd-check' + (v ? ' on' : ''), type: 'button', role: 'checkbox', 'aria-checked': String(!!v), title: v ? 'Да' : 'Нет',
