@@ -2684,18 +2684,39 @@ grant execute on function fast_forward_request(text, text[], text) to authentica
 
 -- Цифры по юнитам для меню и карточек (вместо выгрузки всех задач в браузер): по колонкам, просрочено, на ревью, закрыто за неделю.
 -- Права — как на доске (RLS): сотрудник считает только видимое ему; этапы, которые ждут предыдущих, у не-администраторов не считаются.
+-- Незакрытые среди переданных задач (одним запросом — для подсчёта «ждущих» этапов сразу у всех).
+create or replace function open_task_ids(p_ids text[]) returns setof text
+language sql stable security definer set search_path = public as $$
+  select t.id from tasks t join units u on u.id = t.unit_id
+   where t.id = any(coalesce(p_ids, '{}'))
+     and not exists (select 1 from jsonb_array_elements(u.settings -> 'columns') c where c ->> 'id' = t.status and c ->> 'kind' = 'done');
+$$;
+grant execute on function open_task_ids(text[]) to authenticated;
+
 create or replace function unit_task_counts(p_day text, p_week text) returns table (unit_id text, todo int, in_progress int, done int, overdue int, review int, done_week int)
 language sql stable set search_path = public as $$
   with st as (select is_staff() as staff),
-  t as (
-    select t.unit_id, t.status, t.due_date, t.done_at,
-           coalesce((select c ->> 'kind' from jsonb_array_elements(u.settings -> 'columns') c where c ->> 'id' = t.status limit 1),
-                    u.settings -> 'columns' -> 0 ->> 'kind',
-                    case t.status when 'todo' then 'todo' when 'done' then 'done' else 'progress' end) as kind,
-           u.settings -> 'review' ->> 'column' as rcol
-      from tasks t join units u on u.id = t.unit_id, st
+  base as (
+    select t.id, t.unit_id, t.status, t.due_date, t.done_at, t.depends_on, u.settings
+      from tasks t join units u on u.id = t.unit_id
      where not t.archived
-       and (st.staff or t.depends_on = '[]'::jsonb or open_deps(t.depends_on) is null)
+  ),
+  -- этапы, которые ждут незакрытых предыдущих, у не-администраторов не считаются (как на доске); зависимости проверяем разом
+  od as (
+    select id from open_task_ids(case when (select staff from st) then '{}'::text[]
+      else array(select distinct d from base, jsonb_array_elements_text(base.depends_on) d where base.depends_on <> '[]'::jsonb) end) id
+  ),
+  blocked as (
+    select distinct b.id from base b, jsonb_array_elements_text(b.depends_on) d where d in (select id from od)
+  ),
+  t as (
+    select b.unit_id, b.status, b.due_date, b.done_at,
+           coalesce((select c ->> 'kind' from jsonb_array_elements(b.settings -> 'columns') c where c ->> 'id' = b.status limit 1),
+                    b.settings -> 'columns' -> 0 ->> 'kind',
+                    case b.status when 'todo' then 'todo' when 'done' then 'done' else 'progress' end) as kind,
+           b.settings -> 'review' ->> 'column' as rcol
+      from base b
+     where b.id not in (select id from blocked)
   )
   select unit_id,
          count(*) filter (where kind = 'todo')::int,
