@@ -3160,3 +3160,4 @@ a.bug-title:hover { text-decoration: underline; }
 .sc-uc-btn { font: inherit; font-size: inherit; color: var(--text); text-decoration: underline; text-underline-offset: 2px; padding: 0; }
 .sc-gone.sc-unchecked, .store-check.compact .sc-gone.sc-unchecked { margin-top: 10px; background: var(--surface-2); border-top: 0; border-radius: 14px; }
 .sc-why.bad { color: #b45309; }
+.ap-more { display: flex; margin: 8px auto 12px; }

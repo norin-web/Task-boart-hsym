@@ -1902,7 +1902,7 @@ export function createBackend(db, opts = {}) {
      * ссылки этапов и поля приложения. ready — дизайн закрыт, а iOS ещё не начат (очередь на разработку).
      */
     async getPipeline() {
-      const apps = await methods.listApps({});
+      const apps = await methods.listApps({ full: true });
       const main = a => a.requests.filter(r => r.type === 'new_app').sort((x, y) => String(x.createdAt).localeCompare(String(y.createdAt)))[0]
         || a.requests.filter(r => r.type !== 'update')[0] || null;
       const upd = a => a.requests.filter(r => r.type === 'update').sort((x, y) => String(y.createdAt).localeCompare(String(x.createdAt)))[0] || null;
@@ -1927,19 +1927,45 @@ export function createBackend(db, opts = {}) {
       });
     },
 
+    /**
+     * Приложения с запросами. По умолчанию — лёгкий режим: запросы, этапы только незакрытых запросов и релизы
+     * (закрытые этапы приложений в сторе не тянем — их тысячи). full — все этапы (Сводка, карточка одного приложения).
+     * ids — только эти приложения.
+     */
     async listApps(p) {
       let q = T('apps').select('*').eq('archived', !!p.archived);
       if (p.unitId) q = q.eq('unit_id', String(p.unitId));
+      const onlyIds = Array.isArray(p.ids) ? p.ids.map(x => String(x ?? '')).filter(Boolean).slice(0, 500) : null;
+      if (onlyIds) q = q.in('id', onlyIds.length ? onlyIds : ['-']);
       const apps = (await run(q.order('ord').order('created_at'))).map(appOut);
       if (!apps.length) return [];
-      const [tasks, units] = await Promise.all([
-        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,due_date,archived,kind,request_type,step,parent_id,app_id,depends_on,fields,created_at,updated_at,done_at,flow_steps,release')
-          .in('app_id', apps.map(a => a.id)).eq('archived', false).order('created_at').order('id')),
-        all(() => T('units').select('id,key,settings').order('id')),
-      ]);
+      const COLS = 'id,unit_id,num,title,status,assignee_id,due_date,archived,kind,request_type,step,parent_id,app_id,depends_on,fields,created_at,updated_at,done_at,flow_steps,release';
+      // id пачками — чтобы адрес запроса не разрастался
+      const byChunks = async (ids, build) => {
+        const out = [];
+        for (let i = 0; i < ids.length; i += 150) out.push(...(await all(() => build(ids.slice(i, i + 150)))));
+        return out;
+      };
+      const appIds = apps.map(a => a.id);
+      const units = await all(() => T('units').select('id,key,settings').order('id'));
       const U = Object.fromEntries(units.map(u => [u.id, { ...u, st: unitSettings(u.settings) }]));
       const kindOfRow = r => (U[r.unit_id] ? kindOf(U[r.unit_id].st, r.status) : 'todo');
       const doneRow = r => kindOfRow(r) === 'done';
+      let tasks;
+      if (p.full) {
+        tasks = await byChunks(appIds, ids => T('tasks').select(COLS).in('app_id', ids).eq('archived', false).order('created_at').order('id'));
+      } else {
+        const [reqs, rels] = await Promise.all([
+          byChunks(appIds, ids => T('tasks').select(COLS).in('app_id', ids).eq('kind', 'request').eq('archived', false).order('created_at').order('id')),
+          byChunks(appIds, ids => T('tasks').select(COLS).in('app_id', ids).eq('step', 'release').eq('archived', false).order('created_at').order('id')),
+        ]);
+        const openIds = reqs.filter(r => !doneRow(r)).map(r => r.id);
+        // этапам тяжёлые поля (данные релиза, флоу, поля задачи) не нужны — без них ответ в разы легче
+        const STAGE_COLS = 'id,unit_id,title,status,assignee_id,due_date,kind,step,parent_id,app_id,depends_on,created_at,updated_at';
+        const kids = openIds.length ? await byChunks(openIds, ids => T('tasks').select(STAGE_COLS).in('parent_id', ids).neq('step', 'release').eq('archived', false).order('created_at').order('id')) : [];
+        const seenIds = new Set();
+        tasks = [...reqs, ...kids, ...rels].filter(t => (seenIds.has(t.id) ? false : seenIds.add(t.id)));
+      }
       // запросы-родители релизов на ревью, которых не видно по правам (у RM) — названия из базы
       const seen = new Set(tasks.map(t => t.id));
       const RP = await releaseParents(tasks.filter(t => t.step === 'release' && t.parent_id && !seen.has(t.parent_id)).map(t => t.parent_id));
@@ -1956,7 +1982,7 @@ export function createBackend(db, opts = {}) {
             stages: stages.map(t => ({ id: t.id, unitId: t.unit_id, step: t.step, title: t.title, assigneeId: t.assignee_id, kind: kindOfRow(t),
               dueDate: t.due_date, updatedAt: t.updated_at,
               done: doneRow(t), blocked: !doneRow(t) && (json(t.depends_on, []) || []).some(id => { const d = own.find(x => x.id === id); return d && !doneRow(d); }) })),
-            progress: stages.length ? Math.round((done.length / stages.length) * 100) : 0,
+            progress: stages.length ? Math.round((done.length / stages.length) * 100) : doneRow(r) ? 100 : 0,
           };
         });
         // последняя работа с приложением: само приложение, его задачи и этапы — чтобы видеть забытые

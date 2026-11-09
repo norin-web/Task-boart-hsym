@@ -288,8 +288,17 @@ export async function renderApps({ unitId = '' } = {}) {
     h('button', { class: 'btn sm', onclick: () => setPicking(false) }, 'Готово'));
   const search = h('input', {
     class: 'apps-search-inp', type: 'search', placeholder: 'Поиск приложения', 'aria-label': 'Поиск приложения',
-    oninput: e => { q = e.target.value.trim().toLowerCase(); drawList(); },
+    oninput: e => { q = e.target.value.trim().toLowerCase(); shown.clear(); drawList(); },
   });
+  // страницы: в каждой группе по 50 строк, «Показать ещё» — следующие 50 (сбрасывается при смене фильтра/поиска)
+  const PAGE = 50;
+  const shown = new Map();
+  const pageOf = (id, list) => {
+    const n = shown.get(id) || PAGE;
+    const rest = list.length - n;
+    return [list.slice(0, n), rest > 0 && h('button', { class: 'btn sm ap-more', type: 'button', onclick: () => { shown.set(id, n + PAGE); drawList(); } },
+      `Показать ещё ${Math.min(PAGE, rest)}`, rest > PAGE && h('span', { class: 'muted' }, ` · осталось ${rest}`))];
+  };
   // при поиске и фильтре группы раскрыты, но свернуть их можно — это не запоминается (tmpClosed)
   const tmpClosed = new Set();
   const forced = () => !!q || active() > 0;
@@ -320,17 +329,17 @@ export async function renderApps({ unitId = '' } = {}) {
         h('button', { class: 'ap-group-head', 'aria-expanded': String(workOpen), onclick: () => toggle('__work') },
           h('span', { class: 'ap-chev' }, icon('chevron', 14)), icon('progress', 14), h('b', null, 'В работе'),
           h('span', { class: 'muted' }, work.length)),
-        workOpen && appTable(work, reload, sel, pick, true, sort)),
+        workOpen && (() => { const [rows, more] = pageOf('__work', work); return [appTable(rows, reload, sel, pick, true, sort), more]; })()),
       ...groups.map(({ u, list }) => {
       // во вкладке юнита группа одна — без заголовка
-      if (unitId) return appTable(list, reload, sel, pick, false, sort);
+      if (unitId) { const [rows, more] = pageOf(u.id, list); return [appTable(rows, reload, sel, pick, false, sort), more]; }
       const open = isOpen(u.id);
       return h('section', { class: 'ap-group' + (open ? ' open' : '') },
         h('button', { class: 'ap-group-head', 'aria-expanded': String(open), onclick: () => toggle(u.id) },
           h('span', { class: 'ap-chev' }, icon('chevron', 14)),
           h('span', { class: 'unit-dot', style: { background: u.color, margin: 0 } }), h('b', null, u.name),
           h('span', { class: 'muted' }, list.length)),
-        open && appTable(list, reload, sel, pick, false, sort));
+        open && (() => { const [rows, more] = pageOf(u.id, list); return [appTable(rows, reload, sel, pick, false, sort), more]; })());
     })] : h('p', { class: 'muted apps-none' }, 'Ничего не найдено'));
   };
   const drawTools = () => {
@@ -439,7 +448,7 @@ export function appTable(apps, reload, sel, onPick, withUnit, sort) {
 /** Открыть карточку приложения по id (с дашборда CEO): свежие данные — из listApps. */
 export async function openAppById(id, onChange) {
   try {
-    const a = (await call('listApps', {})).find(x => x.id === id);
+    const a = (await call('listApps', { ids: [id], full: true }))[0];
     if (!a) return toast('Приложение не найдено — возможно, его перенесли в архив', { type: 'error' });
     openAppCard(a, onChange);
   } catch (e) { showErr(e); }
@@ -459,7 +468,7 @@ export async function renderAppPage(id) {
   const main = $('#main');
   fill(main, topbar([h('h1', null, 'Приложение')]), h('div', { class: 'view-body' }, skeleton()));
   try {
-    const a = (await call('listApps', {})).find(x => x.id === id);
+    const a = (await call('listApps', { ids: [id], full: true }))[0];
     if (S.route.view !== 'app' || S.route.id !== id) return;
     if (!a) { toast('Приложение не найдено — возможно, его перенесли в архив', { type: 'error' }); return navigate({ view: 'apps' }, { replace: true }); }
     document.title = a.name + ' · Tasks';
@@ -486,8 +495,7 @@ export function openAppPanel(a, onChange, page = null) {
   const loadNotes = () => call('getAppNotes', { appId: a.id }).then(list => { notes = list; draw(); }).catch(showErr);
   const refresh = async () => {
     try {
-      const list = await call('listApps', {});
-      const fresh = list.find(x => x.id === a.id);
+      const fresh = (await call('listApps', { ids: [a.id], full: true }))[0];
       if (!fresh) return close();
       a = fresh;
       const i = S.apps.findIndex(x => x.id === a.id);
