@@ -3382,8 +3382,17 @@ export function createBackend(db, opts = {}) {
           run(T('notifications').select('*').eq('read_at', '').order('at', { ascending: false }).limit(50)),
           run(T('notifications').select('*').neq('read_at', '').gte('at', since).order('at', { ascending: false }).limit(100)),
         ])).flat();
-      const rows = (Array.isArray(all_) ? all_ : [all_]).filter(r => r && !off.includes(r.kind));
-      if (!rows.length) return [];
+      const allRows = (Array.isArray(all_) ? all_ : [all_]).filter(r => r && !off.includes(r.kind));
+      // новые предложения (обратная связь) — без задачи: одной строкой «Новые предложения: N»
+      const fb = allRows.filter(r => r.kind === 'feedback');
+      const fbFresh = fb.filter(r => !r.read_at), fbList = fbFresh.length ? fbFresh : fb;
+      const fbItem = fbList.length ? {
+        id: 'feedback', kind: 'feedback', kinds: ['feedback'], count: fbList.length, feedback: true,
+        actorId: [...fbList].sort((a, b) => String(b.at).localeCompare(String(a.at)))[0].actor_id,
+        at: fbList.map(r => r.at).sort().pop(), ref: '', taskId: null, title: '', read: !fbFresh.length,
+      } : null;
+      const rows = allRows.filter(r => r.kind !== 'feedback' && r.task_id);
+      if (!rows.length) return fbItem ? [fbItem] : [];
       const tasks = await run(T('tasks').select('id,unit_id,num,title,status,due_date,archived,app_id').in('id', [...new Set(rows.map(r => r.task_id))]));
       const appIds = [...new Set(tasks.map(t => t.app_id).filter(Boolean))];
       const [units, apps] = await Promise.all([
@@ -3412,14 +3421,15 @@ export function createBackend(db, opts = {}) {
           actorId: top.actor_id, at: list.map(r => r.at).sort().pop(), ref: top.ref || '', taskId: t.id, title: t.title, dueDate: t.due_date,
           key: `${u.key}-${t.num}`, unit: { id: u.id, name: u.name, color: u.color }, app: A[t.app_id] || null, read: !fresh.length,
         };
-      }).sort((a, b) => String(b.at).localeCompare(String(a.at)));
+      }).concat(fbItem ? [fbItem] : []).sort((a, b) => String(b.at).localeCompare(String(a.at)));
     },
 
     /** Отметить прочитанными: все или по одной задаче (taskId). База даёт менять только свои. */
     async readNotifications(p) {
       if (await viewedPerson(p.personId)) return 0; // «смотреть как» — только посмотреть, не отмечаем
       let q = T('notifications').update({ read_at: now() }).eq('read_at', '');
-      if (p.taskId) q = q.eq('task_id', String(p.taskId));
+      if (p.kind === 'feedback') q = q.eq('kind', 'feedback');
+      else if (p.taskId) q = q.eq('task_id', String(p.taskId));
       return (await run(q.select('id'))).length;
     },
 

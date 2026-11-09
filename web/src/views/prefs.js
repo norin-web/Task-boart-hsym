@@ -48,6 +48,7 @@ const NOTIFY = [
   ['Можно начинать', 'Предыдущие этапы закрыты', ['unblocked']],
   ['Сроки', 'Срок сегодня или завтра, просрочено', ['due_soon', 'overdue']],
   ['Релизы', 'Вышло в App Store, реджект Apple', ['store_live', 'store_reject']],
+  ['Обратная связь', 'Новые предложения людей по улучшению (режим разработчика)', ['feedback'], 'dev'],
 ];
 
 export function renderPrefs(tab) {
@@ -152,7 +153,7 @@ function notify() {
     h('div', { class: 'nt-row nt-head', role: 'row' }, h('span', { role: 'columnheader' }, 'Событие'),
       h('span', { role: 'columnheader' }, 'В Tasks'), h('span', { role: 'columnheader' }, 'Почта', h('span', { class: 'soon-tag' }, 'скоро')),
       h('span', { role: 'columnheader' }, 'Telegram', h('span', { class: 'soon-tag' }, 'скоро'))),
-    NOTIFY.map(([title, sub, kinds]) => {
+    NOTIFY.filter(([, , , only]) => only !== 'dev' || isDev()).map(([title, sub, kinds]) => {
       const on = !kinds.every(k => off.includes(k));
       return h('div', { class: 'nt-row', role: 'row' },
         h('span', { class: 'prefs-row-text', role: 'cell' }, h('b', null, title), h('small', { class: 'muted' }, sub)),

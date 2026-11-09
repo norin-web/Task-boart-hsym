@@ -2728,3 +2728,17 @@ language sql stable set search_path = public as $$
     from t group by unit_id;
 $$;
 grant execute on function unit_task_counts(text, text) to authenticated;
+
+-- Уведомление о новом предложении (обратная связь): разработчикам, кроме автора. У такого уведомления нет задачи —
+-- task_id пустой (null), ref — id предложения.
+alter table notifications alter column task_id drop not null;
+create or replace function notify_feedback() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  insert into notifications (id, person_id, task_id, kind, actor_id, at, ref)
+  select 'n_' || substr(md5(random()::text || clock_timestamp()::text || p.id), 1, 12), p.id, null, 'feedback', new.person_id,
+         to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'), new.id
+    from people p where p.is_dev and p.active and p.id <> new.person_id;
+  return new;
+end $$;
+drop trigger if exists notify_feedback on feedback;
+create trigger notify_feedback after insert on feedback for each row execute function notify_feedback();

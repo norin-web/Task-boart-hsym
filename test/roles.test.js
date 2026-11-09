@@ -1279,3 +1279,21 @@ test('доска: выполненные — последними порциям
   const more = await api.as(admin, () => api('getBoard', { unitId: A.id, doneLimit: 200 }));
   assert.equal(more.tasks.filter(t => t.status === doneCol).length, 60);
 });
+
+test('обратная связь: новое предложение — уведомление разработчику (одной строкой), автору — нет; прочитать по виду', async () => {
+  const api = await setup();
+  const { admin, mod, designer } = await team(api);
+  await api.pg.query('update people set is_dev = true where id = $1', [admin.id]);
+  await api.as(designer, () => api('sendFeedback', { kind: 'idea', text: 'Первое' }));
+  await api.as(mod, () => api('sendFeedback', { kind: 'bug', text: 'Второе' }));
+  const n = await api.as(admin, () => api('getNotifications', { personId: admin.id }));
+  const fb = n.filter(x => x.kind === 'feedback');
+  assert.equal(fb.length, 1);
+  assert.deepEqual([fb[0].count, fb[0].read, fb[0].actorId], [2, false, mod.id]);
+  assert.equal((await api.as(designer, () => api('getNotifications', { personId: designer.id }))).filter(x => x.kind === 'feedback').length, 0);
+  const hb = await api.as(admin, () => api('heartbeat', { personId: admin.id }));
+  assert.ok(hb.unread >= 1);
+  await api.as(admin, () => api('readNotifications', { kind: 'feedback', personId: admin.id }));
+  const after = (await api.as(admin, () => api('getNotifications', { personId: admin.id }))).filter(x => x.kind === 'feedback');
+  assert.equal(after[0].read, true);
+});

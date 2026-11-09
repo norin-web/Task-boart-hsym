@@ -86,6 +86,8 @@ export function feedbackInboxSection() {
     send('deleteFeedback', { id: f.id }).then(() => { list = list.filter(x => x.id !== f.id); draw(); }).catch(showErr);
   };
   call('getFeedback', {}).then(l => { list = l; draw(); }).catch(e => { fill(box); showErr(e); });
+  // открыли входящие — уведомления о предложениях прочитаны
+  import('./home.js').then(m => m.readFeedbackNotes()).catch(() => {});
   return [
     h('div', { class: 'prefs-head fb-headrow' }, h('div', null, h('h2', null, 'Обратная связь'), h('p', { class: 'muted' }, 'Предложения людей по улучшению сервиса · видно только в режиме разработчика')), seg),
     box,

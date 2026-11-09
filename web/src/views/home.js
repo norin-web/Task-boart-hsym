@@ -63,6 +63,32 @@ const NEWS_BLOCK = {
 
 const NEWS_DANGER = ['overdue', 'returned', 'store_reject'];
 
+/** Новые предложения (обратная связь) — одной строкой; клик открывает раздел «Обратная связь» и отмечает прочитанным. */
+function feedbackRow(n, history) {
+  const by = personById(n.actorId);
+  const text = n.count > 1 ? ['Новые предложения по улучшению: ', h('b', null, String(n.count))]
+    : by ? [h('b', null, by.name.split(' ')[0]), ' предложил(а) улучшение'] : ['Новое предложение по улучшению'];
+  return h('button', {
+    class: 'news-row' + (n.read ? ' read' : ''), dataset: history ? { histTask: 'feedback' } : { noteTask: 'feedback' },
+    onclick: () => { readFeedbackNotes(); navigate({ view: 'settings', tab: 'feedback' }); },
+  },
+  by ? avatar(by, 'lg') : h('span', { class: 'news-noapp' }),
+  h('span', { class: 'news-body' }, h('span', { class: 'news-sentence' }, text), h('span', { class: 'news-sub' }, ['Обратная связь', relTime(n.at)].join(' · '))),
+  !n.read && h('span', { class: 'news-dot' }));
+}
+
+/** Отметить прочитанными уведомления о предложениях (открыли «Обратную связь»). */
+export function readFeedbackNotes() {
+  if (!S.notes || !S.notes.some(n => n.feedback)) return;
+  S.notes = S.notes.filter(n => !n.feedback);
+  (S.history || []).forEach(n => { if (n.feedback) n.read = true; });
+  S.unread = Math.max(0, S.unread - 1);
+  renderUnread();
+  document.querySelectorAll('[data-note-task="feedback"]').forEach(fadeOut);
+  document.querySelectorAll('[data-hist-task="feedback"]').forEach(el => el.classList.add('read'));
+  call('readNotifications', { kind: 'feedback', personId: S.meId }).catch(showErr);
+}
+
 /**
  * «Новое для вас» на главной — только новые. history: true — колокольчик: новые и прочитанные за N дней
  * (прочитанные приглушены, без точки), «Прочитать все» не убирает строки, а приглушает их.
@@ -70,7 +96,8 @@ const NEWS_DANGER = ['overdue', 'returned', 'store_reject'];
 export function newsBlock({ history = false } = {}) {
   const src = () => (history ? S.history || [] : S.notes);
   if (!src().length) return null;
-  const row = n => {
+  const row = n => (n.feedback ? feedbackRow(n, history) : taskRow(n));
+  const taskRow = n => {
     const by = personById(n.actorId);
     const who = by && by.id !== S.meId ? h('b', null, by.name.split(' ')[0]) : null;
     const q = '«' + n.title + '»';
