@@ -44,7 +44,13 @@ function allColumns(sheet) {
   ].map(c => ({ ...c, group: 'Основные' }));
   const stages = [...STAGES.map(([k, name]) => ({ id: 'st:' + k, name, type: 'stage', group: 'Этапы', get: r => ({ t: r.stages[k], ready: k === 'ios' && r.ready }) })),
     { id: 'upd', name: 'Апдейт', type: 'upd', group: 'Этапы', get: r => r.update }];
-  const links = S.linkFields.filter(f => !f.archived).map(f => ({ id: 'lf:' + f.id, name: f.name, type: 'link', group: 'Ссылки этапов', get: r => (r.links || {})[f.id] || '' }));
+  // ссылка этапа; нет в задачах — из «Быстрого доступа» приложения (поле с тем же смыслом: Figma, Drive, Мета/Meta)
+  const kindOf = name => (/figma/i.test(name) ? 'figma' : /drive/i.test(name) ? 'drive' : /^(meta|мета)/i.test(name) ? 'meta' : '');
+  const appFieldFor = f => { const k = kindOf(f.name); return k ? S.appFields.find(x => x.kind === 'link' && kindOf(x.name) === k) : null; };
+  const links = S.linkFields.filter(f => !f.archived).map(f => {
+    const af = appFieldFor(f);
+    return { id: 'lf:' + f.id, name: f.name, type: 'link', group: 'Ссылки этапов', get: r => (r.links || {})[f.id] || (af && (r.info || {})[af.id]) || '' };
+  });
   const fields = S.appFields.map(f => ({ id: 'af:' + f.id, name: f.name, type: f.kind === 'link' ? 'link' : 'text', group: 'Поля приложения', get: r => (r.info || {})[f.id] || '' }));
   const checks = S.appInfoItems.map(x => ({ id: 'ck:' + x.id, name: x.name, type: 'check', group: 'Info', get: r => !!(r.checks && (r.checks.done || []).includes(x.id)) }));
   const mine = sheet.cols.map(c => ({ id: 'cu:' + c.id, name: c.name, type: c.type, group: 'Мои колонки', custom: true, def: c, get: r => (sheet.vals[r.key] || {})[c.id] }));
