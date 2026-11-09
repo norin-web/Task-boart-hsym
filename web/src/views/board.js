@@ -261,10 +261,13 @@ export function filterTasks(opts = {}) {
   // задача её позиции без исполнителя тоже здесь — видно, что ждёт людей; CEO видит все задачи позиции команды, чьи бы ни были
   const ceo = isSuper();
   const teamDepts = team && (team.departmentIds || []).length ? new Set(team.departmentIds) : null;
+  const qaTeam = !!(teamDepts && teamDepts.has('d_qa'));
   return S.board.tasks.filter(t => {
     if (byId && (t.kind === 'stage' || t.step === 'part') && foldedChild(t, byId)) return false;
-    if (inTeam && !inTeam.has(t.assigneeId) && !((ceo || !t.assigneeId) && teamDepts && teamDepts.has(t.departmentId))) return false;
-    if (teamDepts && t.departmentId && !teamDepts.has(t.departmentId)) return false;
+    // у QA на доске — и задачи разработчиков, которые тестировщики вернули в «Доработку»
+    const qaBack = qaTeam && isReworkColumn(colById(t.status));
+    if (!qaBack && inTeam && !inTeam.has(t.assigneeId) && !((ceo || !t.assigneeId) && teamDepts && teamDepts.has(t.departmentId))) return false;
+    if (!qaBack && teamDepts && t.departmentId && !teamDepts.has(t.departmentId)) return false;
     if (t.archived && !f.archived) return false;
     if (!opts.withOld && hidingOld() && staleDone(t)) return false;
     if (f.assignees.length && !f.assignees.includes(t.assigneeId || NO_DEPT)) return false;
@@ -362,9 +365,9 @@ const narrowed = () => {
 
 /**
  * Колонки доски. На доске команды колонки, которые её позиции не используют, скрыты: «Доработка» (возврат с тестирования
- * разработчику) — только у команды с позицией iOS. Если в колонке всё же есть видимые задачи — она остаётся.
+ * разработчику) — у команд iOS и QA (QA видит, что вернул). Если в колонке всё же есть видимые задачи — она остаётся.
  */
-const REWORK_POSITIONS = ['d_ios'];
+const REWORK_POSITIONS = ['d_ios', 'd_qa'];
 function boardColumns(tasks) {
   const team = teamById(S.route.team);
   const deps = (team && team.departmentIds) || [];
