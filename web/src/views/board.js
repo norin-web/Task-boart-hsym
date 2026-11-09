@@ -1,5 +1,5 @@
 import Sortable from 'sortablejs';
-import { S, taskById, appById, personById, activeFields, missingFor, missingNext, priorityOf, priorityField, byPriority, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder, between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, unitById, emptyCounts, freshFilters, saveBoardView, activeDepts, deptById, teamById, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS, me, ownTeamsOnly, visibleLinkFields, KINDS, LS, isSuper } from '../state.js';
+import { S, taskById, appById, personById, activeFields, missingFor, missingNext, priorityOf, priorityField, byPriority, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder, between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, unitById, emptyCounts, freshFilters, saveBoardView, activeDepts, deptById, teamById, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS, me, ownTeamsOnly, visibleLinkFields, KINDS, LS, isSuper, isReworkColumn } from '../state.js';
 import { $, h, icon, avatar, menu, closeMenu, modal, field, confirmDlg, promptDlg, toast, showErr, statusDot, statusIcon, fill, prioMark } from '../ui.js';
 import { call, send } from '../api.js';
 import { navigate, link } from '../router.js';
@@ -339,7 +339,9 @@ const loadedDone = () => {
   return S.board.tasks.filter(t => !t.archived && colById(t.status).kind === 'done' && !open.has(t.parentId)).length;
 };
 function moreButton(col, total, shown) {
-  const serverMore = col.kind === 'done' && S.board.doneTotal != null && S.board.doneTotal > loadedDone();
+  // выполненные грузятся от новых к старым: если давние уже спрятаны («Ещё N выполненных — показать»), дальше грузить нечего
+  const serverMore = col.kind === 'done' && S.board.doneTotal != null && S.board.doneTotal > loadedDone()
+    && !(hidingOld() && S.board.tasks.some(staleDone));
   if (shown >= total && !serverMore) return null;
   const left = shown < total ? total - shown : S.board.doneTotal - loadedDone();
   return h('button', { class: 'col-more', type: 'button', onclick: async e => {
@@ -350,7 +352,24 @@ function moreButton(col, total, shown) {
     colShown[shownKey(col.id)] = shown + COL_PAGE;
     try { await loadBoard(unitId); } catch (err) { showErr(err); }
     renderTasks();
-  } }, `Показать ещё · ${left}`);
+  } }, shown < total || !narrowed() ? `Показать ещё · ${left}` : 'Загрузить ещё выполненные');
+}
+/** Доска команды или фильтр: число выполненных в базе — по всему юниту, здесь его не показываем. */
+const narrowed = () => {
+  const f = S.filters;
+  return !!(S.route.team || f.q || f.assignees.length || f.depts.length || f.opts.length || f.app || f.overdue);
+};
+
+/**
+ * Колонки доски. На доске команды колонки, которые её позиции не используют, скрыты: «Доработка» (возврат с тестирования
+ * разработчику) — только у команды с позицией iOS. Если в колонке всё же есть видимые задачи — она остаётся.
+ */
+const REWORK_POSITIONS = ['d_ios'];
+function boardColumns(tasks) {
+  const team = teamById(S.route.team);
+  const deps = (team && team.departmentIds) || [];
+  if (!deps.length || deps.some(d => REWORK_POSITIONS.includes(d))) return columns();
+  return columns().filter(c => !isReworkColumn(c) || tasks.some(t => colById(t.status) === c));
 }
 
 function renderColumns(board) {
@@ -358,7 +377,7 @@ function renderColumns(board) {
   board.classList.remove('lanes');
   const tasks = filterTasks();
   const filtered = tasks.length !== S.board.tasks.filter(t => !t.archived && !(hidingOld() && staleDone(t))).length || S.filters.archived;
-  fill(board, columns().map(col => {
+  fill(board, boardColumns(tasks).map(col => {
     const items = tasks.filter(t => colById(t.status).id === col.id).sort(byPriority());
     const quickHere = S.quick.status === col.id && S.quick.dept == null;
     // по 40 карточек: длинная колонка «Готово» не рисует сотни карточек разом
@@ -378,8 +397,8 @@ function renderColumns(board) {
 function renderLanes(board) {
   const done = beginRender();
   board.classList.add('lanes');
-  const cols = columns();
   const tasks = filterTasks();
+  const cols = boardColumns(tasks);
   // Дорожки по типу (запросы CEO / задачи и этапы), по приложениям или по отделам
   const byKind = S.lanes === 'kind', byApp = S.lanes === 'app';
   const laneKind = t => (t.kind === 'request' ? 'request' : '');
