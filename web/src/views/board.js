@@ -718,7 +718,8 @@ function renderList(container) {
     const x = col.val(a), y = col.val(b);
     return (x < y ? -1 : x > y ? 1 : 0) * sort.dir;
   } : byPriority());
-  const groups = columns().map(c => ({ c, list: tasks.filter(t => colById(t.status) === c), more: oldDoneToggle(c) })).filter(g => g.list.length || g.more);
+  const groups = columns().map(c => ({ c, list: tasks.filter(t => colById(t.status) === c), more: oldDoneToggle(c) }))
+    .filter(g => g.list.length || g.more || (g.c.kind === 'done' && S.board.doneTotal != null && S.board.doneTotal > loadedDone()));
   const taskRow = t => h('tr', {
     class: (t.archived ? 'archived' : '') + (taskDone(t) ? ' done' : ''),
     onclick: () => { if (!t._temp) navigate({ unit: S.board.unit.id, mode: 'list', task: t.id }); },
@@ -734,7 +735,12 @@ function renderList(container) {
         groups.map(({ c, list, more }) => h('tbody', { class: 'grp' },
           h('tr', { class: 'grp-head' }, h('td', { colspan: cols.length },
             h('span', { class: 'grp-name' }, statusDot(colColor(c), 8), c.name + ' · ' + list.length))),
-          list.map(taskRow),
+          // по 40 строк в группе, «Показать ещё» — как в колонках доски (в «Готово» догружает выполненные из базы)
+          (() => {
+            const cap = colShown[shownKey(c.id)] || COL_PAGE;
+            const btn = moreButton(c, list.length, Math.min(cap, list.length));
+            return [list.slice(0, cap).map(taskRow), btn && h('tr', { class: 'grp-more' }, h('td', { colspan: cols.length }, btn))];
+          })(),
           more && h('tr', { class: 'grp-more' }, h('td', { colspan: cols.length }, more))))))
       : h('div', { class: 'card-box empty-state' },
         h('h2', null, S.board.tasks.length ? 'Ничего не найдено' : 'Задач пока нет'),

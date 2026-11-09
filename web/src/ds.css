@@ -3165,3 +3165,4 @@ a.bug-title:hover { text-decoration: underline; }
 .col-more { display: block; width: calc(100% - 16px); margin: 6px 8px 4px; padding: 8px; border: 0; border-radius: 12px; background: var(--surface); color: var(--text-2); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 .col-more:hover { color: var(--text); background: var(--surface-3); }
 .col-more:disabled { opacity: .6; cursor: default; }
+.grp-more .col-more { width: auto; display: inline-block; margin: 4px 0; padding: 6px 14px; background: var(--surface-2); }
