@@ -1118,6 +1118,51 @@ function assignPicker(unitId) {
 /** Приоритет: от высокого к низкому, «—» — без приоритета. */
 const prioPicker = value => prioSelect(S.priorityOptions, value);
 
+/** Имя для сравнения: без регистра и лишних пробелов (как app_name_key в базе). */
+export const appNameKey = v => String(v || '').trim().replace(/\s+/g, ' ').toLowerCase();
+
+/**
+ * Подсказка под названием: такие же и похожие приложения юнита, в том числе убранные.
+ * check() → true, если имя занято (создать нельзя — база тоже не даст).
+ */
+function nameMatches(input, unitOf) {
+  const box = h('div', { class: 'name-matches' });
+  // приложения юнита вместе с убранными — свежие из базы (в S.apps после экранов приложений убранных нет)
+  const pool = new Map();
+  const load = id => {
+    if (!id || pool.has(id)) return;
+    pool.set(id, null);
+    Promise.all([call('listApps', { unitId: id, bare: true }), call('listApps', { unitId: id, archived: true, bare: true })])
+      .then(([a, b]) => { pool.set(id, [...a, ...b]); draw(); }).catch(() => pool.delete(id));
+  };
+  const appsOf = id => {
+    const fresh = pool.get(id) || [];
+    const ids = new Set(fresh.map(a => a.id));
+    return [...fresh, ...S.apps.filter(a => a.unitId === id && !ids.has(a.id))];
+  };
+  const taken = () => {
+    const k = appNameKey(input.value);
+    return !!k && appsOf(unitOf()).some(a => appNameKey(a.name) === k);
+  };
+  const draw = () => {
+    load(unitOf());
+    const k = appNameKey(input.value);
+    if (k.length < 2) { fill(box); input.classList.remove('invalid'); return; }
+    const same = appsOf(unitOf());
+    const exact = same.find(a => appNameKey(a.name) === k);
+    const like = same.filter(a => a !== exact && appNameKey(a.name).includes(k))
+      .sort((x, y) => x.name.localeCompare(y.name, 'ru', { numeric: true })).slice(0, 5);
+    input.classList.toggle('invalid', !!exact);
+    const tag = a => (a.archived ? h('span', { class: 'muted' }, ' · ' + (SHELVES[a.shelf] || 'убрано')) : null);
+    fill(box,
+      exact && h('div', { class: 'danger-text' }, 'Уже есть в этом юните: «', exact.name, '»', tag(exact), '. Укажите другую версию в названии.'),
+      like.length > 0 && h('div', { class: 'muted' }, exact ? 'Ещё похожие: ' : 'Похожие в юните: ',
+        like.map((a, i) => [i > 0 && ', ', h('span', { class: 'name-match' }, a.name), tag(a)])));
+  };
+  input.addEventListener('input', draw);
+  return { el: box, draw, taken };
+}
+
 /** unitId — сразу в этот юнит (со страницы юнита). */
 export function openCreateApp(onDone, unitId) {
   const list = unitId ? units().filter(u => u.id === unitId) : units();
@@ -1131,14 +1176,16 @@ export function openCreateApp(onDone, unitId) {
     if (!info) { fill(preview); iconUrl = ''; return; }
     iconUrl = info.iconUrl;
     storeName = info.name;
-    if (info.name && !name.value.trim()) name.value = info.name;
+    if (info.name && !name.value.trim()) { name.value = info.name; name.dispatchEvent(new Event('input')); }
     fill(preview, info.iconUrl && h('img', { class: 'uc-icon app-img sm', src: info.iconUrl, alt: '' }), h('span', { class: 'muted' }, 'из App Store'));
   };
   store.addEventListener('change', pull);
   store.addEventListener('paste', () => setTimeout(pull, 0));
   const unit = h('select', { class: 'inp' }, list.map(u => h('option', { value: u.id }, u.name)));
   const pm = pmPicker(list[0] && list[0].id);
-  unit.addEventListener('change', () => pm.setUnit(unit.value));
+  const matches = nameMatches(name, () => unit.value);
+  unit.addEventListener('change', () => { pm.setUnit(unit.value); matches.draw(); });
+  matches.draw(); // сразу подгрузить приложения юнита (с убранными)
   const due = h('input', { class: 'inp', type: 'date' });
   const prio = prioPicker('');
   const desc = h('textarea', { class: 'inp', rows: 3, placeholder: 'Что за приложение, рынки, важное для команды' });
@@ -1148,7 +1195,7 @@ export function openCreateApp(onDone, unitId) {
     title: 'Новое приложение',
     body: [
       // порядок как в макете 35: название, юнит и PM, срок и приоритет, ссылка в стор, описание
-      field('Название', name),
+      field('Название', name, matches.el),
       h('div', { class: 'grid2' }, field('Юнит', unit), field('PM', pm.el, pm.hint)),
       h('div', { class: 'grid2' }, field('Срок', due), field('Приоритет', prio)),
       field('Где сейчас', place, 'Новое — запрос PM. Уже в работе — этапы появятся сразу: пройденные «Готово», текущий «В работе»'),
@@ -1159,8 +1206,10 @@ export function openCreateApp(onDone, unitId) {
       label: 'Создать', primary: true,
       action: async close => {
         if (!name.value.trim()) { name.focus(); return; }
+        if (matches.taken()) { matches.draw(); name.focus(); return; }
         const stage = place.value;
         const made = await send('createApp', { name: name.value, unitId: unit.value, pmId: pm.el.value, dueDate: due.value, priority: prio.value, description: desc.value, storeUrl: store.value.trim(), iconUrl, storeName, noRequest: stage !== 'new' });
+        if (!S.apps.some(a => a.id === made.app.id)) S.apps.push(made.app); // следующее «Новое приложение» уже видит это имя
         if (stage !== 'new') {
           const meP = personById(S.meId);
           const r = await send('placeApps', { items: [{ id: made.app.id, stage }], designerId: meP && (meP.positionIds || []).includes('d_design') ? meP.id : '' });
@@ -1455,7 +1504,7 @@ const storeId = url => (/id(\d{5,})/.exec(url || '') || [])[1] || '';
 
 /**
  * «Добавить списком» — уже существующие приложения: строка = название и ссылка на App Store (как копируется из таблицы).
- * Иконка — из стора, название — ваше; статус по умолчанию «В сторе», запроса PM не создаётся. Уже добавленные (та же ссылка) пропускаются.
+ * Иконка — из стора, название — ваше; статус по умолчанию «В сторе», запроса PM не создаётся. Уже добавленные (та же ссылка или такое же имя в юните) пропускаются.
  */
 export function openImportApps(onDone, unitId) {
   const list = units();
@@ -1470,12 +1519,23 @@ export function openImportApps(onDone, unitId) {
     const url = (/https?:\/\/\S+/.exec(l) || [''])[0];
     return { name: l.replace(url, '').replace(/\s+/g, ' ').trim(), url };
   }).filter(x => x.name);
+  // такое имя уже есть в выбранном юните (или повторяется в самом списке) — тоже пропускаем
+  const skip = rows => {
+    const names = new Set(S.apps.filter(a => a.unitId === unit.value).map(a => appNameKey(a.name)));
+    return rows.map(x => {
+      const k = appNameKey(x.name);
+      const out = known.has(storeId(x.url)) || names.has(k);
+      names.add(k);
+      return out;
+    });
+  };
   const count = () => {
     const rows = parse();
-    const dup = rows.filter(x => known.has(storeId(x.url))).length;
+    const dup = skip(rows).filter(Boolean).length;
     summary.textContent = rows.length ? `${rows.length} ${plural(rows.length, ['приложение', 'приложения', 'приложений'])}` + (dup ? ` · уже есть: ${dup} — пропустим` : '') : 'Строка: название, затем ссылка (через Tab или пробел)';
   };
   text.addEventListener('input', count);
+  unit.addEventListener('change', count);
   count();
   modal({
     title: 'Добавить приложения списком',
@@ -1488,18 +1548,26 @@ export function openImportApps(onDone, unitId) {
     actions: [{ label: 'Отмена' }, {
       label: 'Добавить', primary: true,
       action: async close => {
-        const rows = parse().filter(x => !known.has(storeId(x.url)));
+        const all = parse(), sk = skip(all);
+        const rows = all.filter((x, i) => !sk[i]);
         if (!rows.length) { text.focus(); return; }
         // иконки из стора — параллельно, создание — по порядку списка
         const icons = await Promise.all(rows.map(x => (x.url ? storeLookup(x.url) : null)));
-        let done = 0;
+        let done = 0, taken = 0;
         for (const [i, x] of rows.entries()) {
-          await send('createApp', { name: x.name, unitId: unit.value, status: status.value, noRequest: true, storeUrl: x.url, iconUrl: (icons[i] && icons[i].iconUrl) || '', storeName: (icons[i] && icons[i].name) || '' });
+          let made;
+          try {
+            made = await send('createApp', { name: x.name, unitId: unit.value, status: status.value, noRequest: true, storeUrl: x.url, iconUrl: (icons[i] && icons[i].iconUrl) || '', storeName: (icons[i] && icons[i].name) || '' });
+          } catch (e) {
+            if (e && e.code === 'RULE' && /уже есть приложение/.test(e.message || '')) { taken++; continue; } // такое имя уже есть в юните (например, среди убранных)
+            throw e;
+          }
+          if (made && made.app && !S.apps.some(a => a.id === made.app.id)) S.apps.push(made.app);
           done++;
           known.add(storeId(x.url));
         }
         close();
-        toast(`Добавлено: ${done} ${plural(done, ['приложение', 'приложения', 'приложений'])}`);
+        toast(`Добавлено: ${done} ${plural(done, ['приложение', 'приложения', 'приложений'])}` + (taken ? ` · пропущено (имя уже есть в юните): ${taken}` : ''));
         if (onDone) onDone();
       },
     }],

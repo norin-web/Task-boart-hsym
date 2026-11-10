@@ -3204,3 +3204,9 @@ a.bug-title:hover { text-decoration: underline; }
 @media (max-width: 640px) {
   .filterbar > .search-inp { flex: 1 1 100%; max-width: none; }
 }
+
+/* Новое приложение: такие же и похожие имена в юните */
+.inp.invalid, .inp.invalid:focus, .modal:has(.title-field) .field > .inp.title-field.invalid:focus { border-color: var(--danger); box-shadow: 0 0 0 2px var(--danger); }
+.name-matches:empty { display: none; }
+.name-matches > div + div { margin-top: 2px; }
+.name-match { color: var(--text); }

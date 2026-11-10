@@ -1392,3 +1392,28 @@ test('вкладки юнита без доски: getBoard lite — без за
     assert.deepEqual(lite.summary, { byStatus, byAssignee, open, late }, who.name);
   }
 });
+
+test('имя приложения в юните уникально: без регистра и пробелов, убранные тоже; в другом юните — можно; старые дубли не мешают правкам', async () => {
+  const api = await setup();
+  const { admin, A, B } = await team(api);
+  const mk = (name, unitId = A.id) => api.as(admin, () => api('createApp', { name, unitId, noRequest: true }));
+  const calm = (await mk('Calm v2')).app;
+  await assert.rejects(mk('  calm   V2 '), e => e.code === 'RULE' && /уже есть приложение «calm\s+V2»/.test(e.message));
+  // в другом юните — своё «Calm v2»
+  const other = (await mk('Calm v2', B.id)).app;
+  // перенос в юнит, где такое имя уже есть, — нельзя; переименование в занятое — нельзя
+  await assert.rejects(api.as(admin, () => api('updateApp', { id: other.id, unitId: A.id })), e => e.code === 'RULE');
+  const v3 = (await mk('Calm v3')).app;
+  await assert.rejects(api.as(admin, () => api('updateApp', { id: v3.id, name: 'CALM v2' })), e => e.code === 'RULE');
+  // убранное приложение имя держит
+  await api.as(admin, () => api('shelveApp', { id: v3.id, shelf: 'spam' }));
+  await assert.rejects(mk('Calm v3'), e => e.code === 'RULE');
+  // старый дубль (до правила) не мешает менять другие поля
+  await api.pg.query(`insert into apps (id, unit_id, name, status, created_at, updated_at) values ('app_dup', $1, 'calm v2', '', 'x', 'x')`, [A.id]).catch(async () => {
+    await api.pg.query(`alter table apps disable trigger guard_app_name`);
+    await api.pg.query(`insert into apps (id, unit_id, name, status, created_at, updated_at) values ('app_dup', $1, 'calm v2', '', 'x', 'x')`, [A.id]);
+    await api.pg.query(`alter table apps enable trigger guard_app_name`);
+  });
+  assert.equal((await api.as(admin, () => api('updateApp', { id: calm.id, priority: '' }))).name, 'Calm v2');
+  assert.equal((await api.as(admin, () => api('updateApp', { id: calm.id, name: 'Calm v2' }))).name, 'Calm v2');
+});

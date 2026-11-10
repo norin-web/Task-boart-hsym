@@ -2791,3 +2791,23 @@ language sql stable set search_path = public as $$
    limit greatest(1, least(coalesce(p_limit, 50), 500));
 $$;
 grant execute on function search_task_ids(text, int) to authenticated;
+
+-- ---------- Уникальное имя приложения в юните (2026-11-10) ----------
+-- Без регистра и лишних пробелов; убранные (Design Spam, удалённые) тоже считаются.
+-- Проверка только при добавлении, переименовании и переносе в другой юнит — старые дубли не ломают другие правки.
+create or replace function app_name_key(p text) returns text language sql immutable as $$
+  select lower(regexp_replace(btrim(coalesce(p, '')), '\s+', ' ', 'g'));
+$$;
+create or replace function guard_app_name() returns trigger language plpgsql security definer set search_path = public as $$
+declare v_unit text;
+begin
+  if tg_op = 'UPDATE' and app_name_key(new.name) = app_name_key(old.name) and new.unit_id = old.unit_id then return new; end if;
+  if exists (select 1 from apps a where a.unit_id = new.unit_id and a.id <> new.id and app_name_key(a.name) = app_name_key(new.name)) then
+    select name into v_unit from units where id = new.unit_id;
+    raise exception 'В юните «%» уже есть приложение «%»', coalesce(v_unit, ''), btrim(new.name) using errcode = 'P0001';
+  end if;
+  return new;
+end $$;
+drop trigger if exists guard_app_name on apps;
+create trigger guard_app_name before insert or update of name, unit_id on apps for each row execute function guard_app_name();
+create index if not exists apps_unit_name_key on apps (unit_id, app_name_key(name));
