@@ -153,6 +153,17 @@ function paged(items, renderRow, step = 15, cls = 'blk-more') {
   return box;
 }
 
+/** Первые limit строк, остальное — «Показать все · N» раскрывает список на месте, «Свернуть» — обратно. */
+function folded(items, renderRow, limit = 5) {
+  const box = h('div', { style: { display: 'contents' } });
+  let open = false;
+  const draw = () => fill(box, (open ? items : items.slice(0, limit)).map(renderRow),
+    items.length > limit && h('button', { class: 'rc-more link-btn', type: 'button', 'aria-expanded': String(open), onclick: e => { e.stopPropagation(); open = !open; draw(); } },
+      open ? 'Свернуть' : `Показать все · ${items.length}`));
+  draw();
+  return box;
+}
+
 export function inProgress(d, reload, { brief = false } = {}) {
   const rows = [...d.inProgress].sort((a, b) => prioRank(b.request.priority) - prioRank(a.request.priority)
     || (a.request.dueDate || '9999').localeCompare(b.request.dueDate || '9999'));
@@ -161,7 +172,7 @@ export function inProgress(d, reload, { brief = false } = {}) {
   if (brief) return h('section', null,
     h('div', { class: 'section-head' }, h('h2', null, 'Работы в ходу')),
     rows.length
-      ? h('div', { class: 'card-box' }, paged(rows, ({ app, request: r, current }) => h('button', { class: 'wip-brief', onclick: () => openAppById(app.id, reload) },
+      ? h('div', { class: 'card-box' }, folded(rows, ({ app, request: r, current }) => h('button', { class: 'wip-brief', onclick: () => openAppById(app.id, reload) },
         appIcon(app, 'sm'),
         h('span', { class: 'wip-brief-main' }, app.name, h('small', null, [REQUEST_TYPES[r.type], current && current.title.split(' · ')[0]].filter(Boolean).join(' · '))),
         h('span', { class: 'wip-brief-bar', 'aria-hidden': 'true' }, h('i', { style: { width: (r.progress || 0) + '%' } })),
