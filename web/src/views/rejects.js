@@ -28,7 +28,7 @@ export async function renderRejects() {
 
   const load = async () => {
     try {
-      const [dash, hist, gone] = await Promise.all([call('getRmDashboard', {}), call('getReleaseHistory', { result: 'reject' }), call('listApps', { archived: true })]);
+      const [dash, hist, gone] = await Promise.all([call('getRmDashboard', {}), call('getReleaseHistory', { result: 'reject' }), call('listApps', { archived: true, bare: true })]);
       appRejects = dash.rejectedApps || [];
       appResent = (dash.review || []).filter(x => x.appOnly && x.afterReject).map(x => ({ ...x, at: x.submittedAt }));
       shelved = gone;

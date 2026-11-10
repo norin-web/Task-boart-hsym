@@ -62,7 +62,7 @@ export function watchBlock(apps, { openApp, openTask, appIcon, appStatusCell, st
   }
   const onChange = () => refresh(true);
   const pick = async () => {
-    if (!pool.length) { try { pool = await call('listApps', {}); } catch { pool = []; } }
+    if (!pool.length) { try { pool = await call('listApps', { bare: true }); } catch { pool = []; } }
     openWatchPicker(pool, () => refresh(true));
   };
   const onVis = () => { if (!document.hidden) refresh(false); };

@@ -104,6 +104,6 @@ export function openPalette() {
 
   $('#palette-root').append(wrap);
   draw();
-  if (!apps.length) call('listApps', {}).then(list => { apps = list.filter(a => !a.archived); if (isPaletteOpen()) draw(); }).catch(() => {});
+  if (!apps.length) call('listApps', { bare: true }).then(list => { apps = list.filter(a => !a.archived); if (isPaletteOpen()) draw(); }).catch(() => {});
   inp.focus();
 }

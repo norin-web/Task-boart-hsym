@@ -2038,7 +2038,8 @@ export function createBackend(db, opts = {}) {
       const onlyIds = Array.isArray(p.ids) ? p.ids.map(x => String(x ?? '')).filter(Boolean).slice(0, 500) : null;
       if (onlyIds) q = q.in('id', onlyIds.length ? onlyIds : ['-']);
       const apps = (await run(q.order('ord').order('created_at'))).map(appOut);
-      if (!apps.length) return [];
+      // bare — только сами приложения, без запросов и этапов (поиск, выбор приложений, убранные)
+      if (!apps.length || p.bare) return apps;
       const COLS = 'id,unit_id,num,title,status,assignee_id,due_date,archived,kind,request_type,step,parent_id,app_id,depends_on,fields,created_at,updated_at,done_at,flow_steps,release';
       // id пачками — чтобы адрес запроса не разрастался
       const byChunks = async (ids, build) => {

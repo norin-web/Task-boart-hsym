@@ -188,7 +188,7 @@ export function peopleManager({ search = false, bare = false } = {}) {
 
   /** CEO выбирает, какие приложения видит PM (внутри его юнитов). Остальные для PM не существуют — проверка в базе. */
   async function pmAppsDialog(p) {
-    const [apps, lists] = await Promise.all([call('listApps', {}), call('getPmApps', {})]);
+    const [apps, lists] = await Promise.all([call('listApps', { bare: true }), call('getPmApps', {})]);
     const mine = new Set(lists[p.id] || []);
     const units = S.units.filter(u => !u.archived && (u.members || []).includes(p.id));
     const boxes = new Map();
