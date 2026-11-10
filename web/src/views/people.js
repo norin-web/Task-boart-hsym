@@ -220,7 +220,7 @@ export function peopleManager({ search = false, bare = false } = {}) {
   }
 
   const removePerson = async p => {
-    const n = (await call('queryTasks', { assigneeId: p.id }).catch(() => [])).length;
+    const n = Number(await call('queryTasks', { assigneeId: p.id, count: true }).catch(() => 0)) || 0;
     const tasksNote = n ? ` Его задачи (${n}) останутся без исполнителя.` : '';
     if (!(await confirmDlg(`Удалить ${p.name} из системы навсегда? Вход и профиль удалятся, человек пропадёт из команд.${tasksNote} История и комментарии сохранятся.`, { ok: 'Удалить', danger: true }))) return;
     await send('deletePerson', { id: p.id });

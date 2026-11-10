@@ -111,7 +111,7 @@ test('чеклист, срок, комментарии, главная, поис
   const home = await api('getHome', { today: '2026-09-24' });
   assert.equal(home.stats.overdue, 1);
   assert.equal(home.units[0].counts.overdue, 1);
-  assert.ok(home.activity.some(a => a.action === 'comment' && a.task.key === 'OPS-1'));
+  assert.ok((await api('getActivity', {})).items.some(a => a.action === 'comment' && a.task.key === 'OPS-1'));
 
   const found = await api('queryTasks', { q: 'бэкап' });
   assert.equal(found.length, 1);
@@ -134,7 +134,7 @@ test('чеклист, срок, комментарии, главная, поис
   assert.equal(ov.unassigned, 1);
   await api('deleteTask', { id: t.id });
   assert.equal((await api('getTaskExtras', { taskId: t.id })).comments.length, 0);
-  assert.ok((await api('getHome', {})).activity.some(a => a.action === 'delete' && a.fromText === 'Проверить бэкап'));
+  assert.ok((await api('getActivity', {})).items.some(a => a.action === 'delete' && a.fromText === 'Проверить бэкап'));
 });
 
 test('поля: создание, варианты, удаление вместе со значениями; перенос задач', async () => {

@@ -2,7 +2,7 @@ import '@fontsource-variable/montserrat/wght.css';
 import './styles.css';
 import './ds.css';
 import './motion.css';
-import { S, setMe, todayStr } from './state.js';
+import { S, setMe, todayStr, setPeople } from './state.js';
 import { $, h, icon, fill, closeMenu, closeNav, isMenuOpen, isModalOpen, refreshPresence } from './ui.js';
 import { call } from './api.js';
 import { initBackend, mode, supabase, localLogin } from './data.js';
@@ -131,7 +131,7 @@ async function boot() {
 /** Разложить ответ bootstrap по S (юниты, люди, приложения, настройки). live — свежие данные с сервера (можно сохранять часовой пояс). */
 async function applyBootstrap(d, live) {
   S.units = d.units;
-  S.people = d.people;
+  setPeople(d.people);
   S.departments = d.departments;
   S.leadPeople = (S.people.find(p => p.id === S.meId) || {}).access === 'lead' ? (await call('getLeadPeople', {}).catch(() => ({})))[S.meId] || [] : [];
   if (d.teams) S.teams = d.teams;

@@ -1,4 +1,4 @@
-import { S, greeting, me, isSuper, personById, plural, emptyCounts, isStaff, deptById, todayStr, fmtDate, activeDepts, ACCESS_LABELS, relTime, dueInfo } from '../state.js';
+import { S, greeting, me, isSuper, personById, plural, emptyCounts, isStaff, deptById, todayStr, fmtDate, activeDepts, ACCESS_LABELS, relTime, dueInfo, setPeople } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, toast, menu, closeMenu, modal, emptyBlock, skeleton, unitIcon } from '../ui.js';
 import { call } from '../api.js';
 import { currentView, link, navigate, taskLink, rerender } from '../router.js';
@@ -205,7 +205,7 @@ export async function renderHome() {
   }
   if (currentView() !== 'home') return;
   S.units = d.units;
-  S.people = d.people;
+  setPeople(d.people);
   S.departments = d.departments;
   if (d.teams) S.teams = d.teams;
   renderSidebar();
@@ -544,7 +544,7 @@ async function renderMemberHome() {
   }
   if (currentView() !== 'home') return;
   S.units = d.units;
-  S.people = d.people;
+  setPeople(d.people);
   S.departments = d.departments;
   if (d.teams) S.teams = d.teams;
   renderSidebar();

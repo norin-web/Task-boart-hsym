@@ -1,5 +1,5 @@
 import Sortable from 'sortablejs';
-import { S, taskById, appById, personById, activeFields, missingFor, missingNext, priorityOf, priorityField, byPriority, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder, between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, unitById, emptyCounts, freshFilters, saveBoardView, activeDepts, deptById, teamById, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS, me, ownTeamsOnly, visibleLinkFields, KINDS, LS, isSuper, isReworkColumn } from '../state.js';
+import { S, taskById, appById, personById, activeFields, missingFor, missingNext, priorityOf, priorityField, byPriority, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder, between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, unitById, emptyCounts, freshFilters, saveBoardView, activeDepts, deptById, teamById, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS, me, ownTeamsOnly, visibleLinkFields, KINDS, LS, isSuper, isReworkColumn, setPeople } from '../state.js';
 import { $, h, icon, avatar, menu, closeMenu, modal, field, confirmDlg, promptDlg, toast, showErr, statusDot, statusIcon, fill, prioMark } from '../ui.js';
 import { call, send } from '../api.js';
 import { navigate, link } from '../router.js';
@@ -22,7 +22,7 @@ export async function loadBoard(unitId, taskId = S.panelTaskId, { only = false, 
   if ((only && taskId) || lite) {
     const d = await call('getBoard', only && taskId ? { unitId, only: taskId } : { unitId, lite: true, today: todayStr() });
     S.board = d;
-    S.people = d.people;
+    setPeople(d.people);
     S.departments = d.departments;
     if (d.teams) S.teams = d.teams;
     return;
@@ -34,7 +34,7 @@ export async function loadBoard(unitId, taskId = S.panelTaskId, { only = false, 
   const d = await call('getBoard', { unitId, archived, taskId: taskId || undefined, doneLimit, foldDone });
   S.board = d;
   d.foldDone = foldDone; // доске команды (этапы отдельно) нужны и выполненные этапы — при переходе догружаем
-  S.people = d.people;
+  setPeople(d.people);
   S.departments = d.departments;
   if (d.teams) S.teams = d.teams;
   S.quick = { status: null, dept: null, text: '' };

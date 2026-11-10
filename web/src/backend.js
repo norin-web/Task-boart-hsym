@@ -297,7 +297,7 @@ const timezoneValue = v => { const s = String(v || '').trim(); return /^[A-Za-z_
 const personOut = r => ({
   id: r.id, name: r.name, email: r.email, role: r.role || '', color: r.color || '', active: !!r.active,
   access: r.access || 'member', positionId: r.position_id || '', linked: !!r.user_id, prefs: json(r.prefs, {}) || {},
-  lastSeenAt: r.last_seen_at || '', isDev: !!r.is_dev, viewAs: r.view_as || '', isTest: !!r.is_test, avatar: r.avatar || '', telegram: r.telegram || '', timezone: r.timezone || '',
+  lastSeenAt: r.last_seen_at || '', isDev: !!r.is_dev, viewAs: r.view_as || '', isTest: !!r.is_test, ...('avatar' in r ? { avatar: r.avatar || '' } : {}), telegram: r.telegram || '', timezone: r.timezone || '',
   extraPositionIds: json(r.extra_positions, []) || [],
   teamIds: json(r.team_ids, []) || [],
   positionIds: [r.position_id || 'd_other', ...(json(r.extra_positions, []) || [])],
@@ -530,7 +530,9 @@ export function createBackend(db, opts = {}) {
   const one = async (table, id) => run(T(table).select('*').eq('id', String(id ?? '')).maybeSingle());
   const findUnit = async id => (await one('units', id)) || fail('Юнит не найден', 'NOT_FOUND');
   const findTask = async id => (await one('tasks', id)) || fail('Задача не найдена', 'NOT_FOUND');
-  const people = async () => (await all(() => T('people').select('*').order('name').order('id'))).map(personOut)
+  // фото аватаров (до ~120 КБ на человека) отдаём только при старте (bootstrap) — в остальных ответах без них, браузер держит прежние
+  const PEOPLE_COLS = 'id,name,email,role,color,active,access,position_id,user_id,prefs,last_seen_at,is_dev,view_as,is_test,telegram,timezone,extra_positions,team_ids';
+  const people = async (avatars = false) => (await all(() => T('people').select(avatars ? PEOPLE_COLS + ',avatar' : PEOPLE_COLS).order('name').order('id'))).map(personOut)
     .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
   const teams = async () => (await all(() => T('teams').select('*').order('ord').order('id'))).map(teamOut);
   const validTeam = async id => (id && (await one('teams', id)) ? String(id) : '');
@@ -546,6 +548,13 @@ export function createBackend(db, opts = {}) {
    * Сводка по потомкам задач (вниз по иерархии, до 6 уровней): сколько всего, готово, просрочено,
    * и родитель каждой задачи (для «↑ App» на карточке). Возвращает { stats: {id → {total, done, overdue}}, parents: {id → brief} }.
    */
+  /** Строки по списку id пачками по 150 — чтобы адрес запроса не разрастался. build(idsChunk) → запрос. */
+  async function inChunks(ids, build) {
+    const list = [...new Set(ids.filter(Boolean))], out = [];
+    for (let i = 0; i < list.length; i += 150) out.push(...(await all(() => build(list.slice(i, i + 150)))));
+    return out;
+  }
+
   async function treeInfo(tasks, day) {
     const stats = {}, parents = {};
     const withParent = tasks.filter(t => t.parent_id);
@@ -984,8 +993,9 @@ export function createBackend(db, opts = {}) {
     /* ---------- общие данные, главная, поиск ---------- */
 
     async bootstrap(p) {
-      const [units, ppl, depts, lf, tpl, tm, apps, statuses, afields, gfields, info, manual, infoLists] = await Promise.all([unitsWithCounts(today(p.today)), people(), departments(), linkFields(), templates(), teams(),
-        all(() => T('apps').select('*').order('ord').order('id')), appStatuses(), appFields(), globalFields(), appInfoItems(), setting('storeManualCheck'),
+      const [units, ppl, depts, lf, tpl, tm, apps, statuses, afields, gfields, info, manual, infoLists] = await Promise.all([unitsWithCounts(today(p.today)), people(true), departments(), linkFields(), templates(), teams(),
+        // без снимка задач убранных приложений (shelf_tasks) — он нужен только при восстановлении
+        all(() => T('apps').select('id,unit_id,name,color,status,info,priority,status_at,icon_url,store_name,store_ok,store_checked_at,checks,own_fields,ord,archived,shelf,shelved_at,is_test,created_by,created_at,updated_at').order('ord').order('id')), appStatuses(), appFields(), globalFields(), appInfoItems(), setting('storeManualCheck'),
         run(T('info_lists').select('person_id'))]);
       const prio = gfields.find(f => f.role === 'priority');
       return {
@@ -1002,10 +1012,10 @@ export function createBackend(db, opts = {}) {
       const day = today(p.today);
       const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
       // заодно — корзина юнитов по сроку хранения (для участников функция ничего не делает); всё параллельно
-      const [, units, ppl, depts, log, tm] = await Promise.all([
+      // лента событий на главной грузится своим блоком (getActivity) — здесь её не тянем
+      const [, units, ppl, depts, tm] = await Promise.all([
         rpc('purge_archived_units', {}).catch(() => 0),
-        unitsWithCounts(day, weekAgo), people(), departments(),
-        run(T('activity').select('*').order('at', { ascending: false }).limit(30)), teams(),
+        unitsWithCounts(day, weekAgo), people(), departments(), teams(),
       ]);
       const stats = { todo: 0, in_progress: 0, overdue: 0, doneWeek: 0 };
       for (const u of units) {
@@ -1015,7 +1025,7 @@ export function createBackend(db, opts = {}) {
         stats.overdue += u.counts.overdue;
         stats.doneWeek += u.doneWeek;
       }
-      return { units: units.map(({ doneWeek, ...u }) => u), people: ppl, departments: depts, teams: tm, stats, activity: await enrichActivity(log) };
+      return { units: units.map(({ doneWeek, ...u }) => u), people: ppl, departments: depts, teams: tm, stats };
     },
 
     /**
@@ -1074,7 +1084,8 @@ export function createBackend(db, opts = {}) {
       const day = today(p.today);
       const [units, tasks, ppl, members] = await Promise.all([
         all(() => T('units').select('id,key,name,color,settings,archived').order('id')),
-        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,department_id,due_date').eq('archived', false).order('id')),
+        // считаем только открытые — закрытые (их большинство) не тянем
+        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,department_id,due_date').eq('archived', false).eq('done_at', '').order('id')),
         people(),
         all(() => T('unit_members').select('unit_id,person_id').order('unit_id')),
       ]);
@@ -1137,13 +1148,14 @@ export function createBackend(db, opts = {}) {
         });
       }
       let rows = await all(() => {
-        let b = T('tasks').select('*').eq('archived', false);
+        let b = T('tasks').select(p.count ? 'id,unit_id' : '*').eq('archived', false);
         if (p.assigneeId) b = b.eq('assignee_id', String(p.assigneeId));
         if (p.authorId) b = b.eq('created_by', String(p.authorId)).neq('kind', 'stage'); // «Поставил я»: этапы разбивки — не постановка
         if (ids) b = b.in('id', ids);
         return b.order('updated_at', { ascending: false }).order('id');
       });
       rows = rows.filter(r => units[r.unit_id]);
+      if (p.count) return rows.length; // сколько всего (удаление человека: сколько задач останется без исполнителя) — без лимита
       if (p.assigneeId) rows = await hideWaiting(rows); // «Мои задачи»: ждущие этапы появятся, когда откроются
       if (q) rows = rows.filter(r => `${units[r.unit_id].key}-${r.num} ${r.title} ${r.description}`.toLowerCase().includes(q));
       return rows.slice(0, Math.min(Number(p.limit) || 50, 500)).map(r => {
@@ -2300,10 +2312,12 @@ export function createBackend(db, opts = {}) {
       const day = today(p.today);
       const periodDays = { week: 7, month: 30, quarter: 90 }[p.period] || 30;
       const from = new Date(Date.now() - periodDays * 864e5).toISOString();
-      const [units, tasks, members, ppl, apps, staleRow] = await Promise.all([
+      const COLS = 'id,unit_id,num,title,status,assignee_id,due_date,archived,kind,request_type,step,parent_id,app_id,depends_on,created_at,updated_at,done_at,started_at,department_id,created_by';
+      // открытые задачи + закрытые за период (KPI людей, только CEO); закрытые раньше — не тянем, их большинство
+      const [units, open, recent, members, ppl, apps, staleRow] = await Promise.all([
         all(() => T('units').select('id,name,key,color,settings').eq('archived', false).order('ord').order('id')),
-        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,due_date,archived,kind,request_type,step,parent_id,app_id,depends_on,created_at,updated_at,done_at,started_at,department_id,created_by')
-          .eq('archived', false).order('created_at').order('id')),
+        all(() => T('tasks').select(COLS).eq('archived', false).eq('done_at', '').order('created_at').order('id')),
+        isCeo ? all(() => T('tasks').select(COLS).eq('archived', false).gte('done_at', from).order('created_at').order('id')) : [],
         all(() => T('unit_members').select('unit_id,person_id').order('unit_id')),
         people(),
         all(() => T('apps').select('id,name,color,icon_url,unit_id,status,priority,is_test').order('id')),
@@ -2311,6 +2325,12 @@ export function createBackend(db, opts = {}) {
       ]);
       const U = Object.fromEntries(units.map(u => [u.id, { ...u, st: unitSettings(u.settings) }]));
       const A = Object.fromEntries(apps.map(a => [a.id, { id: a.id, name: a.name, color: a.color, iconUrl: a.icon_url || '', unitId: a.unit_id, status: a.status, priority: a.priority || '', isTest: !!a.is_test }]));
+      // этапы открытых запросов, закрытые давно, — для прогресса
+      const reqIds = open.filter(t => t.kind === 'request').map(t => t.id);
+      const kidRows = reqIds.length ? await inChunks(reqIds, ids => T('tasks').select(COLS).in('parent_id', ids).eq('archived', false).neq('done_at', '').order('created_at').order('id')) : [];
+      const seenT = new Set();
+      const tasks = [...open, ...recent, ...kidRows].filter(t => (seenT.has(t.id) ? false : seenT.add(t.id)))
+        .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)) || String(a.id).localeCompare(String(b.id)));
       const own = tasks.filter(t => U[t.unit_id]);
       const kindOfRow = t => kindOf(U[t.unit_id].st, t.status);
       const done = t => kindOfRow(t) === 'done';
@@ -2488,7 +2508,11 @@ export function createBackend(db, opts = {}) {
           }
         }
       } else {
-        const tasks = (await all(() => T('tasks').select('id,unit_id,assignee_id,department_id,done_at,started_at,created_at,due_date').eq('archived', false).order('id'))).filter(t => unitOk(t.unit_id));
+        // только то, что попадает в период: закрытые в нём (задачи, время в работе) или со сроком до его конца (просрочки)
+        const tasks = (await all(() => {
+          const q = T('tasks').select('id,unit_id,assignee_id,department_id,done_at,started_at,created_at,due_date').eq('archived', false);
+          return (c.metric === 'overdue' ? q.neq('due_date', '').lt('due_date', buckets[n - 1].to) : q.gte('done_at', buckets[0].from)).order('id');
+        })).filter(t => unitOk(t.unit_id));
         for (const t of tasks) {
           const row = { unit: t.unit_id, position: t.department_id, person: t.assignee_id };
           const key = dimOf(row, c.split);
@@ -2835,18 +2859,40 @@ export function createBackend(db, opts = {}) {
       const day = today(p.today);
       const tomorrow = new Date(Date.parse(day) + 864e5).toISOString().slice(0, 10);
       const meId = str(p.personId, 40);
-      const [tasks, units, apps, ppl, members] = await Promise.all([
-        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,due_date,archived,kind,step,app_id,depends_on,fields,review_from,department_id,updated_at,parent_id,checklist')
-          .eq('archived', false).order('id')),
+      // не все задачи, а только нужные: мои открытые, отправленные мной на ревью; у лида — открытые его людей и розданные подзадачи
+      const COLS = 'id,unit_id,num,title,status,assignee_id,due_date,archived,kind,step,app_id,depends_on,fields,review_from,department_id,updated_at,parent_id,checklist';
+      const [mineRows, sentRows, units, apps, ppl, members] = await Promise.all([
+        meId ? all(() => T('tasks').select(COLS).eq('archived', false).eq('done_at', '').eq('assignee_id', meId).order('id')) : [],
+        meId ? all(() => T('tasks').select(COLS).eq('archived', false).eq('done_at', '').eq('review_from', meId).order('id')) : [],
         all(() => T('units').select('id,key,name,color,settings').eq('archived', false).order('ord').order('id')),
         all(() => T('apps').select('id,name,color,icon_url,priority').order('id')),
         people(), all(() => T('unit_members').select('unit_id,person_id').order('unit_id')),
       ]);
+      const meP = ppl.find(x => x.id === meId);
+      let teamPeople = [], extra = [];
+      if (meP && meP.access === 'lead') {
+        const myUnits = new Set(members.filter(m => m.person_id === meId).map(m => m.unit_id));
+        const inMine = new Set(members.filter(m => myUnits.has(m.unit_id)).map(m => m.person_id));
+        teamPeople = ppl.filter(x => x.active && inMine.has(x.id) && x.positionIds.some(id => meP.positionIds.includes(id)));
+        const [teamRows, parts] = await Promise.all([
+          inChunks(teamPeople.map(x => x.id), ids => T('tasks').select(COLS).eq('archived', false).eq('done_at', '').in('assignee_id', ids).order('id')),
+          mineRows.length ? inChunks(mineRows.map(t => t.id), ids => T('tasks').select(COLS).eq('archived', false).eq('step', 'part').in('parent_id', ids).order('id')) : [],
+        ]);
+        extra = [...teamRows, ...parts];
+      }
+      const seenT = new Set();
+      let tasks = [...mineRows, ...sentRows, ...extra].filter(t => (seenT.has(t.id) ? false : seenT.add(t.id)));
+      // от чего зависят — только статусы (ждёт ли задача другую)
+      const depIds = tasks.flatMap(t => json(t.depends_on, []) || []).filter(id => !seenT.has(id));
+      const deps = depIds.length ? await inChunks(depIds, ids => T('tasks').select('id,unit_id,status,depends_on').in('id', ids).order('id')) : [];
+      const depOnly = new Set(deps.map(t => t.id));
+      tasks = [...tasks, ...deps].sort((a, b) => String(a.id).localeCompare(String(b.id)));
       const U = Object.fromEntries(units.map(u => [u.id, { ...u, st: unitSettings(u.settings) }]));
       const A = Object.fromEntries(apps.map(a => [a.id, { id: a.id, name: a.name, color: a.color, iconUrl: a.icon_url || '', priority: a.priority || '' }]));
-      const vis = tasks.filter(t => U[t.unit_id]);
+      const all_ = tasks.filter(t => U[t.unit_id]);
+      const vis = all_.filter(t => !depOnly.has(t.id));
       const kindOfRow = t => kindOf(U[t.unit_id].st, t.status);
-      const byId = Object.fromEntries(vis.map(t => [t.id, t]));
+      const byId = Object.fromEntries(all_.map(t => [t.id, t]));
       const done = t => kindOfRow(t) === 'done';
       const blocked = t => (json(t.depends_on, []) || []).some(id => byId[id] && !done(byId[id]));
       const col = t => columnOf(U[t.unit_id].st, t.status);
@@ -2877,9 +2923,7 @@ export function createBackend(db, opts = {}) {
         return { ...brief(t), authorId: t.review_from, acceptStatus: fin ? fin.id : '', returnStatus: back.id };
       });
       // загрузка: люди моих позиций в моих юнитах
-      const myUnits = new Set(members.filter(m => m.person_id === meId).map(m => m.unit_id));
-      const inMine = new Set(members.filter(m => myUnits.has(m.unit_id)).map(m => m.person_id));
-      const team = ppl.filter(x => x.active && inMine.has(x.id) && x.positionIds.some(id => person.positionIds.includes(id))).map(x => {
+      const team = teamPeople.map(x => {
         const own = vis.filter(t => t.assignee_id === x.id && !done(t));
         return { personId: x.id, open: own.length, inProgress: own.filter(t => kindOfRow(t) === 'progress').length,
           overdue: own.filter(t => t.due_date && t.due_date < day).length, waiting: own.filter(blocked).length };
@@ -3221,10 +3265,15 @@ export function createBackend(db, opts = {}) {
      */
     async getReleaseHistory(p) {
       const [rows, units, apps, files] = await Promise.all([
-        all(() => T('tasks').select('id,unit_id,num,title,app_id,release,assignee_id').eq('step', 'release').order('created_at').order('id')),
+        all(() => {
+          let q = T('tasks').select('id,unit_id,num,title,app_id,release,assignee_id').eq('step', 'release');
+          if (p.unitId) q = q.eq('unit_id', String(p.unitId));
+          if (p.appId) q = q.eq('app_id', String(p.appId));
+          return q.order('created_at').order('id');
+        }),
         all(() => T('units').select('id,key,name,color').order('id')),
         all(() => T('apps').select('id,name,color,icon_url,unit_id').order('id')),
-        all(() => T('task_files').select('id,task_id,tag').neq('tag', '').order('id')),
+        all(() => T('task_files').select('task_id,tag').neq('tag', '').order('id')),
       ]);
       const U = Object.fromEntries(units.map(u => [u.id, u]));
       const A = Object.fromEntries(apps.map(a => [a.id, { id: a.id, name: a.name, color: a.color, iconUrl: a.icon_url || '', unitId: a.unit_id }]));
@@ -3272,7 +3321,7 @@ export function createBackend(db, opts = {}) {
       const ids = (Array.isArray(p.ids) ? p.ids : []).map(x => String(x ?? '')).filter(Boolean).slice(0, 200);
       if (!ids.length) return {};
       const [rows, units, settings] = await Promise.all([
-        run(T('tasks').select('*').eq('step', 'release').eq('archived', false).in('app_id', ids).order('created_at')),
+        run(T('tasks').select('id,unit_id,num,assignee_id,app_id,release,checklist').eq('step', 'release').eq('archived', false).in('app_id', ids).order('created_at')),
         all(() => T('units').select('id,key').order('id')),
         methods.getReleaseSettings(),
       ]);
@@ -3331,7 +3380,8 @@ export function createBackend(db, opts = {}) {
 
     async getRmDashboard(p) {
       const [rows, units, apps, settings] = await Promise.all([
-        all(() => T('tasks').select('*').eq('step', 'release').eq('archived', false).neq('assignee_id', '').order('created_at').order('id')),
+        // релизы без описаний, полей и вложений — только то, что показывает экран
+        all(() => T('tasks').select('id,unit_id,num,title,assignee_id,due_date,app_id,release,updated_at,checklist,parent_id').eq('step', 'release').eq('archived', false).neq('assignee_id', '').order('created_at').order('id')),
         all(() => T('units').select('id,key,settings').order('id')),
         all(() => T('apps').select('id,name,color,icon_url,unit_id,status,priority,is_test,archived,status_at').order('id')),
         methods.getReleaseSettings(),

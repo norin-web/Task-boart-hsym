@@ -292,3 +292,9 @@ export const nameFrom = full => {
   const n = String(full || '').split(' ')[0];
   return /[кгхжшчщ]а$/.test(n) ? n.slice(0, -1) + 'и' : /а$/.test(n) ? n.slice(0, -1) + 'ы' : /я$/.test(n) ? n.slice(0, -1) + 'и' : /й$/.test(n) ? n.slice(0, -1) + 'я' : /ел$/.test(n) ? n.slice(0, -2) + 'ла' : n + 'а';
 };
+
+/** Список людей с сервера. Фото аватаров приходят только при старте — у кого в ответе аватара нет, оставляем прежний. */
+export function setPeople(list) {
+  const had = new Map((S.people || []).map(p => [p.id, p.avatar || '']));
+  S.people = (list || []).map(p => ('avatar' in p ? p : { ...p, avatar: had.get(p.id) || '' }));
+}

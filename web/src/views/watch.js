@@ -40,7 +40,8 @@ const snapTask = t => [t.status, t.assigneeId, t.dueDate].join('|');
 export function watchBlock(apps, { openApp, openTask, appIcon, appStatusCell, stageDots, release = false, prioTag = null }) {
   const box = h('section', { class: 'watch' + (release ? ' rel' : '') });
   const prev = new Map();
-  let appsNow = apps, tasks = [], rels = {}, timer = null, busy = false;
+  // appsNow — свежие данные только отслеживаемых приложений; pool — список для «Добавить» (на дашборде RM его нет — грузим при открытии)
+  let appsNow = apps, pool = apps, tasks = [], rels = {}, timer = null, busy = false;
 
   async function refresh(force) {
     if (busy || (!force && document.hidden)) return;
@@ -49,16 +50,21 @@ export function watchBlock(apps, { openApp, openTask, appIcon, appStatusCell, st
     try {
       const w = watchList();
       const taskIds = w.filter(x => x.t === 'task').map(x => x.id);
+      const appIds = w.filter(x => x.t === 'app').map(x => x.id);
+      // раз в 20 с — только отслеживаемые приложения, не весь список
       [appsNow, tasks] = await Promise.all([
-        w.some(x => x.t === 'app') || !appsNow.length ? call('listApps', {}) : Promise.resolve(appsNow), // пустой список (дашборд RM) — для поиска при добавлении
+        appIds.length ? call('listApps', { ids: appIds }) : Promise.resolve([]),
         taskIds.length ? call('queryTasks', { ids: taskIds }) : Promise.resolve([]),
       ]);
-      const appIds = w.filter(x => x.t === 'app').map(x => x.id);
       if (release && appIds.length) rels = await call('getAppReleases', { ids: appIds });
       draw();
     } catch { /* сеть моргнула — следующая попытка по таймеру */ } finally { busy = false; }
   }
   const onChange = () => refresh(true);
+  const pick = async () => {
+    if (!pool.length) { try { pool = await call('listApps', {}); } catch { pool = []; } }
+    openWatchPicker(pool, () => refresh(true));
+  };
   const onVis = () => { if (!document.hidden) refresh(false); };
 
   /** Строка RM: как в «Релизах» — приложение и состояние его релиза. */
@@ -136,7 +142,7 @@ export function watchBlock(apps, { openApp, openTask, appIcon, appStatusCell, st
       h('div', { class: 'section-head' },
         h('span', { class: 'w-head' }, h('h2', null, 'Отслеживаю'), h('span', { class: 'w-live muted' }, 'Обновляется само каждые 20 секунд')),
         h('span', { class: 'spacer' }),
-        h('button', { class: 'btn ghost sm', onclick: () => openWatchPicker(appsNow, () => refresh(true)) }, icon('plus', 14), 'Добавить')),
+        h('button', { class: 'btn ghost sm', onclick: pick }, icon('plus', 14), 'Добавить')),
       items.length
         ? h('div', { class: 'card-box w-list' }, items.map(it => {
           const changed = prev.has(it.key) && prev.get(it.key) !== it.snap;
@@ -149,7 +155,7 @@ export function watchBlock(apps, { openApp, openTask, appIcon, appStatusCell, st
         }), gone > 0 && h('p', { class: 'muted w-gone' }, `Ещё ${gone} — удалены, в архиве или нет доступа`))
         : h('div', { class: 'card-box empty-state sm' },
           h('p', { class: 'muted', style: { margin: 0 } }, 'Добавьте приложения и задачи, за которыми следите, — статус и текущий этап будут здесь и обновляются сами.'),
-          h('button', { class: 'btn sm', onclick: () => openWatchPicker(appsNow, () => refresh(true)) }, icon('plus', 14), 'Добавить')));
+          h('button', { class: 'btn sm', onclick: pick }, icon('plus', 14), 'Добавить')));
   }
 
   // на дашборде RM приложений ещё нет: сначала загрузка, иначе все строки покажутся удалёнными
