@@ -17,15 +17,6 @@ const LATE_DAYS = 3; // столько дней реджект без движе
 
 let tab = 'open';
 
-/** Сколько реджектов открыто сейчас — число у пункта меню. */
-export async function openRejectCount() {
-  try {
-    const d = await call('getRmDashboard', {});
-    // открыто = отмечен реджект и ещё не отправлено заново (у PM или исправлен и ждёт отправки)
-    return (d.rejected || []).length + (d.queue || []).filter(x => x.rejectNo && x.fixedAt).length + (d.rejectedApps || []).length;
-  } catch { return 0; }
-}
-
 export async function renderRejects() {
   const main = $('#main');
   const body = h('div', { class: 'page ceo-page rj-page' }, skeleton());

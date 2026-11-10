@@ -1,6 +1,4 @@
 import Sortable from 'sortablejs';
-import { queueCount } from './ready.js';
-import { openRejectCount } from './rejects.js';
 import { S, LS, byOrder, openCount, me, unitById, personById, activeTeams, isStaff, isSuper, ceoMode, ceoDefault, isDev, ACCESS_LABELS, seesApps, ownTeamsOnly, myAccess } from '../state.js';
 import { $, h, icon, avatar, menu, closeMenu, showErr, fill, confirmDlg, setBell } from '../ui.js';
 import { call, send } from '../api.js';
@@ -11,7 +9,25 @@ import { openActAs, openMyProfile, openTeamDialog } from './people.js';
 import { personCaption } from './my.js';
 import { mode, supabase, resetLocalData } from '../data.js';
 
-let myOpen = 0, myOpenAt = 0, readyN = 0, readyAt = 0, rejN = 0, rejAt = 0;
+// цифры меню: одним лёгким запросом navCounts раз в 30 с (раньше — Сводка, экран реджектов и все мои задачи целиком)
+let navN = { ready: 0, rejects: 0, mine: 0 }, navAt = 0, navWait = null;
+const navEls = { ready: new Set(), rejects: new Set(), mine: new Set() };
+function navCount(key, danger) {
+  const el = h('span', { class: 'nav-count' + (danger && navN[key] ? ' danger' : '') }, navN[key] || '');
+  navEls[key].add(el);
+  if (Date.now() - navAt > 30000 && !navWait) {
+    navAt = Date.now();
+    navWait = call('navCounts', { personId: S.meId }).then(n => {
+      navN = n;
+      for (const k of Object.keys(navEls)) for (const e of navEls[k]) {
+        if (!e.isConnected) { navEls[k].delete(e); continue; }
+        e.textContent = n[k] || '';
+        if (k === 'rejects') e.classList.toggle('danger', !!n[k]);
+      }
+    }).catch(() => {}).finally(() => { navWait = null; });
+  }
+  return el;
+}
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 
@@ -139,34 +155,10 @@ function drawSidebar() {
   const navLink = (route, ic, label, extra) => link(route, { class: 'nav-item' + (isHere(r, route) ? ' active' : '') }, icon(ic), h('span', { class: 'nav-label' }, label), extra);
   // сколько открытых задач на мне: число у «Мои задачи» (RM) и «Моя доска» (Lead, сотрудник)
   // сколько приложений ждут разработки (дизайн закрыт, iOS не начат) — число у «Готовы к разработке»
-  const readyCount = () => {
-    const el = h('span', { class: 'nav-count' }, readyN || '');
-    if (Date.now() - readyAt > 30000) {
-      readyAt = Date.now();
-      queueCount().then(n => { readyN = n; el.textContent = n || ''; });
-    }
-    return el;
-  };
+  const readyCount = () => navCount('ready');
   // сколько реджектов открыто — число у «Реджекты» (CEO и релиз-менеджер)
-  const rejectCount = () => {
-    const el = h('span', { class: 'nav-count' + (rejN ? ' danger' : '') }, rejN || '');
-    if (Date.now() - rejAt > 30000) {
-      rejAt = Date.now();
-      openRejectCount().then(n => { rejN = n; el.textContent = n || ''; el.classList.toggle('danger', !!n); });
-    }
-    return el;
-  };
-  const myCount = () => {
-    const el = h('span', { class: 'nav-count' }, myOpen || '');
-    if (Date.now() - myOpenAt > 30000) {
-      myOpenAt = Date.now();
-      call('queryTasks', { assigneeId: S.meId, limit: 500 }).then(r => {
-        myOpen = r.filter(t => t.statusKind !== 'done').length;
-        el.textContent = myOpen || '';
-      }).catch(() => {});
-    }
-    return el;
-  };
+  const rejectCount = () => navCount('rejects', true);
+  const myCount = () => navCount('mine');
   const sec = (label, extra) => h('div', { class: 'nav-section' }, h('span', null, label), extra);
 
   const meBtn = h('button', { class: 'nav-item me', onclick: e => { e.stopPropagation(); meMenu(); }, title: 'Аккаунт', 'aria-haspopup': 'menu', 'aria-expanded': String(meOpen) },

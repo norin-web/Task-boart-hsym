@@ -2778,3 +2778,16 @@ create policy tasks_update on tasks for update to authenticated
   with check ((select is_superadmin()) or ((select my_access()) = 'moderator' and unit_id = any(coalesce((select my_unit_ids()), '{}')))
               or assignee_id = (select my_person_id()) or review_from = (select my_person_id()) or reviewer_id = (select my_person_id())
               or ((select my_access()) = 'lead' and in_lead_zone(unit_id, department_id, assignee_id)));
+
+-- Поиск задач в базе (палитра ⌘K, «Слежу»): раньше браузер тянул все задачи всех юнитов и искал сам.
+-- Права — обычные (функция не security definer: RLS задач действует).
+create or replace function search_task_ids(p_q text, p_limit int) returns setof text
+language sql stable set search_path = public as $$
+  select t.id from tasks t join units u on u.id = t.unit_id
+   where not t.archived and not u.archived
+     and (u.key || '-' || t.num || ' ' || t.title || ' ' || t.description)
+         ilike '%' || replace(replace(replace(coalesce(p_q, ''), '\', '\\'), '%', '\%'), '_', '\_') || '%'
+   order by (upper(u.key || '-' || t.num) = upper(trim(coalesce(p_q, '')))) desc, t.updated_at desc, t.id
+   limit greatest(1, least(coalesce(p_limit, 50), 500));
+$$;
+grant execute on function search_task_ids(text, int) to authenticated;

@@ -483,4 +483,3 @@ export async function renderReady() {
 }
 
 /** Сколько приложений ждут разработки — для цифры в меню. */
-export const queueCount = () => call('getPipeline', {}).then(r => r.filter(x => x.ready).length).catch(() => 0);

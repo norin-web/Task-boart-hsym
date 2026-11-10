@@ -45,7 +45,7 @@ export async function peekTask(unitId, taskId) {
   }
   try {
     // доска этого юнита уже есть — берём её; нет — грузим только эту задачу (вся доска юнита — секунды)
-    if (!S.board || S.board.unit.id !== unitId || (S.board.partial && !taskById(taskId))) await loadBoard(unitId, taskId, { only: true });
+    if (!S.board || S.board.unit.id !== unitId || ((S.board.partial || S.board.lite) && !taskById(taskId))) await loadBoard(unitId, taskId, { only: true });
   } catch (e) {
     return showErr(e);
   }
@@ -61,7 +61,7 @@ export function openTask(id, again = false) {
   const t = taskById(id);
   // задачи нет на доске: может быть в архиве (он грузится отдельно) — дозагрузить один раз
   if (!t && !again && S.board) {
-    const partial = !!S.board.partial;
+    const partial = !!(S.board.partial || S.board.lite);
     loadBoard(S.board.unit.id, id, { only: partial }).then(() => { if (!partial && S.route.unit === S.board.unit.id) renderTasks(); openTask(id, true); }).catch(showErr);
     return;
   }

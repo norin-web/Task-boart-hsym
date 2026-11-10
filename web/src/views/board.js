@@ -16,10 +16,11 @@ const NO_DEPT = '__none';
 /**
  * Доска юнита. Архив — только с фильтром «Архив» (его копится много); taskId — открытая задача: подгрузится, даже если в архиве.
  */
-export async function loadBoard(unitId, taskId = S.panelTaskId, { only = false } = {}) {
-  // только карточка поверх страницы: одна задача без доски (partial) — экран доски юнита потом догрузит всё
-  if (only && taskId) {
-    const d = await call('getBoard', { unitId, only: taskId });
+export async function loadBoard(unitId, taskId = S.panelTaskId, { only = false, lite = false } = {}) {
+  // только карточка поверх страницы: одна задача без доски (partial) — экран доски юнита потом догрузит всё;
+  // lite — вкладки юнита без доски (обзор, приложения, команда, настройки): без задач, только цифры по ним
+  if ((only && taskId) || lite) {
+    const d = await call('getBoard', only && taskId ? { unitId, only: taskId } : { unitId, lite: true, today: todayStr() });
     S.board = d;
     S.people = d.people;
     S.departments = d.departments;

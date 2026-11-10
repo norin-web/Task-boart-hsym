@@ -1241,7 +1241,7 @@ export function openStartWork(list, onDone) {
       close();
       toast(`Разнесено: ${r.made}` + (r.skipped ? ` · пропущено: ${r.skipped}` : '') + (r.errors.length ? ` · ошибок: ${r.errors.length}` : ''), r.errors.length ? { type: 'error' } : undefined);
       if (r.errors.length) console.warn('placeApps', r.errors);
-      if (S.board && list.some(a => picked.has(a.id) && a.unitId === S.board.unit.id)) await import('./board.js').then(m => m.loadBoard(S.board.unit.id)).catch(() => {});
+      if (S.board && list.some(a => picked.has(a.id) && a.unitId === S.board.unit.id)) await import('./board.js').then(m => m.loadBoard(S.board.unit.id, undefined, { lite: !!S.board.lite })).catch(() => {});
       if (onDone) onDone();
     } }],
   });

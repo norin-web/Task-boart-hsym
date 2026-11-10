@@ -15,6 +15,31 @@ import { addMemberDialog, applyMembers } from './people.js';
 import { sparkline, openSeries } from './charts.js';
 import { unitHeader } from './unitnav.js';
 
+/**
+ * Цифры по задачам юнита: из лёгкой загрузки (summary с сервера) или, если доска уже загружена целиком, — по ней.
+ * byStatus — сколько в каждой колонке, byAssignee — у кого сколько открытых и просроченных, open / late — всего.
+ */
+function unitStats() {
+  if (S.board.summary) return S.board.summary;
+  const today = todayStr();
+  const byStatus = {}, byAssignee = {};
+  let open = 0, late = 0;
+  for (const t of S.board.tasks) {
+    if (t.archived) continue;
+    byStatus[t.status] = (byStatus[t.status] || 0) + 1;
+    if (taskDone(t)) continue;
+    open++;
+    const isLate = !!t.dueDate && t.dueDate < today;
+    if (isLate) late++;
+    if (t.assigneeId) {
+      const a = byAssignee[t.assigneeId] || (byAssignee[t.assigneeId] = { open: 0, late: 0 });
+      a.open++;
+      if (isLate) a.late++;
+    }
+  }
+  return { byStatus, byAssignee, open, late };
+}
+
 export async function renderUnitPage() {
   const u = S.board.unit;
   const key = 'overview:' + u.id;
@@ -61,9 +86,7 @@ export async function renderUnitPage() {
     }
     const mine = x => x.app && x.app.unitId === u.id;
     const ud = { ...d, attention: d.attention.filter(mine), inProgress: d.inProgress.filter(mine), recent: d.recent.filter(mine) };
-    const open = S.board.tasks.filter(t => !t.archived && !taskDone(t));
-    const today = todayStr();
-    const late = open.filter(t => t.dueDate && t.dueDate < today).length;
+    const { open, late } = unitStats();
     const stat = (n, label, mode, tone, spark, f) => link({ unit: u.id, mode, f }, { class: 'cs' + (tone ? ' ' + tone : '') }, h('div', { class: 'cs-n' }, n), h('div', { class: 'cs-label' }, label), spark);
 
     fill(actions,
@@ -123,11 +146,11 @@ function openRmList(title, kind, rows, reload) {
 
 /** Команда на обзоре: кто, позиция и сколько задач в работе; самые загруженные сверху. */
 function teamBrief(u) {
-  const today = todayStr();
+  const { byAssignee } = unitStats();
   const rows = S.board.members.map(m => {
     const p = personById(m.personId);
-    const t = p ? S.board.tasks.filter(x => !x.archived && !taskDone(x) && x.assigneeId === p.id) : [];
-    return p && { p, pos: (deptById(m.departmentId) || deptById(p.positionId) || {}).name || '', n: t.length, late: t.filter(x => x.dueDate && x.dueDate < today).length };
+    const c = (p && byAssignee[p.id]) || { open: 0, late: 0 };
+    return p && { p, pos: (deptById(m.departmentId) || deptById(p.positionId) || {}).name || '', n: c.open, late: c.late };
   }).filter(Boolean).sort((a, b) => b.n - a.n || a.p.name.localeCompare(b.p.name, 'ru'));
   return h('section', null,
     h('div', { class: 'section-head' }, h('h2', null, 'Команда' + (rows.length ? ' · ' + rows.length : ''))),
@@ -141,11 +164,11 @@ function teamBrief(u) {
 
 /** Задачи юнита по колонкам доски: полоса и цифры; клик — на вкладку «Задачи». */
 function tasksByColumn(u, open) {
-  const all = S.board.tasks.filter(t => !t.archived);
-  const cols = columns().map(c => ({ c, n: all.filter(t => t.status === c.id).length }));
-  const total = all.length;
+  const { byStatus } = unitStats();
+  const cols = columns().map(c => ({ c, n: byStatus[c.id] || 0 }));
+  const total = cols.reduce((n, x) => n + x.n, 0);
   return h('section', null,
-    h('div', { class: 'section-head' }, h('h2', null, `Задачи · ${open.length} открыто`)),
+    h('div', { class: 'section-head' }, h('h2', null, `Задачи · ${open} открыто`)),
     total
       ? h('div', { class: 'card-box col-sum' },
         h('div', { class: 'col-sum-bar', 'aria-hidden': 'true' }, cols.filter(x => x.n).map(x => h('span', { style: { flex: x.n, background: colColor(x.c) } }))),
@@ -172,7 +195,6 @@ function appsBrief(u, apps, reload, LIMIT = 3) {
 /** Вкладка «Команда»: участники юнита — роль, позиция в юните, открытые и просроченные задачи здесь. */
 export function renderUnitTeam() {
   const u = S.board.unit;
-  const today = todayStr();
   const body = h('div', { class: 'page unit-page' });
   let zones = {};  // зоны лидов: { leadId: [personId…] } — видят и меняют CEO и PM юнита
   /** Зона лида = его позиции + люди, которых выдали отдельно. */
@@ -208,12 +230,13 @@ export function renderUnitTeam() {
   const draw = () => {
     const rows = S.board.members.map(m => ({ m, p: personById(m.personId) })).filter(x => x.p)
       .sort((a, b) => a.p.name.localeCompare(b.p.name, 'ru'));
-    const mine = id => S.board.tasks.filter(t => !t.archived && !taskDone(t) && t.assigneeId === id);
+    const { byAssignee } = unitStats();
     fill($('#main'), ...unitHeader('team', [
       canEdit && h('button', { class: 'btn primary', onclick: async () => { if (await addMemberDialog(u.id)) draw(); } }, icon('plus', 15), h('span', { class: 'btn-label' }, 'Участник')),
     ]), h('div', { class: 'view-body' }, body));
     const row = ({ m, p }) => {
-      const t = mine(p.id), late = t.filter(x => x.dueDate && x.dueDate < today).length;
+      const c = byAssignee[p.id] || { open: 0, late: 0 };
+      const n = c.open, late = c.late;
       return h('div', { class: 'team-row' },
         avatar(p, 'sm'),
         h('b', { class: 'team-who', 'data-pcard': p.id }, p.name),
@@ -221,7 +244,7 @@ export function renderUnitTeam() {
         h('span', { class: 'muted team-role' }, ACCESS_LABELS[p.access] || '',
           p.access === 'lead' && isStaff() && h('button', { class: 'link-btn', style: { marginLeft: '8px' }, title: 'Позиции лида и выданные ему люди', onclick: () => zoneDialog(p) },
             'зона' + ((zones[p.id] || []).length ? ' · +' + zones[p.id].length : ''))),
-        h('span', { class: 'team-load' }, t.length ? `${t.length} ${plural(t.length, ['задача', 'задачи', 'задач'])}` : null,
+        h('span', { class: 'team-load' }, n ? `${n} ${plural(n, ['задача', 'задачи', 'задач'])}` : null,
           late > 0 && h('span', { class: 'warn-text' }, ` · просрочено ${late}`),
           canEdit && (p.access === 'moderator' ? isSuper() : p.access !== 'superadmin') && h('button', { class: 'icon-btn sm', type: 'button', title: p.access === 'moderator' ? 'Убрать PM из юнита' : 'Убрать из команды', 'aria-label': 'Убрать ' + p.name + ' из команды', onclick: () => removeMember(p) }, icon('x', 14))));
     };

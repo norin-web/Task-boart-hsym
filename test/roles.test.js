@@ -1337,3 +1337,58 @@ test('карточка поверх страницы: getBoard only — одна
   // сотрудник чужую задачу не видит и в режиме only
   assert.deepEqual((await api.as(designer, () => api('getBoard', { unitId: A.id, only: other.id }))).tasks, []);
 });
+
+test('лёгкие цифры меню (navCounts) и поиск в базе совпадают со старым подсчётом', async () => {
+  const api = await setup();
+  const { admin, designer, dev, A } = await team(api);
+  const rm = await api.as(admin, () => api('createPerson', { name: 'Релизный', email: 'rm@x.ru', access: 'rm', positionId: 'd_release' }));
+  await api.as(admin, () => api('setMember', { unitId: A.id, personId: rm.id }));
+  const mk = async name => (await api.as(admin, () => api('createApp', { name, unitId: A.id, noRequest: true }))).app;
+  const [aReady, aDev, aRej] = [await mk('Готов к iOS'), await mk('Пилим'), await mk('Отклонили')];
+  await api.as(admin, () => api('placeApps', { items: [{ id: aReady.id, stage: 'ready' }, { id: aDev.id, stage: 'dev' }] }));
+  const st = (await api.as(admin, () => api('getCeoDashboard', {}))).statuses;
+  await api.as(admin, () => api('updateApp', { id: aRej.id, status: st.find(s => s.kind === 'reject').id }));
+  for (const who of [admin, rm, dev, designer]) {
+    const n = await api.as(who, () => api('navCounts', { personId: who.id }));
+    const ready = (await api.as(who, () => api('getPipeline', {}))).filter(x => x.ready).length;
+    const d = await api.as(who, () => api('getRmDashboard', {}));
+    const rejects = (d.rejected || []).length + (d.queue || []).filter(x => x.rejectNo && x.fixedAt).length + (d.rejectedApps || []).length;
+    const mine = (await api.as(who, () => api('queryTasks', { assigneeId: who.id, limit: 500 }))).filter(t => t.statusKind !== 'done').length;
+    assert.deepEqual(n, { ready, rejects, mine }, who.name);
+  }
+  assert.equal((await api.as(admin, () => api('navCounts', { personId: admin.id }))).ready, 1);
+  // поиск: по названию, по ключу, спецсимволы не ломают; сотрудник находит только видимое ему
+  const found = await api.as(admin, () => api('queryTasks', { q: 'вёрстка', limit: 8 }));
+  assert.deepEqual(found.map(t => t.title), ['Вёрстка']);
+  assert.equal((await api.as(admin, () => api('queryTasks', { q: found[0].key, limit: 8 })))[0].id, found[0].id);
+  assert.deepEqual(await api.as(admin, () => api('queryTasks', { q: '%_\\', limit: 8 })), []);
+  assert.deepEqual(await api.as(designer, () => api('queryTasks', { q: 'вёрстка', limit: 8 })), []);
+});
+
+test('вкладки юнита без доски: getBoard lite — без задач, цифры совпадают с полной доской', async () => {
+  const api = await setup();
+  const { admin, designer, dev, A } = await team(api);
+  await api.as(admin, () => api('createTask', { unitId: A.id, title: 'Просрочка', assigneeId: designer.id, dueDate: '2020-01-01' }));
+  const app = (await api.as(admin, () => api('createApp', { name: 'Счёт', unitId: A.id, noRequest: true }))).app;
+  await api.as(admin, () => api('placeApps', { items: [{ id: app.id, stage: 'dev' }] }));
+  const day = '2026-11-10';
+  for (const who of [admin, designer, dev]) {
+    const lite = await api.as(who, () => api('getBoard', { unitId: A.id, lite: true, today: day }));
+    const full = await api.as(who, () => api('getBoard', { unitId: A.id, today: day }));
+    assert.equal(lite.lite, true);
+    assert.deepEqual(lite.tasks, []);
+    assert.deepEqual(lite.members, full.members);
+    const kind = id => (full.unit.settings.columns.find(c => c.id === id) || {}).kind;
+    const byStatus = {}, byAssignee = {};
+    let open = 0, late = 0;
+    for (const t of full.tasks) {
+      byStatus[t.status] = (byStatus[t.status] || 0) + 1;
+      if (kind(t.status) === 'done') continue;
+      open++;
+      const l = !!t.dueDate && t.dueDate < day;
+      if (l) late++;
+      if (t.assigneeId) { const a = byAssignee[t.assigneeId] || (byAssignee[t.assigneeId] = { open: 0, late: 0 }); a.open++; if (l) a.late++; }
+    }
+    assert.deepEqual(lite.summary, { byStatus, byAssignee, open, late }, who.name);
+  }
+});

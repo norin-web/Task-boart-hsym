@@ -36,12 +36,16 @@ export function renderSettings() {
       st.columns = colEditor.value();
       // Задачи из удалённых колонок — в первую оставшуюся (с подтверждением)
       const ids = new Set(st.columns.map(c => c.id));
+      // лёгкая загрузка (без задач) — сколько в каждой колонке, знаем из summary
+      const counts = b.summary ? b.summary.byStatus : b.tasks.reduce((m, t) => ((m[t.status] = (m[t.status] || 0) + 1), m), {});
+      const lost = Object.keys(counts).filter(id => !ids.has(id) && counts[id] > 0);
+      const nLost = lost.reduce((n, id) => n + counts[id], 0);
       const orphans = b.tasks.filter(t => !ids.has(t.status));
       let remap = {};
-      if (orphans.length) {
-        const ok = await confirmDlg(`${orphans.length} ${plural(orphans.length, ['задача', 'задачи', 'задач'])} из удалённых колонок переедут в «${st.columns[0].name}». Продолжить?`, { ok: 'Сохранить' });
+      if (nLost) {
+        const ok = await confirmDlg(`${nLost} ${plural(nLost, ['задача', 'задачи', 'задач'])} из удалённых колонок переедут в «${st.columns[0].name}». Продолжить?`, { ok: 'Сохранить' });
         if (!ok) { btn.disabled = false; return; }
-        orphans.forEach(t => { remap[t.status] = st.columns[0].id; });
+        lost.forEach(id => { remap[id] = st.columns[0].id; });
       }
       builtinRows.forEach(r => {
         st.builtins[r.k].label = r.label.value.trim() || st.builtins[r.k].label;
@@ -49,7 +53,8 @@ export function renderSettings() {
       });
       st.flows = u.settings.flows; // флоу сохраняется отдельно (своя кнопка) — берём свежий
       const saved = await send('updateUnit', { id: u.id, name: name.value, key: key.value, color: color.value(), icon: photo.value(), description: desc.value, settings: st, statusRemap: remap });
-      if (orphans.length) orphans.forEach(t => { t.status = remap[t.status]; });
+      orphans.forEach(t => { t.status = remap[t.status]; });
+      if (b.summary && nLost) { lost.forEach(id => { counts[st.columns[0].id] = (counts[st.columns[0].id] || 0) + counts[id]; delete counts[id]; }); }
       Object.assign(u, saved);
       const lu = unitById(u.id);
       if (lu) Object.assign(lu, saved);

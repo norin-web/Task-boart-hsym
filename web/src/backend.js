@@ -1123,6 +1123,19 @@ export function createBackend(db, opts = {}) {
       const units = Object.fromEntries((await all(() => T('units').select('*').eq('archived', false).order('id'))).map(u => [u.id, u]));
       const ids = Array.isArray(p.ids) ? p.ids.map(x => String(x ?? '')).filter(Boolean).slice(0, 200) : null;
       if (ids && !ids.length) return [];
+      // поиск по тексту — в базе, сразу с лимитом (раньше тянули все задачи и искали в браузере)
+      if (q && !ids && !p.assigneeId && !p.authorId) {
+        const raw = await rpc('search_task_ids', { p_q: q, p_limit: Math.min(Number(p.limit) || 50, 500) });
+        const found = (Array.isArray(raw) ? raw : raw == null ? [] : [raw])
+          .map(x => (x && typeof x === 'object' ? x.search_task_ids || Object.values(x)[0] : x)).filter(Boolean);
+        if (!found.length) return [];
+        const got = Object.fromEntries((await run(T('tasks').select('*').in('id', found))).map(r => [r.id, r]));
+        return found.map(id => got[id]).filter(r => r && units[r.unit_id]).map(r => {
+          const u = units[r.unit_id];
+          const col = columnOf(unitSettings(u.settings), r.status);
+          return { ...taskOut(r), key: `${u.key}-${r.num}`, statusName: col.name, statusKind: col.kind, statusColor: col.color, unit: { id: u.id, name: u.name, key: u.key, color: u.color } };
+        });
+      }
       let rows = await all(() => {
         let b = T('tasks').select('*').eq('archived', false);
         if (p.assigneeId) b = b.eq('assignee_id', String(p.assigneeId));
@@ -1147,10 +1160,47 @@ export function createBackend(db, opts = {}) {
      * Доска юнита. Архив копится годами, поэтому по умолчанию без него: archived — вместе с архивом (фильтр «Архив»),
      * taskId — плюс эта задача, даже если она в архиве (открыли по ссылке).
      */
+    /**
+     * Юнит без доски: настройки, поля, люди и цифры по задачам — сколько в каждой колонке, у кого сколько открытых и просроченных.
+     * Задачи берём лёгкими колонками (без описаний, полей, чеклистов), дерево и ссылки не считаем.
+     */
+    async unitLite(unit, p) {
+      const day = today(p.today);
+      const [fields, rows, units, ppl, depts, members, manages] = await Promise.all([
+        unitFields(unit.id),
+        all(() => T('tasks').select('id,unit_id,status,assignee_id,due_date,depends_on').eq('unit_id', unit.id).eq('archived', false).order('id')),
+        all(() => T('units').select('id,name,key,color,archived').order('ord').order('id')),
+        people(), departments(), unitMembers(unit.id), rpc('can_manage', { p_unit: unit.id }),
+      ]);
+      const tasks = manages ? rows : await hideWaiting(rows);
+      const st = unitSettings(unit.settings);
+      const byStatus = {}, byAssignee = {};
+      let open = 0, late = 0;
+      for (const t of tasks) {
+        byStatus[t.status] = (byStatus[t.status] || 0) + 1;
+        if (kindOf(st, t.status) === 'done') continue;
+        open++;
+        const isLate = !!t.due_date && t.due_date < day;
+        if (isLate) late++;
+        if (t.assignee_id) {
+          const a = byAssignee[t.assignee_id] || (byAssignee[t.assignee_id] = { open: 0, late: 0 });
+          a.open++;
+          if (isLate) a.late++;
+        }
+      }
+      return {
+        unit: unitOut(unit), fields, tasks: [], units: units.map(u => ({ ...u, archived: !!u.archived })),
+        people: ppl, departments: depts, members, withArchived: false, lite: true, doneTotal: null, doneLimit: null,
+        summary: { byStatus, byAssignee, open, late },
+      };
+    },
+
     async getBoard(p) {
       const unit = await findUnit(p.unitId);
       // only: id задачи — карточка поверх страницы (с дашборда, «Моей доски»): только она, без всей доски юнита — быстро
       const only = p.only ? String(p.only) : '';
+      // lite: вкладки юнита без доски (обзор, приложения, команда, настройки) — без задач, только цифры по ним
+      if (p.lite) return methods.unitLite(unit, p);
       if (!only) await autoArchive(unit);
       // выполненные копятся тысячами: грузим последние doneLimit (по дате закрытия), остальные — «Показать ещё»
       const ust = unitSettings(unit.settings);
@@ -3241,6 +3291,42 @@ export function createBackend(db, opts = {}) {
         };
       }
       return out;
+    },
+
+    /**
+     * Цифры в меню слева одним лёгким запросом (раньше — три полные загрузки раз в 30 с):
+     * ready — приложения, готовые к разработке (дизайн закрыт, iOS не начат); rejects — открытые реджекты (как на экране «Реджекты»);
+     * mine — мои открытые задачи (ждущие этапы не считаются).
+     */
+    async navCounts(p) {
+      const me = String(p.personId || '');
+      const [units, reqs, steps, rels, apps, statuses, mineRows] = await Promise.all([
+        all(() => T('units').select('id,settings,archived').order('id')),
+        all(() => T('tasks').select('id,unit_id,status,app_id').eq('kind', 'request').eq('archived', false).order('id')),
+        all(() => T('tasks').select('id,unit_id,status,parent_id,step').in('step', ['design', 'ios']).eq('archived', false).order('id')),
+        all(() => T('tasks').select('id,unit_id,app_id,release').eq('step', 'release').eq('archived', false).neq('assignee_id', '').order('id')),
+        all(() => T('apps').select('id,unit_id,status,archived').order('id')),
+        appStatuses(),
+        me ? all(() => T('tasks').select('id,unit_id,status,depends_on').eq('assignee_id', me).eq('archived', false).order('id')) : [],
+      ]);
+      const ST = Object.fromEntries(units.map(u => [u.id, unitSettings(u.settings)]));
+      const kind = r => (ST[r.unit_id] ? kindOf(ST[r.unit_id], r.status) : 'todo');
+      // готовы к разработке: у открытого запроса дизайн готов, iOS ещё «к выполнению»
+      const liveApps = new Set(apps.filter(a => !a.archived).map(a => a.id));
+      const openReq = Object.fromEntries(reqs.filter(r => kind(r) !== 'done' && liveApps.has(r.app_id)).map(r => [r.id, r.app_id]));
+      const by = {};
+      for (const t of steps) if (openReq[t.parent_id]) (by[t.parent_id] = by[t.parent_id] || {})[t.step] = t;
+      const ready = new Set(Object.entries(by).filter(([, x]) => x.design && x.ios && kind(x.design) === 'done' && kind(x.ios) === 'todo')
+        .map(([id]) => openReq[id])).size;
+      // реджекты: релиз в реджекте, исправленный и ждущий повторной отправки, приложения в статусе «Реджект» без релиза
+      const rejectSt = new Set(statuses.filter(x => x.kind === 'reject').map(x => x.id));
+      const items = rels.filter(t => ST[t.unit_id]).map(t => ({ app: t.app_id, rel: json(t.release, {}) || {} })).filter(x => x.rel.phase !== 'live');
+      const withRel = new Set(items.map(x => x.app));
+      const rejects = items.filter(x => x.rel.phase === 'rejected' || (!x.rel.phase && x.rel.rejectNo && x.rel.fixedAt)).length
+        + apps.filter(a => !a.archived && rejectSt.has(a.status) && !withRel.has(a.id) && ST[a.unit_id]).length;
+      const openUnits = new Set(units.filter(u => !u.archived).map(u => u.id));
+      const mine = (await hideWaiting(mineRows.filter(r => openUnits.has(r.unit_id)))).filter(r => kind(r) !== 'done').length;
+      return { ready, rejects, mine };
     },
 
     async getRmDashboard(p) {

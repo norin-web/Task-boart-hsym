@@ -219,13 +219,15 @@ export async function render() {
     return;
   }
 
-  if (!S.board || S.board.unit.id !== r.unit || S.board.partial || (S.board.foldDone && !foldStages())) {
+  // полная доска — только экранам задач (доска, список, таймлайн) и ссылке на задачу; остальным вкладкам юнита — лёгкая
+  const needFull = ['board', 'list', 'timeline'].includes(r.mode) || !!r.task;
+  if (!S.board || S.board.unit.id !== r.unit || S.board.partial || (needFull && S.board.lite) || (S.board.foldDone && !foldStages())) {
     rendered = 'loading';
     closePanel();
     loadBoardView(r.unit); // фильтры и дорожки этой доски — как оставили
     fill($('#main'), h('div', { class: 'page' }, skeleton()));
     try {
-      await loadBoard(r.unit, r.task);
+      await loadBoard(r.unit, r.task, { lite: !needFull });
     } catch (e) {
       showErr(e.code === 'NOT_FOUND' ? new Error('Юнит не найден — возможно, его удалили') : e);
       return navigate({ view: 'home' }, { replace: true });
