@@ -183,9 +183,10 @@ export function infoListSection() {
 /** Отдельная страница #/info — сюда ведёт пункт «Инфо-лист» в меню слева. */
 export function renderInfoList() {
   if (!hasInfoList()) { navigate({ view: 'home' }, { replace: true }); return; }
-  const { q, body, own, navSwitch } = infoListParts();
+  // рабочая страница — только таблица; колонки и «Кому включён» настраиваются в «Настройках → Инфо-лист»
+  const { q, body, navSwitch } = infoListParts();
   fill($('#main'), topbar([h('h1', null, 'Инфо-лист')], [navSwitch]),
-    h('div', { class: 'view-body' }, h('div', { class: 'page il-page' }, h('p', { class: 'muted il-sub' }, ilSub()), own, q, body)));
+    h('div', { class: 'view-body' }, h('div', { class: 'page il-page' }, h('p', { class: 'muted il-sub' }, isSuper() ? 'Ссылки по приложениям всех юнитов. Колонки — в «Настройках → Инфо-лист»' : IL_SUB), q, body)));
 }
 
 export const infoListCount = () => { const n = (S.infoListIds || []).length; return n ? `включён у ${n} ${plural(n, ['человека', 'человек', 'человек'])}` : 'пока ни у кого'; };
