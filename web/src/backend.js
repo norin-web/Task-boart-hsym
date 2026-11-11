@@ -1158,12 +1158,24 @@ export function createBackend(db, opts = {}) {
       if (p.count) return rows.length; // сколько всего (удаление человека: сколько задач останется без исполнителя) — без лимита
       if (p.assigneeId) rows = await hideWaiting(rows); // «Мои задачи»: ждущие этапы появятся, когда откроются
       if (q) rows = rows.filter(r => `${units[r.unit_id].key}-${r.num} ${r.title} ${r.description}`.toLowerCase().includes(q));
-      return rows.slice(0, Math.min(Number(p.limit) || 50, 500)).map(r => {
+      rows = rows.slice(0, Math.min(Number(p.limit) || 50, 500));
+      // у запросов — сколько этапов и сколько из них готово («Мои задачи»: разложить / веду как PM)
+      const reqIds = rows.filter(r => r.kind === 'request').map(r => r.id);
+      const kids = reqIds.length ? await inChunks(reqIds, ids => T('tasks').select('id,unit_id,status,parent_id').in('parent_id', ids).eq('archived', false).order('id')) : [];
+      const stagesOf = {};
+      for (const k of kids) {
+        const u = units[k.unit_id];
+        const c = stagesOf[k.parent_id] || (stagesOf[k.parent_id] = { total: 0, done: 0 });
+        c.total++;
+        if (u && kindOf(unitSettings(u.settings), k.status) === 'done') c.done++;
+      }
+      return rows.map(r => {
         const u = units[r.unit_id];
         const col = columnOf(unitSettings(u.settings), r.status);
         return {
           ...taskOut(r), key: `${u.key}-${r.num}`, statusName: col.name, statusKind: col.kind, statusColor: col.color,
           unit: { id: u.id, name: u.name, key: u.key, color: u.color },
+          ...(r.kind === 'request' ? { stages: stagesOf[r.id] || { total: 0, done: 0 } } : {}),
         };
       });
     },

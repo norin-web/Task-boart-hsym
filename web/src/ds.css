@@ -3211,3 +3211,26 @@ a.bug-title:hover { text-decoration: underline; }
 .name-matches:empty { display: none; }
 .name-matches > div + div { margin-top: 2px; }
 .name-match { color: var(--text); }
+
+/* «Мои задачи» → «По работе»: прогресс в строке (чек-лист дизайна, этапы запроса) */
+.trow-prog { width: 124px; flex: none; display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; }
+.trow-prog .muted { flex: none; min-width: 38px; text-align: right; font-variant-numeric: tabular-nums; }
+/* длинное название не распирает строку: колонка списка сжимается, название — с многоточием */
+.ugroup .rows { grid-template-columns: minmax(0, 1fr); }
+.trow-bar { flex: 1; height: 4px; border-radius: 2px; background: var(--surface-3); overflow: hidden; }
+.trow-bar > i { display: block; height: 100%; background: var(--ok, #22c55e); border-radius: 2px; }
+.work-groups .ugroup-head .count.danger-text { color: var(--danger); }
+@media (max-width: 720px) { .trow-prog { width: 64px; } .trow-prog .muted { display: none; } }
+/* узкое окно: место — названию; ключ прячем, колонки поуже */
+.work-groups .ugroup { container-type: inline-size; }
+@container (max-width: 860px) {
+  .work-groups .trow-key { display: none; }
+  .work-groups .trow-status { width: 104px; }
+  .work-groups .trow-due { width: 92px; }
+  .work-groups .trow-prog { width: 92px; }
+}
+@container (max-width: 600px) {
+  .work-groups .trow-status, .work-groups .trow-unit { display: none; }
+}
+.work-groups .trow-unit { width: 64px; flex: none; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trow-prog { margin-right: 14px; } /* плашка статуса справа заходит влево на 14px — не закрывать «1/10» */

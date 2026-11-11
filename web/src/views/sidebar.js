@@ -186,7 +186,8 @@ function drawSidebar() {
       (ceo || (person && person.access === 'rm')) && navLink({ view: 'rejects' }, 'rejected', 'Реджекты', rejectCount()),
       ceo && navLink({ view: 'analytics' }, 'chart', 'Аналитика'),
       !lite && navLink({ view: 'myboard' }, 'board', 'Моя доска', !staff && !(person && person.access === 'rm') && myCount()),
-      !lite && (staff || (person && person.access === 'rm')) && navLink({ view: 'my' }, 'list', 'Мои задачи', !staff && myCount()),
+      // «Мои задачи» — и у CEO в «Обзоре»: что разложить и свой дизайн под рукой
+      (staff || (person && person.access === 'rm')) && navLink({ view: 'my' }, 'list', 'Мои задачи', !staff && myCount()),
       // инфо-лист: включает CEO, пункт в меню — сам человек (prefs.infoListNav)
       (S.infoListIds || []).includes(S.meId) && person && (person.prefs || {}).infoListNav &&
         navLink({ view: 'infolist' }, 'link', 'Инфо-лист'),

@@ -1417,3 +1417,17 @@ test('имя приложения в юните уникально: без ре�
   assert.equal((await api.as(admin, () => api('updateApp', { id: calm.id, priority: '' }))).name, 'Calm v2');
   assert.equal((await api.as(admin, () => api('updateApp', { id: calm.id, name: 'Calm v2' }))).name, 'Calm v2');
 });
+
+test('«Мои задачи»: у запроса — сколько этапов и сколько готово (разложить / веду как PM)', async () => {
+  const api = await setup();
+  const { admin, mod, A } = await team(api);
+  const { request } = await api.as(admin, () => api('createApp', { name: 'Пульт', unitId: A.id, pmId: mod.id }));
+  let mine = await api.as(mod, () => api('queryTasks', { assigneeId: mod.id, limit: 500 }));
+  assert.deepEqual(mine.find(t => t.id === request.id).stages, { total: 0, done: 0 });
+  const app = (await api.as(admin, () => api('createApp', { name: 'Счёт', unitId: A.id, noRequest: true }))).app;
+  await api.as(admin, () => api('placeApps', { items: [{ id: app.id, stage: 'dev' }] }));
+  const all = await api.as(admin, () => api('queryTasks', { assigneeId: mod.id, limit: 500 }));
+  const placed = all.find(t => t.kind === 'request' && t.appId === app.id);
+  if (placed) assert.ok(placed.stages.total > 0 && placed.stages.done > 0 && placed.stages.done < placed.stages.total);
+  assert.ok(all.filter(t => t.kind !== 'request').every(t => !('stages' in t)));
+});

@@ -32,18 +32,19 @@ export async function renderMy() {
     if (currentView() === 'my') drawList();
   }
 
-  // Вид (по юнитам / по статусу) и «показывать готовые» запоминаем
-  let view = LS.get('myView', 'units');
+  // Вид (по работе / по юнитам / по статусу) и «показывать готовые» запоминаем; «По работе» — только для своих задач
+  let view = LS.get('myView2', 'work');
   showDone = LS.get('myShowDone', false) === true;
   const list = h('div');
   const drawList = () => {
     const q = query.trim().toLowerCase();
     const shown = q ? tasks.filter(t => (t.title + ' ' + t.key).toLowerCase().includes(q)) : tasks;
-    fill(list, view === 'units' ? unitGroups(shown) : taskGroups(shown));
+    const v = view === 'work' && whose === 'set' ? 'units' : view;
+    fill(list, v === 'work' ? workGroups(shown) : v === 'units' ? unitGroups(shown) : taskGroups(shown));
   };
   const whoseSeg = isStaff() && h('div', { class: 'seg my-whose' });
   const drawWhose = () => whoseSeg && fill(whoseSeg, [['mine', 'На мне'], ['set', 'Поставил я']].map(([v, t]) =>
-    h('button', { class: whose === v ? 'on' : '', onclick: () => { whose = v; LS.set('myWhose', v); drawWhose(); reload(); } }, t)));
+    h('button', { class: whose === v ? 'on' : '', onclick: () => { whose = v; LS.set('myWhose', v); drawWhose(); drawSeg(); reload(); } }, t)));
   drawWhose();
   const controls = h('div', { class: 'my-controls' },
     whoseSeg,
@@ -54,8 +55,8 @@ export async function renderMy() {
       showDone = !showDone; LS.set('myShowDone', showDone); e.currentTarget.setAttribute('aria-checked', String(showDone)); drawList();
     } }, h('span', { class: 'sw' }), 'Показывать готовые'));
   const drawSeg = () => fill(controls.querySelector('.my-view'),
-    [['units', 'По юнитам', 'layers'], ['status', 'По статусу', 'progress']].map(([v, t, ic]) =>
-      h('button', { class: view === v ? 'on' : '', onclick: () => { view = v; LS.set('myView', v); drawSeg(); drawList(); } }, icon(ic, 14), t)));
+    [whose !== 'set' && ['work', 'По работе', 'list'], ['units', 'По юнитам', 'layers'], ['status', 'По статусу', 'progress']].filter(Boolean).map(([v, t, ic]) =>
+      h('button', { class: (view === 'work' && whose === 'set' ? 'units' : view) === v ? 'on' : '', onclick: () => { view = v; LS.set('myView2', v); drawSeg(); drawList(); } }, icon(ic, 14), t)));
   drawSeg();
   fill(page, controls, list);
   drawList();
@@ -93,6 +94,43 @@ export function unitGroups(tasks) {
 
 export const loadMyTasks = () => call('queryTasks', { assigneeId: S.meId, limit: 500 });
 
+/**
+ * «По работе»: что разложить (новые приложения, где PM — я, этапов ещё нет), мой дизайн (прогресс по чек-листу),
+ * запросы, которые веду как PM (прогресс этапов), и остальное. В каждом разделе — просроченные, в работе, к выполнению.
+ */
+export function workGroups(tasks) {
+  const box = h('div', { class: 'unit-groups work-groups' });
+  const today = todayStr();
+  const late = t => t.statusKind !== 'done' && t.dueDate && t.dueDate < today;
+  const rank = t => late(t) ? 0 : t.statusKind === 'progress' ? 1 : t.statusKind === 'todo' ? 2 : 3;
+  const byDue = (a, b) => rank(a) - rank(b) || (a.dueDate || '9999').localeCompare(b.dueDate || '9999');
+  const isReq = t => t.kind === 'request';
+  const isDesign = t => !isReq(t) && (t.step === 'design' || t.departmentId === 'd_design');
+  const checklist = t => { const c = t.checklist || []; return c.length ? { done: c.filter(i => i.done).length, total: c.length } : null; };
+  const sections = [
+    { id: 'place', title: 'Разложить по этапам', hint: 'Новые приложения и запросы, где PM — вы: этапов ещё нет',
+      test: t => isReq(t) && !(t.stages && t.stages.total), prog: () => null },
+    { id: 'design', title: 'Дизайн', hint: 'Ваши этапы дизайна: прогресс — по чек-листу', test: isDesign, prog: checklist },
+    { id: 'pm', title: 'Веду как PM', hint: 'Разложенные запросы: прогресс — сколько этапов готово', test: t => isReq(t) && t.stages && t.stages.total > 0, prog: t => t.stages },
+    { id: 'rest', title: 'Остальное', test: () => true, prog: checklist },
+  ];
+  const taken = new Set();
+  const groups = sections.map(sc => {
+    const items = tasks.filter(t => !taken.has(t.id) && sc.test(t));
+    items.forEach(t => taken.add(t.id));
+    return { ...sc, open: items.filter(t => t.statusKind !== 'done').sort(byDue), done: items.filter(t => t.statusKind === 'done') };
+  });
+  const shown = groups.map(g => ({ ...g, items: [...g.open, ...(showDone ? g.done : [])] })).filter(g => g.items.length);
+  fill(box, shown.length ? shown.map(g => h('section', { class: 'ugroup wg-' + g.id },
+    h('div', { class: 'ugroup-head', title: g.hint || '' },
+      h('span', null, g.title),
+      h('span', { class: 'spacer' }),
+      g.open.filter(late).length > 0 && h('span', { class: 'count danger-text' }, 'просрочено ' + g.open.filter(late).length),
+      h('span', { class: 'count' }, g.open.length + ' ' + plural(g.open.length, ['задача', 'задачи', 'задач']))),
+    h('div', { class: 'rows' }, g.items.map(t => row(t, { done: t.statusKind === 'done', progress: g.prog(t), slot: true }))))) : empty());
+  return box;
+}
+
 /** Задачи человека по группам: просрочено, в работе, к выполнению, готово (свёрнуто). */
 export function taskGroups(tasks) {
   const box = h('div');
@@ -118,7 +156,7 @@ export function taskGroups(tasks) {
   return box;
 }
 
-function row(t, { unit = true, done = false } = {}) {
+function row(t, { unit = true, done = false, progress = null, slot = false } = {}) {
   const due = dueInfo(t.dueDate, t.statusKind === 'done');
   const d = deptById(t.departmentId);
   const late = due && due.cls.includes('overdue');
@@ -126,6 +164,10 @@ function row(t, { unit = true, done = false } = {}) {
     whose !== 'set' && statusIcon(t.statusKind === 'progress' && /ревью/i.test(t.statusName) ? 'review' : t.statusKind, 16),
     h('span', { class: 'trow-key' }, t.key),
     h('span', { class: 't-title' }, t.title),
+    progress ? h('span', { class: 'trow-prog', title: `Готово ${progress.done} из ${progress.total}` },
+      h('span', { class: 'trow-bar' }, h('i', { style: { width: Math.round(progress.done / progress.total * 100) + '%' } })),
+      h('span', { class: 'muted' }, `${progress.done}/${progress.total}`))
+      : slot && h('span', { class: 'trow-prog', 'aria-hidden': 'true' }), // пустое место — колонки разделов «По работе» стоят ровно
     whose === 'set' ? h('span', { class: 'trow-status st-' + t.statusKind }, KIND_LABELS[t.statusKind]) : h('span', { class: 'trow-status' }, h('span', { class: 'trow-chip' }, t.step === 'release' && (t.release || {}).phase === 'submitted' ? 'Ревью Apple' : t.statusName)),
     h('span', { class: 'trow-due' + (late ? ' danger-text' : due ? '' : ' muted'), title: due ? due.hint : '' },
       due ? [whose !== 'set' && icon('calendar', 14), due.text] : whose === 'set' ? '—' : 'Без срока'),
