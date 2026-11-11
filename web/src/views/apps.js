@@ -4,7 +4,7 @@
  * справа: статус, юнит, приоритет, поля быстрого доступа, работы (запросы CEO и их этапы).
  */
 import Sortable from 'sortablejs';
-import { S, isSuper, isStaff, seesApps, me, personById, unitById, appStatusById, prioById, REQUEST_TYPES, LS, plural, fmtDate, PALETTE, relTime, safeUrl } from '../state.js';
+import { S, isSuper, isStaff, seesApps, me, personById, unitById, appStatusById, prioById, REQUEST_TYPES, LS, plural, fmtDate, PALETTE, relTime, safeUrl, STEP_NAMES } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, modal, field, toast, menu, closeMenu, confirmDlg, promptDlg, prioMark, prioSelect, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView, navigate, navParent } from '../router.js';
@@ -1688,7 +1688,6 @@ function openCreateRequest(a, type, onDone) {
 
 /* ---------- шаблоны апдейтов ---------- */
 
-const STEP_NAMES = { design: 'Дизайн', art: 'Онбординг и ASO-графика', ios: 'Разработка iOS', qa: 'Тестирование', integr: 'Интеграция', meta: 'Тексты OB / PW / ASO', store: 'Метаданные', retext: 'Тексты в дизайне', l10n: 'Локализации', release: 'Релиз' };
 const updateTemplates = () => S.templates.filter(x => x.kind === 'update').sort((x, y) => (x.order || 0) - (y.order || 0));
 
 /** Шаблоны апдейтов (CEO и PM): название, заголовок задачи, описание, пункты и нужные этапы. */

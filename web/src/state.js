@@ -298,3 +298,6 @@ export function setPeople(list) {
   const had = new Map((S.people || []).map(p => [p.id, p.avatar || '']));
   S.people = (list || []).map(p => ('avatar' in p ? p : { ...p, avatar: had.get(p.id) || '' }));
 }
+
+/** Этапы флоу приложения: ключ step → название. */
+export const STEP_NAMES = { design: 'Дизайн', art: 'Онбординг и ASO-графика', ios: 'Разработка iOS', qa: 'Тестирование', integr: 'Интеграция', meta: 'Тексты OB / PW / ASO', store: 'Метаданные', retext: 'Тексты в дизайне', l10n: 'Локализации', release: 'Релиз' };

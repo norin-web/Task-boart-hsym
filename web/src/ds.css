@@ -3234,3 +3234,23 @@ a.bug-title:hover { text-decoration: underline; }
 }
 .work-groups .trow-unit { width: 64px; flex: none; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .trow-prog { margin-right: 14px; } /* плашка статуса справа заходит влево на 14px — не закрывать «1/10» */
+
+/* «Мои задачи»: сворачиваемые разделы */
+.fold-head { cursor: pointer; user-select: none; }
+.fold-head:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 8px; }
+.fold-ic { display: inline-flex; color: var(--muted); transition: transform .15s ease; margin-left: -4px; }
+.folded .fold-ic { transform: rotate(-90deg); }
+.ugroup.folded { padding-bottom: 18px; }
+.ugroup.folded > .rows, .group.folded > .rows { display: none; }
+.ugroup.folded > .ugroup-head { border-bottom: 0; margin-bottom: 0; padding-bottom: 0; }
+.group .group-head .fold-ic { margin-left: 0; }
+.my-setup[hidden] { display: none; }
+/* наведение на строку: ровная плашка со скруглением со всех сторон, черты рядом с ней прячем; у последней строки черты нет */
+.ugroup .rows > .trow:last-child { border-bottom-color: transparent; }
+.ugroup .rows > .trow:hover { border-radius: 10px; border-bottom-color: transparent; }
+.ugroup .rows > .trow:has(+ .trow:hover) { border-bottom-color: transparent; }
+/* «Мои задачи»: фильтр по типу задач (фокус) */
+.my-types { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+.my-types[hidden] { display: none; }
+.my-type-n { color: var(--muted); font-weight: 500; }
+.fchip.on .my-type-n { color: inherit; opacity: .7; }

@@ -130,8 +130,8 @@ export function editLayout(key, defs, container, onDone, opts = {}) {
   container.classList.add('lz-mode');
   fill(container,
     h('header', { class: 'lz-head' },
-      h('button', { class: 'icon-btn back-btn', title: 'Назад: Дашборд', 'aria-label': 'Назад: Дашборд', onclick: () => { container.classList.remove('lz-mode'); done(); } }, icon('back', 18)),
-      h('div', { class: 'lz-titles' }, h('span', { class: 'lz-crumb muted' }, 'Дашборд'), h('h1', null, opts.title || 'Настройка главной')),
+      h('button', { class: 'icon-btn back-btn', title: 'Назад: ' + (opts.crumb || 'Дашборд'), 'aria-label': 'Назад: ' + (opts.crumb || 'Дашборд'), onclick: () => { container.classList.remove('lz-mode'); done(); } }, icon('back', 18)),
+      h('div', { class: 'lz-titles' }, h('span', { class: 'lz-crumb muted' }, opts.crumb || 'Дашборд'), h('h1', null, opts.title || 'Настройка главной')),
       h('div', { class: 'lz-actions' },
         opts.extra,
         h('button', { class: 'btn ghost', onclick: () => { L = current('__none', defs); save(key, null); fillZones(); } }, 'По умолчанию'),
@@ -140,7 +140,7 @@ export function editLayout(key, defs, container, onDone, opts = {}) {
     zone('full', 'Сверху, на всю ширину'),
     h('div', { class: 'lz-grid' }, zone('left', 'Левая колонка', 'широкая'), zone('right', 'Правая колонка', 'узкая')),
     h('div', { class: 'lz-note' }, icon('alert', 13), 'На узком экране и телефоне колонки встают друг под другом: сначала левая, потом правая.'),
-    zone('hidden', 'Скрытые блоки', 'перетащите сюда, чтобы убрать с главной'));
+    zone('hidden', 'Скрытые блоки', opts.hiddenHint || 'перетащите сюда, чтобы убрать с главной'));
 
   for (const z of Object.values(zones)) {
     sortables.push(Sortable.create(z, {
