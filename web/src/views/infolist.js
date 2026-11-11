@@ -3,7 +3,7 @@
  * Нужен не всем: CEO включает его выбранным людям и каждому отмечает поля (Настройки → Приложения → Инфо-лист).
  * Человек видит его в «Настройках» отдельным разделом.
  */
-import { S, me, unitById, deptById, plural, safeUrl, isSuper } from '../state.js';
+import { S, me, unitById, deptById, plural, safeUrl, isSuper, LS } from '../state.js';
 import { $, h, icon, avatar, fill, modal, toast, showErr, skeleton, topbar } from '../ui.js';
 import { navigate } from '../router.js';
 import { call, send } from '../api.js';
@@ -116,21 +116,39 @@ function infoListParts() {
   const body = h('div', { class: 'il-body' }, skeleton());
   const q = h('input', { class: 'inp il-q', type: 'search', placeholder: 'Найти приложение', 'aria-label': 'Найти приложение' });
   let data = null;
+  // юнит: кнопки «Все · Gold · RF…»; «Все» — таблица по юнитам с заголовками
+  let unitF = LS.get('ilUnit', '');
+  const unitsBar = h('div', { class: 'il-units', role: 'radiogroup', 'aria-label': 'Юнит' });
+  const order = id => { const i = S.units.findIndex(u => u.id === id); return i < 0 ? 999 : i; };
   const draw = () => {
     if (!data) return;
-    if (!data.on) { fill(body, h('p', { class: 'muted' }, isSuper() ? 'Отметьте колонки выше — появится таблица.' : 'Инфо-лист вам выключен.')); return; }
+    if (!data.on) { fill(unitsBar); fill(body, h('p', { class: 'muted' }, isSuper() ? 'Отметьте колонки выше — появится таблица.' : 'Инфо-лист вам выключен.')); return; }
     const s = q.value.trim().toLowerCase();
-    const apps = data.apps.filter(a => !s || a.name.toLowerCase().includes(s));
+    const found = data.apps.filter(a => !s || a.name.toLowerCase().includes(s));
+    const unitIds = [...new Set(data.apps.map(a => a.unitId))].sort((a, b) => order(a) - order(b));
+    if (unitF && !unitIds.includes(unitF)) unitF = '';
+    fill(unitsBar, unitIds.length > 1 && [['', 'Все', data.apps.length], ...unitIds.map(id => [id, (unitById(id) || {}).name || '—', data.apps.filter(a => a.unitId === id).length])]
+      .map(([id, name, n]) => h('button', { type: 'button', class: 'fchip' + (unitF === id ? ' on' : ''), role: 'radio', 'aria-checked': String(unitF === id),
+        onclick: () => { unitF = id; LS.set('ilUnit', id); draw(); } },
+      id && h('span', { class: 'il-udot', style: { background: (unitById(id) || {}).color || 'var(--muted)' } }), name, h('span', { class: 'il-unit-n' }, n))));
     const cols = `minmax(200px, 1.4fr) repeat(${data.fields.length}, minmax(180px, 1fr))`;
+    const appRow = a => h('div', { class: 'il-row', role: 'row', style: { gridTemplateColumns: cols } },
+      h('span', { class: 'il-app', role: 'cell' }, appIcon(a, 'sm'),
+        h('span', { class: 'il-app-name' }, h('b', null, a.name), !unitF && unitIds.length < 2 && h('small', { class: 'muted' }, (unitById(a.unitId) || {}).name || ''))),
+      data.fields.map(f => h('span', { role: 'cell', class: 'il-cell' }, cell(f, a.values[f.id]))));
+    const groups = (unitF ? [unitF] : unitIds).map(id => ({ id, apps: found.filter(a => a.unitId === id) })).filter(g => g.apps.length);
     fill(body,
       !data.apps.length ? h('p', { class: 'muted' }, 'В ваших юнитах пока нет приложений.')
         : h('div', { class: 'card-box il-table', role: 'table', 'aria-label': 'Инфо-лист' },
           h('div', { class: 'il-row il-head', role: 'row', style: { gridTemplateColumns: cols } },
             h('span', { role: 'columnheader' }, 'Приложение'), data.fields.map(f => h('span', { role: 'columnheader' }, f.name))),
-          apps.length ? apps.map(a => h('div', { class: 'il-row', role: 'row', style: { gridTemplateColumns: cols } },
-            h('span', { class: 'il-app', role: 'cell' }, appIcon(a, 'sm'),
-              h('span', { class: 'il-app-name' }, h('b', null, a.name), h('small', { class: 'muted' }, (unitById(a.unitId) || {}).name || ''))),
-            data.fields.map(f => h('span', { role: 'cell', class: 'il-cell' }, cell(f, a.values[f.id])))))
+          groups.length ? groups.map(g => [
+            // заголовок юнита — когда показаны все юниты
+            !unitF && unitIds.length > 1 && h('div', { class: 'il-group', role: 'row' },
+              h('span', { class: 'il-udot', style: { background: (unitById(g.id) || {}).color || 'var(--muted)' } }),
+              h('b', null, (unitById(g.id) || {}).name || '—'),
+              h('span', { class: 'muted' }, g.apps.length + ' ' + plural(g.apps.length, ['приложение', 'приложения', 'приложений']))),
+            g.apps.map(appRow)])
             : h('p', { class: 'muted il-none' }, 'Ничего не нашлось')));
   };
   q.addEventListener('input', draw);
@@ -165,7 +183,7 @@ function infoListParts() {
       .then(() => toast(on ? '«Инфо-лист» добавлен в меню слева' : '«Инфо-лист» убран из меню слева'))
       .catch(e => { nav.checked = !on; p.prefs = { ...(p.prefs || {}), infoListNav: !on }; renderSidebar(); showErr(e); });
   };
-  return { q, body, own, navSwitch: h('label', { class: 'il-nav' }, h('span', null, 'В меню слева'), nav) };
+  return { q, body, own, unitsBar, navSwitch: h('label', { class: 'il-nav' }, h('span', null, 'В меню слева'), nav) };
 }
 const IL_SUB = 'Ссылки по приложениям ваших юнитов. Какие поля здесь — решает CEO';
 const IL_SUB_CEO = 'Ссылки по приложениям всех юнитов. Какие колонки показывать — отметьте ниже';
@@ -173,10 +191,10 @@ const ilSub = () => (isSuper() ? IL_SUB_CEO : IL_SUB);
 
 /** Раздел «Инфо-лист» в настройках человека. */
 export function infoListSection() {
-  const { q, body, own, navSwitch } = infoListParts();
+  const { q, body, own, unitsBar, navSwitch } = infoListParts();
   return [
     h('div', { class: 'prefs-head il-headrow' }, h('div', null, h('h2', null, 'Инфо-лист'), h('p', { class: 'muted' }, ilSub())), navSwitch),
-    own, q, body,
+    own, h('div', { class: 'il-tools' }, q, unitsBar), body,
   ];
 }
 
@@ -184,9 +202,10 @@ export function infoListSection() {
 export function renderInfoList() {
   if (!hasInfoList()) { navigate({ view: 'home' }, { replace: true }); return; }
   // рабочая страница — только таблица; колонки и «Кому включён» настраиваются в «Настройках → Инфо-лист»
-  const { q, body, navSwitch } = infoListParts();
+  const { q, body, unitsBar, navSwitch } = infoListParts();
   fill($('#main'), topbar([h('h1', null, 'Инфо-лист')], [navSwitch]),
-    h('div', { class: 'view-body' }, h('div', { class: 'page il-page' }, h('p', { class: 'muted il-sub' }, isSuper() ? 'Ссылки по приложениям всех юнитов. Колонки — в «Настройках → Инфо-лист»' : IL_SUB), q, body)));
+    h('div', { class: 'view-body' }, h('div', { class: 'page il-page' }, h('p', { class: 'muted il-sub' }, isSuper() ? 'Ссылки по приложениям всех юнитов. Колонки — в «Настройках → Инфо-лист»' : IL_SUB),
+      h('div', { class: 'il-tools' }, q, unitsBar), body)));
 }
 
 export const infoListCount = () => { const n = (S.infoListIds || []).length; return n ? `включён у ${n} ${plural(n, ['человека', 'человек', 'человек'])}` : 'пока ни у кого'; };

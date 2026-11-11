@@ -3262,3 +3262,14 @@ a.bug-title:hover { text-decoration: underline; }
 /* Инфо-лист: ссылки чипами, как в «Сводке» */
 .il-link a.rd-link-chip { display: inline-flex; font-size: 12px; font-weight: 600; text-decoration: none; overflow: hidden; }
 .il-link a.rd-link-chip:hover { text-decoration: none; }
+/* Инфо-лист: поиск и юниты в одну строку; таблица по юнитам */
+.il-tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 12px; }
+.il-tools .il-q { margin: 0; flex: 0 1 320px; }
+.il-units { display: flex; flex-wrap: wrap; gap: 8px; }
+.il-units:empty { display: none; }
+.il-udot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; }
+.il-unit-n { color: var(--muted); font-weight: 500; }
+.fchip.on .il-unit-n { color: inherit; opacity: .7; }
+.il-group { display: flex; align-items: center; gap: 8px; padding: 14px 8px 6px; font-size: 13px; border-top: 1px solid var(--border); margin-top: 4px; }
+.il-head + .il-group { border-top: 0; margin-top: 0; }
+.il-group .muted { font-size: 12px; }
