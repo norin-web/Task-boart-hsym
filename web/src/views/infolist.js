@@ -8,6 +8,7 @@ import { $, h, icon, avatar, fill, modal, toast, showErr, skeleton, topbar } fro
 import { navigate } from '../router.js';
 import { call, send } from '../api.js';
 import { appIcon } from './apps.js';
+import { brandIcon, brandOf } from './brand.js';
 import { renderSidebar } from './sidebar.js';
 
 /** Включён ли инфо-лист вошедшему. */
@@ -103,8 +104,11 @@ function cell(f, v) {
   const url = safeUrl(v);
   const copy = h('button', { type: 'button', class: 'icon-btn sm il-copy', title: 'Скопировать ссылку', 'aria-label': 'Скопировать ссылку ' + f.name,
     onclick: () => (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(() => toast('Ссылка скопирована')).catch(() => toast('Не удалось скопировать', { type: 'error' })) }, icon('copy', 13));
+  // ссылка — чипом, как в «Сводке»: значок сервиса и название поля; полный адрес — в подсказке
   return h('span', { class: 'il-link' },
-    url ? h('a', { href: url, target: '_blank', rel: 'noopener noreferrer', title: v }, shortUrl(v)) : h('span', { title: v }, v), copy);
+    url ? h('a', { class: 'rd-link rd-link-chip', href: url, target: '_blank', rel: 'noopener noreferrer', title: v },
+      brandIcon(brandOf(v) || brandOf(f.name), 14, 'link'), h('span', null, String(f.name || shortUrl(v)).replace(/^Google\s+/i, '')))
+      : h('span', { title: v }, v), copy);
 }
 
 /** Таблица, поиск и переключатель «В меню слева» — общие для раздела настроек и отдельной страницы. */

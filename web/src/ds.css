@@ -3259,3 +3259,6 @@ a.bug-title:hover { text-decoration: underline; }
 .il-own { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 12px; }
 .il-own .il-fields { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .il-own-label { font-size: 13px; }
+/* Инфо-лист: ссылки чипами, как в «Сводке» */
+.il-link a.rd-link-chip { display: inline-flex; font-size: 12px; font-weight: 600; text-decoration: none; overflow: hidden; }
+.il-link a.rd-link-chip:hover { text-decoration: none; }
