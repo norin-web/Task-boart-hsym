@@ -3,7 +3,7 @@
  * Нужен не всем: CEO включает его выбранным людям и каждому отмечает поля (Настройки → Приложения → Инфо-лист).
  * Человек видит его в «Настройках» отдельным разделом.
  */
-import { S, me, unitById, deptById, plural, safeUrl } from '../state.js';
+import { S, me, unitById, deptById, plural, safeUrl, isSuper } from '../state.js';
 import { $, h, icon, avatar, fill, modal, toast, showErr, skeleton, topbar } from '../ui.js';
 import { navigate } from '../router.js';
 import { call, send } from '../api.js';
@@ -114,7 +114,7 @@ function infoListParts() {
   let data = null;
   const draw = () => {
     if (!data) return;
-    if (!data.on) { fill(body, h('p', { class: 'muted' }, 'Инфо-лист вам выключен.')); return; }
+    if (!data.on) { fill(body, h('p', { class: 'muted' }, isSuper() ? 'Отметьте колонки выше — появится таблица.' : 'Инфо-лист вам выключен.')); return; }
     const s = q.value.trim().toLowerCase();
     const apps = data.apps.filter(a => !s || a.name.toLowerCase().includes(s));
     const cols = `minmax(200px, 1.4fr) repeat(${data.fields.length}, minmax(180px, 1fr))`;
@@ -130,7 +130,25 @@ function infoListParts() {
             : h('p', { class: 'muted il-none' }, 'Ничего не нашлось')));
   };
   q.addEventListener('input', draw);
-  call('getMyInfoList', { personId: S.meId }).then(d => { data = d; draw(); }).catch(e => { fill(body); showErr(e); });
+  const load = () => call('getMyInfoList', { personId: S.meId }).then(d => { data = d; draw(); drawOwn(); }).catch(e => { fill(body); showErr(e); });
+  // CEO настраивает свой инфо-лист сам: какие поля-колонки показывать; «Кому включён» — остальным
+  const own = h('div', { class: 'il-own' });
+  const drawOwn = () => {
+    if (!isSuper()) return;
+    const ids = data && data.on ? data.fields.map(f => f.id) : [];
+    const set = next => send('setInfoList', { personId: S.meId, on: true, fieldIds: next })
+      .then(r => { S.infoListIds = [...new Set([...(S.infoListIds || []), S.meId])]; return r; }).then(load).catch(showErr);
+    fill(own,
+      h('div', { class: 'il-fields', role: 'group', 'aria-label': 'Мои колонки' },
+        h('span', { class: 'muted il-own-label' }, 'Колонки:'),
+        S.appFields.map(f => {
+          const has = ids.includes(f.id);
+          return h('button', { type: 'button', class: 'fchip' + (has ? ' on' : ''), 'aria-pressed': String(has),
+            onclick: () => set(has ? ids.filter(x => x !== f.id) : [...ids, f.id]) }, f.name);
+        })),
+      h('button', { type: 'button', class: 'btn ghost sm', onclick: () => openInfoListsEditor(load) }, icon('users', 14), 'Кому включён'));
+  };
+  load();
   // пункт «Инфо-лист» в меню слева — личная настройка человека
   const p = me();
   const nav = h('input', { type: 'checkbox', class: 'switch', checked: !!(p && (p.prefs || {}).infoListNav), 'aria-label': 'Показывать «Инфо-лист» в меню слева' });
@@ -143,25 +161,27 @@ function infoListParts() {
       .then(() => toast(on ? '«Инфо-лист» добавлен в меню слева' : '«Инфо-лист» убран из меню слева'))
       .catch(e => { nav.checked = !on; p.prefs = { ...(p.prefs || {}), infoListNav: !on }; renderSidebar(); showErr(e); });
   };
-  return { q, body, navSwitch: h('label', { class: 'il-nav' }, h('span', null, 'В меню слева'), nav) };
+  return { q, body, own, navSwitch: h('label', { class: 'il-nav' }, h('span', null, 'В меню слева'), nav) };
 }
 const IL_SUB = 'Ссылки по приложениям ваших юнитов. Какие поля здесь — решает CEO';
+const IL_SUB_CEO = 'Ссылки по приложениям всех юнитов. Какие колонки показывать — отметьте ниже';
+const ilSub = () => (isSuper() ? IL_SUB_CEO : IL_SUB);
 
 /** Раздел «Инфо-лист» в настройках человека. */
 export function infoListSection() {
-  const { q, body, navSwitch } = infoListParts();
+  const { q, body, own, navSwitch } = infoListParts();
   return [
-    h('div', { class: 'prefs-head il-headrow' }, h('div', null, h('h2', null, 'Инфо-лист'), h('p', { class: 'muted' }, IL_SUB)), navSwitch),
-    q, body,
+    h('div', { class: 'prefs-head il-headrow' }, h('div', null, h('h2', null, 'Инфо-лист'), h('p', { class: 'muted' }, ilSub())), navSwitch),
+    own, q, body,
   ];
 }
 
 /** Отдельная страница #/info — сюда ведёт пункт «Инфо-лист» в меню слева. */
 export function renderInfoList() {
   if (!hasInfoList()) { navigate({ view: 'home' }, { replace: true }); return; }
-  const { q, body, navSwitch } = infoListParts();
+  const { q, body, own, navSwitch } = infoListParts();
   fill($('#main'), topbar([h('h1', null, 'Инфо-лист')], [navSwitch]),
-    h('div', { class: 'view-body' }, h('div', { class: 'page il-page' }, h('p', { class: 'muted il-sub' }, IL_SUB), q, body)));
+    h('div', { class: 'view-body' }, h('div', { class: 'page il-page' }, h('p', { class: 'muted il-sub' }, ilSub()), own, q, body)));
 }
 
 export const infoListCount = () => { const n = (S.infoListIds || []).length; return n ? `включён у ${n} ${plural(n, ['человека', 'человек', 'человек'])}` : 'пока ни у кого'; };

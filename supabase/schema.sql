@@ -2811,3 +2811,19 @@ end $$;
 drop trigger if exists guard_app_name on apps;
 create trigger guard_app_name before insert or update of name, unit_id on apps for each row execute function guard_app_name();
 create index if not exists apps_unit_name_key on apps (unit_id, app_name_key(name));
+
+-- ---------- Инфо-лист у CEO: приложения всех юнитов, не только тех, где он участник (2026-11-11) ----------
+create or replace function my_info_list() returns table (id text, name text, icon_url text, color text, unit_id text, vals jsonb)
+language sql stable security definer set search_path = public as $$
+  select a.id, a.name, a.icon_url, a.color, a.unit_id,
+         coalesce((select jsonb_object_agg(k, a.info -> k) from jsonb_array_elements_text(l.field_ids) k
+                    where jsonb_typeof(a.info -> k) = 'string'), '{}'::jsonb)
+    from info_lists l
+    join apps a on not a.archived and (not a.is_test or is_dev())
+    join units u on u.id = a.unit_id and not u.archived
+   where l.person_id = my_person_id()
+     and (is_superadmin() or exists (select 1 from unit_members m where m.person_id = l.person_id and m.unit_id = a.unit_id))
+   order by lower(a.name);
+$$;
+revoke execute on function my_info_list() from public, anon;
+grant execute on function my_info_list() to authenticated;

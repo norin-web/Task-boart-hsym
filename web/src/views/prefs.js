@@ -28,7 +28,7 @@ const PERSONAL_ALL = [
 /** Разработчик (из своего аккаунта) предложения не шлёт — входящие у него на странице режима разработчика. */
 const devInbox = () => isDev() && S.meId === S.realMeId;
 /** Личные разделы: «Графики» — у тех, у кого есть аналитика (CEO и PM); «Инфо-лист» — кому его включил CEO. */
-const personal = () => PERSONAL_ALL.filter(t => (t[0] !== 'charts' || isSuper()) && (t[0] !== 'infolist' || hasInfoList()) && (t[0] !== 'feedback' || !devInbox()));
+const personal = () => PERSONAL_ALL.filter(t => (t[0] !== 'charts' || isSuper()) && (t[0] !== 'infolist' || hasInfoList() || isSuper()) && (t[0] !== 'feedback' || !devInbox()));
 
 /** Разделы студии, доступные вошедшему. */
 const studio = () => [

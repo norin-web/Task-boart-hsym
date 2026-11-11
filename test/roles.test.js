@@ -1431,3 +1431,17 @@ test('«Мои задачи»: у запроса — сколько этапов
   if (placed) assert.ok(placed.stages.total > 0 && placed.stages.done > 0 && placed.stages.done < placed.stages.total);
   assert.ok(all.filter(t => t.kind !== 'request').every(t => !('stages' in t)));
 });
+
+test('инфо-лист у CEO: свои колонки, приложения всех юнитов (и тех, где он не участник)', async () => {
+  const api = await setup();
+  const { admin, A, B } = await team(api);
+  const a1 = (await api.as(admin, () => api('createApp', { name: 'Альфа', unitId: A.id, noRequest: true }))).app;
+  const b1 = (await api.as(admin, () => api('createApp', { name: 'Браво', unitId: B.id, noRequest: true }))).app;
+  const f = (await api.as(admin, () => api('getAppFields', {})))[0];
+  await api.as(admin, () => api('setInfoList', { personId: admin.id, on: true, fieldIds: [f.id] }));
+  const mine = await api.as(admin, () => api('getMyInfoList', { personId: admin.id }));
+  assert.equal(mine.on, true);
+  assert.deepEqual(mine.fields.map(x => x.id), [f.id]);
+  const ids = mine.apps.map(a => a.id);
+  assert.ok(ids.includes(a1.id) && ids.includes(b1.id));
+});

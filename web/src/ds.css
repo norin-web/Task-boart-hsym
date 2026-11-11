@@ -3254,3 +3254,8 @@ a.bug-title:hover { text-decoration: underline; }
 .my-types[hidden] { display: none; }
 .my-type-n { color: var(--muted); font-weight: 500; }
 .fchip.on .my-type-n { color: inherit; opacity: .7; }
+/* Инфо-лист у CEO: свои колонки и «Кому включён» */
+.il-own:empty { display: none; }
+.il-own { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 12px; }
+.il-own .il-fields { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.il-own-label { font-size: 13px; }
