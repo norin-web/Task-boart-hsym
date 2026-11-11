@@ -909,14 +909,17 @@ function openTaskPool(a, onDone) {
  */
 function quickBlock(a, manage, ceo, save, fromStore, redraw, configure) {
   const own = a.ownFields || [];
-  if (!S.appFields.length && !own.length && !manage) return null;
+  // быстрый доступ — ссылки на внешние источники; общие текстовые поля (Prod UPD, Development из импорта) сюда не выводим —
+  // их значения остаются и работают в «Сводке»
+  const common = S.appFields.filter(f => f.card !== false && f.kind === 'link');
+  if (!common.length && !own.length && !manage) return null;
   const putOwn = next => { a.ownFields = next; redraw(); save({ ownFields: next }); };
   return h('section', null,
     h('div', { class: 'up-head' }, h('h3', null, 'Быстрый доступ'),
-      manage && (S.appFields.length > 0 || own.length > 0) && h('button', { class: 'btn ghost sm', onclick: configure }, icon('plus', 14), 'Поле')),
-    S.appFields.length || own.length
+      manage && (common.length > 0 || own.length > 0) && h('button', { class: 'btn ghost sm', onclick: configure }, icon('plus', 14), 'Поле')),
+    common.length || own.length
       ? h('div', { class: 'af-list' },
-        S.appFields.filter(f => f.card !== false).map(f => infoRow(a, f, manage, v => (f === storeField() && v ? fromStore(v, { info: { [f.id]: v } }) : save({ info: { [f.id]: v } })))),
+        common.map(f => infoRow(a, f, manage, v => (f === storeField() && v ? fromStore(v, { info: { [f.id]: v } }) : save({ info: { [f.id]: v } })))),
         own.map(f => infoRow(a, f, manage, v => putOwn(own.map(x => (x.id === f.id ? { ...x, value: v } : x))), { value: f.value })))
       : h('div', { class: 'card-empty' },
         h('span', { class: 'muted' }, 'Ссылки под рукой: App Store, Figma, Google Drive…'),
@@ -1793,10 +1796,10 @@ export function openFieldsEditor(onDone) {
   const items = S.appFields.map(x => ({ ...x }));
   const row = (x, i, redraw) => [
     h('input', { class: 'inp', value: x.name, maxlength: 40, placeholder: 'Например, RevenueCat', 'aria-label': 'Название поля', oninput: e => { x.name = e.target.value; } }),
-    h('select', { class: 'inp', 'aria-label': 'Тип поля', onchange: e => { x.kind = e.target.value; } },
+    h('select', { class: 'inp', 'aria-label': 'Тип поля', onchange: e => { x.kind = e.target.value; redraw(); } },
       [['link', 'Ссылка'], ['text', 'Текст']].map(([k, label]) => h('option', { value: k, selected: k === x.kind }, label))),
-    h('label', { class: 'fe-card', title: 'Показывать поле в «Быстром доступе» карточки приложения' },
-      h('input', { type: 'checkbox', checked: x.card !== false, onchange: e => { x.card = e.target.checked ? undefined : false; } }), 'В карточке'),
+    h('label', { class: 'fe-card', title: x.kind === 'link' ? 'Показывать ссылку в «Быстром доступе» карточки приложения' : 'Текстовые поля в «Быстрый доступ» не выводятся — только ссылки' },
+      h('input', { type: 'checkbox', checked: x.kind === 'link' && x.card !== false, disabled: x.kind !== 'link', onchange: e => { x.card = e.target.checked ? undefined : false; } }), 'В карточке'),
     h('button', { class: 'icon-btn sm', title: 'Удалить (значения у приложений сотрутся)', onclick: () => { items.splice(i, 1); redraw(); } }, icon('x', 14)),
   ];
   modal({
