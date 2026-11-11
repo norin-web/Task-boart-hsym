@@ -230,9 +230,8 @@ export function taskGroups(tasks) {
 
 function row(t, { unit = true, done = false, progress = null, slot = false } = {}) {
   const due = dueInfo(t.dueDate, t.statusKind === 'done');
-  const d = deptById(t.departmentId);
   const late = due && due.cls.includes('overdue');
-  return taskLink(t.unit.id, t.id, { class: 'trow' + (done ? ' done' : ''), title: [t.key, d && d.name].filter(Boolean).join(' · ') },
+  return taskLink(t.unit.id, t.id, { class: 'trow' + (done ? ' done' : '') },
     whose !== 'set' && statusIcon(t.statusKind === 'progress' && /ревью/i.test(t.statusName) ? 'review' : t.statusKind, 16),
     h('span', { class: 'trow-key' }, t.key),
     h('span', { class: 't-title' }, t.title),

@@ -3245,10 +3245,11 @@ a.bug-title:hover { text-decoration: underline; }
 .ugroup.folded > .ugroup-head { border-bottom: 0; margin-bottom: 0; padding-bottom: 0; }
 .group .group-head .fold-ic { margin-left: 0; }
 .my-setup[hidden] { display: none; }
-/* наведение на строку: ровная плашка со скруглением со всех сторон, черты рядом с ней прячем; у последней строки черты нет */
-.ugroup .rows > .trow:last-child { border-bottom-color: transparent; }
-.ugroup .rows > .trow:hover { border-radius: 10px; border-bottom-color: transparent; }
-.ugroup .rows > .trow:has(+ .trow:hover) { border-bottom-color: transparent; }
+/* «Мои задачи»: строки без черт — разделяет воздух; наведение — плашка со скруглением, с отступом от заголовка */
+.ugroup .ugroup-head { border-bottom: 0; padding-bottom: 4px; margin-bottom: 4px; }
+.ugroup .rows { gap: 2px; }
+.ugroup .rows > .trow { border-bottom: 0; border-radius: 10px; min-height: 48px; }
+.ugroup .rows > .trow:hover { background: var(--surface-2); }
 /* «Мои задачи»: фильтр по типу задач (фокус) */
 .my-types { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
 .my-types[hidden] { display: none; }
