@@ -27,7 +27,8 @@ const GROUPS = [['', 'Не группировать'], ['unit', 'Юнит'], ['s
 /** Личная часть сводки из prefs: свои колонки и строки, значения, скрытые приложения, группировки. */
 function sheetOf() {
   const s = (me() && me().prefs && me().prefs.readySheet) || {};
-  return { cols: s.cols || [], vals: s.vals || {}, rows: s.rows || [], hide: s.hide || [], group: s.group || '', foldRows: s.foldRows || [], colGroup: s.colGroup || {}, foldCols: s.foldCols || [] };
+  return { cols: s.cols || [], vals: s.vals || {}, rows: s.rows || [], hide: s.hide || [], group: s.group || '', foldRows: s.foldRows || [], colGroup: s.colGroup || {}, foldCols: s.foldCols || [],
+    filters: s.filters && typeof s.filters === 'object' ? s.filters : {} };
 }
 
 const STAGES = [['design', 'Дизайн'], ['art', 'OB и ASO-графика'], ['ios', 'Разработка'], ['qa', 'Тесты'], ['integr', 'Интеграция'], ['meta', 'Тексты'], ['store', 'Метаданные'], ['retext', 'Тексты в дизайне'], ['l10n', 'Локализации'], ['release', 'Релиз']];
@@ -86,6 +87,35 @@ function stageMenu(row, key, anchor, reload) {
     } }));
   menu(anchor, [{ title: 'Статус этапа' }, ...items], { align: 'left' });
 }
+
+/** Значение ячейки для фильтра — та же подпись, что видна в таблице («В работе», «Дизайнер Мария», «Есть ссылка»…). */
+function filterLabel(c, row) {
+  const v = c.get(row);
+  const empty = '—';
+  if (c.custom) {
+    const d = c.def;
+    if (d.type === 'checkbox') return v ? 'Да' : 'Нет';
+    if (d.type === 'select') { const o = (d.options || []).find(x => x.id === v); return o ? o.name : empty; }
+    if (d.type === 'person') { const p = personById(v); return p ? p.name : empty; }
+    return v == null || v === '' ? 'Пусто' : 'Заполнено';
+  }
+  switch (c.type) {
+    case 'stage': return !v.t ? empty : v.t.done ? 'Готово' : v.ready ? 'В очереди' : v.t.blocked ? 'Ждёт' : (STAGE_CHIP[v.t.kind] || STAGE_CHIP.todo)[0];
+    case 'upd': return !v ? empty : v.text ? 'Есть (Prod UPD)' : v.done ? 'Готово' : 'В работе';
+    case 'status': { const st = S.appStatuses.find(x => x.id === v); return st ? st.name : empty; }
+    case 'person': { const p = personById(v); return p ? p.name : empty; }
+    case 'unit': { const u = unitById(v); return u ? u.name : empty; }
+    case 'link': return v ? 'Есть ссылка' : 'Нет ссылки';
+    case 'check': return v ? 'Да' : 'Нет';
+    case 'wait': return v ? (daysSince(v) >= 7 ? 'Дольше недели' : 'До недели') : empty;
+    default: return v == null || v === '' ? 'Пусто' : 'Заполнено';
+  }
+}
+/** Порядок значений в фильтре: статусы — как в настройках, остальное — по алфавиту, пустое — в конце. */
+const filterOrder = (c, labels) => {
+  const pos = c.type === 'status' ? x => { const i = S.appStatuses.findIndex(st => st.name === x); return i < 0 ? 999 : i; } : () => 0;
+  return labels.sort((a, b) => (a === '—') - (b === '—') || pos(a) - pos(b) || a.localeCompare(b, 'ru'));
+};
 
 /** Ячейка по типу колонки. ctx.reload перечитывает таблицу после правки. */
 function cell(c, row, ctx) {
@@ -288,10 +318,24 @@ export async function renderReady() {
   const dropGroupName = name => { if (!Object.values(sheet.colGroup).includes(name)) sheet.foldCols = sheet.foldCols.filter(x => x !== name); };
   const unGroup = colId => { const g = sheet.colGroup[colId]; delete sheet.colGroup[colId]; dropGroupName(g); persist(); draw(); };
 
+  // фильтр колонки: отмеченные значения; несколько — «или», разные колонки — «и»
+  const setFilter = (colId, list) => { if (list.length) sheet.filters[colId] = list; else delete sheet.filters[colId]; shownRows.clear(); persist(); draw(); };
   const colMenu = (anchor, c, ids, idx) => {
     const g = sheet.colGroup[c.id];
     const groups = [...new Set(Object.values(sheet.colGroup))].filter(x => x !== g);
+    // значения — по строкам с учётом остальных фильтров (сколько останется, если отметить)
+    const base = baseRows().filter(r => passes(r, c.id));
+    const counts = new Map();
+    for (const r of base) { const l = filterLabel(c, r); counts.set(l, (counts.get(l) || 0) + 1); }
+    const on = sheet.filters[c.id] || [];
+    for (const l of on) if (!counts.has(l)) counts.set(l, 0);
+    const reopen = () => setTimeout(() => { const a = body.querySelector(`[data-hcol="${c.id}"]`); if (a) colMenu(a, c, ids, idx); });
     menu(anchor, [
+      { title: 'Фильтр' },
+      ...filterOrder(c, [...counts.keys()]).map(l => ({ label: `${l} · ${counts.get(l)}`, icon: on.includes(l) ? 'check' : 'blank',
+        action: () => { setFilter(c.id, on.includes(l) ? on.filter(x => x !== l) : [...on, l]); reopen(); } })),
+      on.length > 0 && { label: 'Сбросить фильтр', icon: 'x', action: () => setFilter(c.id, []) },
+      { sep: true },
       { title: c.name },
       c.custom && { label: 'Свойства и тип…', icon: 'sliders', action: () => colDialog(c.def, def => { sheet.cols = sheet.cols.map(x => (x.id === def.id ? def : x)); persist(); draw(); }) },
       { label: 'Вставить колонку слева', icon: 'plus', action: () => colDialog(null, def => addCol(def, idx)) },
@@ -348,6 +392,21 @@ export async function renderReady() {
 
   const ROW_PAGE = 50;
   const shownRows = new Map();
+  // строки приложений до фильтров колонок (юнит, «Ждут разработки», скрытые)
+  const baseRows = () => {
+    const apps = rows.filter(r => !sheet.hide.includes(r.appId)).map(r => ({ ...r, key: r.appId }));
+    const inUnit = unit ? apps.filter(r => r.unitId === unit) : apps;
+    return onlyReady ? inUnit.filter(r => r.ready) : inUnit;
+  };
+  // строка проходит все фильтры колонок (кроме except — для подсчёта в меню этой колонки)
+  const passes = (r, except) => {
+    const cols = allColumns(sheet);
+    return Object.entries(sheet.filters).every(([id, list]) => {
+      if (id === except || !list.length) return true;
+      const c = cols.find(x => x.id === id);
+      return !c || list.includes(filterLabel(c, r));
+    });
+  };
   const draw = () => {
     const cols = allColumns(sheet);
     const ids = chosenIds(cols);
@@ -357,7 +416,10 @@ export async function renderReady() {
     const free = sheet.rows.map(f => ({ free: true, key: 'r:' + f.id, freeId: f.id, appName: f.name, stages: {}, links: {}, info: {}, checks: null, ready: false }));
     const inUnit = unit ? apps.filter(r => r.unitId === unit) : apps;
     const queue = inUnit.filter(r => r.ready);
-    const list = [...(onlyReady ? queue : inUnit), ...(unit || onlyReady ? [] : free)];
+    // фильтры колонок (только известные колонки: удалённая колонка фильтр не держит)
+    for (const id of Object.keys(sheet.filters)) if (!cols.some(c => c.id === id)) delete sheet.filters[id];
+    const filtered = Object.keys(sheet.filters).length > 0;
+    const list = [...(onlyReady ? queue : inUnit).filter(r => passes(r)), ...(unit || onlyReady || filtered ? [] : free)];
     const units = S.units.filter(u => !u.archived && rows.some(r => r.unitId === u.id));
 
     // строки по группам
@@ -433,7 +495,9 @@ export async function renderReady() {
 
     const head = h('div', { class: 'rd-row rd-head', role: 'row', style: rowStyle }, h('span', null, 'Приложение'),
       items.map(it => (it.col
-        ? h('span', { title: it.col.name }, h('button', { class: 'rd-hbtn', type: 'button', 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); colMenu(e.currentTarget, it.col, ids, shown.indexOf(it.col)); } }, h('span', null, it.col.name), icon('chevron', 12)))
+        ? h('span', { title: it.col.name }, h('button', { class: 'rd-hbtn' + (sheet.filters[it.col.id] ? ' filtered' : ''), type: 'button', 'aria-haspopup': 'menu', dataset: { hcol: it.col.id },
+          onclick: e => { e.stopPropagation(); colMenu(e.currentTarget, it.col, ids, shown.indexOf(it.col)); } },
+        sheet.filters[it.col.id] && icon('filter', 12), h('span', null, it.col.name), icon('chevron', 12)))
         : h('span', { class: 'rd-fold', title: it.fold }))),
       h('span', { class: 'rd-plus' }, h('button', { class: 'rd-hbtn', type: 'button', title: 'Добавить колонку', 'aria-label': 'Добавить колонку', onclick: () => colDialog(null, def => addCol(def)) }, icon('plus', 15))));
 
@@ -464,10 +528,21 @@ export async function renderReady() {
           { title: 'Скрытые строки' },
           ...hidden.map(r => ({ label: r.appName, icon: 'eye', action: () => { sheet.hide = sheet.hide.filter(x => x !== r.appId); persist(); draw(); } })),
           { sep: true }, { label: 'Показать все', icon: 'eye', action: () => { sheet.hide = []; persist(); draw(); } }], { align: 'left' }) },
-        icon('eye', 13), `Скрыто: ${hidden.length}`)),
+        icon('eye', 13), `Скрыто: ${hidden.length}`),
+        // активные фильтры колонок: «Статус: В разработке, Ревью Apple ×»
+        ...Object.entries(sheet.filters).map(([id, vals]) => {
+          const c = cols.find(x => x.id === id);
+          return c && h('span', { class: 'rd-filter' }, icon('filter', 12),
+            h('button', { class: 'rd-filter-name', type: 'button', title: 'Изменить фильтр', onclick: () => { const a = body.querySelector(`[data-hcol="${id}"]`); if (a) colMenu(a, c, ids, shown.indexOf(c)); } },
+              `${c.name}: ${vals.join(', ')}`),
+            h('button', { class: 'rd-filter-x', type: 'button', title: 'Убрать фильтр', 'aria-label': 'Убрать фильтр ' + c.name, onclick: () => setFilter(id, []) }, icon('x', 12)));
+        }),
+        Object.keys(sheet.filters).length > 1 && h('button', { class: 'link-btn rd-filter-all', type: 'button', onclick: () => { sheet.filters = {}; shownRows.clear(); persist(); draw(); } }, 'Сбросить все')),
       list.length
         ? h('div', { class: 'table-wrap rd-table', role: 'table' }, band, head, lines,
           h('button', { class: 'rd-addrow', type: 'button', style: { width: total + 'px' }, onclick: addRow }, icon('plus', 14), 'Добавить строку'))
+        : filtered ? h('div', { class: 'card-box empty-state' }, h('h2', null, 'Ничего не подходит под фильтр'),
+          h('button', { class: 'btn', onclick: () => { sheet.filters = {}; persist(); draw(); } }, icon('x', 14), 'Сбросить фильтры'))
         : h('div', { class: 'card-box empty-state' }, h('h2', null, onlyReady ? 'Очередь пуста' : 'Приложений пока нет'),
           h('p', { class: 'muted' }, onlyReady ? 'Здесь появятся приложения, у которых дизайн закрыт, а разработка ещё не началась.' : 'Они появятся здесь, как только вы создадите приложение.'),
           !onlyReady && isDev() && h('button', { class: 'btn primary', onclick: () => navigate({ view: 'dev' }) }, icon('code', 14), 'Режим разработчика → Демо-процесс')));

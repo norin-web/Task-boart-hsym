@@ -3291,3 +3291,11 @@ a.bug-title:hover { text-decoration: underline; }
 .board:not(.lanes) { overflow-y: hidden; }
 .board:not(.lanes) > .col { height: 100%; max-height: 100%; min-height: 0; }
 .board:not(.lanes) > .col > .col-list { flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+/* Сводка: фильтры колонок */
+.rd-hbtn.filtered { color: var(--accent-text, var(--accent)); }
+.rd-hbtn .i:first-child { flex: none; }
+.rd-filter { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 4px 0 10px; border-radius: 999px; background: var(--primary); color: var(--on-primary); font-size: 12px; font-weight: 600; max-width: 360px; }
+.rd-filter-name { border: 0; background: none; color: inherit; font: inherit; padding: 0; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rd-filter-x { border: 0; background: transparent; color: inherit; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; cursor: pointer; opacity: .75; }
+.rd-filter-x:hover { opacity: 1; background: color-mix(in srgb, var(--on-primary) 18%, transparent); }
+.rd-filter-all { font-size: 12px; }
