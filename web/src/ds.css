@@ -3274,3 +3274,20 @@ a.bug-title:hover { text-decoration: underline; }
 .il-group { display: flex; align-items: center; gap: 8px; padding: 14px 8px 6px; font-size: 13px; border-top: 1px solid var(--border); margin-top: 4px; }
 .il-head + .il-group { border-top: 0; margin-top: 0; }
 .il-group .muted { font-size: 12px; }
+/* Карточка задачи: заготовка этапов, пока грузятся (те же высоты, что у шапки и строк) */
+.fb-skel { display: flex; flex-direction: column; gap: 4px; }
+.fb-skel i { display: block; border-radius: 8px; background: linear-gradient(100deg, var(--surface-3) 30%, var(--surface-2) 50%, var(--surface-3) 70%) 0 0 / 300% 100%; animation: skel-shim 1.4s ease-in-out infinite; }
+.fb-skel-head { display: flex; align-items: center; gap: 12px; padding: 4px 8px 8px; height: 44px; box-sizing: border-box; }
+.fb-skel-ic { width: 32px; height: 32px; border-radius: 10px !important; flex: none; }
+.fb-skel-title { height: 14px; flex: 1; max-width: 260px; }
+.fb-skel-bar { height: 6px; width: 120px; margin-left: auto; }
+.fb-skel-row { display: flex; align-items: center; gap: 12px; height: 36px; padding: 0 8px; }
+.fb-skel-dot { width: 16px; height: 16px; border-radius: 50% !important; flex: none; }
+.fb-skel-row i:not(.fb-skel-dot) { height: 12px; }
+@media (prefers-reduced-motion: reduce) { .fb-skel i { animation: none; } }
+.fb-skel-edit { padding: 2px 8px 0; }
+.fb-skel-edit i { width: 130px; height: 28px; border-radius: 999px !important; }
+/* Доска (без группировки): шапки колонок стоят, карточки прокручиваются внутри своей колонки; быстрое создание — под списком */
+.board:not(.lanes) { overflow-y: hidden; }
+.board:not(.lanes) > .col { height: 100%; max-height: 100%; min-height: 0; }
+.board:not(.lanes) > .col > .col-list { flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }

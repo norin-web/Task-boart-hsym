@@ -191,12 +191,22 @@ function treeBlock(t, { noParents = false } = {}) {
   return box;
 }
 
+/** Этапы запроса, уже открывавшегося в этой сессии: при повторном открытии рисуем сразу, потом тихо обновляем. */
+const treeCache = new Map();
+/** Заготовка блока этапов, пока они грузятся: шапка и строки той же высоты — карточка не прыгает. */
+const flowSkeleton = () => h('div', { class: 'fb-skel', role: 'status', 'aria-label': 'Загружаем этапы' },
+  h('div', { class: 'fb-skel-head' }, h('i', { class: 'fb-skel-ic' }), h('i', { class: 'fb-skel-title' }), h('i', { class: 'fb-skel-bar' })),
+  [72, 58, 64, 34].map(w => h('div', { class: 'fb-skel-row' }, h('i', { class: 'fb-skel-dot' }), h('i', { style: { width: w + '%' } }))),
+  h('div', { class: 'fb-skel-edit' }, h('i')));
+
 /**
  * Tasks 2.0: запрос CEO — приложение, этапы флоу (состояние, блокировки), «Разложить по флоу»;
  * этап — к какому запросу относится, чего ждёт, у релиза — «Передать в релиз» (когда всё закрыто).
  */
 function flowBlock(t) {
   const box = h('div', { class: 'tree-block flow-block' });
+  const treeId = t.kind === 'stage' && t.parentId ? t.parentId : t.id;
+  if (!treeCache.has(treeId)) fill(box, flowSkeleton());
   const app = appById(t.appId);
   const manage = isSuper() || (isStaff() && (S.board.members || []).some(m => m.personId === S.meId)); // CEO или PM юнита
   const reload = () => { load(); reloadBoard().catch(() => {}); };
@@ -219,10 +229,14 @@ function flowBlock(t) {
         : n.assigneeId ? avatar(personById(n.assigneeId), 'sm') : h('span', { class: 'muted rq-who' }, n.step === 'release' ? 'RM' : '—'));
   };
   async function load() {
-    let tree;
     // запрос может быть не виден (лиду, сотруднику) — тогда блока нет совсем, без пустой карточки
-    try { tree = await call('getTaskTree', { id: t.kind === 'stage' && t.parentId ? t.parentId : t.id }); } catch { box.remove(); return; }
+    let tree;
+    try { tree = await call('getTaskTree', { id: treeId }); } catch { box.remove(); return; }
+    treeCache.set(treeId, tree);
     if (S.panelTaskId !== t.id) return;
+    draw(tree);
+  }
+  function draw(tree) {
     const req = tree.task;
     const stages = tree.descendants.filter(n => n.depth === 1 && n.kind === 'stage' && !n.archived);
     const done = stages.filter(n => stateOf(n, stages) === 'done').length;
@@ -263,7 +277,7 @@ function flowBlock(t) {
         const vis = expanded || relReady ? stages.length : Math.min(stages.length, Math.max(3, cur + 3));
         const hidden = stages.length - vis;
         return [stages.slice(0, vis).map(n => stageRow(n, stages)),
-          (hidden > 0 || expanded) && stages.length > 3 && h('button', { class: 'rq-more', 'aria-expanded': String(expanded), onclick: () => { expanded = !expanded; load(); } },
+          (hidden > 0 || expanded) && stages.length > 3 && h('button', { class: 'rq-more', 'aria-expanded': String(expanded), onclick: () => { expanded = !expanded; draw(treeCache.get(treeId)); } },
             h('span', { class: 'rq-ic rq-more-chev' }, icon('chevron', 16)),
             h('span', { class: 'rq-stitle muted' }, expanded ? 'Свернуть' : `Ещё ${hidden} ${plural(hidden, ['этап', 'этапа', 'этапов'])}`),
             h('span', { class: 'muted rq-state' }, expanded ? '' : 'Показать'))];
@@ -306,6 +320,7 @@ function flowBlock(t) {
       !add.length && !del.length && h('p', { class: 'muted', style: { padding: '4px 10px', margin: 0 } }, 'Менять нечего'),
     ], { align: 'left' });
   }
+  if (treeCache.has(treeId)) draw(treeCache.get(treeId));
   load();
   return box;
 }
