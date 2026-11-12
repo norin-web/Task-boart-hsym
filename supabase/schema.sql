@@ -2827,3 +2827,56 @@ language sql stable security definer set search_path = public as $$
 $$;
 revoke execute on function my_info_list() from public, anon;
 grant execute on function my_info_list() to authenticated;
+
+-- ---------- Ссылки наследуются вниз (2026-11-12) ----------
+-- Ссылку поставили или поменяли в задаче — она уходит всем её потомкам (запрос → этапы → подзадачи),
+-- где поле пустое или стояло прежнее значение: свою другую ссылку этапа не трогаем. Снятие — так же.
+create or replace function share_task_link(p_task text, p_field text, p_url text, p_old text) returns integer
+language plpgsql security definer set search_path = public as $$
+declare
+  v_cur record; n integer := 0;
+  at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+begin
+  select * into v_cur from tasks where id = p_task;
+  if v_cur.id is null or not can_see_link(p_field) then return 0; end if;
+  if not (can_manage(v_cur.unit_id) or v_cur.assignee_id = my_person_id() or v_cur.review_from = my_person_id()) then
+    raise exception 'Недостаточно прав для этого действия' using errcode = '42501';
+  end if;
+  if coalesce(p_url, '') <> '' then
+    with recursive fam as (
+      select t.id, t.unit_id from tasks t where t.parent_id = p_task and not t.archived
+      union all select t.id, t.unit_id from tasks t join fam f on t.parent_id = f.id where not t.archived
+    )
+    insert into task_links (task_id, field_id, unit_id, url, updated_at)
+      select f.id, p_field, f.unit_id, p_url, at_ from fam f
+       where coalesce((select l.url from task_links l where l.task_id = f.id and l.field_id = p_field), '') in ('', coalesce(p_old, ''))
+    on conflict (task_id, field_id) do update set url = excluded.url, updated_at = excluded.updated_at;
+  elsif coalesce(p_old, '') <> '' then
+    with recursive fam as (
+      select t.id from tasks t where t.parent_id = p_task and not t.archived
+      union all select t.id from tasks t join fam f on t.parent_id = f.id where not t.archived
+    )
+    delete from task_links l using fam f where l.task_id = f.id and l.field_id = p_field and l.url = p_old;
+  end if;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke execute on function share_task_link(text, text, text, text) from public, anon;
+grant execute on function share_task_link(text, text, text, text) to authenticated;
+
+-- Один раз: ссылки, добавленные в открытые запросы после разбивки, — их этапам и подзадачам, где поле пустое
+do $$
+begin
+  if not exists (select 1 from app_settings where key = 'once_links_to_stages') then
+    with recursive fam as (
+      select r.id as root, r.id from tasks r where r.kind = 'request' and not r.archived and r.done_at = ''
+      union all select f.root, t.id from tasks t join fam f on t.parent_id = f.id where not t.archived
+    )
+    insert into task_links (task_id, field_id, unit_id, url, updated_at)
+      select f.id, l.field_id, t.unit_id, l.url, l.updated_at
+        from fam f join task_links l on l.task_id = f.root join tasks t on t.id = f.id
+       where f.id <> f.root
+    on conflict (task_id, field_id) do nothing;
+    insert into app_settings (key, value, updated_at) values ('once_links_to_stages', 'true'::jsonb, '') on conflict (key) do nothing;
+  end if;
+end $$;

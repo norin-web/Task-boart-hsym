@@ -484,6 +484,20 @@ function copyLink(t) {
 
 /* ---------- ссылки ---------- */
 
+/** То же, что share_task_link в базе, — на загруженной доске: ссылка уходит потомкам задачи (этапам, подзадачам). */
+function shareLinkLocal(t, fieldId, url, old) {
+  const tasks = (S.board && S.board.tasks) || [];
+  const fam = new Set([t.id]);
+  for (let grew = true; grew;) { grew = false; for (const x of tasks) if (!fam.has(x.id) && fam.has(x.parentId)) { fam.add(x.id); grew = true; } }
+  for (const x of tasks) {
+    if (x.id === t.id || !fam.has(x.id)) continue;
+    const ls = x.links || (x.links = {});
+    const cur = ls[fieldId] || '';
+    if (url && (cur === '' || cur === old)) ls[fieldId] = url;
+    else if (!url && old && cur === old) delete ls[fieldId];
+  }
+}
+
 /** Ссылки задачи (Figma, GitHub…): только поля, открытые позиции человека. Правка на месте: карандаш → поле → Enter. */
 function linksBlock(t, editable) {
   const fields = visibleLinkFields();
@@ -509,6 +523,7 @@ function linksBlock(t, editable) {
         try {
           const saved = await send('setTaskLink', { taskId: t.id, fieldId: f.id, url: v });
           if (saved) links[f.id] = saved; else delete links[f.id];
+          shareLinkLocal(t, f.id, saved || '', url);
           if (!S.peek) renderTasks();
           fill(box, ...draw());
         } catch (e) { inp.disabled = false; showErr(e); }

@@ -3682,7 +3682,11 @@ export function createBackend(db, opts = {}) {
         const gone = await run(T('task_links').delete().eq('task_id', t.id).eq('field_id', fieldId).select('task_id'));
         if (!gone.length) fail('Недостаточно прав для этого действия', 'FORBIDDEN');
       }
-      if ((had ? had.url : '') !== url) await log([{ unitId: t.unit_id, taskId: t.id, action: 'update', field: 'link:' + fieldId, from: had ? had.url : null, to: url || null }], ctx);
+      if ((had ? had.url : '') !== url) {
+        await log([{ unitId: t.unit_id, taskId: t.id, action: 'update', field: 'link:' + fieldId, from: had ? had.url : null, to: url || null }], ctx);
+        // ссылка наследуется вниз: этапам запроса и подзадачам этапа (где пусто или стояла прежняя)
+        await rpc('share_task_link', { p_task: t.id, p_field: fieldId, p_url: url, p_old: had ? had.url : '' });
+      }
       return url;
     },
 
