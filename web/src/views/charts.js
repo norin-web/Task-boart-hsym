@@ -3,6 +3,7 @@
  * Цвета и шрифты — токены; подпись есть у каждой линии (цвет только помогает).
  */
 import { h } from '../ui.js';
+import { METRIC_KIND } from '../chartdefs.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 // цвет в SVG-разметке — только безопасный формат (#hex, var(--…), rgb()), иначе текущий: цвет из базы мог записать кто угодно
@@ -257,14 +258,33 @@ export function chartSeries(data, c) {
   }));
 }
 
+/**
+ * «Число» — только по показанным рядам («Что показывать»): состояние (приложения, просрочки) — сейчас, на конец периода;
+ * события (задачи, релизы, реджекты) — сумма за период; время в работе — среднее.
+ */
+function numberOf(data, c, series) {
+  const kind = METRIC_KIND[c.metric];
+  const span = c.days === 365 ? 'год' : `${c.days} дней`;
+  const timeAxis = data.x.length > 0 && !!data.x[0].end && !(data.x.length === 1 && c.step === 'total');
+  let value;
+  if (kind === 'avg') {
+    const vals = series.flatMap(s => s.values).filter(Boolean);
+    value = vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 10) / 10 : 0;
+  } else if (kind === 'state' && timeAxis) value = series.reduce((a, s) => a + (s.values[s.values.length - 1] || 0), 0);
+  else value = series.reduce((a, s) => a + s.values.reduce((x, y) => x + y, 0), 0);
+  const note = kind === 'state' ? 'сейчас' : kind === 'avg' ? `в среднем за ${span}` : `за ${span}`;
+  return { value, note };
+}
+
 /** Нарисовать свой график по данным getChartData и настройке c (вид — c.view). */
 export function renderChart(data, c, { height = 220 } = {}) {
   const series = chartSeries(data, c);
   const aria = c.title;
   if (c.view === 'number') {
+    const { value, note } = numberOf(data, c, series);
     return h('div', { class: 'chart-number', style: { height: height + 'px' } },
-      h('b', null, String(data.total).replace('.', ',') + (data.unit ? ' ' + data.unit : '')),
-      h('span', { class: 'muted' }, c.step === 'total' || c.metric === 'apps' || c.metric === 'overdue' ? `за ${c.days === 365 ? 'год' : c.days + ' дней'}` : 'итого за период'));
+      h('b', null, String(value).replace('.', ',') + (data.unit ? ' ' + data.unit : '')),
+      h('span', { class: 'muted' }, note));
   }
   if (!series.length) return h('div', { class: 'chart-empty muted', style: { height: height + 'px' } }, 'Нет данных за период');
   const labels = data.x.map(x => xLabel(x, c.step, c.days));

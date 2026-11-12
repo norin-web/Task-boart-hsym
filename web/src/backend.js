@@ -2381,9 +2381,13 @@ export function createBackend(db, opts = {}) {
 
       // команда: участники этих юнитов, кроме CEO и PM
       const ids = new Set(members.filter(m => U[m.unit_id]).map(m => m.person_id));
+      // KPI — по настоящей работе, как в графиках: без запросов, без этапов, розданных на подзадачи, и без перемотанных при разнесении
+      const splitIds = new Set(own.filter(t => t.step === 'part' && t.parent_id).map(t => t.parent_id));
+      const instantDone = t => t.kind === 'stage' && !!t.done_at
+        && (t.started_at === t.done_at || (!!t.created_at && Date.parse(t.done_at) - Date.parse(t.created_at) < 5 * 60e3));
       const team = ppl.filter(x => x.active && ids.has(x.id) && !['superadmin', 'moderator'].includes(x.access)).map(x => {
         const mine = own.filter(t => t.assignee_id === x.id);
-        const closed = mine.filter(t => done(t) && t.done_at >= from);
+        const closed = mine.filter(t => done(t) && t.done_at >= from && t.kind !== 'request' && !splitIds.has(t.id) && !instantDone(t));
         const withDue = closed.filter(t => t.due_date);
         const onTime = withDue.filter(t => t.done_at.slice(0, 10) <= t.due_date).length;
         const spans = closed.map(t => (Date.parse(t.done_at) - Date.parse(t.started_at || t.created_at)) / 864e5).filter(d => d >= 0);
@@ -2522,10 +2526,21 @@ export function createBackend(db, opts = {}) {
         }
       } else {
         // только то, что попадает в период: закрытые в нём (задачи, время в работе) или со сроком до его конца (просрочки)
-        const tasks = (await all(() => {
-          const q = T('tasks').select('id,unit_id,assignee_id,department_id,done_at,started_at,created_at,due_date').eq('archived', false);
-          return (c.metric === 'overdue' ? q.neq('due_date', '').lt('due_date', buckets[n - 1].to) : q.gte('done_at', buckets[0].from)).order('id');
-        })).filter(t => unitOk(t.unit_id));
+        const [rowsT, partParents] = await Promise.all([
+          all(() => {
+            const q = T('tasks').select('id,unit_id,assignee_id,department_id,done_at,started_at,created_at,due_date,kind,step').eq('archived', false);
+            return (c.metric === 'overdue' ? q.neq('due_date', '').lt('due_date', buckets[n - 1].to) : q.gte('done_at', buckets[0].from)).order('id');
+          }),
+          all(() => T('tasks').select('parent_id').eq('step', 'part').eq('archived', false).order('id')),
+        ]);
+        // считаем работу, а не обёртки и автоматику: без запросов (они закрываются сами вслед за этапами),
+        // без этапов, розданных на подзадачи (считаются подзадачи), и без закрытых сразу при создании
+        // (импорт, «Разнести по этапам» — пройденные этапы закрываются разом, это не сделанная за день работа)
+        const split = new Set(partParents.map(r => r.parent_id).filter(Boolean));
+        // этап «перемотан» вперёд (импорт, placeApps): закрыт сразу после создания или взят и закрыт одним моментом
+        const instant = t => t.kind === 'stage' && !!t.done_at
+          && (t.started_at === t.done_at || (!!t.created_at && Date.parse(t.done_at) - Date.parse(t.created_at) < 5 * 60e3));
+        const tasks = rowsT.filter(t => unitOk(t.unit_id) && t.kind !== 'request' && !split.has(t.id) && (c.metric === 'overdue' || !instant(t)));
         for (const t of tasks) {
           const row = { unit: t.unit_id, position: t.department_id, person: t.assignee_id };
           const key = dimOf(row, c.split);

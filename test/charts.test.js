@@ -106,3 +106,32 @@ test('графики: приложения по юнитам и статусам
   const onlyRf = await chart(api, ceo, { metric: 'tasks', split: 'unit', view: 'bars', step: 'week', days: 30 }, rf.id);
   assert.ok(onlyRf.series.every(s => s.id === rf.id));
 });
+
+test('графики «Задачи» и «Время в работе»: без запросов, без этапов, перемотанных при разнесении, без этапа, розданного на подзадачи', async () => {
+  const api = await setup();
+  const ceo = await person(api, 'CEO', 'superadmin', 'd_po');
+  const gold = await api('createUnit', { name: 'Gold', key: 'GLD' });
+  // приложение «уже в работе»: «Разнести по этапам» закрывает пройденные этапы разом — это не работа за день
+  const app = (await api.as(ceo, () => api('createApp', { name: 'Импорт', unitId: gold.id, noRequest: true }))).app;
+  await api.as(ceo, () => api('placeApps', { items: [{ id: app.id, stage: 'qa' }] }));
+  const placedDone = (await api.pg.query(`select count(*)::int n from tasks where app_id = $1 and kind = 'stage' and done_at <> ''`, [app.id])).rows[0].n;
+  assert.ok(placedDone > 0);
+  // настоящая работа: задача, взятая в работу неделю назад и закрытая сегодня
+  const t = await api.as(ceo, () => api('createTask', { unitId: gold.id, title: 'Работа' }));
+  const b = await api.as(ceo, () => api('getBoard', { unitId: gold.id }));
+  const cols = b.unit.settings.columns;
+  await api.as(ceo, () => api('updateTask', { id: t.id, patch: { status: cols.find(c => c.kind === 'progress').id } }));
+  await api.pg.query(`update tasks set started_at = $1, created_at = $1 where id = $2`, [daysAgo(7), t.id]);
+  await api.as(ceo, () => api('updateTask', { id: t.id, patch: { status: cols.find(c => c.kind === 'done').id } }));
+  // этап, розданный на подзадачи: считается подзадача, не сам этап
+  const stage = (await api.pg.query(`select id from tasks where app_id = $1 and kind = 'stage' and done_at = '' order by created_at limit 1`, [app.id])).rows[0];
+  const part = await api.as(ceo, () => api('createTask', { unitId: gold.id, title: 'Подзадача', parentId: stage.id }));
+  await api.pg.query(`update tasks set step = 'part', created_at = $1, started_at = $1 where id = $2`, [daysAgo(3), part.id]);
+  await api.as(ceo, () => api('updateTask', { id: part.id, patch: { status: cols.find(c => c.kind === 'done').id } }));
+  await api.pg.query(`update tasks set done_at = $1 where id = $2`, [new Date().toISOString(), stage.id]);
+
+  const d = await chart(api, ceo, { metric: 'tasks', split: 'none', step: 'total', days: 30 });
+  assert.equal(d.series[0].values.reduce((a, b) => a + b, 0), 2); // «Работа» и подзадача
+  const cyc = await chart(api, ceo, { metric: 'cycle', split: 'none', step: 'total', days: 30 });
+  assert.ok(cyc.total >= 3 && cyc.total <= 7, 'среднее — по настоящей работе, без нулей от перемотки: ' + cyc.total);
+});

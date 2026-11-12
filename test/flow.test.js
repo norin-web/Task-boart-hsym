@@ -391,6 +391,8 @@ test('дашборд PM: входящие, этапы, проблемы, KPI к�
   const { request: inboxReq } = await api.as(ceo, () => api('createApp', { name: 'Inbox', unitId: gold.id }));
   const { request: r } = await api.as(ceo, () => api('createApp', { name: 'Work', unitId: gold.id }));
   const st = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: r.id }))).map(t => [t.step, t]));
+  // этапы созданы два дня назад: закрытое сразу после создания KPI не считает (это перемотка, а не работа)
+  await api.pg.query(`update tasks set created_at = $1 where parent_id = $2`, [new Date(Date.now() - 2 * 864e5).toISOString(), r.id]);
   // дизайн — в срок; iOS — после срока; ещё одна задача iOS просрочена и висит
   await api.as(pm, () => api('updateTask', { id: st.design.id, patch: { dueDate: '2099-01-01' } }));
   await api.as(lead, () => api('updateTask', { id: st.design.id, patch: { status: 'in_progress' } }));
