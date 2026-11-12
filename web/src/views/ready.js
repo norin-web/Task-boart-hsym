@@ -419,7 +419,11 @@ export async function renderReady() {
     // фильтры колонок (только известные колонки: удалённая колонка фильтр не держит)
     for (const id of Object.keys(sheet.filters)) if (!cols.some(c => c.id === id)) delete sheet.filters[id];
     const filtered = Object.keys(sheet.filters).length > 0;
-    const list = [...(onlyReady ? queue : inUnit).filter(r => passes(r)), ...(unit || onlyReady || filtered ? [] : free)];
+    // ближе к финишу — выше: больше готовых этапов сверху; при равном — прежний порядок
+    const doneN = r => Object.values(r.stages || {}).filter(t => t && t.done).length;
+    const ranked = (onlyReady ? queue : inUnit).filter(r => passes(r)).map((r, i) => ({ r, i, n: doneN(r) }))
+      .sort((a, b) => b.n - a.n || a.i - b.i).map(x => x.r);
+    const list = [...ranked, ...(unit || onlyReady || filtered ? [] : free)];
     const units = S.units.filter(u => !u.archived && rows.some(r => r.unitId === u.id));
 
     // строки по группам
