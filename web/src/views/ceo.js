@@ -165,7 +165,9 @@ function folded(items, renderRow, limit = 5) {
 }
 
 export function inProgress(d, reload, { brief = false } = {}) {
-  const rows = [...d.inProgress].sort((a, b) => prioRank(b.request.priority) - prioRank(a.request.priority)
+  // ближе к финишу — выше: больше готовых этапов сверху; при равном прогрессе — приоритет, потом срок
+  const rows = [...d.inProgress].sort((a, b) => (b.request.progress || 0) - (a.request.progress || 0)
+    || prioRank(b.request.priority) - prioRank(a.request.priority)
     || (a.request.dueDate || '9999').localeCompare(b.request.dueDate || '9999'));
   const today = todayStr();
   // обзор юнита (C02): короткий список — приложение, работа и этап, полоса прогресса, срок
