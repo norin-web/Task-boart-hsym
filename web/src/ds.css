@@ -3319,3 +3319,8 @@ a.bug-title:hover { text-decoration: underline; }
 .view-body:has(> .myboard) { display: flex; flex-direction: column; overflow: hidden; }
 .view-body > .myboard { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .myboard > .board { flex: 1; min-height: 0; }
+/* «Открыть в App Store» — синяя, как у Apple, с белым значком */
+.btn.store-blue, .topbar .btn.store-blue { background: #0a84ff; border-color: #0a84ff; color: #fff; gap: 6px; }
+.btn.store-blue:hover { background: #0070e0; border-color: #0070e0; color: #fff; }
+.btn.store-blue:active { background: #005ec0; border-color: #005ec0; }
+.btn.store-blue .store-glyph { display: inline-flex; }

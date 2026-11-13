@@ -63,6 +63,14 @@ export async function storeLookup(url) {
   } catch { return null; }
 }
 /** Приложение в сторе — значок и подпись App Store вместо статуса. */
+/** Белый значок App Store («A» из палочек) — для синей кнопки. */
+const appStoreGlyph = size => {
+  const el = document.createElement('span');
+  el.className = 'store-glyph';
+  el.setAttribute('aria-hidden', 'true');
+  el.innerHTML = `<svg viewBox="100 130 600 540" width="${size}" height="${size}" fill="currentColor"><path d="m396.6 183.8 16.2-28c10-17.5 32.3-23.4 49.8-13.4s23.4 32.3 13.4 49.8L319.9 462.4h112.9c36.6 0 57.1 43 41.2 72.8H143c-20.2 0-36.4-16.2-36.4-36.4s16.2-36.4 36.4-36.4h92.8l118.8-205.9-37.1-64.4c-10-17.5-4.1-39.6 13.4-49.8 17.5-10 39.6-4.1 49.8 13.4l15.9 28.1zM256.2 572.7l-35 60.7c-10 17.5-32.3 23.4-49.8 13.4S148 614.5 158 597l26-45c29.4-9.1 53.3-2.1 72.2 20.7zm301.4-110.1h94.7c20.2 0 36.4 16.2 36.4 36.4s-16.2 36.4-36.4 36.4h-52.6l35.5 61.6c10 17.5 4.1 39.6-13.4 49.8-17.5 10-39.6 4.1-49.8-13.4-59.8-103.7-104.7-181.3-134.5-233-30.5-52.6-8.7-105.4 12.8-123.3 23.9 41 59.6 102.9 107.3 185.5z"/></svg>`;
+  return el;
+};
 export const storeBadge = () => h('span', { class: 'store-badge', title: 'В App Store' }, h('img', { src: appStoreSvg, alt: '', width: 18, height: 18 }), 'App Store');
 /** Проверка показала, что страницы в сторе нет. */
 export const storeGoneBadge = () => h('span', { class: 'store-badge gone', title: 'Страница в App Store не открывается' }, icon('alert', 15), 'Нет в App Store');
@@ -695,7 +703,8 @@ export function openAppPanel(a, onChange, page = null) {
   loadNotes();
   if (page) {
     // страница (макет 12б): шапка в topbar, ниже блоки слева и правая колонка
-    const storeA = storeUrl && h('a', { class: 'btn ghost sm aph-store-btn', href: safeUrl(storeUrl), target: '_blank', rel: 'noopener' }, 'Открыть в App Store', icon('arrowUpRight', 13));
+    // синяя кнопка с белым значком App Store (как у Apple)
+    const storeA = storeUrl && h('a', { class: 'btn sm aph-store-btn store-blue', href: safeUrl(storeUrl), target: '_blank', rel: 'noopener' }, appStoreGlyph(15), 'Открыть в App Store', icon('arrowUpRight', 13));
     const more = h('button', { class: 'icon-btn', title: 'Действия', 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); menu(e.currentTarget, actions()); } }, icon('more', 18));
     fill(page, topbar([pageHead], [storeA, more]),
       h('div', { class: 'view-body' }, h('div', { class: 'app-page' }, body, side)));
