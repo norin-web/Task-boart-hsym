@@ -690,7 +690,8 @@ document.addEventListener('mousedown', e => {
 function quickAddEl(status, dept, compact) {
   if (!isStaff()) return null;
   if (S.quick.status !== status || S.quick.dept !== dept) {
-    return h('button', { class: 'quick-btn' + (compact ? ' compact' : ''), onclick: () => openQuickAdd(status, dept) }, icon('plus', 14), compact ? '' : 'Задача');
+    // в колонке кнопки «+ Задача» нет — есть плюсик в шапке колонки; в строках группировки — маленький плюс
+    return compact ? h('button', { class: 'quick-btn compact', title: 'Добавить задачу', onclick: () => openQuickAdd(status, dept) }, icon('plus', 14)) : null;
   }
   const cancel = () => { S.quick = { status: null, dept: null, text: '' }; renderTasks(); };
   const inp = h('textarea', {

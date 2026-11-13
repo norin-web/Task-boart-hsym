@@ -3299,3 +3299,17 @@ a.bug-title:hover { text-decoration: underline; }
 .rd-filter-x { border: 0; background: transparent; color: inherit; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; cursor: pointer; opacity: .75; }
 .rd-filter-x:hover { opacity: 1; background: color-mix(in srgb, var(--on-primary) 18%, transparent); }
 .rd-filter-all { font-size: 12px; }
+/* Доска: колонка видна до самого низа, карточки уходят под её скруглённый нижний край (а не срезаются в пустоте) */
+.board:not(.lanes) > .col { background: color-mix(in srgb, var(--surface-3) 70%, transparent); overflow: hidden; padding-bottom: 0; }
+.board:not(.lanes) > .col > .col-list { padding-bottom: 12px; }
+.board:not(.lanes) > .col > .quick { margin-bottom: 12px; }
+/* Шапка колонки: «+» и «⋯» видны всегда, а не только при наведении */
+.col-head .icon-btn, .col-head .col-menu-btn { opacity: 1; pointer-events: auto; }
+.col-head { min-width: 0; }
+.col-head .col-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.col-head .icon-btn, .col-head .col-count, .col-head .st-ic { flex: none; }
+/* шапка колонки компактнее — название помещается рядом с «+» и «⋯» */
+.board .col-head { gap: 5px; padding: 0 2px 0 4px; }
+.board:not(.lanes) > .col { padding-left: 10px; padding-right: 10px; }
+.board .col-head .icon-btn.sm { width: 22px; height: 22px; }
+.board .col-head .icon-btn.sm + .icon-btn.sm { margin-left: -2px; }
