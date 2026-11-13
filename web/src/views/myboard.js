@@ -6,7 +6,7 @@
  * Свои колонки — people.prefs.myBoard.custom [{ id, name, group, color }]; старт — шаблон моей команды.
  */
 import Sortable from 'sortablejs';
-import { S, me, activeTeams, between, dueInfo, todayStr, PALETTE, isStaff, LS } from '../state.js';
+import { S, me, activeTeams, between, dueInfo, todayStr, PALETTE, isStaff, LS, plural } from '../state.js';
 import { $, h, icon, topbar, fill, modal, showErr, statusDot, statusIcon, confirmDlg, menu, closeMenu, toast, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
@@ -84,14 +84,17 @@ export async function renderMyBoard() {
     doneToggle.setAttribute('aria-checked', String(showDone));
     fill(doneToggle, h('span', { class: 'sw' }), 'Показывать готовые', !showDone && data.doneHidden > 0 && h('span', { class: 'my-type-n' }, data.doneHidden));
   };
-  doneToggle.onclick = async () => {
+  const toggleDone = async () => {
     showDone = !showDone;
     LS.set('mbShowDone', showDone);
     paintDone();
     try { data = await fetchBoard(); } catch (e) { showErr(e); return; }
     if (currentView() !== 'my') return;
+    data.onShowDone = toggleDone;
     paintDone(); drawControls(); drawTypes(); draw(host, data);
   };
+  doneToggle.onclick = toggleDone;
+  data.onShowDone = toggleDone;
   paintDone();
   $('#main .topbar').replaceWith(top()); // роль известна только после загрузки людей
   const drawControls = () => fill(controls,
@@ -176,8 +179,15 @@ function draw(page, data) {
 
   const columnEls = cols.map(c => {
     const mine = items.filter(i => i.col.id === c.id).sort((a, b) => a.order - b.order);
+    // «Готово» при скрытых готовых: сколько их и кнопка «Показать» (их не грузили, чтобы доска открывалась быстрее)
+    const hiddenDone = c.fixed && c.group === 'done' ? data.doneHidden || 0 : 0;
     const list = h('div', { class: 'col-list', dataset: { stage: c.id } }, mine.map(card),
-      !mine.length && h('div', { class: 'col-empty' }, c.group === 'review' && c.fixed ? 'Перетащите сюда — уйдёт на ревью' : 'Пусто'));
+      !mine.length && (hiddenDone
+        ? h('div', { class: 'mb-done-hidden' },
+          h('b', null, hiddenDone + ' ' + plural(hiddenDone, ['готовая задача', 'готовые задачи', 'готовых задач'])),
+          h('span', { class: 'muted' }, 'Скрыты, чтобы доска открывалась быстрее'),
+          data.onShowDone && h('button', { class: 'btn sm', type: 'button', onclick: () => data.onShowDone() }, icon('eye', 14), 'Показать'))
+        : h('div', { class: 'col-empty' }, c.group === 'review' && c.fixed ? 'Перетащите сюда — уйдёт на ревью' : 'Пусто')));
     sortables.push(Sortable.create(list, {
       group: 'myboard', animation: 150, draggable: '.card', ghostClass: 'sortable-ghost', fallbackClass: 'sortable-drag', forceFallback: true, fallbackTolerance: 4,
       onEnd: evt => {
@@ -191,7 +201,7 @@ function draw(page, data) {
     return h('section', { class: 'col' + (c.fixed ? ' fixed' : ' own'), dataset: { group: c.group }, style: { '--cc': color } },
       h('div', { class: 'col-head' }, c.fixed ? statusIcon(c.group, 16) : statusDot(color, 9),
         h('span', { class: 'col-name', title: c.fixed ? 'Обязательная колонка — по ней меняется статус в юните' : 'Ваша колонка · считается как «' + FIXED.find(f => f.group === c.group).name + '»' }, c.name),
-        h('span', { class: 'col-count' }, mine.length)),
+        h('span', { class: 'col-count', title: hiddenDone ? 'Готовые скрыты — «Показывать готовые»' : '' }, mine.length + hiddenDone)),
       list);
   });
 

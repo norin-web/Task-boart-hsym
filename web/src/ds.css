@@ -3248,7 +3248,7 @@ a.bug-title:hover { text-decoration: underline; }
 /* «Мои задачи»: строки без черт — разделяет воздух; наведение — плашка со скруглением, с отступом от заголовка */
 .ugroup .ugroup-head { border-bottom: 0; padding-bottom: 4px; margin-bottom: 4px; }
 .ugroup .rows { gap: 2px; }
-.ugroup .rows > .trow { border-bottom: 0; border-radius: 10px; min-height: 48px; }
+.ugroup .rows > .trow, .ugroup .rows > * + * { border-bottom: 0; border-top: 0; border-radius: 10px; min-height: 48px; } /* без черт сверху и снизу */
 .ugroup .rows > .trow:hover { background: var(--surface-2); }
 /* «Мои задачи»: фильтр по типу задач (фокус) */
 .my-types { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
@@ -3327,3 +3327,7 @@ a.bug-title:hover { text-decoration: underline; }
 /* полоса прокрутки в колонках не видна (прокрутка колесом и тачпадом работает) */
 .board:not(.lanes) > .col > .col-list { scrollbar-width: none; }
 .board:not(.lanes) > .col > .col-list::-webkit-scrollbar { display: none; }
+/* «Мои задачи» → доска: в «Готово» при скрытых готовых — сколько их и «Показать» */
+.mb-done-hidden { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 20px 12px; border: 1px dashed var(--border-strong); border-radius: 16px; text-align: center; font-size: 13px; }
+.mb-done-hidden .muted { font-size: 12px; }
+.mb-done-hidden .btn { margin-top: 6px; }
