@@ -136,7 +136,7 @@ function cell(c, row, ctx) {
     case 'status': {
       const st = S.appStatuses.find(x => x.id === v); if (!st) return h('span', { class: 'muted' }, '—');
       const el = pick(st.name, 'stat', an => menu(an, [{ title: 'Статус приложения' }, ...S.appStatuses.map(x => ({ label: x.name, icon: x.id === v ? 'check' : 'blank',
-        action: () => { row.status = x.id; ctx.redraw(); send('updateApp', { id: row.appId, status: x.id }).then(ctx.reload, e => { showErr(e); ctx.reload(); }); } }))], { align: 'left' }));
+        action: () => { ctx.patch(row, { status: x.id }); send('updateApp', { id: row.appId, status: x.id }).then(ctx.reload, e => { showErr(e); ctx.reload(); }); } }))], { align: 'left' }));
       el.style.setProperty('--c', st.color);
       return el;
     }
@@ -151,7 +151,7 @@ function cell(c, row, ctx) {
         onclick: e => {
           e.stopPropagation();
           const checks = { ...(row.checks || { own: [] }), done: v ? done.filter(x => x !== id) : [...done, id] };
-          row.checks = checks; ctx.redraw(); // сразу на экране, база — в фоне
+          ctx.patch(row, { checks }); // сразу на экране, база — в фоне
           send('updateApp', { id: row.appId, checks }).then(ctx.reload, er => { showErr(er); ctx.reload(); });
         } }, v ? icon('check', 13) : null);
     }
@@ -475,7 +475,9 @@ export async function renderReady() {
       h('button', { class: 'btn', type: 'button', onclick: addRow }, icon('plus', 14), 'Строка'));
 
     const late = queue.filter(r => daysSince(r.readySince) >= 7).length;
-    const ctx = { reload: load, set: setVal, redraw: draw };
+    // строки таблицы — копии; правку кладём в исходные данные (иначе перерисовка вернёт старое до ответа базы)
+    const patchRow = (row, patch) => { Object.assign(row, patch); const src = rows.find(x => x.appId === row.appId); if (src) Object.assign(src, patch); draw(); };
+    const ctx = { reload: load, set: setVal, redraw: draw, patch: patchRow };
     const moreBtn = r => h('button', { class: 'icon-btn sm rd-more', type: 'button', 'aria-haspopup': 'menu', 'aria-label': 'Действия со строкой', title: 'Действия со строкой', onclick: e => { e.stopPropagation(); rowMenu(e.currentTarget, r); } }, icon('more', 15));
     const rowEl = r => h('div', { class: 'rd-row' + (r.ready ? ' queued' : ''), role: 'row', style: rowStyle },
       r.free
