@@ -34,8 +34,14 @@ export async function renderMy() {
     [setupBtn, isStaff() && h('button', { class: 'btn primary', onclick: () => import('./task.js').then(m => m.openCreateTask({ onCreated: reload })) }, 'Задача')]),
   h('div', { class: 'view-body' }, page));
 
-  const memKey = () => 'my:' + whose;
-  const fetchTasks = async () => { const list = await (whose === 'set' ? call('queryTasks', { authorId: S.meId, limit: 500 }) : loadMyTasks()); keep(memKey(), list); return list; };
+  // готовые — по переключателю «Показывать готовые»; выключен — с сервера их не берём вовсе
+  showDone = LS.get('myShowDone', false) === true;
+  const memKey = () => 'my:' + whose + (showDone ? ':done' : '');
+  const fetchTasks = async () => {
+    const list = await call('queryTasks', { ...(whose === 'set' ? { authorId: S.meId } : { assigneeId: S.meId }), limit: 500, open: !showDone });
+    keep(memKey(), list);
+    return list;
+  };
   // повторный заход — сразу из памяти, свежее — в фоне (в конце, когда экран построен)
   let tasks = peek(memKey());
   const fromMemory = !!tasks;
@@ -51,7 +57,6 @@ export async function renderMy() {
 
   // Вид (по работе / по юнитам / по статусу) и «показывать готовые» запоминаем; «По работе» — только для своих задач
   let view = myView() === 'board' ? 'units' : myView(); // «Поставил я» — без доски
-  showDone = LS.get('myShowDone', false) === true;
   const list = h('div');
   // тип задачи: этап (Дизайн, Онбординг и ASO, iOS…), запрос, подзадача, прочее — фильтр «фокус»
   let type = LS.get('myType', '');
@@ -84,7 +89,8 @@ export async function renderMy() {
       h('input', { type: 'search', placeholder: 'Поиск по задачам', value: query, oninput: e => { query = e.target.value; drawList(); } })),
     h('div', { class: 'seg my-view' }),
     h('button', { class: 'my-toggle', role: 'switch', 'aria-checked': String(showDone), onclick: e => {
-      showDone = !showDone; LS.set('myShowDone', showDone); e.currentTarget.setAttribute('aria-checked', String(showDone)); drawTypes(); drawList();
+      showDone = !showDone; LS.set('myShowDone', showDone); e.currentTarget.setAttribute('aria-checked', String(showDone));
+      reload(); // готовые подтягиваем, только когда их показывают
     } }, h('span', { class: 'sw' }), 'Показывать готовые'));
   onSetup = () => {
     const q = query.trim().toLowerCase();

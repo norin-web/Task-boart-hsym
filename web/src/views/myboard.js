@@ -71,11 +71,28 @@ export async function renderMyBoard() {
     isStaff() && h('button', { class: 'btn primary', onclick: () => import('./task.js').then(m => m.openCreateTask()) }, 'Задача'),
   ]);
   fill($('#main'), top(), h('div', { class: 'view-body' }, controls, host));
+  // готовые — по переключателю; выключен — с сервера их не берём вовсе
+  let showDone = LS.get('mbShowDone', false) === true;
+  const fetchBoard = () => call('getMyBoard', { personId: S.meId, today: todayStr(), withDone: showDone });
   let data;
   try {
-    data = await call('getMyBoard', { personId: S.meId, today: todayStr() });
+    data = await fetchBoard();
   } catch (e) { showErr(e); return; }
   if (currentView() !== 'my') return;
+  const doneToggle = h('button', { class: 'my-toggle', role: 'switch' });
+  const paintDone = () => {
+    doneToggle.setAttribute('aria-checked', String(showDone));
+    fill(doneToggle, h('span', { class: 'sw' }), 'Показывать готовые', !showDone && data.doneHidden > 0 && h('span', { class: 'my-type-n' }, data.doneHidden));
+  };
+  doneToggle.onclick = async () => {
+    showDone = !showDone;
+    LS.set('mbShowDone', showDone);
+    paintDone();
+    try { data = await fetchBoard(); } catch (e) { showErr(e); return; }
+    if (currentView() !== 'my') return;
+    paintDone(); drawControls(); drawTypes(); draw(host, data);
+  };
+  paintDone();
   $('#main .topbar').replaceWith(top()); // роль известна только после загрузки людей
   const drawControls = () => fill(controls,
     myViewSeg('board'),
@@ -86,6 +103,7 @@ export async function renderMyBoard() {
       data.units.map(u => h('button', { class: 'fchip' + (mbUnit === u.id ? ' on' : ''), onclick: () => { mbUnit = mbUnit === u.id ? '' : u.id; drawControls(); draw(host, data); } },
         h('span', { class: 'dot', style: { background: u.color } }), u.name))],
     h('span', { class: 'spacer' }),
+    doneToggle,
     h('button', { class: 'btn lg', onclick: () => editColumns(() => renderMyBoard()) }, icon('plus', 14), 'Своя колонка'));
   // фильтр по типу: кнопки с количеством (по выбранному юниту)
   const types = h('div', { class: 'my-types mb-types', role: 'radiogroup', 'aria-label': 'Тип задач' });

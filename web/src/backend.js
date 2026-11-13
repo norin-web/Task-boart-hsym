@@ -1149,6 +1149,7 @@ export function createBackend(db, opts = {}) {
       }
       let rows = await all(() => {
         let b = T('tasks').select(p.count ? 'id,unit_id' : '*').eq('archived', false);
+        if (p.open) b = b.eq('done_at', ''); // готовые скрыты — не тянем
         if (p.assigneeId) b = b.eq('assignee_id', String(p.assigneeId));
         if (p.authorId) b = b.eq('created_by', String(p.authorId)).neq('kind', 'stage'); // «Поставил я»: этапы разбивки — не постановка
         if (ids) b = b.in('id', ids);
@@ -1771,10 +1772,14 @@ export function createBackend(db, opts = {}) {
      */
     async getMyBoard(p) {
       const me = str(p.personId, 40);
+      // готовые — только если их показывают (withDone): скрыты — не тянем, это большая часть задач
+      const withDone = p.withDone !== false;
+      const q = build => (withDone ? build : build.eq('done_at', ''));
       // свои задачи + отправленные мной на ревью (они у ревьюера, но видны мне в Review — можно забрать обратно)
-      const [mine, sent] = await Promise.all([
-        all(() => T('tasks').select('*').eq('assignee_id', me).eq('archived', false).order('id')),
-        all(() => T('tasks').select('*').eq('review_from', me).eq('archived', false).order('id')),
+      const [mine, sent, doneIds] = await Promise.all([
+        all(() => q(T('tasks').select('*').eq('assignee_id', me).eq('archived', false)).order('id')),
+        all(() => q(T('tasks').select('*').eq('review_from', me).eq('archived', false)).order('id')),
+        withDone ? [] : all(() => T('tasks').select('id,unit_id').eq('assignee_id', me).eq('archived', false).neq('done_at', '').order('id')),
       ]);
       const rows = await hideWaiting([...mine, ...sent.filter(t => !mine.some(x => x.id === t.id))]);
       const unitIds = [...new Set(rows.map(t => t.unit_id))];
@@ -1784,6 +1789,8 @@ export function createBackend(db, opts = {}) {
       ]);
       const live = new Set(units.filter(u => !u.archived).map(u => u.id));
       return {
+        // сколько готовых скрыто (для «Показывать готовые · N»)
+        doneHidden: withDone ? 0 : doneIds.length,
         tasks: rows.filter(t => live.has(t.unit_id)).map(taskOut),
         units: units.filter(u => !u.archived).map(u => ({ id: u.id, name: u.name, key: u.key, color: u.color, columns: unitSettings(u.settings).columns })),
         placement: Object.fromEntries(places.map(r => [r.task_id, { stage: r.stage, order: Number(r.ord) }])),

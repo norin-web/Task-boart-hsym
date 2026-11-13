@@ -1446,3 +1446,20 @@ test('инфо-лист у CEO: свои колонки, приложения в
   const ids = mine.apps.map(a => a.id);
   assert.ok(ids.includes(a1.id) && ids.includes(b1.id));
 });
+
+test('«Мои задачи»: готовые скрыты — не тянем (getMyBoard withDone:false, queryTasks open), сколько скрыто — doneHidden', async () => {
+  const api = await setup();
+  const { admin, designer, A } = await team(api);
+  const b = await api.as(admin, () => api('getBoard', { unitId: A.id }));
+  const done = b.unit.settings.columns.find(c => c.kind === 'done').id;
+  const t1 = await api.as(admin, () => api('createTask', { unitId: A.id, title: 'Открытая', assigneeId: designer.id }));
+  const t2 = await api.as(admin, () => api('createTask', { unitId: A.id, title: 'Готовая', assigneeId: designer.id }));
+  await api.as(admin, () => api('updateTask', { id: t2.id, patch: { status: done } }));
+  const full = await api.as(designer, () => api('getMyBoard', { personId: designer.id }));
+  assert.ok(full.tasks.some(t => t.id === t2.id));
+  const lite = await api.as(designer, () => api('getMyBoard', { personId: designer.id, withDone: false }));
+  assert.ok(lite.tasks.some(t => t.id === t1.id) && !lite.tasks.some(t => t.id === t2.id));
+  assert.ok(lite.doneHidden >= 1);
+  const open = await api.as(designer, () => api('queryTasks', { assigneeId: designer.id, open: true }));
+  assert.ok(open.some(t => t.id === t1.id) && !open.some(t => t.id === t2.id));
+});

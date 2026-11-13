@@ -3315,3 +3315,7 @@ a.bug-title:hover { text-decoration: underline; }
 .board .col-head .icon-btn.sm + .icon-btn.sm { margin-left: -2px; }
 /* Моя доска: фильтр по типу под строкой поиска */
 .mb-types { margin: 0; padding: 10px 16px 0 24px; }
+/* «Мои задачи» → доска: высота — до низа экрана, карточки прокручиваются внутри колонок (как на доске юнита) */
+.view-body:has(> .myboard) { display: flex; flex-direction: column; overflow: hidden; }
+.view-body > .myboard { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.myboard > .board { flex: 1; min-height: 0; }
