@@ -169,7 +169,9 @@ export function workBlocks(tasks) {
   const rank = t => late(t) ? 0 : t.statusKind === 'progress' ? 1 : t.statusKind === 'todo' ? 2 : 3;
   const byDue = (a, b) => rank(a) - rank(b) || (a.dueDate || '9999').localeCompare(b.dueDate || '9999');
   const isReq = t => t.kind === 'request';
-  const isDesign = t => !isReq(t) && (t.step === 'design' || t.departmentId === 'd_design');
+  // этап — по самому этапу (у «Метаданных» исполнителя-дизайнера позиция дизайнерская, но это не дизайн);
+  // обычная задача и подзадача — по позиции
+  const isDesign = t => !isReq(t) && (t.step && t.step !== 'part' ? t.step === 'design' : t.departmentId === 'd_design');
   const checklist = t => { const c = t.checklist || []; return c.length ? { done: c.filter(i => i.done).length, total: c.length } : null; };
   const sections = [
     { id: 'place', title: 'Разложить по этапам', hint: 'Новые приложения и запросы, где PM — вы: этапов ещё нет',
