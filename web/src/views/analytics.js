@@ -5,7 +5,7 @@
  */
 import { S, LS, isSuper, todayStr, me } from '../state.js';
 import { $, h, icon, topbar, showErr, fill, skeleton } from '../ui.js';
-import { call, send } from '../api.js';
+import { call, send, swr } from '../api.js';
 import { currentView, navigate } from '../router.js';
 import { statBlocks, tileTable } from './ceo.js';
 import { team, PERIODS } from './pm.js';
@@ -48,10 +48,13 @@ export async function renderAnalytics(tile) {
   let d, apps, kpi, ov;
 
   async function load() {
+    // повторный заход — сразу из памяти, свежее — в фоне
     try {
-      [d, apps, kpi, ov] = await Promise.all([call('getCeoDashboard', { today: todayStr() }), call('listApps', {}), call('getPmDashboard', { today: todayStr(), period }), call('getOverview', { today: todayStr() })]);
-    } catch (e) { return showErr(e); }
-    if (currentView() !== 'analytics:' + (tile || '')) return;
+      await swr('analytics:' + period, () => Promise.all([call('getCeoDashboard', { today: todayStr() }), call('listApps', {}), call('getPmDashboard', { today: todayStr(), period }), call('getOverview', { today: todayStr() })]),
+        r => { [d, apps, kpi, ov] = r; show(); }, { still: () => currentView() === 'analytics:' + (tile || '') });
+    } catch (e) { showErr(e); }
+  }
+  function show() {
     S.apps = apps.map(({ requests, active, ...a }) => a);
     if (unit && !S.units.some(u => u.id === unit && !u.archived)) unit = '';
     draw();

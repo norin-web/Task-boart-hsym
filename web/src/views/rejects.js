@@ -5,7 +5,8 @@
  */
 import { isSuper, personById, unitById, fmtDate, plural, safeUrl, appStatusById } from '../state.js';
 import { $, h, icon, fill, topbar, toast, showErr, confirmDlg, emptyBlock, skeleton, menu } from '../ui.js';
-import { call, send } from '../api.js';
+import { call, send, swr } from '../api.js';
+import { currentView } from '../router.js';
 import { peekTask } from './task.js';
 import { appIcon, openAppById, shelveAppDlg, deleteAppsDlg, SHELVES, SHELF_ACTION, shelfDone } from './apps.js';
 import { openShots } from './shots.js';
@@ -26,9 +27,11 @@ export async function renderRejects() {
   let appResent = [];   // такие же, снова в «Ревью Apple» после «Реджекта» — отправлены повторно
   let shelved = [];     // убранные CEO: Design Spam [4.3] и удалённые
 
-  const load = async () => {
-    try {
-      const [dash, hist, gone] = await Promise.all([call('getRmDashboard', {}), call('getReleaseHistory', { result: 'reject' }), call('listApps', { archived: true, bare: true })]);
+  // повторный заход — сразу из памяти, свежее — в фоне
+  const load = () => swr('rejects', () => Promise.all([call('getRmDashboard', {}), call('getReleaseHistory', { result: 'reject' }), call('listApps', { archived: true, bare: true })]),
+    show, { still: () => currentView() === 'rejects' }).catch(showErr);
+  const show = ([dash, hist, gone]) => {
+    {
       appRejects = dash.rejectedApps || [];
       appResent = (dash.review || []).filter(x => x.appOnly && x.afterReject).map(x => ({ ...x, at: x.submittedAt }));
       shelved = gone;
@@ -48,7 +51,7 @@ export async function renderRejects() {
         if (!rows.some(r => r.taskId === a.id && r.open)) rows.push({ taskId: a.id, requestId: a.rejectRequestId || '', unitId: a.unitId, app: a.app, rejectNo: a.rejectNo, reason: a.reason, at: a.rejectedAt, shot: a.shot, state: 'open', open: true, fixed: false, pmId: a.pmId });
       }
       draw();
-    } catch (e) { showErr(e); }
+    }
   };
 
   async function step(x, action) {

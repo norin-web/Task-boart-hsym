@@ -4,7 +4,7 @@
  */
 import { personById, relTime, nameFrom } from '../state.js';
 import { $, h, icon, topbar, showErr, fill, toast, confirmDlg, emptyBlock, skeleton } from '../ui.js';
-import { call, send } from '../api.js';
+import { call, send, swr } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
 import { appIcon, appStatusCell, stageDots, openAppById } from './apps.js';
@@ -25,9 +25,10 @@ export async function renderRmHome() {
       h('button', { class: 'btn', title: 'Блоки и порядок дашборда', onclick: () => edit() }, icon('layers', 14), 'Настроить')]),
     h('div', { class: 'view-body' }, page));
   async function load() {
-    try { [d, live] = await Promise.all([call('getRmDashboard', {}), call('getReleaseHistory', { result: 'live' }), loadNotes()]); } catch (e) { return showErr(e); }
-    if (currentView() !== 'home') return;
-    draw();
+    try {
+      await swr('rm-home', () => Promise.all([call('getRmDashboard', {}), call('getReleaseHistory', { result: 'live' }), loadNotes()]),
+        ([a, b]) => { d = a; live = b; draw(); }, { still: () => currentView() === 'home' });
+    } catch (e) { showErr(e); }
   }
   let d;
   let live;

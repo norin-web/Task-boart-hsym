@@ -1,6 +1,6 @@
 import { S, todayStr, dueInfo, KIND_COLORS, KIND_LABELS, deptById, ACCESS_LABELS, LS, plural, isStaff, personById, STEP_NAMES } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, statusIcon, emptyBlock, skeleton } from '../ui.js';
-import { call } from '../api.js';
+import { call, keep, peek } from '../api.js';
 import { currentView, taskLink, link } from '../router.js';
 import { renderLayout, editLayout } from './layout.js';
 
@@ -22,18 +22,19 @@ export async function renderMy() {
   h('div', { class: 'view-body' }, page));
 
   whose = isStaff() ? LS.get('myWhose', 'mine') : 'mine';
-  const fetchTasks = () => (whose === 'set' ? call('queryTasks', { authorId: S.meId, limit: 500 }) : loadMyTasks());
-  let tasks;
-  try {
-    tasks = await fetchTasks();
-  } catch (e) {
-    showErr(e);
-    return;
+  const memKey = () => 'my:' + whose;
+  const fetchTasks = async () => { const list = await (whose === 'set' ? call('queryTasks', { authorId: S.meId, limit: 500 }) : loadMyTasks()); keep(memKey(), list); return list; };
+  // повторный заход — сразу из памяти, свежее — в фоне (в конце, когда экран построен)
+  let tasks = peek(memKey());
+  const fromMemory = !!tasks;
+  if (!tasks) {
+    try { tasks = await fetchTasks(); } catch (e) { showErr(e); return; }
   }
   if (currentView() !== 'my') return;
-  async function reload() {
-    try { tasks = await fetchTasks(); } catch (e) { return showErr(e); }
-    if (currentView() === 'my') { drawTypes(); drawList(); }
+  async function reload({ quiet = false } = {}) {
+    const was = quiet ? JSON.stringify(tasks) : '';
+    try { tasks = await fetchTasks(); } catch (e) { return quiet ? null : showErr(e); }
+    if (currentView() === 'my' && (!quiet || JSON.stringify(tasks) !== was)) { drawTypes(); drawList(); }
   }
 
   // Вид (по работе / по юнитам / по статусу) и «показывать готовые» запоминаем; «По работе» — только для своих задач
@@ -88,6 +89,7 @@ export async function renderMy() {
   fill(page, controls, types, list);
   drawTypes();
   drawList();
+  if (fromMemory) reload({ quiet: true });
 }
 
 

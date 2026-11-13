@@ -1,6 +1,6 @@
 import { S, greeting, me, isSuper, personById, plural, emptyCounts, isStaff, deptById, todayStr, fmtDate, activeDepts, ACCESS_LABELS, relTime, dueInfo, setPeople } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, toast, menu, closeMenu, modal, emptyBlock, skeleton, unitIcon } from '../ui.js';
-import { call } from '../api.js';
+import { call, swr } from '../api.js';
 import { currentView, link, navigate, taskLink, rerender } from '../router.js';
 import { renderSidebar, renderUnread } from './sidebar.js';
 import { openCreateTask, peekTask } from './task.js';
@@ -534,47 +534,46 @@ async function renderMemberHome() {
   let editHook = null;
   fill($('#main'), topbar([h('div', { class: 'screen-head' }, h('div', { class: 'screen-date' }, (() => { const t = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }); return t.charAt(0).toUpperCase() + t.slice(1); })()),
     h('h1', { class: 'screen-title' }, 'Мой дашборд'))], [h('button', { class: 'btn', title: 'Настроить дашборд под себя', onclick: () => editHook && editHook() }, 'Настроить')]), h('div', { class: 'view-body' }, page));
-  let d, tasks, md;
+  // повторный заход — сразу из памяти, свежее — в фоне
   try {
-    [d, tasks, , md] = await Promise.all([call('getHome', { today: new Date().toISOString().slice(0, 10) }), loadMyTasks(), loadNotes(),
-      call('getMyDashboard', { personId: S.meId, today: todayStr() })]);
-  } catch (e) {
-    showErr(e);
-    return;
+    await swr('member-home', () => Promise.all([call('getHome', { today: new Date().toISOString().slice(0, 10) }), loadMyTasks(), loadNotes(),
+      call('getMyDashboard', { personId: S.meId, today: todayStr() })]), show, { still: () => currentView() === 'home' });
+  } catch (e) { showErr(e); }
+
+  function show([d, tasks, , md]) {
+    S.units = d.units;
+    setPeople(d.people);
+    S.departments = d.departments;
+    if (d.teams) S.teams = d.teams;
+    renderSidebar();
+
+    const units = d.units.filter(u => !u.archived);
+    const open = tasks.filter(t => t.statusKind !== 'done');
+    const overdue = open.filter(t => t.dueDate && t.dueDate < new Date().toISOString().slice(0, 10)).length;
+
+    const BLOCKS = [
+      { ...NEWS_BLOCK, off: true },
+      { id: 'focus', title: 'Фокус', col: 'full', render: () => focusBlock(md, () => rerender()) },
+      (me() || {}).access === 'member' && { id: 'sent', title: 'Отправлено на ревью', col: 'left', render: () => sentBlock(md, () => rerender()) },
+      md.lead && { id: 'reviews', title: 'Ждут вашего ревью', col: 'left', render: () => reviewsBlock(md, () => rerender()) },
+      md.lead && { id: 'split', title: 'Раздано', col: 'left', off: true, render: () => splitBlock(md) },
+      md.lead && { id: 'teamLoad', title: 'Загрузка позиции', col: 'right', render: () => teamLoadBlock(md) },
+      { id: 'stats', title: 'Статистика', col: 'full', off: true, render: () => h('div', { class: 'cs-row' },
+        h('div', { class: 'cs' }, h('div', { class: 'cs-n' }, open.length), h('div', { class: 'cs-label' }, 'открытых задач')),
+        h('div', { class: 'cs' + (overdue ? ' danger' : '') }, h('div', { class: 'cs-n' }, overdue), h('div', { class: 'cs-label' }, 'просрочено')),
+        h('div', { class: 'cs' }, h('div', { class: 'cs-n' }, tasks.length - open.length), h('div', { class: 'cs-label' }, 'сделано')),
+        h('div', { class: 'cs' }, h('div', { class: 'cs-n' }, units.length), h('div', { class: 'cs-label' }, plural(units.length, ['юнит', 'юнита', 'юнитов'])))) },
+      { id: 'tasks', title: 'Мои задачи', col: 'left', off: true, render: () => h('section', null,
+        h('div', { class: 'section-head' }, h('h2', null, 'Мои задачи')), unitGroups(tasks)) },
+      { id: 'units', title: 'Мои юниты', col: 'right', off: true, render: () => h('section', null,
+        h('div', { class: 'section-head' }, h('h2', null, 'Мои юниты')),
+        units.length
+          ? h('div', { class: 'unit-grid', style: { gridTemplateColumns: '1fr' } }, units.map(unitCard))
+          : emptyBlock('Юнитов пока нет', { ic: 'board' })) },
+    ].filter(Boolean);
+    editHook = () => editLayout('memberHome', BLOCKS, page, draw);
+    const draw = () => fill(page, renderLayout('memberHome', BLOCKS));
+    draw();
   }
-  if (currentView() !== 'home') return;
-  S.units = d.units;
-  setPeople(d.people);
-  S.departments = d.departments;
-  if (d.teams) S.teams = d.teams;
-  renderSidebar();
-
-  const units = d.units.filter(u => !u.archived);
-  const open = tasks.filter(t => t.statusKind !== 'done');
-  const overdue = open.filter(t => t.dueDate && t.dueDate < new Date().toISOString().slice(0, 10)).length;
-
-  const BLOCKS = [
-    { ...NEWS_BLOCK, off: true },
-    { id: 'focus', title: 'Фокус', col: 'full', render: () => focusBlock(md, () => rerender()) },
-    (me() || {}).access === 'member' && { id: 'sent', title: 'Отправлено на ревью', col: 'left', render: () => sentBlock(md, () => rerender()) },
-    md.lead && { id: 'reviews', title: 'Ждут вашего ревью', col: 'left', render: () => reviewsBlock(md, () => rerender()) },
-    md.lead && { id: 'split', title: 'Раздано', col: 'left', off: true, render: () => splitBlock(md) },
-    md.lead && { id: 'teamLoad', title: 'Загрузка позиции', col: 'right', render: () => teamLoadBlock(md) },
-    { id: 'stats', title: 'Статистика', col: 'full', off: true, render: () => h('div', { class: 'cs-row' },
-      h('div', { class: 'cs' }, h('div', { class: 'cs-n' }, open.length), h('div', { class: 'cs-label' }, 'открытых задач')),
-      h('div', { class: 'cs' + (overdue ? ' danger' : '') }, h('div', { class: 'cs-n' }, overdue), h('div', { class: 'cs-label' }, 'просрочено')),
-      h('div', { class: 'cs' }, h('div', { class: 'cs-n' }, tasks.length - open.length), h('div', { class: 'cs-label' }, 'сделано')),
-      h('div', { class: 'cs' }, h('div', { class: 'cs-n' }, units.length), h('div', { class: 'cs-label' }, plural(units.length, ['юнит', 'юнита', 'юнитов'])))) },
-    { id: 'tasks', title: 'Мои задачи', col: 'left', off: true, render: () => h('section', null,
-      h('div', { class: 'section-head' }, h('h2', null, 'Мои задачи')), unitGroups(tasks)) },
-    { id: 'units', title: 'Мои юниты', col: 'right', off: true, render: () => h('section', null,
-      h('div', { class: 'section-head' }, h('h2', null, 'Мои юниты')),
-      units.length
-        ? h('div', { class: 'unit-grid', style: { gridTemplateColumns: '1fr' } }, units.map(unitCard))
-        : emptyBlock('Юнитов пока нет', { ic: 'board' })) },
-  ].filter(Boolean);
-  editHook = () => editLayout('memberHome', BLOCKS, page, draw);
-  const draw = () => fill(page, renderLayout('memberHome', BLOCKS));
-  draw();
 }
 

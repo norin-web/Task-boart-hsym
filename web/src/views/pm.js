@@ -5,7 +5,7 @@
  */
 import { S, personById, deptById, LS, fmtDate, todayStr, nameFrom } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, emptyBlock, statusIcon, skeleton } from '../ui.js';
-import { call } from '../api.js';
+import { call, swr } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask, openCreateTask } from './task.js';
 import { appIcon, prioTag, openDecomposeDialog, sendRelease, openAppById } from './apps.js';
@@ -33,9 +33,11 @@ export async function renderPmHome() {
   let period = PERIODS.some(([k]) => k === LS.get('kpiPeriod', '')) ? LS.get('kpiPeriod', '') : 'month';
   let d;
   async function load() {
-    try { [d] = await Promise.all([call('getPmDashboard', { today: todayStr(), period }), loadNotes()]); } catch (e) { return showErr(e); }
-    if (currentView() !== 'home') return;
-    draw();
+    // повторный заход — сразу из памяти, свежее — в фоне
+    try {
+      await swr('pm-home:' + period, () => Promise.all([call('getPmDashboard', { today: todayStr(), period }), loadNotes()]),
+        ([x]) => { d = x; draw(); }, { still: () => currentView() === 'home' });
+    } catch (e) { showErr(e); }
   }
   function setPeriod(p) { period = p; LS.set('kpiPeriod', p); load(); }
   function draw() { fill(page, renderLayout('pmHome', blocks())); }

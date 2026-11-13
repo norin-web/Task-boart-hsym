@@ -6,7 +6,7 @@
 import Sortable from 'sortablejs';
 import { S, isSuper, isStaff, seesApps, me, personById, unitById, appStatusById, prioById, REQUEST_TYPES, LS, plural, fmtDate, PALETTE, relTime, safeUrl, STEP_NAMES } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, modal, field, toast, menu, closeMenu, confirmDlg, promptDlg, prioMark, prioSelect, skeleton } from '../ui.js';
-import { call, send } from '../api.js';
+import { call, send, keep, peek } from '../api.js';
 import { currentView, navigate, navParent } from '../router.js';
 import { peekTask } from './task.js';
 import { unitHeader } from './unitnav.js';
@@ -110,12 +110,17 @@ export async function renderApps({ unitId = '' } = {}) {
   fill($('#main'), ...head(), h('div', { class: 'view-body' }, bar, body));
 
   let apps;
-  const load = async () => {
-    apps = await call('listApps', unitId ? { unitId } : {});
+  const memKey = 'apps:' + (unitId || '');
+  const take = list => {
+    apps = list;
     const brief = apps.map(({ requests, active, ...a }) => a);
     S.apps = unitId ? [...S.apps.filter(a => a.unitId !== unitId), ...brief] : brief;
   };
-  try { await load(); } catch (e) { return showErr(e); }
+  const load = async () => { const list = await call('listApps', unitId ? { unitId } : {}); keep(memKey, list); take(list); };
+  // повторный заход — список сразу из памяти, свежий — в фоне (ниже, когда экран построен)
+  const fromMemory = peek(memKey);
+  if (fromMemory) take(fromMemory);
+  else { try { await load(); } catch (e) { return showErr(e); } }
   if (!here()) return;
   if (unitId) fill($('#main'), ...head(), h('div', { class: 'view-body' }, bar, body));  // счётчик вкладки — по свежему списку
   setTimeout(() => fillFromStore(apps, () => here() && drawList()), 0);
@@ -357,6 +362,8 @@ export async function renderApps({ unitId = '' } = {}) {
   };
   drawTools();
   drawList();
+  // показали из памяти — свежий список в фоне; перерисуем, если что-то поменялось
+  if (fromMemory) { const was = JSON.stringify(fromMemory); load().then(() => { if (here() && JSON.stringify(apps) !== was) { drawTools(); drawList(); } }).catch(() => {}); }
 }
 
 function emptyApps(reload) {

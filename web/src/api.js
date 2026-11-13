@@ -44,3 +44,37 @@ export function send(method, payload, onOk) {
   queue = p.catch(() => {});
   return p;
 }
+
+/*
+ * Память экранов (как в Jira): открытый раньше экран показываем сразу из памяти вкладки, свежие данные грузим в фоне
+ * и перерисовываем, только если что-то поменялось. Живёт до перезагрузки страницы; ключ — экран и человек.
+ */
+const memo = new Map();
+
+/**
+ * key — экран (например, 'pm-home'), fetch() — загрузка, apply(data, fromMemory) — показать.
+ * still() — экран ещё открыт (иначе свежие данные только запоминаем). Ошибка при показанной памяти — тихо (данные уже на экране).
+ */
+export async function swr(key, fetch, apply, { still = () => true } = {}) {
+  const k = (S.meId || '') + ':' + key;
+  const had = memo.get(k);
+  if (had) apply(had.data, true);
+  let data;
+  try { data = await fetch(); } catch (e) { if (!had) throw e; return; }
+  const json = safeJson(data);
+  memo.set(k, { data, json });
+  if (!still()) return;
+  if (!had || had.json !== json) apply(data, false);
+}
+const safeJson = v => { try { return JSON.stringify(v); } catch { return String(Math.random()); } };
+
+/** Забыть экран (после своей правки, чтобы при возврате не мелькнуло старое). Без ключа — всё. */
+export function forget(key) {
+  if (!key) { memo.clear(); return; }
+  memo.delete((S.meId || '') + ':' + key);
+}
+
+/** Взять экран из памяти (или undefined) — для экранов, которые строятся по шагам и обновляются сами. */
+export const peek = key => (memo.get((S.meId || '') + ':' + key) || {}).data;
+/** Запомнить данные экрана. */
+export const keep = (key, data) => memo.set((S.meId || '') + ':' + key, { data, json: safeJson(data) });

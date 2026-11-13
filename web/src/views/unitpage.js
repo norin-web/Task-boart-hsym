@@ -5,7 +5,7 @@
  */
 import { S, me, isSuper, isStaff, todayStr, ACCESS_LABELS, personById, deptById, taskDone, plural, columns, colColor, appStatusById } from '../state.js';
 import { $, h, icon, avatar, showErr, fill, menu, toast, emptyBlock, skeleton, modal, confirmDlg } from '../ui.js';
-import { call, send } from '../api.js';
+import { call, send, swr } from '../api.js';
 import { currentView, link } from '../router.js';
 import { openCreateApp, openNewAppTask, pmsOf, openAppCard, appStatusCell, appIcon, idleApps, openStartWork } from './apps.js';
 import { peekTask } from './task.js';
@@ -50,11 +50,14 @@ export async function renderUnitPage() {
 
   async function load() {
     const rm = ((me() || {}).access) === 'rm';
-    let apps, d, rd;
+    // повторный заход — сразу из памяти, свежее — в фоне
     try {
-      [apps, d, rd] = await Promise.all([call('listApps', { unitId: u.id }), rm ? null : call('getCeoDashboard', { today: todayStr() }),
-        rm ? call('getRmDashboard', {}) : null]);
-    } catch (e) { return showErr(e); }
+      await swr('unit:' + u.id + (rm ? ':rm' : ''), () => Promise.all([call('listApps', { unitId: u.id }), rm ? null : call('getCeoDashboard', { today: todayStr() }),
+        rm ? call('getRmDashboard', {}) : null]), show, { still: () => currentView() === key });
+    } catch (e) { showErr(e); }
+  }
+  function show([apps, d, rd]) {
+    const rm = ((me() || {}).access) === 'rm';
     if (currentView() !== key) return;
     // приложения юнита — в общий список (их ищут формы «Новая задача» и счётчик вкладки)
     S.apps = [...S.apps.filter(a => a.unitId !== u.id), ...apps.map(({ requests, active, ...a }) => a)];

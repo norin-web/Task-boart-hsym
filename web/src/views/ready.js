@@ -8,8 +8,8 @@
 import { S, isDev, isStaff, ceoDefault, me, personById, unitById, plural, safeUrl } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, skeleton, modal, toast, menu, confirmDlg } from '../ui.js';
 import Sortable from 'sortablejs';
-import { call, send } from '../api.js';
-import { navigate } from '../router.js';
+import { call, send, swr } from '../api.js';
+import { navigate, currentView } from '../router.js';
 import { openAppById, appIcon } from './apps.js';
 import { brandIcon, brandOf } from './brand.js';
 
@@ -553,9 +553,9 @@ export async function renderReady() {
     if (pos) { const nw = body.querySelector('.rd-table'); if (nw) { nw.scrollLeft = pos[0]; nw.scrollTop = pos[1]; } }
   };
   async function load() {
+    // повторный заход — сразу из памяти, свежее — в фоне
     try {
-      rows = await call('getPipeline', {});
-      draw();
+      await swr('pipeline', () => call('getPipeline', {}), r => { rows = r; draw(); }, { still: () => currentView() === 'ready' });
     } catch (e) { showErr(e); }
   }
   load();
