@@ -878,7 +878,7 @@ export async function reloadBoard() {
  * Живые обновления доски: кто-то поменял задачу этого юнита — доска тихо перечитывается (свои правки эхом не приходят).
  * Не мешаем работе: пока вы тащите карточку, печатаете, открыто окно или меню — ждём и пробуем позже.
  */
-let remoteTimer = null;
+let remoteTimer = null, remoteBusy = false, remoteAgain = false;
 const boardBusy = () => {
   const a = document.activeElement;
   return isModalOpen() || isMenuOpen() || !!document.querySelector('.sortable-chosen, .sortable-ghost, .sortable-drag')
@@ -886,6 +886,15 @@ const boardBusy = () => {
 };
 async function remoteReload() {
   remoteTimer = null;
+  // по одной: пока идёт загрузка, новые изменения — одной повторной загрузкой после неё (иначе старый ответ перезапишет новый)
+  if (remoteBusy) { remoteAgain = true; return; }
+  remoteBusy = true;
+  try { await remoteReloadOnce(); } finally {
+    remoteBusy = false;
+    if (remoteAgain) { remoteAgain = false; remoteTimer = setTimeout(remoteReload, 0); }
+  }
+}
+async function remoteReloadOnce() {
   const b = S.board;
   if (!b || b.partial || b.lite || !S.route || S.route.unit !== b.unit.id) return;
   if (boardBusy()) { remoteTimer = setTimeout(remoteReload, 3000); return; }

@@ -372,7 +372,15 @@ export async function renderApps({ unitId = '' } = {}) {
   drawTools();
   drawList();
   // показали из памяти — свежий список в фоне; перерисуем, если что-то поменялось
-  const quiet = () => { const was = JSON.stringify(apps); load().then(() => { if (here() && JSON.stringify(apps) !== was) { drawTools(); drawList(); } }).catch(() => {}); };
+  let quietSeq = 0;
+  const quiet = () => {
+    const my = ++quietSeq, was = JSON.stringify(apps);
+    call('listApps', unitId ? { unitId } : {}).then(list => {
+      if (my !== quietSeq) return; // пришёл старый ответ после нового — не берём
+      keep(memKey, list); take(list);
+      if (here() && JSON.stringify(apps) !== was) { drawTools(); drawList(); }
+    }).catch(() => {});
+  };
   if (fromMemory) quiet();
   onRemote(quiet, here); // живые обновления: чужие правки — тихо
 }

@@ -49,9 +49,15 @@ export async function renderMy() {
     try { tasks = await fetchTasks(); } catch (e) { showErr(e); return; }
   }
   if (currentView() !== 'my') return;
+  // ответы приходят не по порядку (живые обновления дёргают перезагрузку подряд) — берём только последний
+  let seq = 0;
   async function reload({ quiet = false } = {}) {
+    const my = ++seq;
     const was = quiet ? JSON.stringify(tasks) : '';
-    try { tasks = await fetchTasks(); } catch (e) { return quiet ? null : showErr(e); }
+    let fresh;
+    try { fresh = await fetchTasks(); } catch (e) { return quiet || my !== seq ? null : showErr(e); }
+    if (my !== seq) return;
+    tasks = fresh;
     if (currentView() === 'my' && (!quiet || JSON.stringify(tasks) !== was)) { drawTypes(); drawList(); }
   }
 

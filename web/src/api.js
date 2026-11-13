@@ -60,12 +60,16 @@ const memo = new Map();
  * key — экран (например, 'pm-home'), fetch() — загрузка, apply(data, fromMemory) — показать.
  * still() — экран ещё открыт (иначе свежие данные только запоминаем). Ошибка при показанной памяти — тихо (данные уже на экране).
  */
+const seqs = new Map(); // последний запрос по экрану: более старый ответ, пришедший позже, отбрасываем
 export async function swr(key, fetch, apply, { still = () => true } = {}) {
   const k = (S.meId || '') + ':' + key;
+  const my = (seqs.get(k) || 0) + 1;
+  seqs.set(k, my);
   const had = memo.get(k);
   if (had) apply(had.data, true);
   let data;
-  try { data = await fetch(); } catch (e) { if (!had) throw e; return; }
+  try { data = await fetch(); } catch (e) { if (!had && seqs.get(k) === my) throw e; return; }
+  if (seqs.get(k) !== my) return;
   const json = safeJson(data);
   memo.set(k, { data, json });
   if (!still()) return;
