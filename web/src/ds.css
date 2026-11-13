@@ -3324,3 +3324,6 @@ a.bug-title:hover { text-decoration: underline; }
 .btn.store-blue:hover { background: #0070e0; border-color: #0070e0; color: #fff; }
 .btn.store-blue:active { background: #005ec0; border-color: #005ec0; }
 .btn.store-blue .store-glyph { display: inline-flex; }
+/* полоса прокрутки в колонках не видна (прокрутка колесом и тачпадом работает) */
+.board:not(.lanes) > .col > .col-list { scrollbar-width: none; }
+.board:not(.lanes) > .col > .col-list::-webkit-scrollbar { display: none; }
