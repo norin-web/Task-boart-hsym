@@ -61,7 +61,7 @@ if (perfOn && typeof window !== 'undefined' && window.fetch) {
       const res = await orig(input, init);
       // размер: читаем копию ответа (только в режиме замера)
       res.clone().arrayBuffer().then(buf => {
-        const rec = { path: shortPath(url), ms: now() - t0, kb: buf.byteLength / 1024, at: s ? t0 - s.start : 0 };
+        const rec = { path: batchLabel(url, init) || shortPath(url), ms: now() - t0, kb: buf.byteLength / 1024, at: s ? t0 - s.start : 0 };
         if (s) { s.http.push(rec); s.end = Math.max(s.end, now() - s.start); }
         draw();
       }).catch(() => {});
@@ -71,6 +71,16 @@ if (perfOn && typeof window !== 'undefined' && window.fetch) {
     }
   };
 }
+// пакет чтений (batch.js): какие таблицы внутри — «пакет 12: tasks×5, apps, units…»
+const batchLabel = (url, init) => {
+  if (!/rpc\/read_batch/.test(url) || !init || typeof init.body !== 'string') return '';
+  try {
+    const qs = JSON.parse(init.body).p_queries || [];
+    const n = {};
+    for (const q of qs) n[q.t] = (n[q.t] || 0) + 1;
+    return `пакет ${qs.length}: ` + Object.entries(n).sort((a, b) => b[1] - a[1]).map(([t, k]) => (k > 1 ? `${t}×${k}` : t)).join(', ');
+  } catch { return ''; }
+};
 const shortPath = url => {
   try {
     const u = new URL(url);

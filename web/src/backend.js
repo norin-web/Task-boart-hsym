@@ -550,9 +550,10 @@ export function createBackend(db, opts = {}) {
    */
   /** Строки по списку id пачками по 150 — чтобы адрес запроса не разрастался. build(idsChunk) → запрос. */
   async function inChunks(ids, build) {
-    const list = [...new Set(ids.filter(Boolean))], out = [];
-    for (let i = 0; i < list.length; i += 150) out.push(...(await all(() => build(list.slice(i, i + 150)))));
-    return out;
+    // пачки — параллельно: при пакетном чтении (batch.js) уходят в базу одним запросом
+    const list = [...new Set(ids.filter(Boolean))], parts = [];
+    for (let i = 0; i < list.length; i += 150) parts.push(all(() => build(list.slice(i, i + 150))));
+    return (await Promise.all(parts)).flat();
   }
 
   async function treeInfo(tasks, day) {
@@ -1251,7 +1252,9 @@ export function createBackend(db, opts = {}) {
             .sort((x, y) => String(y.done_at || '').localeCompare(String(x.done_at || '')) || String(x.id).localeCompare(String(y.id)));
           const pick = cand.slice(0, doneLimit).map(t => t.id);
           const done = [];
-          for (let i = 0; i < pick.length; i += 150) done.push(...(await run(T('tasks').select('*').in('id', pick.slice(i, i + 150)))));
+          const parts = [];
+          for (let i = 0; i < pick.length; i += 150) parts.push(run(T('tasks').select('*').in('id', pick.slice(i, i + 150))));
+          done.push(...(await Promise.all(parts)).flat());
           // задачи со статусом удалённой колонки (бывает после правки колонок) — тоже на доску
           const lost = open.length + doneLight.length < allIds.length
             ? (await all(() => T('tasks').select('*').eq('unit_id', unit.id).eq('archived', false).order('id'))).filter(t => !doneIds.includes(t.status) && !otherIds.includes(t.status))
@@ -2056,18 +2059,20 @@ export function createBackend(db, opts = {}) {
       if (p.unitId) q = q.eq('unit_id', String(p.unitId));
       const onlyIds = Array.isArray(p.ids) ? p.ids.map(x => String(x ?? '')).filter(Boolean).slice(0, 500) : null;
       if (onlyIds) q = q.in('id', onlyIds.length ? onlyIds : ['-']);
-      const apps = (await run(q.order('ord').order('created_at'))).map(appOut);
+      // юниты и статусы — тем же пакетом, что и приложения (не ждать их отдельно)
+      const [appRows, units, statusList] = await Promise.all([run(q.order('ord').order('created_at')),
+        p.bare ? [] : all(() => T('units').select('id,key,settings').order('id')), p.bare ? [] : appStatuses()]);
+      const apps = appRows.map(appOut);
       // bare — только сами приложения, без запросов и этапов (поиск, выбор приложений, убранные)
       if (!apps.length || p.bare) return apps;
       const COLS = 'id,unit_id,num,title,status,assignee_id,due_date,archived,kind,request_type,step,parent_id,app_id,depends_on,fields,created_at,updated_at,done_at,flow_steps,release';
       // id пачками — чтобы адрес запроса не разрастался
       const byChunks = async (ids, build) => {
-        const out = [];
-        for (let i = 0; i < ids.length; i += 150) out.push(...(await all(() => build(ids.slice(i, i + 150)))));
-        return out;
+        const parts = [];
+        for (let i = 0; i < ids.length; i += 150) parts.push(all(() => build(ids.slice(i, i + 150))));
+        return (await Promise.all(parts)).flat();
       };
       const appIds = apps.map(a => a.id);
-      const units = await all(() => T('units').select('id,key,settings').order('id'));
       const U = Object.fromEntries(units.map(u => [u.id, { ...u, st: unitSettings(u.settings) }]));
       const kindOfRow = r => (U[r.unit_id] ? kindOf(U[r.unit_id].st, r.status) : 'todo');
       const doneRow = r => kindOfRow(r) === 'done';
@@ -2085,7 +2090,7 @@ export function createBackend(db, opts = {}) {
       // запросы-родители релизов на ревью, которых не видно по правам (у RM) — названия из базы
       const seen = new Set(tasks.map(t => t.id));
       const RP = await releaseParents(tasks.filter(t => t.step === 'release' && t.parent_id && !seen.has(t.parent_id)).map(t => t.parent_id));
-      const reviewIds = new Set((await appStatuses()).filter(x => x.kind === 'review').map(x => x.id));
+      const reviewIds = new Set(statusList.filter(x => x.kind === 'review').map(x => x.id));
       return apps.map(a => {
         const own = tasks.filter(t => t.app_id === a.id);
         const requests = own.filter(t => t.kind === 'request').map(r => {

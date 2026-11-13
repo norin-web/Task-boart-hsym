@@ -2895,3 +2895,58 @@ begin
     end loop;
   end if;
 end $$;
+
+-- ---------- Пакетное чтение (2026-11-13) ----------
+-- Экран читает много таблиц сразу; каждый запрос по сети стоит ~0,3–1 с. Приложение собирает одновременные выборки
+-- в один вызов (web/src/batch.js). Функция работает от имени пользователя (security invoker): права и RLS те же,
+-- что у обычного чтения. Только выборки из известных таблиц; имена колонок экранируются, значения — литералы.
+-- p_queries: [{ t: таблица, c: 'a,b' | '*', f: [[колонка, eq|neq|lt|gt|gte|lte|in|is, значение]], o: [[колонка, по возрастанию]],
+--   l: limit, s: offset }] → массив массивов строк в том же порядке.
+create or replace function read_batch(p_queries jsonb) returns jsonb
+language plpgsql stable security invoker set search_path = public as $$
+declare
+  q jsonb; f jsonb; o jsonb;
+  tables text[] := array['activity', 'app_notes', 'app_settings', 'app_status_log', 'apps', 'client_errors', 'comments', 'departments',
+    'deputies', 'feedback', 'fields', 'ideas', 'info_lists', 'lead_people', 'link_fields', 'my_board', 'notifications', 'people',
+    'task_files', 'task_links', 'task_templates', 'tasks', 'teams', 'unit_members', 'units'];
+  sql text; w text; ord text; cols text; c text; op text; part jsonb;
+  out jsonb := '[]'::jsonb;
+begin
+  if jsonb_typeof(p_queries) is distinct from 'array' or jsonb_array_length(p_queries) > 80 then
+    raise exception 'read_batch: нужен массив до 80 выборок';
+  end if;
+  for q in select value from jsonb_array_elements(p_queries) loop
+    if not ((q->>'t') = any(tables)) then raise exception 'read_batch: таблица % недоступна', q->>'t'; end if;
+    cols := coalesce(nullif(q->>'c', ''), '*');
+    if cols <> '*' then
+      select string_agg(quote_ident(trim(x)), ', ') into cols from unnest(string_to_array(cols, ',')) as x;
+    end if;
+    w := '';
+    for f in select value from jsonb_array_elements(coalesce(q->'f', '[]'::jsonb)) loop
+      c := quote_ident(f->>0); op := f->>1;
+      w := w || case when w = '' then ' where ' else ' and ' end || case op
+        when 'eq' then c || ' = ' || quote_literal(f->>2)
+        when 'neq' then c || ' <> ' || quote_literal(f->>2)
+        when 'lt' then c || ' < ' || quote_literal(f->>2)
+        when 'gt' then c || ' > ' || quote_literal(f->>2)
+        when 'gte' then c || ' >= ' || quote_literal(f->>2)
+        when 'lte' then c || ' <= ' || quote_literal(f->>2)
+        when 'is' then c || ' is null'
+        when 'in' then coalesce(c || ' in (' || (select string_agg(quote_literal(v), ', ') from jsonb_array_elements_text(f->2) as v) || ')', 'false')
+      end;
+      if op is null or op not in ('eq', 'neq', 'lt', 'gt', 'gte', 'lte', 'is', 'in') then raise exception 'read_batch: условие % не поддерживается', op; end if;
+    end loop;
+    ord := '';
+    for o in select value from jsonb_array_elements(coalesce(q->'o', '[]'::jsonb)) loop
+      ord := ord || case when ord = '' then ' order by ' else ', ' end || quote_ident(o->>0) || case when (o->>1)::boolean then ' asc' else ' desc' end;
+    end loop;
+    sql := format('select %s from public.%I', cols, q->>'t') || w || ord;
+    if jsonb_typeof(q->'l') = 'number' then sql := sql || ' limit ' || (q->>'l')::int; end if;
+    if jsonb_typeof(q->'s') = 'number' then sql := sql || ' offset ' || (q->>'s')::int; end if;
+    execute format('select coalesce(jsonb_agg(to_jsonb(x)), ''[]''::jsonb) from (%s) as x', sql) into part;
+    out := out || jsonb_build_array(part);
+  end loop;
+  return out;
+end $$;
+revoke execute on function read_batch(jsonb) from public, anon;
+grant execute on function read_batch(jsonb) to authenticated;

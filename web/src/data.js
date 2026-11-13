@@ -5,6 +5,7 @@
  *              Входа нет — «Войти как» переключает, от чьего имени работают правила доступа.
  */
 import { createBackend, ApiError } from './backend.js';
+import { batchClient } from './batch.js';
 
 const URL_ = import.meta.env.VITE_SUPABASE_URL;
 const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -48,7 +49,8 @@ export async function initBackend(opts = {}) {
   if (mode === 'supabase') {
     const { createClient } = await import('@supabase/supabase-js');
     supabase = createClient(URL_, KEY, { auth: { flowType: 'pkce', persistSession: true, detectSessionInUrl: true } });
-    backend = createBackend(supabase, { invoke });
+    // чтения одного такта — одним запросом к базе (read_batch): каждый сетевой запрос стоит дорого
+    backend = createBackend(batchClient(supabase), { invoke });
     return;
   }
   // Локальная база — одна на браузер, и две вкладки затирают данные друг друга: работает только одна

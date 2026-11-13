@@ -4,6 +4,9 @@ import fs from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 import { createBackend } from '../web/src/backend.js';
 import { pgliteClient, AUTH_STUB_SQL } from '../web/src/pglite-client.js';
+import { batchClient } from '../web/src/batch.js';
+// TM_BATCH=1 — все чтения через пакет (read_batch), как на общей базе
+const client = pg => (process.env.TM_BATCH ? batchClient(pgliteClient(pg)) : pgliteClient(pg));
 
 const SCHEMA = fs.readFileSync(new URL('../supabase/schema.sql', import.meta.url), 'utf8');
 
@@ -12,7 +15,7 @@ async function setup() {
   const pg = new PGlite();
   await pg.exec(AUTH_STUB_SQL);
   await pg.exec(SCHEMA);
-  const backend = createBackend(pgliteClient(pg));
+  const backend = createBackend(client(pg));
   const api = async (method, payload, ctx) => {
     const r = await backend.call(method, payload, ctx);
     if (!r.ok) throw Object.assign(new Error(`${method}: ${r.error}`), { code: r.code, data: r.data });
