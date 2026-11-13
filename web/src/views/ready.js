@@ -77,13 +77,15 @@ const pick = (text, cls, onOpen, title) => h('button', { class: 'rd-cell ' + cls
   h('span', { class: 'rd-cell-t' }, text), icon('chevron', 12));
 
 /** Сменить статус этапа прямо в таблице: тот же updateTask, что и на доске, с теми же правилами. */
-function stageMenu(row, key, anchor, reload) {
+function stageMenu(row, key, anchor, reload, redraw) {
   const t = row.stages[key]; if (!t) return;
   const unit = unitById(row.unitId); const cols = unit && unit.settings ? unit.settings.columns : [];
   const items = ['todo', 'progress', 'review', 'done'].map(kind => ({ kind, col: cols.find(c => c.kind === kind) })).filter(x => x.col)
-    .map(({ kind, col }) => ({ label: STAGE_CHIP[kind][0], icon: (t.done ? 'done' : t.kind) === kind ? 'check' : 'blank', action: async () => {
-      try { await send('updateTask', { id: t.id, patch: { status: col.id } }); } catch (e) { showErr(e); }
-      reload();
+    .map(({ kind, col }) => ({ label: STAGE_CHIP[kind][0], icon: (t.done ? 'done' : t.kind) === kind ? 'check' : 'blank', action: () => {
+      // сразу на экране, база — в фоне; потом тихо сверяемся (очередь «Ждут разработки» и соседние этапы считает сервер)
+      Object.assign(t, { kind, done: kind === 'done', blocked: false });
+      if (redraw) redraw();
+      send('updateTask', { id: t.id, patch: { status: col.id } }).then(reload, e => { showErr(e); reload(); });
     } }));
   menu(anchor, [{ title: 'Статус этапа' }, ...items], { align: 'left' });
 }
@@ -126,14 +128,14 @@ function cell(c, row, ctx) {
     case 'stage': {
       if (!v.t) return h('span', { class: 'muted' }, '—');
       const [text, cls] = v.t.done ? STAGE_CHIP.done : v.ready ? ['В очереди', 'wait'] : v.t.blocked ? ['Ждёт', 'hold'] : STAGE_CHIP[v.t.kind] || STAGE_CHIP.todo;
-      return pick(text, cls, a => stageMenu(row, c.id.slice(3), a, ctx.reload));
+      return pick(text, cls, a => stageMenu(row, c.id.slice(3), a, ctx.reload, ctx.redraw));
     }
     case 'upd': return v ? (v.text ? h('span', { class: 'rd-text', title: 'Prod UPD' }, v.text)
       : h('span', { class: 'rd-cell ' + (v.done ? 'ok' : 'go'), title: v.title }, h('span', { class: 'rd-cell-t' }, v.done ? 'Готово' : `В работе · ${v.progress}%`))) : h('span', { class: 'muted' }, '—');
     case 'status': {
       const st = S.appStatuses.find(x => x.id === v); if (!st) return h('span', { class: 'muted' }, '—');
       const el = pick(st.name, 'stat', an => menu(an, [{ title: 'Статус приложения' }, ...S.appStatuses.map(x => ({ label: x.name, icon: x.id === v ? 'check' : 'blank',
-        action: async () => { try { await send('updateApp', { id: row.appId, status: x.id }); } catch (e) { showErr(e); } ctx.reload(); } }))], { align: 'left' }));
+        action: () => { row.status = x.id; ctx.redraw(); send('updateApp', { id: row.appId, status: x.id }).then(ctx.reload, e => { showErr(e); ctx.reload(); }); } }))], { align: 'left' }));
       el.style.setProperty('--c', st.color);
       return el;
     }
@@ -145,7 +147,12 @@ function cell(c, row, ctx) {
     case 'check': {
       const id = c.id.slice(3), done = (row.checks && row.checks.done) || [];
       return h('button', { class: 'rd-check' + (v ? ' on' : ''), type: 'button', role: 'checkbox', 'aria-checked': String(!!v), title: v ? 'Да' : 'Нет',
-        onclick: async e => { e.stopPropagation(); try { await send('updateApp', { id: row.appId, checks: { ...(row.checks || { own: [] }), done: v ? done.filter(x => x !== id) : [...done, id] } }); } catch (er) { showErr(er); } ctx.reload(); } }, v ? icon('check', 13) : null);
+        onclick: e => {
+          e.stopPropagation();
+          const checks = { ...(row.checks || { own: [] }), done: v ? done.filter(x => x !== id) : [...done, id] };
+          row.checks = checks; ctx.redraw(); // сразу на экране, база — в фоне
+          send('updateApp', { id: row.appId, checks }).then(ctx.reload, er => { showErr(er); ctx.reload(); });
+        } }, v ? icon('check', 13) : null);
     }
     case 'date': return v ? h('span', null, fmtDate(v)) : h('span', { class: 'muted' }, '—');
     case 'wait': { if (!v) return h('span', { class: 'muted' }, '—'); const n = daysSince(v); return h('span', { class: 'rd-wait' + (n >= 7 ? ' late' : '') }, n === 0 ? 'сегодня' : `${n} ${plural(n, ['день', 'дня', 'дней'])}`); }
@@ -467,7 +474,7 @@ export async function renderReady() {
       h('button', { class: 'btn', type: 'button', onclick: addRow }, icon('plus', 14), 'Строка'));
 
     const late = queue.filter(r => daysSince(r.readySince) >= 7).length;
-    const ctx = { reload: load, set: setVal };
+    const ctx = { reload: load, set: setVal, redraw: draw };
     const moreBtn = r => h('button', { class: 'icon-btn sm rd-more', type: 'button', 'aria-haspopup': 'menu', 'aria-label': 'Действия со строкой', title: 'Действия со строкой', onclick: e => { e.stopPropagation(); rowMenu(e.currentTarget, r); } }, icon('more', 15));
     const rowEl = r => h('div', { class: 'rd-row' + (r.ready ? ' queued' : ''), role: 'row', style: rowStyle },
       r.free
