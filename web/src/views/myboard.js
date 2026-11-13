@@ -6,12 +6,13 @@
  * Свои колонки — people.prefs.myBoard.custom [{ id, name, group, color }]; старт — шаблон моей команды.
  */
 import Sortable from 'sortablejs';
-import { S, me, activeTeams, between, dueInfo, todayStr, PALETTE, isStaff } from '../state.js';
+import { S, me, activeTeams, between, dueInfo, todayStr, PALETTE, isStaff, LS } from '../state.js';
 import { $, h, icon, topbar, fill, modal, showErr, statusDot, statusIcon, confirmDlg, menu, closeMenu, toast, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
 import { reviewButtons } from './review.js';
+import { typeOf, typeName, typeRank } from './my.js';
 
 /** Обязательные колонки: одинаковы у всех, их не убрать и не переставить. */
 export const FIXED = [
@@ -60,6 +61,8 @@ const allColumns = custom => FIXED.flatMap(f => [{ ...f, fixed: true }, ...custo
 let sortables = [];
 let mbQuery = '';
 let mbUnit = '';
+// тип задачи (запросы, этапы — Дизайн, Метаданные…, подзадачи, прочее) — как в «Моих задачах»; выбор запоминается
+let mbType = LS.get('mbType', '');
 
 export async function renderMyBoard() {
   const host = h('div', { class: 'board-wrap myboard' }, skeleton());
@@ -83,7 +86,24 @@ export async function renderMyBoard() {
         h('span', { class: 'dot', style: { background: u.color } }), u.name))],
     h('span', { class: 'spacer' }),
     h('button', { class: 'btn lg', onclick: () => editColumns(() => renderMyBoard()) }, icon('plus', 14), 'Своя колонка'));
+  // фильтр по типу: кнопки с количеством (по выбранному юниту)
+  const types = h('div', { class: 'my-types mb-types', role: 'radiogroup', 'aria-label': 'Тип задач' });
+  controls.after(types);
+  const drawTypes = () => {
+    const pool = data.tasks.filter(t => !mbUnit || t.unitId === mbUnit);
+    const counts = new Map();
+    for (const t of pool) { const k = typeOf(t); counts.set(k, (counts.get(k) || 0) + 1); }
+    const keys = [...counts.keys()].sort((a, b) => typeRank(a) - typeRank(b) || typeName(a).localeCompare(typeName(b), 'ru'));
+    if (mbType && !counts.has(mbType)) mbType = '';
+    types.hidden = keys.length < 2;
+    fill(types, [['', 'Все', pool.length], ...keys.map(k => [k, typeName(k), counts.get(k)])].map(([k, label, n]) =>
+      h('button', { class: 'fchip' + (mbType === k ? ' on' : ''), role: 'radio', 'aria-checked': String(mbType === k),
+        onclick: () => { mbType = k; LS.set('mbType', k); drawTypes(); draw(host, data); } }, label, h('span', { class: 'my-type-n' }, n))));
+  };
   drawControls();
+  drawTypes();
+  // юнит поменялся — пересчитать кнопки типов
+  controls.addEventListener('click', e => { if (e.target.closest('.fchip')) setTimeout(drawTypes, 0); });
   draw(host, data);
 }
 
@@ -113,7 +133,7 @@ function draw(page, data) {
   const cols = allColumns(myCustom());
   const unitById = id => data.units.find(u => u.id === id);
   const q = mbQuery.trim().toLowerCase();
-  const items = data.tasks.filter(t => (!mbUnit || t.unitId === mbUnit) && (!q || t.title.toLowerCase().includes(q))).map(t => ({ t, ...placeOf(data, cols, t) }));
+  const items = data.tasks.filter(t => (!mbUnit || t.unitId === mbUnit) && (!mbType || typeOf(t) === mbType) && (!q || t.title.toLowerCase().includes(q))).map(t => ({ t, ...placeOf(data, cols, t) }));
 
   const card = ({ t }) => {
     const u = unitById(t.unitId);

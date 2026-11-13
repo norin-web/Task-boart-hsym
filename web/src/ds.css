@@ -3313,3 +3313,5 @@ a.bug-title:hover { text-decoration: underline; }
 .board:not(.lanes) > .col { padding-left: 10px; padding-right: 10px; }
 .board .col-head .icon-btn.sm { width: 22px; height: 22px; }
 .board .col-head .icon-btn.sm + .icon-btn.sm { margin-left: -2px; }
+/* Моя доска: фильтр по типу под строкой поиска */
+.mb-types { margin: 0; padding: 10px 16px 0 24px; }

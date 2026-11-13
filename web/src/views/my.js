@@ -96,10 +96,10 @@ export async function renderMy() {
 
 
 /** Тип задачи для фильтра: этап по ключу (design, art, ios…), запрос, подзадача, обычная. */
-const typeOf = t => (t.kind === 'request' ? 'req' : t.step === 'part' ? 'part' : t.step ? 'st:' + t.step : 'other');
-const typeName = k => (k === 'req' ? 'Запросы' : k === 'part' ? 'Подзадачи' : k === 'other' ? 'Прочее' : STEP_NAMES[k.slice(3)] || k.slice(3));
+export const typeOf = t => (t.kind === 'request' ? 'req' : t.step === 'part' ? 'part' : t.step ? 'st:' + t.step : 'other');
+export const typeName = k => (k === 'req' ? 'Запросы' : k === 'part' ? 'Подзадачи' : k === 'other' ? 'Прочее' : STEP_NAMES[k.slice(3)] || k.slice(3));
 const STEP_ORDER = Object.keys(STEP_NAMES);
-const typeRank = k => (k === 'req' ? -1 : k.startsWith('st:') ? (STEP_ORDER.indexOf(k.slice(3)) + 1 || 50) : k === 'part' ? 90 : 99);
+export const typeRank = k => (k === 'req' ? -1 : k.startsWith('st:') ? (STEP_ORDER.indexOf(k.slice(3)) + 1 || 50) : k === 'part' ? 90 : 99);
 
 /** Задачи по юнитам: в каждом — просроченные, в работе, к выполнению; готовые — по кнопке. */
 export function unitGroups(tasks) {
