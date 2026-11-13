@@ -16,6 +16,7 @@ import { openShortcuts } from './views/people.js';
 import { initPersonCard } from './views/personcard.js';
 import { initDevForm } from './views/devquiz.js';
 import { initMonitor } from './monitor.js';
+import { startLive } from './live.js';
 
 // После выкатки старые файлы сборки удаляются: вкладка, открытая до обновления, не найдёт отдельный экран
 // (настройки, аналитика…) — перезагружаем её на новую версию. Не чаще раза в минуту, чтобы не зациклиться.
@@ -123,6 +124,7 @@ async function boot() {
   S.started = true;
   render();
   startPulse();
+  startLive();
   initPersonCard();
   initDevForm();
   initMonitor();
@@ -181,6 +183,8 @@ function startPulse() {
   };
   pulse();
   setInterval(pulse, 60e3);
+  // живые обновления: пришло уведомление — колокольчик сразу, не ждём минуту
+  document.addEventListener('tasks:remote', e => { if (e.detail.tables.includes('notifications')) pulse(); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) pulse(); });
 }
 

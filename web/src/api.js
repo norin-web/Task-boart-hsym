@@ -1,6 +1,7 @@
 /** Клиент API: методы бэкенда (Supabase или локальная база). Записи идут строго по очереди. */
 import { S } from './state.js';
 import { getBackend } from './data.js';
+import { markMine } from './live.js';
 
 let pending = 0;
 function setPending(d) {
@@ -35,7 +36,11 @@ export function send(method, payload, onOk) {
   const p = queue.then(async () => {
     setPending(1);
     try {
-      const data = await call(method, typeof payload === 'function' ? payload() : payload);
+      const body = typeof payload === 'function' ? payload() : payload;
+      // свою правку живые обновления не вернут эхом (экран её уже показал)
+      if (body) for (const k of ['id', 'taskId', 'appId', 'requestId']) if (body[k]) markMine(body[k]);
+      const data = await call(method, body);
+      if (data && typeof data === 'object' && data.id) markMine(data.id);
       return onOk ? onOk(data) : data;
     } finally {
       setPending(-1);

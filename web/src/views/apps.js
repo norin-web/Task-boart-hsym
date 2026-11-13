@@ -15,6 +15,7 @@ import { isWatched, toggleWatch, canWatch } from './watch.js';
 import { fillDemo } from './home.js';
 import { mode } from '../data.js';
 import appStoreSvg from '../assets/app-store.svg';  // thesvg.org/icons/app-store
+import { onRemote } from '../live.js';
 
 const units = () => S.units.filter(u => !u.archived).sort((a, b) => (a.order || 0) - (b.order || 0));
 /** Ответственный за юнит (PM или CEO) первым, затем остальные PM из состава. */
@@ -363,7 +364,9 @@ export async function renderApps({ unitId = '' } = {}) {
   drawTools();
   drawList();
   // показали из памяти — свежий список в фоне; перерисуем, если что-то поменялось
-  if (fromMemory) { const was = JSON.stringify(fromMemory); load().then(() => { if (here() && JSON.stringify(apps) !== was) { drawTools(); drawList(); } }).catch(() => {}); }
+  const quiet = () => { const was = JSON.stringify(apps); load().then(() => { if (here() && JSON.stringify(apps) !== was) { drawTools(); drawList(); } }).catch(() => {}); };
+  if (fromMemory) quiet();
+  onRemote(quiet, here); // живые обновления: чужие правки — тихо
 }
 
 function emptyApps(reload) {

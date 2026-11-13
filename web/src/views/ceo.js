@@ -14,6 +14,7 @@ import { sparkline, openSeries } from './charts.js';
 import { openCreateUnit } from './units.js';
 import { watchBlock } from './watch.js';
 import { mode } from '../data.js';
+import { onRemote } from '../live.js';
 
 const units = () => S.units.filter(u => !u.archived).sort((a, b) => (a.order || 0) - (b.order || 0));
 const prioRank = id => S.priorityOptions.findIndex(o => o.id === id);
@@ -85,6 +86,7 @@ export async function renderCeoHome() {
     draw();
   }
   load();
+  onRemote(() => load(), () => currentView() === 'home'); // живые обновления
 }
 
 /* ---------- юниты ---------- */

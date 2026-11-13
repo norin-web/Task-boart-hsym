@@ -14,6 +14,7 @@ import { attention, inProgress, recent } from './ceo.js';
 import { addMemberDialog, applyMembers } from './people.js';
 import { sparkline, openSeries } from './charts.js';
 import { unitHeader } from './unitnav.js';
+import { onRemote } from '../live.js';
 
 /**
  * Цифры по задачам юнита: из лёгкой загрузки (summary с сервера) или, если доска уже загружена целиком, — по ней.
@@ -111,6 +112,7 @@ export async function renderUnitPage() {
   }
 
   load();
+  onRemote(d => { if (!d.units.length || d.units.includes(u.id)) load(); }, () => currentView() === key); // живые обновления юнита
 }
 
 /**

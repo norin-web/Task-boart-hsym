@@ -1,6 +1,6 @@
 import Sortable from 'sortablejs';
 import { S, taskById, appById, personById, activeFields, missingFor, missingNext, priorityOf, priorityField, byPriority, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder, between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, unitById, emptyCounts, freshFilters, saveBoardView, activeDepts, deptById, teamById, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS, me, ownTeamsOnly, visibleLinkFields, KINDS, LS, isSuper, isReworkColumn, setPeople } from '../state.js';
-import { $, h, icon, avatar, menu, closeMenu, modal, field, confirmDlg, promptDlg, toast, showErr, statusDot, statusIcon, fill, prioMark } from '../ui.js';
+import { $, h, icon, avatar, menu, closeMenu, modal, field, confirmDlg, promptDlg, toast, showErr, statusDot, statusIcon, fill, prioMark, isModalOpen, isMenuOpen } from '../ui.js';
 import { call, send } from '../api.js';
 import { navigate, link } from '../router.js';
 import { updateSidebarCounts, renderUnread } from './sidebar.js';
@@ -872,3 +872,32 @@ export async function reloadBoard() {
     showErr(e);
   }
 }
+
+/*
+ * Живые обновления доски: кто-то поменял задачу этого юнита — доска тихо перечитывается (свои правки эхом не приходят).
+ * Не мешаем работе: пока вы тащите карточку, печатаете, открыто окно или меню — ждём и пробуем позже.
+ */
+let remoteTimer = null;
+const boardBusy = () => {
+  const a = document.activeElement;
+  return isModalOpen() || isMenuOpen() || !!document.querySelector('.sortable-chosen, .sortable-ghost, .sortable-drag')
+    || !!(a && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable));
+};
+async function remoteReload() {
+  remoteTimer = null;
+  const b = S.board;
+  if (!b || b.partial || b.lite || !S.route || S.route.unit !== b.unit.id) return;
+  if (boardBusy()) { remoteTimer = setTimeout(remoteReload, 3000); return; }
+  const id = b.unit.id, quick = S.quick;
+  try { await loadBoard(id); } catch { return; }
+  S.quick = quick;
+  if (!S.route || S.route.unit !== id || boardBusy()) return;
+  renderTasks();
+  const t = S.panelTaskId && taskById(S.panelTaskId);
+  if (t) refreshPanel(t, { soft: true });
+}
+document.addEventListener('tasks:remote', e => {
+  const b = S.board;
+  if (!b || b.partial || b.lite || !e.detail.units.includes(b.unit.id)) return;
+  if (!remoteTimer) remoteTimer = setTimeout(remoteReload, 0);
+});

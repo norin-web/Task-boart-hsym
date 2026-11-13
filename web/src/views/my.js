@@ -3,6 +3,7 @@ import { $, h, icon, avatar, topbar, showErr, fill, statusIcon, emptyBlock, skel
 import { call, keep, peek } from '../api.js';
 import { currentView, taskLink, link } from '../router.js';
 import { renderLayout, editLayout } from './layout.js';
+import { onRemote } from '../live.js';
 
 let showDone = false;
 let query = '';
@@ -90,6 +91,7 @@ export async function renderMy() {
   drawTypes();
   drawList();
   if (fromMemory) reload({ quiet: true });
+  onRemote(() => reload({ quiet: true }), () => currentView() === 'my'); // живые обновления
 }
 
 

@@ -6,6 +6,7 @@
 import { S, personById, deptById, LS, fmtDate, todayStr, nameFrom } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, emptyBlock, statusIcon, skeleton } from '../ui.js';
 import { call, swr } from '../api.js';
+import { onRemote } from '../live.js';
 import { currentView } from '../router.js';
 import { peekTask, openCreateTask } from './task.js';
 import { appIcon, prioTag, openDecomposeDialog, sendRelease, openAppById } from './apps.js';
@@ -45,6 +46,7 @@ export async function renderPmHome() {
   const edit = () => editLayout('pmHome', blocks(), page, draw, { title: 'Настройка дашборда' });
   editHook = edit;
   load();
+  onRemote(() => load(), () => currentView() === 'home'); // живые обновления: чужие правки — тихо
 }
 
 function pmBlocks(d, reload, redraw, period, setPeriod) {

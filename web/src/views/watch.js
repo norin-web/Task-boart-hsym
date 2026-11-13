@@ -163,6 +163,8 @@ export function watchBlock(apps, { openApp, openTask, appIcon, appStatusCell, st
   setTimeout(() => refresh(true)); // блок вставят на страницу после возврата: раньше refresh счёл бы его закрытым
   timer = setInterval(() => refresh(false), REFRESH);
   document.addEventListener('tasks:watch', onChange);
+  // живые обновления: отслеживаемое поменялось — сразу, не ждём 20 секунд
+  document.addEventListener('tasks:remote', e => { if (document.body.contains(box) && [...e.detail.ids, ...e.detail.apps].some(id => watchList().some(x => x.id === id))) refresh(true); });
   document.addEventListener('visibilitychange', onVis);
   return box;
 }

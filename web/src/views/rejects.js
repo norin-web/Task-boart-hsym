@@ -10,6 +10,7 @@ import { currentView } from '../router.js';
 import { peekTask } from './task.js';
 import { appIcon, openAppById, shelveAppDlg, deleteAppsDlg, SHELVES, SHELF_ACTION, shelfDone } from './apps.js';
 import { openShots } from './shots.js';
+import { onRemote } from '../live.js';
 
 const DAY = 864e5;
 const daysAgo = iso => (iso ? Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / DAY)) : 0);
@@ -177,4 +178,5 @@ export async function renderRejects() {
         : emptyBlock(empty[0], { ok: !shelfTab, sub: empty[1] }));
   }
   load();
+  onRemote(() => load(), () => currentView() === 'rejects'); // живые обновления
 }

@@ -12,6 +12,7 @@ import { appIcon } from './apps.js';
 import { renderLayout, editLayout } from './layout.js';
 import { openPeople } from './people.js';
 import { focusBlock, reviewsBlock, teamLoadBlock, splitBlock, sentBlock } from './employee.js';
+import { onRemote } from '../live.js';
 
 /* ---------- «Новое для вас»: задачи, которые на меня назначили ---------- */
 
@@ -534,11 +535,11 @@ async function renderMemberHome() {
   let editHook = null;
   fill($('#main'), topbar([h('div', { class: 'screen-head' }, h('div', { class: 'screen-date' }, (() => { const t = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }); return t.charAt(0).toUpperCase() + t.slice(1); })()),
     h('h1', { class: 'screen-title' }, 'Мой дашборд'))], [h('button', { class: 'btn', title: 'Настроить дашборд под себя', onclick: () => editHook && editHook() }, 'Настроить')]), h('div', { class: 'view-body' }, page));
-  // повторный заход — сразу из памяти, свежее — в фоне
-  try {
-    await swr('member-home', () => Promise.all([call('getHome', { today: new Date().toISOString().slice(0, 10) }), loadMyTasks(), loadNotes(),
-      call('getMyDashboard', { personId: S.meId, today: todayStr() })]), show, { still: () => currentView() === 'home' });
-  } catch (e) { showErr(e); }
+  // повторный заход — сразу из памяти, свежее — в фоне; чужие правки — тихо (живые обновления)
+  const load = () => swr('member-home', () => Promise.all([call('getHome', { today: new Date().toISOString().slice(0, 10) }), loadMyTasks(), loadNotes(),
+    call('getMyDashboard', { personId: S.meId, today: todayStr() })]), show, { still: () => currentView() === 'home' });
+  try { await load(); } catch (e) { showErr(e); }
+  onRemote(() => load().catch(() => {}), () => currentView() === 'home');
 
   function show([d, tasks, , md]) {
     S.units = d.units;

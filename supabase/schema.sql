@@ -2880,3 +2880,18 @@ begin
     insert into app_settings (key, value, updated_at) values ('once_links_to_stages', 'true'::jsonb, '') on conflict (key) do nothing;
   end if;
 end $$;
+
+-- ---------- Живые обновления (2026-11-13) ----------
+-- Supabase Realtime присылает изменения задач, приложений и уведомлений открытым экранам (права — как у чтения, RLS).
+-- Только если публикация есть (в Supabase она есть всегда; в локальной базе — нет, блок ничего не делает).
+do $$
+declare t text;
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    foreach t in array array['tasks', 'apps', 'notifications'] loop
+      if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t) then
+        execute format('alter publication supabase_realtime add table public.%I', t);
+      end if;
+    end loop;
+  end if;
+end $$;

@@ -12,22 +12,28 @@ import { mode, supabase, resetLocalData } from '../data.js';
 // цифры меню: одним лёгким запросом navCounts раз в 30 с (раньше — Сводка, экран реджектов и все мои задачи целиком)
 let navN = { ready: 0, rejects: 0, mine: 0 }, navAt = 0, navWait = null;
 const navEls = { ready: new Set(), rejects: new Set(), mine: new Set() };
+function fetchNavCounts() {
+  navAt = Date.now();
+  navWait = call('navCounts', { personId: S.meId }).then(n => {
+    navN = n;
+    for (const k of Object.keys(navEls)) for (const e of navEls[k]) {
+      if (!e.isConnected) { navEls[k].delete(e); continue; }
+      e.textContent = n[k] || '';
+      if (k === 'rejects') e.classList.toggle('danger', !!n[k]);
+    }
+  }).catch(() => {}).finally(() => { navWait = null; });
+}
 function navCount(key, danger) {
   const el = h('span', { class: 'nav-count' + (danger && navN[key] ? ' danger' : '') }, navN[key] || '');
   navEls[key].add(el);
-  if (Date.now() - navAt > 30000 && !navWait) {
-    navAt = Date.now();
-    navWait = call('navCounts', { personId: S.meId }).then(n => {
-      navN = n;
-      for (const k of Object.keys(navEls)) for (const e of navEls[k]) {
-        if (!e.isConnected) { navEls[k].delete(e); continue; }
-        e.textContent = n[k] || '';
-        if (k === 'rejects') e.classList.toggle('danger', !!n[k]);
-      }
-    }).catch(() => {}).finally(() => { navWait = null; });
-  }
+  if (Date.now() - navAt > 30000 && !navWait) fetchNavCounts();
   return el;
 }
+// живые обновления: задачи или приложения поменялись — цифры меню пересчитываем (не чаще раза в 5 секунд)
+document.addEventListener('tasks:remote', e => {
+  const t = e.detail.tables;
+  if ((t.includes('tasks') || t.includes('apps')) && !navWait && Date.now() - navAt > 5000) fetchNavCounts();
+});
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 

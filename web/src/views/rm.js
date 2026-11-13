@@ -12,6 +12,7 @@ import { watchBlock } from './watch.js';
 import { loadNotes } from './home.js';
 import { renderLayout, editLayout } from './layout.js';
 import { openReleaseHistory, openRejectForm } from './release.js';
+import { onRemote } from '../live.js';
 
 /** «от Екатерины»: имя в родительном падеже. */
 
@@ -85,6 +86,7 @@ export async function renderRmHome() {
     openRejectForm({ id: x.id, title: x.title }, x.app ? x.app.name : x.title, no, load);
   }
   load();
+  onRemote(() => load(), () => currentView() === 'home'); // живые обновления
 }
 
 /** Секция релизов: строки — приложение, релиз, состояние, исполнитель и действия. */

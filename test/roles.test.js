@@ -1285,6 +1285,7 @@ test('обратная связь: новое предложение — уве�
   const { admin, mod, designer } = await team(api);
   await api.pg.query('update people set is_dev = true where id = $1', [admin.id]);
   await api.as(designer, () => api('sendFeedback', { kind: 'idea', text: 'Первое' }));
+  await new Promise(r => setTimeout(r, 15)); // второе — позже первого (в одну миллисекунду порядок не определён)
   await api.as(mod, () => api('sendFeedback', { kind: 'bug', text: 'Второе' }));
   const n = await api.as(admin, () => api('getNotifications', { personId: admin.id }));
   const fb = n.filter(x => x.kind === 'feedback');

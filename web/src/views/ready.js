@@ -12,6 +12,7 @@ import { call, send, swr } from '../api.js';
 import { navigate, currentView } from '../router.js';
 import { openAppById, appIcon } from './apps.js';
 import { brandIcon, brandOf } from './brand.js';
+import { onRemote } from '../live.js';
 
 const DAY = 86400000;
 const daysSince = iso => (iso ? Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / DAY)) : 0);
@@ -566,6 +567,7 @@ export async function renderReady() {
     } catch (e) { showErr(e); }
   }
   load();
+  onRemote(() => load(), () => currentView() === 'ready'); // живые обновления
 }
 
 /** Сколько приложений ждут разработки — для цифры в меню. */
