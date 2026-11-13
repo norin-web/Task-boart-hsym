@@ -2,6 +2,7 @@
 import { S } from './state.js';
 import { getBackend } from './data.js';
 import { markMine } from './live.js';
+import { timeCall } from './perf.js';
 
 let pending = 0;
 function setPending(d) {
@@ -13,7 +14,7 @@ function setPending(d) {
 export async function call(method, payload) {
   let r;
   try {
-    r = await getBackend().call(method, payload || {}, { actorId: S.meId || '' });
+    r = await timeCall(method, () => getBackend().call(method, payload || {}, { actorId: S.meId || '' }));
   } catch (e) {
     throw new Error(/fetch|network/i.test(String(e && e.message)) ? 'Нет связи с сервером' : String(e && e.message || e));
   }

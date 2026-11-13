@@ -1,3 +1,4 @@
+import './perf.js'; // замер скорости (?perf=1) — первым: перехватывает fetch до создания клиента базы
 import '@fontsource-variable/montserrat/wght.css';
 import './styles.css';
 import './ds.css';

@@ -27,6 +27,7 @@ import { renderTimeline } from './views/timeline.js';
 import { renderSettings } from './views/settings.js';
 import { renderUnitPage, renderUnitTeam } from './views/unitpage.js';
 import { openTask, closePanel, peekTask } from './views/task.js';
+import { perfScreen } from './perf.js';
 
 /**
  * Редкие экраны (настройки, аналитика, режим разработчика, бэклог) — отдельными файлами: грузятся при первом заходе,
@@ -189,6 +190,8 @@ export function rerender() {
 
 export async function render() {
   const r = S.route;
+  // замер скорости (?perf=1): новый экран — с этого перехода
+  perfScreen(r.unit ? `Юнит ${(S.units.find(u => u.id === r.unit) || {}).name || ''} · ${r.mode || 'board'}${r.task ? ' + карточка' : ''}` : (LABELS[r.view] || r.view) + (r.tab ? ' · ' + r.tab : ''));
   closeMenu();
   closeNav();
   renderSidebar();
