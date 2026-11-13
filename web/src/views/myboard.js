@@ -1,5 +1,5 @@
 /**
- * Моя доска (#/board): личное рабочее место. Только задачи, назначенные на меня (из всех юнитов).
+ * «Мои задачи» → вид «Доска» (раньше отдельный раздел «Моя доска», #/board): личное рабочее место. Только задачи, назначенные на меня (из всех юнитов).
  * Колонки: четыре обязательные — To Do / In Progress / Review / Done (одни у всех: по ним синхронизируется статус в юните)
  * и свои между ними (видны только мне; своя колонка считается той обязательной, что слева).
  * Перенос в In Progress / Done меняет статус задачи в юните, в Review — отдаёт на ревью (колонка ревью юнита, ревьюер — по позиции).
@@ -12,7 +12,7 @@ import { call, send } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
 import { reviewButtons } from './review.js';
-import { typeOf, typeName, typeRank } from './my.js';
+import { typeOf, typeName, typeRank, myViewSeg } from './my.js';
 
 /** Обязательные колонки: одинаковы у всех, их не убрать и не переставить. */
 export const FIXED = [
@@ -67,7 +67,7 @@ let mbType = LS.get('mbType', '');
 export async function renderMyBoard() {
   const host = h('div', { class: 'board-wrap myboard' }, skeleton());
   const controls = h('div', { class: 'mb-controls' });
-  const top = () => topbar([h('h1', null, 'Моя доска')], [
+  const top = () => topbar([h('h1', null, 'Мои задачи')], [
     isStaff() && h('button', { class: 'btn primary', onclick: () => import('./task.js').then(m => m.openCreateTask()) }, 'Задача'),
   ]);
   fill($('#main'), top(), h('div', { class: 'view-body' }, controls, host));
@@ -75,9 +75,10 @@ export async function renderMyBoard() {
   try {
     data = await call('getMyBoard', { personId: S.meId, today: todayStr() });
   } catch (e) { showErr(e); return; }
-  if (currentView() !== 'myboard') return;
+  if (currentView() !== 'my') return;
   $('#main .topbar').replaceWith(top()); // роль известна только после загрузки людей
   const drawControls = () => fill(controls,
+    myViewSeg('board'),
     h('label', { class: 'my-search' }, icon('search', 15),
       h('input', { type: 'search', placeholder: 'Поиск по задачам', value: mbQuery, oninput: e => { mbQuery = e.target.value; draw(host, data); } })),
     data.units.length > 1 && [

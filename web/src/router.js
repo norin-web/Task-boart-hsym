@@ -2,7 +2,7 @@
  * Маршруты (в hash — GitHub Pages не умеет отдавать index.html на любые пути):
  *   #/                       главная
  *   #/my                     мои задачи
- *   #/board                  моя доска (личные этапы)
+ *   #/board                  старая «Моя доска» → «Мои задачи», вид «Доска»
  *   #/admin                  старый адрес — ведёт в «Настройки»
  *   #/analytics[/:tile]      аналитика (CEO и PM); плитка — список за цифрой
  *   #/app/:id                карточка приложения на весь экран
@@ -10,7 +10,7 @@
  *   #/u/:unit[/overview|/apps|/list|/team|/settings][?task=:id] — вкладки юнита; без режима — доска
  *   #/u/:unit/t/:team[?task=:id] — доска команды в юните и кто чем занят
  */
-import { S, me, isStaff, isSuper, myAccess, loadBoardView, freshFilters, ceoDefault, seesApps, ownTeamsOnly } from './state.js';
+import { S, me, isStaff, isSuper, myAccess, loadBoardView, freshFilters, ceoDefault, seesApps, ownTeamsOnly, LS } from './state.js';
 import { $, h, fill, icon, closeMenu, closeNav, showErr, setBack, skeleton } from './ui.js';
 import { renderSidebar } from './views/sidebar.js';
 import { renderHome } from './views/home.js';
@@ -195,8 +195,10 @@ export async function render() {
 
   // CEO в режиме Default: дашборд, приложения и страницы юнитов — личные доски и «мои задачи» не показываем; задача — поверх
   // настройки юнита открываются и в «Обзоре»: CEO меняет ревьюеров, колонки и картинку, не переключая режим
-  if (ceoDefault() && r.view === 'myboard') { // «Мои задачи» в «Обзоре» доступны — что разложить и свой дизайн
-    navigate({ view: 'home' }, { replace: true });
+  // «Моя доска» объединена с «Моими задачами»: старая ссылка — тот же раздел, вид «Доска»
+  if (r.view === 'myboard') {
+    LS.set('myView2', 'board');
+    navigate({ view: 'my' }, { replace: true });
     return;
   }
   if (!r.unit) {

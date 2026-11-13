@@ -155,11 +155,9 @@ function drawSidebar() {
   const list = h('div', { class: 'nav-units' }, units.map(u => unitItem(u, r)));
   const staff = isStaff();
   const ceo = isSuper();
-  // CEO в режиме Default — без личных досок и списков задач
-  const lite = ceoMode() === 'default';
   const lens = S.realMeId && S.meId !== S.realMeId ? person : null;
   const navLink = (route, ic, label, extra) => link(route, { class: 'nav-item' + (isHere(r, route) ? ' active' : '') }, icon(ic), h('span', { class: 'nav-label' }, label), extra);
-  // сколько открытых задач на мне: число у «Мои задачи» (RM) и «Моя доска» (Lead, сотрудник)
+  // сколько открытых задач на мне: число у «Мои задачи» (всем, кроме CEO и PM)
   // сколько приложений ждут разработки (дизайн закрыт, iOS не начат) — число у «Готовы к разработке»
   const readyCount = () => navCount('ready');
   // сколько реджектов открыто — число у «Реджекты» (CEO и релиз-менеджер)
@@ -191,9 +189,8 @@ function drawSidebar() {
       ceo && navLink({ view: 'backlog' }, 'layers', 'Бэклог'),
       (ceo || (person && person.access === 'rm')) && navLink({ view: 'rejects' }, 'rejected', 'Реджекты', rejectCount()),
       ceo && navLink({ view: 'analytics' }, 'chart', 'Аналитика'),
-      !lite && navLink({ view: 'myboard' }, 'board', 'Моя доска', !staff && !(person && person.access === 'rm') && myCount()),
-      // «Мои задачи» — и у CEO в «Обзоре»: что разложить и свой дизайн под рукой
-      (staff || (person && person.access === 'rm')) && navLink({ view: 'my' }, 'list', 'Мои задачи', !staff && myCount()),
+      // «Мои задачи» — один раздел для всех (доска и списки — виды внутри); у CEO и в «Обзоре»
+      navLink({ view: 'my' }, 'list', 'Мои задачи', !staff && myCount()),
       // инфо-лист: включает CEO, пункт в меню — сам человек (prefs.infoListNav)
       (S.infoListIds || []).includes(S.meId) && person && (person.prefs || {}).infoListNav &&
         navLink({ view: 'infolist' }, 'link', 'Инфо-лист'),
@@ -236,7 +233,7 @@ export async function setCeoMode(m) {
   renderSidebar(); // переключатель отзывается сразу
   // сохраняем до перерисовки: экраны перечитывают людей с сервера и не должны получить старый режим
   try { await send('setMyPrefs', { personId: p.id, prefs: { ceoMode: m } }); } catch (e) { showErr(e); }
-  if (m === 'default' && ((S.route.unit && S.route.mode === 'settings') || ['my', 'myboard'].includes(S.route.view))) navigate({ view: 'home' });
+  if (m === 'default' && S.route.unit && S.route.mode === 'settings') navigate({ view: 'home' });
   else rerender();
 }
 

@@ -13,7 +13,19 @@ const empty = () => (whose === 'set'
   ? emptyBlock('Вы пока не ставили задач', { ic: 'list', sub: 'Здесь видно ход задач, которые вы поставили другим' })
   : emptyBlock('На вас нет задач', { ic: 'list', sub: 'Когда вас назначат исполнителем, задачи появятся здесь' }));
 
+/** Вид «Моих задач» по умолчанию: CEO и PM — «По работе», остальным — доска (дальше — выбор человека). */
+export const myView = () => LS.get('myView2', isStaff() ? 'work' : 'board');
+export const MY_VIEWS = [['board', 'Доска', 'board'], ['work', 'По работе', 'list'], ['units', 'По юнитам', 'layers'], ['status', 'По статусу', 'progress']];
+/** Переключатель вида — общий для доски и списков; выбор запоминается, экран строится заново. */
+export function myViewSeg(current, { listOnly = false } = {}) {
+  return h('div', { class: 'seg my-view' }, MY_VIEWS.filter(([v]) => !listOnly || v !== 'board').map(([v, t, ic]) =>
+    h('button', { class: current === v ? 'on' : '', onclick: () => { if (v === current) return; LS.set('myView2', v); renderMy(); } }, icon(ic, 14), t)));
+}
+
 export async function renderMy() {
+  // доска — тот же раздел «Мои задачи», вид «Доска» (личные этапы, перетаскивание)
+  whose = isStaff() ? LS.get('myWhose', 'mine') : 'mine';
+  if (myView() === 'board' && whose !== 'set') return import('./myboard.js').then(m => m.renderMyBoard());
   const page = h('div', { class: 'page' }, skeleton());
   // «Настроить» (вид «По работе»): порядок разделов, какие скрыть, во всю ширину или в колонку — как на дашборде
   let onSetup = () => {};
@@ -22,7 +34,6 @@ export async function renderMy() {
     [setupBtn, isStaff() && h('button', { class: 'btn primary', onclick: () => import('./task.js').then(m => m.openCreateTask({ onCreated: reload })) }, 'Задача')]),
   h('div', { class: 'view-body' }, page));
 
-  whose = isStaff() ? LS.get('myWhose', 'mine') : 'mine';
   const memKey = () => 'my:' + whose;
   const fetchTasks = async () => { const list = await (whose === 'set' ? call('queryTasks', { authorId: S.meId, limit: 500 }) : loadMyTasks()); keep(memKey(), list); return list; };
   // повторный заход — сразу из памяти, свежее — в фоне (в конце, когда экран построен)
@@ -39,7 +50,7 @@ export async function renderMy() {
   }
 
   // Вид (по работе / по юнитам / по статусу) и «показывать готовые» запоминаем; «По работе» — только для своих задач
-  let view = LS.get('myView2', 'work');
+  let view = myView() === 'board' ? 'units' : myView(); // «Поставил я» — без доски
   showDone = LS.get('myShowDone', false) === true;
   const list = h('div');
   // тип задачи: этап (Дизайн, Онбординг и ASO, iOS…), запрос, подзадача, прочее — фильтр «фокус»
@@ -84,8 +95,13 @@ export async function renderMy() {
       { title: 'Настройка «Мои задачи»', crumb: 'Мои задачи', hiddenHint: 'перетащите сюда, чтобы не показывать раздел' });
   };
   const drawSeg = () => (setupBtn.hidden = !(view === 'work' && whose !== 'set'), fill(controls.querySelector('.my-view'),
-    [whose !== 'set' && ['work', 'По работе', 'list'], ['units', 'По юнитам', 'layers'], ['status', 'По статусу', 'progress']].filter(Boolean).map(([v, t, ic]) =>
-      h('button', { class: (view === 'work' && whose === 'set' ? 'units' : view) === v ? 'on' : '', onclick: () => { view = v; LS.set('myView2', v); drawSeg(); drawList(); } }, icon(ic, 14), t))));
+    // «Доска» и «По работе» — только для своих задач; доска — отдельный экран того же раздела
+    [whose !== 'set' && ['board', 'Доска', 'board'], whose !== 'set' && ['work', 'По работе', 'list'], ['units', 'По юнитам', 'layers'], ['status', 'По статусу', 'progress']].filter(Boolean).map(([v, t, ic]) =>
+      h('button', { class: (view === 'work' && whose === 'set' ? 'units' : view) === v ? 'on' : '', onclick: () => {
+        LS.set('myView2', v);
+        if (v === 'board') { renderMy(); return; }
+        view = v; drawSeg(); drawList();
+      } }, icon(ic, 14), t))));
   drawSeg();
   fill(page, controls, types, list);
   drawTypes();
