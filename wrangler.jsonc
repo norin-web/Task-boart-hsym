@@ -14,5 +14,7 @@
   // старый адрес task-boart-hsym.norinnort4.workers.dev выключен; превью-ссылки версий (тест веток, например Update) — включены:
   // <ветка>-task-boart-hsym.<поддомен>.workers.dev; прод при этом только на taskmanager.cam
   "workers_dev": false,
-  "preview_urls": true
+  "preview_urls": true,
+  // тестовые версии веток (Cloudflare Previews, команда wrangler preview / versions upload): настройки — как у прода
+  "previews": {}
 }
