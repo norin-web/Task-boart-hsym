@@ -1751,3 +1751,11 @@ button.prefs-row { width: 100%; border: 0; border-radius: 0; background: none; c
 .rl-dev .af-row { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 12px; }
 .rl-dev .af-name { white-space: normal; }
 .rl-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+
+/* участники без входа (настройки юнита) */
+.guest-row { display: grid; grid-template-columns: auto minmax(0, 1fr) 170px 190px auto; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--r); margin-bottom: 6px; }
+.guest-row.off > :not(.switch) { opacity: .55; }
+.guest-row .guest-name { border-color: transparent; background: transparent; font-weight: 500; padding-left: 6px; }
+.guest-row .guest-name:hover, .guest-row .guest-name:focus { border-color: var(--border); background: var(--surface, #fff); }
+.guest-row .guest-note { grid-column: 2 / -1; margin: 0; }
+@media (max-width: 640px) { .guest-row { grid-template-columns: auto minmax(0, 1fr) auto; } .guest-row select { grid-column: 2 / -1; } }

@@ -1,7 +1,7 @@
 import Sortable from 'sortablejs';
-import { S, TYPE_LABELS, PALETTE, unitById, byOrder, KINDS, KIND_LABELS, KIND_COLORS, colColor, personById, activeDepts, plural, isSuper, isReworkColumn } from '../state.js';
+import { S, TYPE_LABELS, PALETTE, unitById, byOrder, KINDS, KIND_LABELS, KIND_COLORS, colColor, personById, activeDepts, deptById, plural, isSuper, isReworkColumn } from '../state.js';
 import { $, h, icon, avatar, field, menu, closeMenu, modal, confirmDlg, toast, showErr, colorPicker, fill, personSelect, unitPhotoField } from '../ui.js';
-import { send } from '../api.js';
+import { call, send } from '../api.js';
 import { link } from '../router.js';
 import { renderSidebar } from './sidebar.js';
 import { archiveUnit, deleteUnit } from './units.js';
@@ -134,7 +134,7 @@ export function renderSettings() {
           h('button', { class: 'btn', onclick: () => { archiveUnit(unitById(u.id) || u, !u.archived); renderSettings(); } }, u.archived ? 'Вернуть из архива' : 'В архив'),
           h('button', { class: 'btn danger solid', onclick: () => deleteUnit(unitById(u.id) || u) }, 'Удалить юнит')))),
 
-      h('div', { class: 'us-wide' }, isSuper() && teamSection(), reviewSection(u), flowSection(u)))));
+      h('div', { class: 'us-wide' }, isSuper() && teamSection(), isSuper() && guestSection(), reviewSection(u), flowSection(u)))));
 
   if (active.length > 1) {
     Sortable.create(fieldList, {
@@ -353,6 +353,88 @@ export function reviewSection(u = S.board.unit, { bare = false } = {}) {
   return box;
 }
 
+/** Участник без входа: профиль без аккаунта и email (только для доски и отчётов). */
+const isGuest = p => !!p && !p.linked && !p.email;
+
+/**
+ * «Без входа» (CEO): участники юнита без аккаунта — на них назначают задачи, ведёт их лид.
+ * Добавить, переименовать, позиция, кто ведёт, включить/выключить (выключенный пропадает из выбора, задачи остаются).
+ */
+function guestSection() {
+  const b = S.board;
+  const box = h('section', { class: 'card-box' });
+  let zones = null;
+  const leads = () => b.members.map(m => personById(m.personId)).filter(p => p && p.active && p.access === 'lead');
+  const leadOf = id => (zones ? Object.keys(zones).find(l => zones[l].includes(id)) || '' : '');
+  const posOptions = cur => activeDepts().map(d => h('option', { value: d.id, selected: d.id === cur }, d.name));
+  const leadOptions = cur => [h('option', { value: '' }, 'Никто'), ...leads().map(p => h('option', { value: p.id, selected: p.id === cur }, p.name))];
+  const has = (p, pos) => p && (p.positionIds || [p.positionId]).includes(pos);
+  const save = async (p, patch) => { Object.assign(p, await send('updatePerson', { id: p.id, ...patch })); draw(); };
+
+  const addDialog = () => {
+    const name = h('input', { class: 'inp', placeholder: 'Например, iOS-разработчик', maxlength: 80 });
+    const pos = h('select', { class: 'inp' }, posOptions(deptById('d_ios') ? 'd_ios' : (activeDepts()[0] || {}).id));
+    const pickLead = () => (leads().find(l => has(l, pos.value)) || leads()[0] || {}).id || '';
+    const lead = h('select', { class: 'inp' }, leadOptions(pickLead()));
+    pos.addEventListener('change', () => { lead.value = pickLead(); });
+    modal({
+      title: 'Участник без входа',
+      cls: 'dlg',
+      body: [
+        h('p', { class: 'hint', style: { marginTop: 0 } }, 'Профиль для доски и отчётов: на него назначают задачи, сам он в систему не входит.'),
+        field('Имя', name),
+        h('div', { class: 'grid2' }, field('Позиция', pos), field('Кто ведёт', lead, 'Лид назначает ему задачи')),
+      ],
+      actions: [
+        { label: 'Отмена' },
+        {
+          label: 'Добавить', primary: true, action: async close => {
+            if (!name.value.trim()) return name.focus();
+            const r = await send('addGuest', { unitId: b.unit.id, name: name.value, positionId: pos.value, leadId: lead.value });
+            S.people.push(r.person);
+            applyMembers(b.unit.id, r.members);
+            if (zones && lead.value) (zones[lead.value] ||= []).push(r.person.id);
+            close();
+            toast(r.person.name + ' — в команде');
+            draw();
+          },
+        },
+      ],
+    });
+    setTimeout(() => name.focus(), 50);
+  };
+
+  const row = p => {
+    const name = h('input', { class: 'inp guest-name', value: p.name, maxlength: 80, 'aria-label': 'Имя' });
+    name.addEventListener('change', () => { if (name.value.trim() && name.value.trim() !== p.name) save(p, { name: name.value.trim() }).catch(showErr); else name.value = p.name; });
+    const pos = h('select', { class: 'inp', 'aria-label': 'Позиция', onchange: e => save(p, { positionId: e.target.value }).catch(showErr) }, posOptions(p.positionId));
+    const cur = leadOf(p.id);
+    const lead = h('select', { class: 'inp', 'aria-label': 'Кто ведёт', disabled: !zones, onchange: async e => {
+      try { zones = await send('setGuestLead', { personId: p.id, leadId: e.target.value }); draw(); } catch (err) { showErr(err); draw(); }
+    } }, leadOptions(cur));
+    const on = h('input', { class: 'switch', type: 'checkbox', checked: p.active, 'aria-label': 'Включён', title: p.active ? 'Включён: есть в выборе исполнителя' : 'Выключен: скрыт из выбора, задачи остаются',
+      onchange: e => save(p, { active: e.target.checked }).catch(showErr) });
+    const L = personById(cur);
+    return h('div', { class: 'guest-row' + (p.active ? '' : ' off') },
+      avatar(p), name, pos, lead, on,
+      L && !has(L, p.positionId) && h('p', { class: 'hint guest-note' },
+        `Лид ${L.name} без позиции «${(deptById(p.positionId) || {}).name || '—'}»: свои задачи этой позиции участнику не передать — только вести те, что уже назначены на участника.`));
+  };
+
+  const draw = () => {
+    const list = b.members.map(m => personById(m.personId)).filter(isGuest);
+    fill(box,
+      h('div', { class: 'section-head', style: { marginBottom: '4px' } },
+        h('h2', null, 'Без входа'),
+        h('button', { class: 'btn ghost sm', onclick: addDialog }, icon('plus', 14), 'Участник без входа')),
+      h('p', { class: 'hint' }, 'Участники без аккаунта — для доски и отчётов. На них назначают задачи; ведёт их лид. Выключенный пропадает из выбора исполнителя, его задачи остаются.'),
+      list.length ? list.map(row) : h('p', { class: 'muted' }, 'Пока никого.'));
+  };
+  draw();
+  call('getLeadPeople', {}).then(z => { zones = z || {}; draw(); }).catch(() => { zones = {}; draw(); });
+  return box;
+}
+
 function teamSection() {
   const b = S.board;
   const box = h('section', { class: 'card-box' });
@@ -374,7 +456,7 @@ function teamSection() {
       b.members.length
         ? b.members.map(m => {
           const p = personById(m.personId);
-          if (!p) return null;
+          if (!p || isGuest(p)) return null;
           // Позиции — из профиля человека (меняются в «Люди и доступы»)
           return h('div', { class: 'member-row' },
             avatar(p),

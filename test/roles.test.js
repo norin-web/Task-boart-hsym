@@ -1463,3 +1463,39 @@ test('«Мои задачи»: готовые скрыты — не тянем (
   const open = await api.as(designer, () => api('queryTasks', { assigneeId: designer.id, open: true }));
   assert.ok(open.some(t => t.id === t1.id) && !open.some(t => t.id === t2.id));
 });
+
+test('участник без входа: CEO заводит в юните, лид ведёт его задачи, переименование и выключение', async () => {
+  const api = await setup();
+  const { admin, mod, A } = await team(api);
+  // лид дизайна ведёт iOS-разработчика без входа (не своя позиция — зона через «кто ведёт»)
+  const lead = await api('createPerson', { name: 'Джексон', email: 'u7@x.ru', access: 'lead', positionId: 'd_design' });
+  await api.pg.query('update people set user_id = $1 where id = $2', [UID(7), lead.id]);
+  await api('setMember', { unitId: A.id, personId: lead.id });
+  const L = { ...lead, uid: UID(7) };
+
+  await assert.rejects(() => api.as(mod, () => api('addGuest', { unitId: A.id, name: 'iOS', positionId: 'd_ios' })), /прав/);
+  const { person: g, members } = await api.as(admin, () => api('addGuest', { unitId: A.id, name: 'iOS-разработчик', positionId: 'd_ios', leadId: lead.id }));
+  assert.equal(g.linked, false);
+  assert.equal(g.email, '');
+  assert.ok(members.some(m => m.personId === g.id), 'сразу в составе юнита');
+  assert.deepEqual((await api('getLeadPeople', {}))[lead.id], [g.id]);
+
+  // PM ставит задачу на участника без входа; лид её видит и ставит срок
+  const t = await api.as(mod, () => api('createTask', { unitId: A.id, title: 'Экран оплаты', assigneeId: g.id, departmentId: 'd_ios' }));
+  assert.ok((await api.as(L, () => api('getBoard', { unitId: A.id }))).tasks.some(x => x.id === t.id), 'лид видит задачу участника');
+  await api.as(L, () => api('updateTask', { id: t.id, patch: { dueDate: '2026-12-01' } }));
+  // лид с позицией iOS передаёт ему iOS-задачи, назначенные на себя
+  await api('updatePerson', { id: lead.id, extraPositionIds: ['d_ios'] });
+  const t2 = await api.as(mod, () => api('createTask', { unitId: A.id, title: 'Пейволл', assigneeId: lead.id, departmentId: 'd_ios' }));
+  assert.equal((await api.as(L, () => api('updateTask', { id: t2.id, patch: { assigneeId: g.id } }))).assigneeId, g.id);
+
+  // переименовать и выключить: задачи остаются за ним
+  await api.as(admin, () => api('updatePerson', { id: g.id, name: 'Алекс (iOS)' }));
+  await api.as(admin, () => api('updatePerson', { id: g.id, active: false }));
+  const { rows } = await api.pg.query('select p.name, p.active, t.assignee_id from people p join tasks t on t.assignee_id = p.id where t.id = $1', [t.id]);
+  assert.deepEqual(rows[0], { name: 'Алекс (iOS)', active: false, assignee_id: g.id });
+
+  // сменить, кто ведёт: из зоны прежнего лида убирается
+  const zones = await api.as(admin, () => api('setGuestLead', { personId: g.id, leadId: '' }));
+  assert.equal((zones[lead.id] || []).length, 0);
+});

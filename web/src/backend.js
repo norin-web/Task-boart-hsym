@@ -1912,6 +1912,29 @@ export function createBackend(db, opts = {}) {
       return unitMembers(u.id);
     },
 
+    /**
+     * Участник без входа (CEO): профиль для доски и отчётов — на него назначают задачи, сам он не входит.
+     * Сразу в составе юнита со своей позицией; leadId — лид, который им управляет (попадает в зону лида).
+     */
+    async addGuest(p) {
+      const unit = await findUnit(p.unitId);
+      const person = await methods.createPerson({ name: p.name, positionId: p.positionId });
+      await methods.setMember({ unitId: unit.id, personId: person.id, departmentId: person.positionId });
+      if (p.leadId) await methods.setGuestLead({ personId: person.id, leadId: p.leadId });
+      return { person, members: await unitMembers(unit.id) };
+    },
+
+    /** Кто ведёт участника без входа: убрать из зон других лидов, добавить в зону leadId ('' — никто). Возвращает зоны лидов. */
+    async setGuestLead(p) {
+      const id = str(p.personId, 40), leadId = str(p.leadId, 40);
+      const zones = await methods.getLeadPeople({});
+      for (const [lead, ids] of Object.entries(zones)) {
+        if (lead !== leadId && ids.includes(id)) await methods.setLeadPeople({ leadId: lead, personIds: ids.filter(x => x !== id) });
+      }
+      if (leadId && !(zones[leadId] || []).includes(id)) await methods.setLeadPeople({ leadId, personIds: [...(zones[leadId] || []), id] });
+      return methods.getLeadPeople({});
+    },
+
     /** Убрать из команды. Задачи человека не трогаем — исполнитель остаётся. */
     async removeMember(p) {
       await run(T('unit_members').delete().eq('unit_id', String(p.unitId ?? '')).eq('person_id', String(p.personId ?? '')));
