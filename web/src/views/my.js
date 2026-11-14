@@ -205,14 +205,16 @@ export function workBlocks(tasks) {
     { id: 'place', title: 'Разложить по этапам', hint: 'Новые приложения и запросы, где PM — вы: этапов ещё нет',
       test: t => isReq(t) && !(t.stages && t.stages.total), prog: () => null },
     { id: 'design', title: 'Дизайн', hint: 'Ваши этапы дизайна: прогресс — по чек-листу', test: isDesign, prog: checklist },
-    { id: 'pm', title: 'Веду как PM', hint: 'Разложенные запросы: прогресс — сколько этапов готово', test: t => isReq(t) && t.stages && t.stages.total > 0, prog: t => t.stages },
+    // как в Сводке: ближе к финишу — выше (больше готовых этапов); просроченные и «в работе» — по-прежнему первыми
+    { id: 'pm', title: 'Веду как PM', hint: 'Разложенные запросы: прогресс — сколько этапов готово', test: t => isReq(t) && t.stages && t.stages.total > 0, prog: t => t.stages,
+      sort: (a, b) => rank(a) - rank(b) || (b.stages.done || 0) - (a.stages.done || 0) || (a.dueDate || '9999').localeCompare(b.dueDate || '9999') },
     { id: 'rest', title: 'Остальное', hint: 'Все прочие задачи на вас', test: () => true, prog: checklist },
   ];
   const taken = new Set();
   return sections.map(sc => {
     const items = tasks.filter(t => !taken.has(t.id) && sc.test(t));
     items.forEach(t => taken.add(t.id));
-    const open = items.filter(t => t.statusKind !== 'done').sort(byDue), done = items.filter(t => t.statusKind === 'done');
+    const open = items.filter(t => t.statusKind !== 'done').sort(sc.sort || byDue), done = items.filter(t => t.statusKind === 'done');
     return {
       id: sc.id, title: sc.title, col: 'full',
       render: () => {
