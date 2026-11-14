@@ -10,11 +10,11 @@
   Cache-Control: no-cache
 
 # CSP — что странице можно загружать. Скрипты — только свои (встроенных и чужих нет), поэтому внедрённый код не выполнится.
-#   connect-src: база и вход (Supabase), проверка приложения в App Store (iTunes Lookup)
+#   connect-src: база и вход (Supabase), живые обновления (Supabase Realtime, wss), проверка приложения в App Store (iTunes Lookup)
 #   img-src: свои картинки, фото и скриншоты (data:, blob:), иконки приложений из App Store (mzstatic)
 #   style-src 'unsafe-inline': стили первого экрана в index.html и стили элементов из кода
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.mzstatic.com; font-src 'self' data:; connect-src 'self' https://*.supabase.co https://itunes.apple.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.mzstatic.com; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://itunes.apple.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: DENY
