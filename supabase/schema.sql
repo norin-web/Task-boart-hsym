@@ -2980,3 +2980,32 @@ create or replace function task_descendants(p_roots text[]) returns table (
 $$;
 revoke execute on function task_descendants(text[]) from public, anon;
 grant execute on function task_descendants(text[]) to authenticated;
+
+-- ---------- Права чтения: «кто я» считается раз на запрос (2026-11-14) ----------
+-- Функции в правилах без (select …) выполняются на каждой строке: у RM и лида это были секунды на экран.
+-- Смысл правил прежний; здесь они пересоздаются после всех нужных функций.
+create or replace function my_link_field_ids() returns text[]
+language sql stable security definer set search_path = public as $$
+  select coalesce(array(select f.id from link_fields f
+    where not f.archived and (f.positions = '[]'::jsonb or f.positions ?| my_positions())), '{}');
+$$;
+grant execute on function my_link_field_ids() to authenticated;
+
+drop policy if exists apps_read on apps;
+create policy apps_read on apps for select to authenticated
+  using ((not is_test or (select is_dev())) and ((select is_superadmin()) or (unit_id = any(coalesce((select my_unit_ids()), '{}')) and (
+    (select my_access()) = 'rm' or ((select my_access()) = 'moderator' and id = any(coalesce((select my_pm_app_ids()), '{}')))))));
+drop policy if exists units_read on units;
+create policy units_read on units for select to authenticated
+  using ((select is_superadmin()) or id = any(coalesce((select my_unit_ids()), '{}')));
+drop policy if exists fields_read on fields;
+create policy fields_read on fields for select to authenticated
+  using ((select is_superadmin()) or unit_id is null or unit_id = any(coalesce((select my_unit_ids()), '{}')));
+drop policy if exists members_read on unit_members;
+create policy members_read on unit_members for select to authenticated
+  using ((select is_superadmin()) or unit_id = any(coalesce((select my_unit_ids()), '{}')));
+-- ссылки: как can_see_link — администраторам все поля, остальным разрешённые их позициям
+drop policy if exists task_links_read on task_links;
+create policy task_links_read on task_links for select to authenticated
+  using (((select is_staff()) or field_id = any(coalesce((select my_link_field_ids()), '{}')))
+         and exists (select 1 from tasks t where t.id = task_id));
