@@ -245,7 +245,8 @@ export function plural(n, forms) {
 export const safeUrl = u => (/^https?:\/\//i.test(u || '') ? u : null);
 
 export function initials(name) {
-  return String(name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') || '?';
+  // только слова с буквой или цифрой: «Алекс (iOS)» → «АI», а не «А(»
+  return String(name || '?').split(/\s+/).map(w => (w.match(/[\p{L}\p{N}]/u) || [''])[0]).filter(Boolean).slice(0, 2).map(c => c.toUpperCase()).join('') || '?';
 }
 
 export function colorFor(str) {

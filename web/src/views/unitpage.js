@@ -12,6 +12,7 @@ import { peekTask } from './task.js';
 import { attention, inProgress, recent } from './ceo.js';
 
 import { addMemberDialog, applyMembers } from './people.js';
+import { guestSection } from './settings.js';
 import { sparkline, openSeries } from './charts.js';
 import { unitHeader } from './unitnav.js';
 import { onRemote } from '../live.js';
@@ -262,7 +263,9 @@ export function renderUnitTeam() {
     fill(body, rows.length
       ? [pms.length ? block('PM', pms) : h('section', null, h('div', { class: 'section-head' }, h('h2', null, 'PM')), emptyBlock('PM не назначен', { ic: 'users', sub: canEdit ? 'Добавьте через «Участник»' : '' })), block('Команда', crew)]
       : h('div', { class: 'card-box empty-state' }, h('h2', null, 'Команда не собрана'),
-        canEdit && h('button', { class: 'btn primary', onclick: async () => { if (await addMemberDialog(u.id)) draw(); } }, icon('plus', 15), 'Добавить участника')));
+        canEdit && h('button', { class: 'btn primary', onclick: async () => { if (await addMemberDialog(u.id)) draw(); } }, icon('plus', 15), 'Добавить участника')),
+    // участники без входа (только CEO): добавить, имя, позиция, кто ведёт, вкл/выкл
+    isSuper() && guestSection({ onChange: draw }));
   };
   draw();
   if (isStaff()) call('getLeadPeople', {}).then(z => { zones = z; if (currentView() === 'team:' + u.id) draw(); }).catch(() => {});

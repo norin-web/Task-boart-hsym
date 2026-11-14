@@ -360,7 +360,7 @@ const isGuest = p => !!p && !p.linked && !p.email;
  * «Без входа» (CEO): участники юнита без аккаунта — на них назначают задачи, ведёт их лид.
  * Добавить, переименовать, позиция, кто ведёт, включить/выключить (выключенный пропадает из выбора, задачи остаются).
  */
-function guestSection() {
+export function guestSection({ onChange } = {}) {
   const b = S.board;
   const box = h('section', { class: 'card-box' });
   let zones = null;
@@ -369,7 +369,8 @@ function guestSection() {
   const posOptions = cur => activeDepts().map(d => h('option', { value: d.id, selected: d.id === cur }, d.name));
   const leadOptions = cur => [h('option', { value: '' }, 'Никто'), ...leads().map(p => h('option', { value: p.id, selected: p.id === cur }, p.name))];
   const has = (p, pos) => p && (p.positionIds || [p.positionId]).includes(pos);
-  const save = async (p, patch) => { Object.assign(p, await send('updatePerson', { id: p.id, ...patch })); draw(); };
+  const save = async (p, patch) => { Object.assign(p, await send('updatePerson', { id: p.id, ...patch })); changed(); };
+  const changed = () => (onChange ? onChange() : draw());
 
   const addDialog = () => {
     const name = h('input', { class: 'inp', placeholder: 'Например, iOS-разработчик', maxlength: 80 });
@@ -396,7 +397,7 @@ function guestSection() {
             if (zones && lead.value) (zones[lead.value] ||= []).push(r.person.id);
             close();
             toast(r.person.name + ' — в команде');
-            draw();
+            changed();
           },
         },
       ],
