@@ -882,8 +882,10 @@ export function createBackend(db, opts = {}) {
       all(() => T('teams').select('id,name').order('id')),
     ]);
     // события приложений, юнитов, людей и настроек (пишет база): подписи статусов, приоритетов, ролей; иконки живых приложений
-    const refs = [...new Set(rows.filter(r => /^app_/.test(r.action) && r.ref_id).map(r => r.ref_id))];
-    const [appRows, statuses, prio] = rows.some(r => /^(app|person|settings)_/.test(r.action))
+    // приложения: из событий приложений и из смены приложения у задачи
+    const refs = [...new Set([...rows.filter(r => /^app_/.test(r.action) && r.ref_id).map(r => r.ref_id),
+      ...rows.filter(r => r.field === 'appId').flatMap(r => [json(r.from_val, r.from_val), json(r.to_val, r.to_val)]).filter(x => typeof x === 'string' && x)])];
+    const [appRows, statuses, prio] = rows.some(r => /^(app|person|settings)_/.test(r.action) || r.field === 'appId')
       ? await Promise.all([refs.length ? run(T('apps').select('id,name,color,icon_url').in('id', refs)) : [], appStatuses(), one('fields', PRIORITY_FIELD)])
       : [[], [], null];
     const AP = Object.fromEntries(appRows.map(r => [r.id, r]));
@@ -916,6 +918,7 @@ export function createBackend(db, opts = {}) {
         case 'unit': label = 'Юнит'; break;
         case 'teamId': label = 'Команда'; fromText = TM[from] || ''; toText = TM[to] || ''; break;
         case 'specUrl': label = 'ТЗ'; break;
+        case 'appId': label = 'Приложение'; fromText = from ? (AP[from] || {}).name || 'удалённое приложение' : ''; toText = to ? (AP[to] || {}).name || 'удалённое приложение' : ''; break;
         case 'checklist:add': case 'checklist:remove': case 'checklist:rename': case 'checklist:done': case 'checklist:undone': label = 'Чеклист'; break;
         default:
           // ссылки: в истории только факт изменения, без адреса — история видна шире, чем само поле
@@ -1431,6 +1434,13 @@ export function createBackend(db, opts = {}) {
       const status = st.columns.some(c => c.id === p.status) ? p.status : st.columns[0].id;
       const assignee = str(p.assigneeId, 40);
       const ts = now();
+      // обычная задача (не запрос, не этап, не подзадача): приложение — только из этого же юнита и видное создающему.
+      // Этапы флоу и подзадачи могут жить в другом юните, чем приложение, — их не проверяем.
+      if (str(p.appId, 40) && !p.kind && !p.parentId) {
+        const app = await run(T('apps').select('id,unit_id').eq('id', str(p.appId, 40)).maybeSingle());
+        if (!app) fail('Приложение не найдено', 'NOT_FOUND');
+        if (app.unit_id !== unit.id) fail('Приложение из другого юнита — выберите приложение этого юнита');
+      }
       await fitsAssignee(unit.id, { kind: p.kind, step: str(p.step, 30), departmentId: await validDept(p.departmentId) || await memberDept(unit.id, assignee) }, assignee);
       const task = {
         id: uid('t'), unit_id: unit.id, num: (await rpc('next_task_num', { p_unit: unit.id })) ?? fail('Создавать задачи могут CEO и PM юнита', 'FORBIDDEN'),
@@ -1525,6 +1535,20 @@ export function createBackend(db, opts = {}) {
         const v = date(patch.dueDate);
         if (v !== t.due_date) { change('dueDate', t.due_date, v); t.due_date = v; }
       }
+      // приложение обычной задачи (не запроса, не этапа, не подзадачи): только из этого же юнита; '' — без приложения
+      if ('appId' in patch) {
+        const v = str(patch.appId, 40);
+        if (v !== (t.app_id || '')) {
+          if (t.kind || t.parent_id) fail('Приложение меняется только у обычной задачи');
+          if (v) {
+            const app = await run(T('apps').select('id,unit_id').eq('id', v).maybeSingle());
+            if (!app) fail('Приложение не найдено', 'NOT_FOUND');
+            if (app.unit_id !== t.unit_id) fail('Приложение из другого юнита — выберите приложение этого юнита');
+          }
+          change('appId', t.app_id || '', v);
+          t.app_id = v;
+        }
+      }
       if ('checklist' in patch) {
         const before = cleanChecklist(t.checklist);
         const after = cleanChecklist(patch.checklist);
@@ -1573,7 +1597,7 @@ export function createBackend(db, opts = {}) {
         const saved = await run(T('tasks').update({
           title: t.title, description: t.description, status: t.status, assignee_id: t.assignee_id, department_id: t.department_id, team_id: t.team_id || '',
           due_date: t.due_date, ord: t.ord, fields: t.fields, checklist: t.checklist, archived: t.archived, spec_url: t.spec_url || '',
-          done_at: t.done_at, updated_at: t.updated_at, started_at: t.started_at || '', reviewer_id: t.reviewer_id || '',
+          done_at: t.done_at, updated_at: t.updated_at, started_at: t.started_at || '', reviewer_id: t.reviewer_id || '', app_id: t.app_id || '',
         }).eq('id', t.id).eq('updated_at', r.updated_at).select('*'));
         if (!saved.length) {
           const fresh = await one('tasks', t.id);

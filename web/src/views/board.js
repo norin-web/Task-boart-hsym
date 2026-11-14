@@ -51,7 +51,18 @@ export function renderBoardView() {
   fill($('#main'),
     ...unitHeader(team ? '' : mode === 'list' ? 'list' : 'board', [
       !team && teamStack(),
-      isStaff() && h('button', { class: 'btn primary', onclick: () => openCreateTask(), title: 'Новая задача (C)' }, h('span', { class: 'btn-label' }, 'Задача')),
+      isStaff() && h('button', {
+        class: 'btn primary', title: 'Новая задача (C)', 'aria-haspopup': isSuper() ? 'menu' : null,
+        // CEO выбирает: задача или новое приложение (приложения заводит только CEO); остальным — сразу задача
+        onclick: e => {
+          if (!isSuper()) return openCreateTask();
+          e.stopPropagation();
+          menu(e.currentTarget, [
+            { label: 'Новая задача', icon: 'plus', action: () => openCreateTask() },
+            { label: 'Новое приложение', icon: 'app', action: () => import('./apps.js').then(m => m.openCreateApp(() => reloadBoard().catch(() => {}), S.board.unit.id)) },
+          ]);
+        },
+      }, h('span', { class: 'btn-label' }, 'Задача'), isSuper() && icon('chevron', 14)),
     ], team),
     !team && h('div', { class: 'vs-line' }, viewSwitch(mode === 'list' ? 'list' : 'board')),
     filterBar(),
@@ -500,6 +511,7 @@ export function deptChip(id) {
 }
 
 function taskCard(t, inLane) {
+  const plainApp = !t.kind && !t.parentId && appById(t.appId);
   const B = S.board.unit.settings.builtins;
   const fields = activeFields();
   const chips = [
@@ -537,8 +549,9 @@ function taskCard(t, inLane) {
   // доработка по багам QA: на карточке видно, что это возврат с баг-репортом, а не новая задача
   (() => { const b = (t.bugs || []).filter(x => !x.closedAt && !x.fixedAt).pop(); return b && !taskDone(t) && h('div', { class: 'card-bug' }, icon('alert', 12), `Баг-репорт №${b.n}`); })(),
   // вторая строка, как в макете: «откуда · состояние» — запрос CEO у этапа, «Запрос · 0 из 7» у самого запроса
-  (t.parent || TASK_KINDS[t.kind] || waits.length > 0) && h('div', { class: 'card-sub', title: t.parent ? t.parent.unit.name + ' · ' + t.parent.key : '' },
-    [t.parent && t.parent.title, !t.parent && TASK_KINDS[t.kind] && TASK_KINDS[t.kind].short + (t.tree ? ` · ${t.tree.done} из ${t.tree.total}` : ''),
+  // у обычной задачи — её приложение
+  (t.parent || TASK_KINDS[t.kind] || waits.length > 0 || plainApp) && h('div', { class: 'card-sub', title: t.parent ? t.parent.unit.name + ' · ' + t.parent.key : plainApp ? 'Приложение' : '' },
+    [plainApp && plainApp.name, t.parent && t.parent.title, !t.parent && TASK_KINDS[t.kind] && TASK_KINDS[t.kind].short + (t.tree ? ` · ${t.tree.done} из ${t.tree.total}` : ''),
       waits.length > 0 && h('span', { title: 'Этап ждёт: ' + waits.join(', ') }, 'ждёт')].filter(Boolean)
       .flatMap((x, i) => (i ? [' · ', x] : [x]))),
   // низ: позиция, чеклист, остальное — тихим текстом; срок только когда горит; справа приоритет и исполнитель

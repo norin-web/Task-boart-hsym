@@ -800,7 +800,17 @@ function sideBlock(t, { staff, editable }) {
       onchange: e => { dot.style.background = colColor(colById(e.target.value)); patchTask(t, { status: e.target.value }); },
     }, u.settings.columns.map(c => h('option', { value: c.id }, c.name)))));
 
-  // Порядок: Статус → Исполнитель → Срок → Приоритет и поля. «Команды» в карточке нет (не нужна — решение заказчика);
+  // приложение обычной задачи: CEO и PM меняют (только приложения этого юнита), остальным — названием
+  if (!t.kind && !t.parentId) {
+    const app = appById(t.appId);
+    const list = S.apps.filter(a => (!a.archived && a.unitId === t.unitId) || a.id === t.appId).sort((x, y) => x.name.localeCompare(y.name, 'ru'));
+    if (staff && list.length) {
+      prop('Приложение', h('select', { class: 'inp', 'aria-label': 'Приложение', onchange: e => { patchTask(t, { appId: e.target.value }); refreshPanel(t); } },
+        h('option', { value: '' }, 'Без приложения'), list.map(a => h('option', { value: a.id, selected: a.id === t.appId }, a.name))));
+    } else if (app) prop('Приложение', ro(h('span', null, app.name)));
+  }
+
+  // Порядок: Статус → Приложение → Исполнитель → Срок → Приоритет и поля. «Команды» в карточке нет (не нужна — решение заказчика);
   // позиция не показывается — её ставит исполнитель (основная позиция), видимость считается по ней.
 
   if (!B.assignee.hidden && !staff && !zone) {
@@ -1037,9 +1047,21 @@ export function openCreateTask(opts = {}) {
     const tpl = taskTpls.find(x => x.id === e.target.value);
     if (tpl) applyTemplate(tpl); else if (used) applyTemplate(used);
   } }, h('option', { value: '' }, 'Без шаблона'), taskTpls.map(tpl => h('option', { value: tpl.id }, tpl.name)));
+  // приложение — необязательно, только из выбранного юнита; у подзадачи — как у родителя
+  const fixedApp = opts.parent && opts.parent.appId ? opts.parent.appId : '';
+  let appId = fixedApp || opts.appId || '';
+  const appSel = h('select', { class: 'inp', disabled: !!fixedApp, 'aria-label': 'Приложение', onchange: e => { appId = e.target.value; } });
+  const drawApps = () => {
+    const list = S.apps.filter(a => (!a.archived && a.unitId === unit.id) || a.id === fixedApp).sort((x, y) => x.name.localeCompare(y.name, 'ru'));
+    if (appId && !list.some(a => a.id === appId)) appId = '';
+    fill(appSel, h('option', { value: '' }, list.length ? 'Без приложения' : 'В юните нет приложений'), list.map(a => h('option', { value: a.id }, a.name)));
+    appSel.value = appId;
+  };
+  drawApps();
   const tplRow = h('div', { class: 'grid2 create-top' },
-    field('Юнит', h('select', { class: 'inp', value: unit.id, disabled: !!opts.parent, onchange: e => { unit = unitById(e.target.value); here = S.board && S.board.unit.id === unit.id; drawProps(); } },
+    field('Юнит', h('select', { class: 'inp', value: unit.id, disabled: !!opts.parent, onchange: e => { unit = unitById(e.target.value); here = S.board && S.board.unit.id === unit.id; drawApps(); drawProps(); } },
       units.map(u => h('option', { value: u.id }, u.name)))),
+    field('Приложение', appSel),
     tplSel && field('Шаблон', tplSel),
     tplNote);
   const props = h('div', { class: 'grid2 create-props' });
@@ -1101,7 +1123,7 @@ export function openCreateTask(opts = {}) {
           const { links, ...rest } = draft;
           const task = await send('createTask', {
             unitId: unit.id, title: text, description: desc.value, specUrl: spec.value.trim(), ...rest,
-            parentId: opts.parent ? opts.parent.id : '', appId: opts.parent && opts.parent.appId ? opts.parent.appId : '',
+            parentId: opts.parent ? opts.parent.id : '', appId: fixedApp || appId,
           });
           // ссылки — отдельной таблицей, после создания задачи
           task.links = {};

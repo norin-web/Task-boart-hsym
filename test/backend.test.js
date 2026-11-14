@@ -344,3 +344,25 @@ test('бэклог: у идеи юнит — общий или выбранны�
   const res = await api('startIdea', { id: mine.id, name: 'Новое' });
   assert.equal(res.request.unitId, u.id);
 });
+
+test('новая задача с приложением: только приложение этого юнита', async () => {
+  const api = await setup();
+  const a = await api('createUnit', { name: 'Alpha', key: 'ALP' });
+  const b = await api('createUnit', { name: 'Bravo', key: 'BRV' });
+  const { app } = await api('createApp', { name: 'Forest', unitId: a.id, noRequest: true });
+  const t = await api('createTask', { unitId: a.id, title: 'Иконка', appId: app.id });
+  assert.equal(t.appId, app.id);
+  await assert.rejects(() => api('createTask', { unitId: b.id, title: 'Чужое', appId: app.id }), /другого юнита/);
+  await assert.rejects(() => api('createTask', { unitId: a.id, title: 'Нет такого', appId: 'app_none' }), /не найдено/);
+  assert.equal((await api('createTask', { unitId: b.id, title: 'Без приложения' })).appId, '');
+  // сменить и убрать приложение у задачи; чужой юнит — отказ; в истории — «Приложение»
+  const { app: app2 } = await api('createApp', { name: 'Ocean', unitId: a.id, noRequest: true });
+  assert.equal((await api('updateTask', { id: t.id, patch: { appId: app2.id } })).appId, app2.id);
+  const { app: other } = await api('createApp', { name: 'Desert', unitId: b.id, noRequest: true });
+  await assert.rejects(() => api('updateTask', { id: t.id, patch: { appId: other.id } }), /другого юнита/);
+  assert.equal((await api('updateTask', { id: t.id, patch: { appId: '' } })).appId, '');
+  const hist = (await api('getTaskExtras', { taskId: t.id })).activity;
+  const row = hist.find(x => x.field === 'appId' && x.toText === '—');
+  assert.ok(hist.some(x => x.label === 'Приложение' && x.fromText === 'Forest' && x.toText === 'Ocean'), 'смена приложения в истории');
+  assert.ok(row && row.fromText === 'Ocean', 'убрали приложение — в истории');
+});
