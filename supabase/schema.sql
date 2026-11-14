@@ -2757,6 +2757,14 @@ language sql stable security definer set search_path = public as $$
 $$;
 grant execute on function my_pm_app_ids() to authenticated;
 
+-- Люди, выданные лиду (его зона кроме позиций), — массивом: правило чтения задач считает зону один раз на запрос,
+-- а не функцией на каждую строку (у лида на тысячах задач это были секунды).
+create or replace function my_lead_people() returns text[]
+language sql stable security definer set search_path = public as $$
+  select coalesce(array(select person_id from lead_people where lead_id = my_person_id()), '{}');
+$$;
+grant execute on function my_lead_people() to authenticated;
+
 drop policy if exists tasks_read on tasks;
 create policy tasks_read on tasks for select to authenticated using (
   (not is_test or (select is_dev()))
@@ -2765,7 +2773,10 @@ create policy tasks_read on tasks for select to authenticated using (
     (select is_superadmin())
     or ((select my_access()) = 'moderator' and unit_id = any(coalesce((select my_unit_ids()), '{}')))
     or assignee_id = (select my_person_id()) or review_from = (select my_person_id()) or reviewer_id = (select my_person_id())
-    or ((select my_access()) = 'lead' and in_lead_zone(unit_id, department_id, assignee_id))
+    -- зона лида (как in_lead_zone): юнит, где он в составе, и позиция задачи из его позиций или исполнитель из выданных ему людей
+    or ((select my_access()) = 'lead' and unit_id = any(coalesce((select my_unit_ids()), '{}'))
+        and ((department_id <> '' and department_id = any(coalesce((select my_positions()), '{}')))
+             or (assignee_id <> '' and assignee_id = any(coalesce((select my_lead_people()), '{}')))))
     or ((select my_access()) = 'rm' and unit_id = any(coalesce((select my_unit_ids()), '{}'))
         and ((department_id <> '' and department_id = any(coalesce((select my_positions()), '{}')))
              or (team_id <> '' and team_id = any(coalesce((select my_teams()), '{}')))))));

@@ -788,15 +788,11 @@ export function createBackend(db, opts = {}) {
     const units = unitIds.length ? await run(T('units').select('id,settings').in('id', unitIds)) : [];
     const ST = Object.fromEntries(units.map(u => [u.id, unitSettings(u.settings)]));
     const done = r => !!r && !!ST[r.unit_id] && kindOf(ST[r.unit_id], r.status) === 'done';
-    const out = [];
-    for (const r of rows) {
-      const ds = json(r.depends_on, []) || [];
-      if (!ds.length) { out.push(r); continue; }
-      // зависимость может быть не видна этому человеку (чужая позиция) — тогда спрашиваем базу
-      if (ds.some(id => !all_[id])) { if (!(await rpc('open_deps', { p_deps: ds }))) out.push(r); continue; }
-      if (!ds.some(id => !done(all_[id]))) out.push(r);
-    }
-    return out;
+    // зависимости, не видные этому человеку (чужая позиция), — одним вопросом к базе: какие из них не закрыты
+    const hidden = deps.filter(id => !all_[id]);
+    const got = hidden.length ? await rpc('open_task_ids', { p_ids: hidden }) : [];
+    const openHidden = new Set((Array.isArray(got) ? got : got ? [got] : []).map(x => (x && typeof x === 'object' ? Object.values(x)[0] : x)));
+    return rows.filter(r => !(json(r.depends_on, []) || []).some(id => (all_[id] ? !done(all_[id]) : openHidden.has(id))));
   }
 
   /** Кого отметили «@Имя Фамилия» в тексте (новые относительно before). Уведомляет база — notify_mention. */
