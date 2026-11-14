@@ -274,7 +274,7 @@ export function menu(anchor, items, { cls = '', align = 'right' } = {}) {
   m.addEventListener('click', e => e.stopPropagation());
   // клавиатура: стрелки ходят по пунктам, Home/End — к крайним
   m.addEventListener('keydown', e => {
-    const items = [...m.querySelectorAll('button:not(:disabled)')];
+    const items = [...m.querySelectorAll('button:not(:disabled)')].filter(b => !b.hidden);
     const i = items.indexOf(document.activeElement);
     const go = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: items.length - 1 }[e.key];
     if (go === undefined || !items.length) return;
@@ -314,12 +314,43 @@ function openSelect(sel) {
     if (sel.value !== x.o.value) { sel.value = x.o.value; sel.dispatchEvent(new Event('input', { bubbles: true })); sel.dispatchEvent(new Event('change', { bubbles: true })); }
     sel.focus();
   } })).filter(Boolean);
-  const m = menu(sel, items, { align: 'left', cls: 'sel-menu' });
+  // длинный список (больше 10 пунктов) — с поиском сверху: печатать можно сразу, Enter выбирает первый найденный
+  const long = list.filter(x => x.o).length > 10;
+  const q = long && h('input', { class: 'inp sel-search', type: 'search', placeholder: 'Поиск', 'aria-label': 'Поиск по списку' });
+  const m = menu(sel, [q, ...items], { align: 'left', cls: 'sel-menu' + (long ? ' with-search' : '') });
   m.style.minWidth = sel.offsetWidth + 'px';
   const r = sel.getBoundingClientRect();
   m.style.left = Math.max(8, Math.min(window.innerWidth - m.offsetWidth - 8, r.left)) + 'px';
   const cur = [...m.querySelectorAll('.menu-item')].find(b => b.querySelector('.i'));
   if (cur) cur.scrollIntoView({ block: 'nearest' });
+  if (!q) return;
+  // высота не прыгает при поиске: фиксируем ту, что была при открытии
+  m.style.height = m.offsetHeight + 'px';
+  const norm = t => String(t || '').toLowerCase().replace(/ё/g, 'е');
+  const filter = () => {
+    const v = norm(q.value.trim());
+    let shown = 0, lastTitle = null, titleHas = false;
+    for (const el of m.children) {
+      if (el === q) continue;
+      if (el.classList.contains('menu-label')) { if (lastTitle) lastTitle.hidden = !titleHas; lastTitle = el; titleHas = false; continue; }
+      if (!el.classList.contains('menu-item')) { el.hidden = !!v; continue; }
+      const ok = !v || norm(el.textContent).includes(v);
+      el.hidden = !ok;
+      if (ok) { shown++; titleHas = true; }
+    }
+    if (lastTitle) lastTitle.hidden = !titleHas;
+    empty.hidden = shown > 0;
+  };
+  const empty = h('div', { class: 'menu-label sel-empty', hidden: true }, 'Ничего не нашлось');
+  m.append(empty);
+  q.addEventListener('input', filter);
+  q.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); const first = [...m.querySelectorAll('.menu-item')].find(b => !b.hidden); if (first) first.click(); }
+    if (e.key === 'Escape') { e.preventDefault(); closeMenu(); sel.focus(); }
+  });
+  // буквы с пунктов меню — в поиск
+  m.addEventListener('keydown', e => { if (e.target !== q && e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) q.focus(); });
+  q.focus();
 }
 const nativeSel = e => { const s = e.target && e.target.closest ? e.target.closest('select') : null; return s && !s.disabled && !s.multiple && !(s.size > 1) && !s.closest('.menu') && !coarse() ? s : null; };
 document.addEventListener('mousedown', e => { if (nativeSel(e)) e.preventDefault(); }, true);
