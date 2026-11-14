@@ -50,9 +50,16 @@ export async function renderAnalytics(tile) {
   async function load() {
     // повторный заход — сразу из памяти, свежее — в фоне
     try {
-      await swr('analytics:' + period, () => Promise.all([call('getCeoDashboard', { today: todayStr() }), call('listApps', {}), call('getPmDashboard', { today: todayStr(), period }), call('getOverview', { today: todayStr() })]),
-        r => { [d, apps, kpi, ov] = r; show(); }, { still: () => currentView() === 'analytics:' + (tile || '') });
+      // приложения — из дашборда CEO (он их уже загружает); «Загрузка команды» (getOverview) — только если блок включён
+      await swr('analytics:' + period, () => Promise.all([call('getCeoDashboard', { today: todayStr() }), call('getPmDashboard', { today: todayStr(), period })]),
+        r => { [d, kpi] = r; apps = d.apps || []; show(); }, { still: () => currentView() === 'analytics:' + (tile || '') });
     } catch (e) { showErr(e); }
+  }
+  let ovLoading = false;
+  function loadOverview() {
+    if (ovLoading) return;
+    ovLoading = true;
+    call('getOverview', { today: todayStr() }).then(r => { ov = r; if (currentView() === 'analytics:' + (tile || '')) draw(); }).catch(showErr).finally(() => { ovLoading = false; });
   }
   function show() {
     S.apps = apps.map(({ requests, active, ...a }) => a);
@@ -87,7 +94,7 @@ export async function renderAnalytics(tile) {
     defs.length = 0; defs.push(...out);
     defs.push({ id: 'kpi-ship', title: 'Команда и «Выпущено»', col: 'full', render: () => h('div', { class: 'an-grid an-grid-32' },
       team(kpi, period, p => { period = p; LS.set('kpiPeriod', p); load(); }), shipped ? shipped.render() : null) });
-    defs.push({ id: 'workload', title: 'Загрузка команды', col: 'full', off: true, render: () => workloadBlock(ov, { all: true }) });
+    defs.push({ id: 'workload', title: 'Загрузка команды', col: 'full', off: true, render: () => (ov ? workloadBlock(ov, { all: true }) : (loadOverview(), skeleton())) });
     return defs;
   };
 

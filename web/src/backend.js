@@ -3456,17 +3456,26 @@ export function createBackend(db, opts = {}) {
     },
 
     async getRmDashboard(p) {
-      const [rows, units, apps, settings] = await Promise.all([
+      const [rows, units, apps, settings, statusList] = await Promise.all([
         // релизы без описаний, полей и вложений — только то, что показывает экран
         all(() => T('tasks').select('id,unit_id,num,title,assignee_id,due_date,app_id,release,updated_at,checklist,parent_id').eq('step', 'release').eq('archived', false).neq('assignee_id', '').order('created_at').order('id')),
         all(() => T('units').select('id,key,settings').order('id')),
         all(() => T('apps').select('id,name,color,icon_url,unit_id,status,priority,is_test,archived,status_at').order('id')),
         methods.getReleaseSettings(),
+        appStatuses(),
       ]);
+      const reviewSt = new Set(statusList.filter(x => x.kind === 'review').map(x => x.id));
+      const rejectSt = new Set(statusList.filter(x => x.kind === 'reject').map(x => x.id));
       const U = Object.fromEntries(units.map(u => [u.id, u]));
       const A = Object.fromEntries(apps.map(a => [a.id, { id: a.id, name: a.name, color: a.color, iconUrl: a.icon_url || '', unitId: a.unit_id, status: a.status, priority: a.priority || '', isTest: !!a.is_test }]));
       const required = settings.fields.filter(f => f.required);
-      const P = await releaseParents(rows.map(t => t.parent_id));
+      // родители релизов и журнал статусов «только на ревью» — одной волной
+      const U0 = new Set(units.map(u => u.id));
+      const reviewOnly = apps.filter(a => !a.archived && reviewSt.has(a.status) && U0.has(a.unit_id)).map(a => a.id);
+      const [P, statusLog] = await Promise.all([
+        releaseParents(rows.map(t => t.parent_id)),
+        reviewOnly.length ? all(() => T('app_status_log').select('app_id,from_status,at').in('app_id', reviewOnly).order('at').order('id')) : [],
+      ]);
       // у RM релиз живёт по своей фазе: статусы задач на досках (Done у PM) на это не влияют; уходит только «В сторе»
       const items = rows.filter(t => U[t.unit_id]).map(t => {
         const rel = json(t.release, {}) || {};
@@ -3482,20 +3491,17 @@ export function createBackend(db, opts = {}) {
         };
       }).filter(x => x.phase !== 'live');
       // приложения со статусом «Ревью Apple» без релиза в трекере (добавлены сразу на ревью) — тоже в «На ревью Apple»
-      const reviewSt = new Set((await appStatuses()).filter(x => x.kind === 'review').map(x => x.id));
       const withRelease = new Set(items.filter(x => x.phase === 'submitted' && x.app).map(x => x.app.id));
       const appOnly = apps.filter(a => !a.archived && reviewSt.has(a.status) && !withRelease.has(a.id) && U[a.unit_id])
         .map(a => ({ id: '', appOnly: true, unitId: a.unit_id, title: a.name, app: A[a.id], submittedAt: a.status_at || '' }));
       // отправлено повторно после реджекта: в «Ревью Apple» перешли из статуса с типом «Реджект»
-      const rejectIds = new Set((await appStatuses()).filter(x => x.kind === 'reject').map(x => x.id));
       if (appOnly.length) {
-        const logs = await all(() => T('app_status_log').select('app_id,from_status,at').in('app_id', appOnly.map(x => x.app.id)).order('at').order('id'));
+        const ids = new Set(appOnly.map(x => x.app.id));
         const last = {};
-        for (const l of logs) last[l.app_id] = l;
-        for (const x of appOnly) x.afterReject = !!(last[x.app.id] && rejectIds.has(last[x.app.id].from_status));
+        for (const l of statusLog) if (ids.has(l.app_id)) last[l.app_id] = l;
+        for (const x of appOnly) x.afterReject = !!(last[x.app.id] && rejectSt.has(last[x.app.id].from_status));
       }
       // и со статусом «Реджект» без открытого реджекта релиза — на экран «Реджекты»
-      const rejectSt = new Set((await appStatuses()).filter(x => x.kind === 'reject').map(x => x.id));
       // у кого есть релиз в трекере — реджект виден по релизу; «по статусу» — только приложения без релиза
       const withReject = new Set(items.filter(x => x.app).map(x => x.app.id));
       const rejectedApps = apps.filter(a => !a.archived && rejectSt.has(a.status) && !withReject.has(a.id) && U[a.unit_id])

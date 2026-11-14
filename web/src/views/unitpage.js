@@ -54,8 +54,11 @@ export async function renderUnitPage() {
     const rm = ((me() || {}).access) === 'rm';
     // повторный заход — сразу из памяти, свежее — в фоне
     try {
-      await swr('unit:' + u.id + (rm ? ':rm' : ''), () => Promise.all([call('listApps', { unitId: u.id }), rm ? null : call('getCeoDashboard', { today: todayStr() }),
-        rm ? call('getRmDashboard', {}) : null]), show, { still: () => currentView() === key });
+      // не RM: приложения юнита берём из дашборда CEO (он и так загружает все приложения) — без второго listApps
+      await swr('unit:' + u.id + (rm ? ':rm' : ''), () => (rm
+        ? Promise.all([call('listApps', { unitId: u.id }), null, call('getRmDashboard', {})])
+        : call('getCeoDashboard', { today: todayStr() }).then(d => [(d.apps || []).filter(a => a.unitId === u.id), d, null])),
+      show, { still: () => currentView() === key });
     } catch (e) { showErr(e); }
   }
   function show([apps, d, rd]) {
