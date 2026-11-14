@@ -51,3 +51,32 @@ test('пакетное чтение (read_batch) отдаёт то же, что 
   await assert.rejects(async () => { const r = await raw.rpc('read_batch', { p_queries: [{ t: 'pg_authid', c: '*' }] }); if (r.error) throw new Error(r.error.message); }, /недоступна/);
   await assert.rejects(async () => { const r = await raw.rpc('read_batch', { p_queries: [{ t: 'units', f: [['id', 'like', 'x']] }] }); if (r.error) throw new Error(r.error.message); }, /не поддерживается/);
 });
+
+test('потомки задач одной функцией (task_descendants) — та же сводка подзадач, что и по уровням', async () => {
+  const pg = new PGlite();
+  await pg.exec(AUTH_STUB_SQL);
+  await pg.exec(SCHEMA);
+  const raw = pgliteClient(pg);
+  let rpcCalls = 0;
+  const viaRpc = { from: t => raw.from(t), rpc: (fn, a) => { if (fn === 'task_descendants') rpcCalls++; return raw.rpc(fn, a); } };
+  // как база без новой функции: отказ «нет такой функции» → по уровням
+  const noRpc = { from: t => raw.from(t), rpc: (fn, a) => (fn === 'task_descendants' ? Promise.resolve({ data: null, error: { code: 'PGRST202', message: 'Could not find the function public.task_descendants' } }) : raw.rpc(fn, a)) };
+  const api = be => async (m, p) => { const r = await be.call(m, p || {}); if (!r.ok) throw new Error(`${m}: ${r.error}`); return r.data; };
+  const A = api(createBackend(viaRpc)), B = api(createBackend(noRpc));
+
+  const u = await A('createUnit', { name: 'Gold' });
+  const done = u.settings.columns.find(c => c.kind === 'done').id;
+  const root = await A('createTask', { unitId: u.id, title: 'Корень' });
+  const k1 = await A('createTask', { unitId: u.id, title: 'Дочь 1', parentId: root.id });
+  await A('createTask', { unitId: u.id, title: 'Дочь 2', parentId: root.id, status: done });
+  const g = await A('createTask', { unitId: u.id, title: 'Внучка', parentId: k1.id, dueDate: '2020-01-01' });
+  await A('createTask', { unitId: u.id, title: 'Правнучка', parentId: g.id });
+
+  const day = { unitId: u.id, today: '2026-11-14' };
+  const a = await A('getBoard', day), b = await B('getBoard', day);
+  assert.ok(rpcCalls > 0, 'функция базы вызвана');
+  const tree = r => Object.fromEntries(r.tasks.map(t => [t.title, { tree: t.tree, parent: t.parent && t.parent.title }]));
+  assert.deepEqual(tree(a), tree(b));
+  assert.deepEqual(tree(a)['Корень'].tree, { total: 4, done: 1, overdue: 1 });
+  assert.equal(tree(a)['Внучка'].parent, 'Дочь 1');
+});

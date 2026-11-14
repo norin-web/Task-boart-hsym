@@ -556,23 +556,42 @@ export function createBackend(db, opts = {}) {
     return (await Promise.all(parts)).flat();
   }
 
+  /** Все потомки задач (до 6 уровней, без повторов): функция базы task_descendants; если её ещё нет — по уровням. */
+  let descRpc = true;
+  async function descendants(roots) {
+    if (descRpc) {
+      const { data, error } = await db.rpc('task_descendants', { p_roots: roots });
+      if (!error) return (Array.isArray(data) ? data : data ? [data] : []).sort((a, b) => String(a.id).localeCompare(String(b.id)));
+      if (error.code === 'PGRST202' || error.code === '42883' || /task_descendants/.test(error.message || '')) descRpc = false;
+      else throw dbError(error);
+    }
+    const out = [], seen = new Set(roots);
+    let level = roots;
+    for (let depth = 1; level.length && depth <= 6; depth++) {
+      const rows = (await run(T('tasks').select('id,parent_id,unit_id,status,due_date,archived').in('parent_id', level).order('id')))
+        .filter(r => !seen.has(r.id) || roots.includes(r.id));
+      out.push(...rows);
+      level = rows.filter(r => !seen.has(r.id)).map(r => r.id);
+      level.forEach(id => seen.add(id));
+    }
+    return out;
+  }
+
   async function treeInfo(tasks, day) {
     const stats = {}, parents = {};
     const withParent = tasks.filter(t => t.parent_id);
     const roots = tasks.map(t => t.id);
     if (!roots.length) return { stats, parents };
-    const unitRows = await all(() => T('units').select('id,key,name,color,settings').order('id'));
+    // юниты, родители и все потомки — одной волной (потомки — функцией базы, без неё — по уровням)
+    const [unitRows, desc, parentRows] = await Promise.all([
+      all(() => T('units').select('id,key,name,color,settings').order('id')),
+      descendants(roots),
+      withParent.length ? run(T('tasks').select('id,unit_id,num,title,kind').in('id', [...new Set(withParent.map(t => t.parent_id))])) : [],
+    ]);
     const U = Object.fromEntries(unitRows.map(u => [u.id, { ...u, st: unitSettings(u.settings) }]));
-    // все потомки (без повторов) и дети каждого — затем у каждой задачи считаем своё поддерево
-    const kids = {}, seen = new Set(roots);
-    let level = roots;
-    for (let depth = 1; level.length && depth <= 6; depth++) {
-      const rows = (await run(T('tasks').select('id,parent_id,unit_id,status,due_date,archived').in('parent_id', level).order('id')))
-        .filter(r => !seen.has(r.id) || roots.includes(r.id));
-      rows.forEach(r => { (kids[r.parent_id] || (kids[r.parent_id] = [])).push(r); });
-      level = rows.filter(r => !seen.has(r.id)).map(r => r.id);
-      level.forEach(id => seen.add(id));
-    }
+    // дети каждой задачи — затем у каждой задачи считаем своё поддерево
+    const kids = {};
+    desc.forEach(r => { (kids[r.parent_id] || (kids[r.parent_id] = [])).push(r); });
     for (const root of roots) {
       const s = { total: 0, done: 0, overdue: 0 };
       const stack = [...(kids[root] || [])];
@@ -587,8 +606,7 @@ export function createBackend(db, opts = {}) {
       if (s.total) stats[root] = s;
     }
     if (withParent.length) {
-      const rows = await run(T('tasks').select('id,unit_id,num,title,kind').in('id', [...new Set(withParent.map(t => t.parent_id))]));
-      const P = Object.fromEntries(rows.map(r => [r.id, r]));
+      const P = Object.fromEntries(parentRows.map(r => [r.id, r]));
       for (const t of withParent) {
         const r = P[t.parent_id], u = r && U[r.unit_id];
         if (r && u) parents[t.id] = { id: r.id, key: `${u.key}-${r.num}`, title: r.title, kind: r.kind || '', unit: { id: u.id, name: u.name, color: u.color } };

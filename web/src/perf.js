@@ -21,12 +21,12 @@ const now = () => performance.now();
 function startScreen(name) {
   if (!perfOn) return;
   finish();
-  cur = { name, start: now(), end: 0, calls: [], http: [] };
+  cur = { name, start: now(), end: 0, calls: [], http: [], errors: [] };
   schedule();
 }
 function finish() {
   if (!cur) return;
-  if (cur.calls.length || cur.http.length) screens.unshift(cur);
+  if (cur.calls.length || cur.http.length || cur.errors.length) screens.unshift(cur);
   if (screens.length > 30) screens.length = 30;
   cur = null;
   draw();
@@ -133,6 +133,7 @@ function copyReport() {
     lines.push('', `${x.name}: ${fmt(x.total)} · API ${x.calls} · запросов ${x.http} · ${Math.round(x.kb)} КБ`);
     for (const c of [...s.calls].sort((a, b) => b.ms - a.ms).slice(0, 6)) lines.push(`  API ${c.method}: ${fmt(c.ms)} (с ${fmt(c.at)})`);
     for (const r of [...s.http].sort((a, b) => b.ms - a.ms).slice(0, 8)) lines.push(`  ${fmt(r.ms)} · ${r.kb.toFixed(1)} КБ · ${r.path} (с ${fmt(r.at)})`);
+    for (const e of s.errors || []) lines.push(`  ОШИБКА: ${e}`);
   }
   const text = lines.join('\n');
   (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(
@@ -141,6 +142,15 @@ function copyReport() {
 }
 
 // первый экран — запуск приложения (вход, bootstrap)
+// ошибки на экране — в отчёт (их же пишет мониторинг в журнал ошибок)
+const noteError = msg => { if (cur && msg) { cur.errors.push(String(msg).slice(0, 300)); draw(); } };
+if (perfOn && typeof window !== 'undefined') {
+  document.addEventListener('tasks:apierror', e => noteError(`${e.detail.method}: ${e.detail.error}`));
+  window.addEventListener('error', e => noteError(e.message));
+  window.addEventListener('unhandledrejection', e => noteError((e.reason && e.reason.message) || String(e.reason)));
+  document.addEventListener('securitypolicyviolation', e => noteError(`CSP: ${e.blockedURI || 'inline'} (${e.effectiveDirective})`));
+}
+
 if (perfOn) startScreen('Запуск');
 
 /** Начало экрана — из роутера при каждом переходе. */

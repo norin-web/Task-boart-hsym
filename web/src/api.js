@@ -11,7 +11,23 @@ function setPending(d) {
   if (el) el.hidden = pending <= 0;
 }
 
-export async function call(method, payload) {
+// Одинаковое чтение, пока первое ещё идёт, второй раз не отправляем: ждём то же (копию — чтобы правки одного не задели другого).
+// Например, карточка запроса: блок подзадач и блок этапов просят одно дерево одновременно.
+const READ = /^(get|list|query)|^(navCounts|bootstrap|whoami)$/;
+const inflight = new Map();
+
+export function call(method, payload) {
+  if (!READ.test(method)) return callNow(method, payload);
+  let key;
+  try { key = method + '|' + (S.meId || '') + '|' + JSON.stringify(payload || {}); } catch { return callNow(method, payload); }
+  const cur = inflight.get(key);
+  if (cur) return cur.then(d => (d && typeof d === 'object' ? structuredClone(d) : d));
+  const p = callNow(method, payload).finally(() => inflight.delete(key));
+  inflight.set(key, p);
+  return p;
+}
+
+async function callNow(method, payload) {
   let r;
   try {
     r = await timeCall(method, () => getBackend().call(method, payload || {}, { actorId: S.meId || '' }));

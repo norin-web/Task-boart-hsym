@@ -2950,3 +2950,22 @@ begin
 end $$;
 revoke execute on function read_batch(jsonb) from public, anon;
 grant execute on function read_batch(jsonb) to authenticated;
+
+-- ---------- Потомки задач одним запросом (2026-11-14) ----------
+-- Сводка подзадач на доске: раньше база читалась уровень за уровнем (до 6 запросов подряд). Права — как у чтения (RLS):
+-- функция работает от имени пользователя. Корни, встреченные среди потомков, не раскрываются второй раз.
+create or replace function task_descendants(p_roots text[]) returns table (
+  id text, parent_id text, unit_id text, status text, due_date text, archived boolean
+) language sql stable security invoker set search_path = public as $$
+  with recursive d as (
+    select t.id, t.parent_id, t.unit_id, t.status, t.due_date, t.archived, 1 as depth
+      from tasks t where t.parent_id = any(p_roots)
+    union all
+    select t.id, t.parent_id, t.unit_id, t.status, t.due_date, t.archived, d.depth + 1
+      from tasks t join d on t.parent_id = d.id
+     where d.depth < 6 and not (d.id = any(p_roots))
+  )
+  select distinct on (d.id) d.id, d.parent_id, d.unit_id, d.status, d.due_date, d.archived from d order by d.id, d.depth;
+$$;
+revoke execute on function task_descendants(text[]) from public, anon;
+grant execute on function task_descendants(text[]) to authenticated;
