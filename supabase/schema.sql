@@ -3009,3 +3009,83 @@ drop policy if exists task_links_read on task_links;
 create policy task_links_read on task_links for select to authenticated
   using (((select is_staff()) or field_id = any(coalesce((select my_link_field_ids()), '{}')))
          and exists (select 1 from tasks t where t.id = task_id));
+
+-- ---------- Ссылки — общие на весь запрос (2026-11-16) ----------
+-- Ссылку поставили на этапе (Figma у дизайна) — она нужна и разработке: уходит в запрос и во все его этапы и подзадачи,
+-- где поле пустое или стояло прежнее значение (свою другую ссылку этапа не трогаем). Вне запроса — как раньше, вниз.
+create or replace function share_task_link(p_task text, p_field text, p_url text, p_old text) returns integer
+language plpgsql security definer set search_path = public as $$
+declare
+  v_cur record; v_root text; n integer := 0;
+  at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+begin
+  select * into v_cur from tasks where id = p_task;
+  if v_cur.id is null or not can_see_link(p_field) then return 0; end if;
+  if not (can_manage(v_cur.unit_id) or v_cur.assignee_id = my_person_id() or v_cur.review_from = my_person_id()) then
+    raise exception 'Недостаточно прав для этого действия' using errcode = '42501';
+  end if;
+  -- корень семьи: запрос, к которому относится задача (сам запрос, этап, подзадача этапа); иначе — сама задача
+  with recursive up as (
+    select t.id, t.parent_id, t.kind, 0 as d from tasks t where t.id = p_task
+    union all select t.id, t.parent_id, t.kind, u.d + 1 from tasks t join up u on t.id = u.parent_id where u.d < 10 and u.parent_id <> ''
+  )
+  select id into v_root from up where kind = 'request' order by d limit 1;
+  v_root := coalesce(v_root, p_task);
+  if coalesce(p_url, '') <> '' then
+    with recursive fam as (
+      select t.id, t.unit_id from tasks t where t.id = v_root
+      union all select t.id, t.unit_id from tasks t join fam f on t.parent_id = f.id where not t.archived
+    )
+    insert into task_links (task_id, field_id, unit_id, url, updated_at)
+      select f.id, p_field, f.unit_id, p_url, at_ from fam f
+       where f.id <> p_task
+         and coalesce((select l.url from task_links l where l.task_id = f.id and l.field_id = p_field), '') in ('', coalesce(p_old, ''))
+    on conflict (task_id, field_id) do update set url = excluded.url, updated_at = excluded.updated_at;
+  elsif coalesce(p_old, '') <> '' then
+    with recursive fam as (
+      select t.id from tasks t where t.id = v_root
+      union all select t.id from tasks t join fam f on t.parent_id = f.id where not t.archived
+    )
+    delete from task_links l using fam f where f.id <> p_task and l.task_id = f.id and l.field_id = p_field and l.url = p_old;
+  end if;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke execute on function share_task_link(text, text, text, text) from public, anon;
+grant execute on function share_task_link(text, text, text, text) to authenticated;
+
+-- Ссылки этапов в карточке релиза (RM): общая ссылка теперь стоит у всех этапов — показываем её один раз, у первого этапа
+create or replace function release_links(p_task text) returns table (task_id text, step text, title text, field_id text, url text)
+language sql stable security definer set search_path = public as $$
+  select task_id, step, title, field_id, url from (
+    select distinct on (l.field_id, l.url) s.id as task_id, s.step, s.title, l.field_id, l.url, s.created_at
+      from tasks r join tasks s on s.parent_id = r.parent_id and s.id <> r.id and r.parent_id <> ''
+      join task_links l on l.task_id = s.id
+     where r.id = p_task and r.step = 'release'
+       and (r.assignee_id = my_person_id() or can_manage(r.unit_id))
+     order by l.field_id, l.url, s.created_at, s.id
+  ) x order by created_at, field_id;
+$$;
+
+-- Один раз: в открытых запросах ссылки этапов — всей семье (запрос, этапы, подзадачи), где поле пустое.
+-- Если у разных этапов разные ссылки одного поля — берём ссылку запроса, иначе самую свежую.
+do $$
+begin
+  if not exists (select 1 from app_settings where key = 'once_links_family') then
+    with recursive fam as (
+      select r.id as root, r.id from tasks r where r.kind = 'request' and not r.archived and r.done_at = ''
+      union all select f.root, t.id from tasks t join fam f on t.parent_id = f.id where not t.archived
+    ),
+    src as (
+      select distinct on (f.root, l.field_id) f.root, l.field_id, l.url, l.updated_at
+        from fam f join task_links l on l.task_id = f.id
+       where l.url <> ''
+       order by f.root, l.field_id, (f.id = f.root) desc, l.updated_at desc
+    )
+    insert into task_links (task_id, field_id, unit_id, url, updated_at)
+      select f.id, s.field_id, t.unit_id, s.url, s.updated_at
+        from fam f join src s on s.root = f.root join tasks t on t.id = f.id
+    on conflict (task_id, field_id) do nothing;
+    insert into app_settings (key, value, updated_at) values ('once_links_family', 'true'::jsonb, '') on conflict (key) do nothing;
+  end if;
+end $$;

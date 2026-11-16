@@ -981,7 +981,7 @@ test('удалить тестовые данные: демо-юнит, демо-
   assert.equal(await left('select 1 from people where id in ($1, $2)', [pm.id, ceo.id]), 2);
 });
 
-test('ссылки наследуются вниз: добавили в запрос после разбивки — у этапов есть; своя ссылка этапа не перезаписывается; снятие — так же', async () => {
+test('ссылки общие на запрос: из запроса и из этапа — всей семье; другая своя ссылка этапа не перезаписывается; снятие — так же', async () => {
   const api = await setup();
   const { ceo, pm, gold } = await studio(api);
   const { request } = await api.as(ceo, () => api('createApp', { name: 'Dual', unitId: gold.id }));
@@ -992,20 +992,28 @@ test('ссылки наследуются вниз: добавили в запр
   await api.as(ceo, () => api('setTaskLink', { taskId: request.id, fieldId: 'lf_figma', url: 'https://figma.com/file/a' }));
   assert.equal((await linksOf(design.id)).lf_figma, 'https://figma.com/file/a');
   assert.equal((await linksOf(ios.id)).lf_figma, 'https://figma.com/file/a');
-  // у дизайна своя Figma — запрос и соседи не меняются; потом запрос меняет общую — своя у дизайна остаётся
+  // дизайн поменял общую Figma — новая у запроса и у соседей (там стояла прежняя)
   await api.as(ceo, () => api('setTaskLink', { taskId: design.id, fieldId: 'lf_figma', url: 'https://figma.com/file/own' }));
-  assert.equal((await linksOf(ios.id)).lf_figma, 'https://figma.com/file/a');
+  assert.equal((await linksOf(ios.id)).lf_figma, 'https://figma.com/file/own');
+  assert.equal((await linksOf(request.id)).lf_figma, 'https://figma.com/file/own');
+  // у iOS своя другая Figma — когда запрос меняет общую, своя у iOS остаётся
+  await api.as(ceo, () => api('setTaskLink', { taskId: ios.id, fieldId: 'lf_figma', url: 'https://figma.com/file/ios' }));
+  assert.equal((await linksOf(design.id)).lf_figma, 'https://figma.com/file/ios'); // общая была — обновилась
+  await api.as(ceo, () => api('setTaskLink', { taskId: design.id, fieldId: 'lf_drive', url: 'https://drive.google.com/x' }));
+  await api.pg.query(`update task_links set url = 'https://figma.com/file/mine' where task_id = $1 and field_id = 'lf_figma'`, [ios.id]);
   await api.as(ceo, () => api('setTaskLink', { taskId: request.id, fieldId: 'lf_figma', url: 'https://figma.com/file/b' }));
-  assert.equal((await linksOf(ios.id)).lf_figma, 'https://figma.com/file/b');
-  assert.equal((await linksOf(design.id)).lf_figma, 'https://figma.com/file/own');
+  assert.equal((await linksOf(design.id)).lf_figma, 'https://figma.com/file/b');
+  assert.equal((await linksOf(ios.id)).lf_figma, 'https://figma.com/file/mine');
+  // ссылка из этапа (Drive у дизайна) — у разработки тоже
+  assert.equal((await linksOf(ios.id)).lf_drive, 'https://drive.google.com/x');
   // подзадача этапа получает ссылку этапа
   const sub = await api.as(pm, () => api('createTask', { unitId: gold.id, title: 'Иконка', parentId: design.id }));
   await api.as(ceo, () => api('setTaskLink', { taskId: design.id, fieldId: 'lf_drive', url: 'https://drive.google.com/d' }));
   assert.equal((await linksOf(sub.id)).lf_drive, 'https://drive.google.com/d');
-  // сняли в запросе — пропало там, где было то же значение
+  // сняли в запросе — пропало там, где было то же значение; своя другая у iOS осталась
   await api.as(ceo, () => api('setTaskLink', { taskId: request.id, fieldId: 'lf_figma', url: '' }));
-  assert.equal((await linksOf(ios.id)).lf_figma, undefined);
-  assert.equal((await linksOf(design.id)).lf_figma, 'https://figma.com/file/own');
+  assert.equal((await linksOf(design.id)).lf_figma, undefined);
+  assert.equal((await linksOf(ios.id)).lf_figma, 'https://figma.com/file/mine');
 });
 
 test('один раз при обновлении схемы: ссылки старых открытых запросов доходят до этапов, где пусто', async () => {
@@ -1019,4 +1027,22 @@ test('один раз при обновлении схемы: ссылки ст�
   await api.pg.exec(SCHEMA);
   const n = (await api.pg.query(`select count(*)::int n from task_links where field_id = 'lf_meta' and task_id = any($1)`, [stages.map(s => s.id)])).rows[0].n;
   assert.equal(n, stages.length);
+});
+
+test('один раз при обновлении схемы: ссылка этапа открытого запроса — всем этапам и запросу, где пусто', async () => {
+  const api = await setup();
+  const { ceo, pm, gold } = await studio(api);
+  const { request } = await api.as(ceo, () => api('createApp', { name: 'Roku', unitId: gold.id }));
+  const stages = await api.as(pm, () => api('decomposeRequest', { taskId: request.id }));
+  const design = stages.find(t => t.step === 'design'), ios = stages.find(t => t.step === 'ios');
+  // как было: Figma стоит только у дизайна; у iOS своя Drive — её не трогаем
+  await api.pg.query(`insert into task_links (task_id, field_id, unit_id, url, updated_at) values ($1, 'lf_figma', $2, 'https://figma.com/roku', 'x')`, [design.id, gold.id]);
+  await api.pg.query(`insert into task_links (task_id, field_id, unit_id, url, updated_at) values ($1, 'lf_drive', $2, 'https://drive.google.com/ios', 'x')`, [ios.id, gold.id]);
+  await api.pg.query(`delete from app_settings where key = 'once_links_family'`);
+  await api.pg.exec(SCHEMA);
+  const url = async (id, f) => ((await api.pg.query(`select url from task_links where task_id = $1 and field_id = $2`, [id, f])).rows[0] || {}).url;
+  assert.equal(await url(ios.id, 'lf_figma'), 'https://figma.com/roku');
+  assert.equal(await url(request.id, 'lf_figma'), 'https://figma.com/roku');
+  assert.equal(await url(design.id, 'lf_drive'), 'https://drive.google.com/ios');
+  assert.equal(await url(ios.id, 'lf_drive'), 'https://drive.google.com/ios');
 });
