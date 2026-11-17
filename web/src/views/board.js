@@ -50,6 +50,8 @@ export function renderBoardView() {
   const team = teamById(S.route.team);
   fill($('#main'),
     ...unitHeader(team ? '' : mode === 'list' ? 'list' : 'board', [
+      // поиск — в шапке, рядом с колокольчиком и «Задачей»: строка под шапкой — только вид и фильтры
+      boardSearch(),
       !team && teamStack(),
       isStaff() && h('button', {
         class: 'btn primary', title: 'Новая задача (C)', 'aria-haspopup': isSuper() ? 'menu' : null,
@@ -64,9 +66,8 @@ export function renderBoardView() {
         },
       }, h('span', { class: 'btn-label' }, 'Задача'), isSuper() && icon('chevron', 14)),
     ], team),
-    !team && h('div', { class: 'vs-line' }, viewSwitch(mode === 'list' ? 'list' : 'board')),
-    isAsoTeam(team) && h('div', { class: 'vs-line' }, asoSwitch(() => { renderBoardView(); })),
-    filterBar(),
+    // вид (доска / список), у ASO — «Мета / Тексты», и фильтры — одной строкой
+    filterBar([!team && viewSwitch(mode === 'list' ? 'list' : 'board'), isAsoTeam(team) && asoSwitch(() => { renderBoardView(); })]),
     h('div', { id: 'tasks', class: mode === 'list' ? 'view-body' : 'board' }));
   renderTasks();
 }
@@ -122,16 +123,20 @@ function syncCounts() {
 
 /* ================= Фильтры ================= */
 
-function filterBar() {
-  const search = h('div', { class: 'search-inp' },
+/** Поиск по задачам доски — в шапке экрана («/» — фокус). */
+function boardSearch() {
+  return h('div', { class: 'search-inp head-search' },
     icon('search', 15),
     h('input', {
       id: 'board-search', class: 'inp', type: 'search', placeholder: 'Поиск по задачам  /', value: S.filters.q,
       oninput: e => { S.filters.q = e.target.value; renderTasks(); drawFilterRest(); },
       onkeydown: e => { if (e.key === 'Escape') { e.target.value = ''; S.filters.q = ''; e.target.blur(); renderTasks(); drawFilterRest(); } },
     }));
+}
+
+function filterBar(lead = []) {
   requestAnimationFrame(fitChips);
-  return h('div', { class: 'filterbar' }, search, h('div', { id: 'fb-rest', class: 'row' }, filterRest()));
+  return h('div', { class: 'filterbar' }, ...lead.filter(Boolean), h('div', { id: 'fb-rest', class: 'row' }, filterRest()));
 }
 
 function drawFilterRest() {

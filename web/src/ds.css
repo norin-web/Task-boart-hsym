@@ -3397,3 +3397,11 @@ a.bug-title:hover { text-decoration: underline; }
 /* «Люди»: у CEO под ролью — направление */
 .access-cell { display: grid; gap: 4px; justify-items: start; min-width: 0; }
 .access-cell .dir-select { height: 28px; width: auto; max-width: 100%; padding: 0 26px 0 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+
+/* Доска: поиск в шапке (рядом с колокольчиком и «Задачей»), под шапкой — вид, «Мета / Тексты» и фильтры одной строкой */
+.topbar .head-search { position: relative; width: 240px; flex: 0 1 240px; min-width: 140px; }
+.topbar .head-search .inp { height: 44px; border-radius: 999px; border: 0; background: var(--surface); padding: 0 14px 0 38px; font-size: 13px; }
+.topbar .head-search .i { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.filterbar > .seg { flex: none; }
+.filterbar > .aso-seg { height: 36px; padding: 3px; }
+.filterbar > .aso-seg button { height: 30px; padding: 0 14px; font-size: 13px; }
