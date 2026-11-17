@@ -314,3 +314,9 @@ export const asoView = () => (LS.get('asoTrack', 'meta') === 'texts' ? 'texts' :
 export const setAsoView = v => LS.set('asoTrack', v === 'texts' ? 'texts' : 'meta');
 /** Задача видна во вкладке ASO: этап своей сущности или обычная задача. */
 export const inAsoView = t => !asoTrack(t) || asoTrack(t) === asoView();
+
+/** Направления CEO: дизайн / меты / релизы. */
+export const DIRECTIONS = [['', 'Без направления'], ['design', 'Дизайн'], ['meta', 'Меты'], ['release', 'Релизы']];
+const DIR_BY_POS = { d_design: 'design', d_aso: 'meta', d_release: 'release' };
+/** Моё направление: явное поле CEO (people.direction), иначе — по основной позиции. */
+export const myDirection = () => { const p = me() || {}; return p.direction || DIR_BY_POS[p.positionId] || ''; };

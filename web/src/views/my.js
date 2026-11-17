@@ -1,4 +1,4 @@
-import { S, todayStr, dueInfo, KIND_COLORS, KIND_LABELS, deptById, ACCESS_LABELS, LS, plural, isStaff, personById, STEP_NAMES, me, asoTrack, appById, appStatusById, myAccess } from '../state.js';
+import { S, todayStr, dueInfo, KIND_COLORS, KIND_LABELS, deptById, ACCESS_LABELS, LS, plural, isStaff, personById, STEP_NAMES, asoTrack, appById, appStatusById, myAccess, myDirection } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, statusIcon, emptyBlock, skeleton } from '../ui.js';
 import { call, keep, peek } from '../api.js';
 import { currentView, taskLink, link } from '../router.js';
@@ -201,33 +201,42 @@ export function workBlocks(tasks) {
   // обычная задача и подзадача — по позиции
   const isDesign = t => !isReq(t) && (t.step && t.step !== 'part' ? t.step === 'design' : t.departmentId === 'd_design');
   const checklist = t => { const c = t.checklist || []; return c.length ? { done: c.filter(i => i.done).length, total: c.length } : null; };
-  // мета: этап «Метаданные» и обычные задачи ASO; на ревью — пришли ко мне на проверку (отдал другой)
-  const isMeta = t => !isReq(t) && (t.step && t.step !== 'part' ? asoTrack(t) === 'meta' : t.departmentId === 'd_aso');
+  // меты и тексты — отдельные сущности: мета — этап «Метаданные», тексты — «Тексты OB / PW / ASO» и «Локализации»
+  const isMeta = t => !isReq(t) && asoTrack(t) === 'meta';
+  const isTexts = t => !isReq(t) && asoTrack(t) === 'texts';
   const toReview = t => !!t.reviewFrom && t.reviewFrom !== S.meId && t.statusKind !== 'done';
-  // блоки по ролям человека: дизайн — дизайнеру, мета — ASO; у кого таких задач нет и позиции нет — блока нет и в «Настроить»
-  // направление — только по ОСНОВНОЙ позиции (у CEO: дизайн / меты / релизы), а не по тому, какие задачи случайно на нём;
-  // у CEO — только блоки своего направления; у остальных «Дизайн» как раньше (если есть такие задачи)
-  const dir = (me() || {}).positionId || '';
+  // направление: у CEO — явное поле «Направление» (дизайн / меты / релизы), у остальных — по основной позиции
+  const dir = myDirection();
   const ceo = myAccess() === 'superadmin';
-  const designOn = dir === 'd_design' || (!ceo && tasks.some(isDesign));
-  const metaOn = dir === 'd_aso';
+  const designOn = dir === 'design' || (!ceo && tasks.some(isDesign));
+  const asoOn = dir === 'meta';
   // релизы: этап «Релиз» на мне и запросы, где остался только релиз; реджекты — приложение в «Реджекте» или задача «Реджект №»
   const appRejected = t => { const a = t.appId && appById(t.appId); return !!a && (appStatusById(a.status) || {}).kind === 'reject'; };
   // этапы дизайна/мет по приложению в реджекте остаются в своих блоках — сюда только запросы и «Реджект №»
   const isRejectTask = t => /^Реджект №/.test(t.title || '') || (isReq(t) && appRejected(t));
   const onlyRelease = t => isReq(t) && t.stages && t.stages.total > 0 && (t.stages.left || []).length === 1 && t.stages.left[0] === 'release';
   const isRelease = t => t.step === 'release' || onlyRelease(t);
-  const relOn = dir === 'd_release' || myAccess() === 'rm';
-  // «Разложить» и «Веду как PM» — работа PM; у CEO и остальных блоки есть, только если в них что-то попало
-  const pmOn = myAccess() === 'moderator';
+  const relOn = dir === 'release' || myAccess() === 'rm';
+  // «Разложить» и «Веду как PM» — у PM и CEO; у остальных — только если в них что-то попало
+  const pmOn = ['moderator', 'superadmin'].includes(myAccess());
   const has = test => tasks.some(test);
+  // блок по всей студии (CEO своего направления): на ревью / в работе — тот же список, что на дашборде
+  const studio = (id, title, track, kind) => ({ id, title, studio: () => {
+    const box = h('section');
+    import('./ceo.js').then(m => fill(box, m.trackBlock(track, kind))).catch(showErr);
+    return box;
+  } });
+  const asoBlocks = (track, name, test) => (ceo
+    ? [studio(track + 'Review', `${name} · на ревью`, track, 'review'), studio(track + 'Work', `${name} · в работе`, track, 'work'),
+      { id: track, title: `${name} · веду сам`, hint: `${name}, которые вы делаете сами`, test, prog: checklist }]
+    : [{ id: track + 'Review', title: `${name} · на ревью`, hint: `${name}, которые прислали вам на проверку`, test: t => test(t) && toReview(t), prog: checklist },
+      { id: track, title: `${name} · веду сам`, hint: `${name}, которые вы делаете сами`, test: t => test(t) && !toReview(t), prog: checklist }]);
   const sections = [
     relOn ? { id: 'rejects', title: 'Реджекты', hint: 'Приложения в реджекте и задачи «Реджект №» на вас', test: isRejectTask, prog: t => t.stages || checklist(t) } : null,
     relOn ? { id: 'releases', title: 'Релизы', hint: 'Этапы «Релиз» и запросы, где остался только релиз', test: isRelease, prog: t => t.stages || checklist(t) } : null,
     (pmOn || has(t => isReq(t) && !(t.stages && t.stages.total))) && { id: 'place', title: 'Разложить по этапам', hint: 'Новые приложения и запросы, где PM — вы: этапов ещё нет',
       test: t => isReq(t) && !(t.stages && t.stages.total), prog: () => null },
-    metaOn && { id: 'metaReview', title: 'Мета · на ревью', hint: 'Меты, которые прислали вам на проверку: «Аппрув» или «Правки»', test: t => isMeta(t) && toReview(t), prog: checklist },
-    metaOn && { id: 'meta', title: 'Мета · веду сам', hint: 'Меты, которые вы делаете сами: прогресс — по чек-листу', test: t => isMeta(t) && !toReview(t), prog: checklist },
+    ...(asoOn ? [...asoBlocks('meta', 'Мета', isMeta), ...asoBlocks('texts', 'Тексты', isTexts)] : []),
     designOn && { id: 'design', title: 'Дизайн', hint: 'Ваши этапы дизайна: прогресс — по чек-листу', test: isDesign, prog: checklist },
     // как в Сводке: ближе к финишу — выше (больше готовых этапов); просроченные и «в работе» — по-прежнему первыми
     (pmOn || has(t => isReq(t) && t.stages && t.stages.total > 0 && !(relOn && (isRelease(t) || isRejectTask(t))))) && { id: 'pm', title: 'Веду как PM', hint: 'Разложенные запросы: прогресс — сколько этапов готово', test: t => isReq(t) && t.stages && t.stages.total > 0, prog: t => t.stages,
@@ -236,6 +245,7 @@ export function workBlocks(tasks) {
   ].filter(Boolean);
   const taken = new Set();
   return sections.map(sc => {
+    if (sc.studio) return { id: sc.id, title: sc.title, col: 'full', render: sc.studio };
     const items = tasks.filter(t => !taken.has(t.id) && sc.test(t));
     items.forEach(t => taken.add(t.id));
     const open = items.filter(t => t.statusKind !== 'done').sort(sc.sort || byDue), done = items.filter(t => t.statusKind === 'done');

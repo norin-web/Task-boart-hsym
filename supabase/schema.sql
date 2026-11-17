@@ -3204,3 +3204,29 @@ begin
     insert into app_settings (key, value, updated_at) values ('once_ceo_requests_to_pm', 'true'::jsonb, '') on conflict (key) do nothing;
   end if;
 end $$;
+
+-- Направление CEO (2026-11-17): дизайн / меты / релизы — по нему «Мои задачи» и дашборд показывают свои блоки.
+-- Явное поле, а не по позициям: у CEO в профиле бывает несколько позиций. Меняет только CEO.
+alter table people add column if not exists direction text not null default '';
+create or replace function guard_people_direction() returns trigger language plpgsql set search_path = public as $$
+begin
+  if new.direction is distinct from old.direction and not (is_superadmin() or app_system()) then
+    raise exception 'Направление меняет только CEO' using errcode = '42501';
+  end if;
+  if new.direction not in ('', 'design', 'meta', 'release') then new.direction := ''; end if;
+  return new;
+end $$;
+drop trigger if exists guard_people_direction on people;
+create trigger guard_people_direction before update of direction on people for each row execute function guard_people_direction();
+-- один раз: Артём — дизайн, Вадим — меты, Сергей — релизы (как сказал владелец); дальше — в «Людях»
+do $$
+begin
+  if not exists (select 1 from app_settings where key = 'once_ceo_directions') then
+    perform set_config('app.system', 'on', true);
+    update people set direction = 'design' where access = 'superadmin' and direction = '' and (name ilike 'Артём%' or name ilike 'Артем%');
+    update people set direction = 'meta' where access = 'superadmin' and direction = '' and name ilike 'Вадим%';
+    update people set direction = 'release' where access = 'superadmin' and direction = '' and name ilike 'Сергей%';
+    perform set_config('app.system', 'off', true);
+    insert into app_settings (key, value, updated_at) values ('once_ceo_directions', 'true'::jsonb, '') on conflict (key) do nothing;
+  end if;
+end $$;

@@ -303,7 +303,7 @@ const personOut = r => ({
   id: r.id, name: r.name, email: r.email, role: r.role || '', color: r.color || '', active: !!r.active,
   access: r.access || 'member', positionId: r.position_id || '', linked: !!r.user_id, prefs: json(r.prefs, {}) || {},
   lastSeenAt: r.last_seen_at || '', isDev: !!r.is_dev, viewAs: r.view_as || '', isTest: !!r.is_test, ...('avatar' in r ? { avatar: r.avatar || '' } : {}), telegram: r.telegram || '', timezone: r.timezone || '',
-  extraPositionIds: json(r.extra_positions, []) || [],
+  extraPositionIds: json(r.extra_positions, []) || [], direction: r.direction || '',
   teamIds: json(r.team_ids, []) || [],
   positionIds: [r.position_id || 'd_other', ...(json(r.extra_positions, []) || [])],
 });
@@ -536,7 +536,7 @@ export function createBackend(db, opts = {}) {
   const findUnit = async id => (await one('units', id)) || fail('Юнит не найден', 'NOT_FOUND');
   const findTask = async id => (await one('tasks', id)) || fail('Задача не найдена', 'NOT_FOUND');
   // фото аватаров (до ~120 КБ на человека) отдаём только при старте (bootstrap) — в остальных ответах без них, браузер держит прежние
-  const PEOPLE_COLS = 'id,name,email,role,color,active,access,position_id,user_id,prefs,last_seen_at,is_dev,view_as,is_test,telegram,timezone,extra_positions,team_ids';
+  const PEOPLE_COLS = 'id,name,email,role,color,active,access,position_id,user_id,prefs,last_seen_at,is_dev,view_as,is_test,telegram,timezone,extra_positions,team_ids,direction';
   const people = async (avatars = false) => (await all(() => T('people').select(avatars ? PEOPLE_COLS + ',avatar' : PEOPLE_COLS).order('name').order('id'))).map(personOut)
     .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
   const teams = async () => (await all(() => T('teams').select('*').order('ord').order('id'))).map(teamOut);
@@ -2688,14 +2688,12 @@ export function createBackend(db, opts = {}) {
     async getDesignOverview(p) {
       const today_ = today(p.today);
       const COLS = 'id,unit_id,num,title,status,assignee_id,review_from,due_date,app_id,step,kind,depends_on,updated_at,department_id';
-      // track: design — задачи позиции дизайна; meta — этап «Метаданные» и обычные задачи ASO
-      const meta = p.track === 'meta';
+      // track: design — задачи позиции дизайна; meta — этап «Метаданные»; texts — тексты OB / PW / ASO и локализации
+      // (меты и тексты — отдельные сущности, обе ходят на ревью)
+      const STEPS = { meta: ['store'], texts: ['meta', 'l10n'] }[p.track];
       const [rows, units] = await Promise.all([
-        meta
-          ? Promise.all([
-            all(() => T('tasks').select(COLS).eq('step', 'store').eq('archived', false).eq('done_at', '').order('id')),
-            all(() => T('tasks').select(COLS).eq('department_id', 'd_aso').neq('kind', 'stage').eq('archived', false).eq('done_at', '').order('id')),
-          ]).then(([a, b]) => [...a, ...b.filter(x => !a.some(y => y.id === x.id))])
+        STEPS
+          ? all(() => T('tasks').select(COLS).in('step', STEPS).eq('archived', false).eq('done_at', '').order('id'))
           : all(() => T('tasks').select(COLS).eq('department_id', 'd_design').eq('archived', false).eq('done_at', '').order('id')),
         all(() => T('units').select('id,key,settings,archived').order('id')),
       ]);
@@ -3911,6 +3909,7 @@ export function createBackend(db, opts = {}) {
       if ('active' in p) upd.active = !!p.active;
       if ('access' in p) upd.access = ACCESS.includes(p.access) ? p.access : fail('Неизвестная роль');
       if ('positionId' in p) upd.position_id = (await validDept(p.positionId)) || 'd_other';
+      if ('direction' in p) upd.direction = ['design', 'meta', 'release'].includes(p.direction) ? p.direction : '';
       const main = upd.position_id || person.position_id;
       if ('teamIds' in p) upd.team_ids = await cleanTeams(p.teamIds);
       if ('extraPositionIds' in p) upd.extra_positions = (await cleanPositions(p.extraPositionIds)).filter(id => id !== main);

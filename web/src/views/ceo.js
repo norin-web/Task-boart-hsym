@@ -2,7 +2,7 @@
  * Дашборд CEO (главная CEO в обоих режимах): портфель приложений по статусам и юнитам, что требует внимания,
  * работы в ходу (запросы и текущий этап), что недавно вышло. Клик — карточка приложения или задача поверх.
  */
-import { S, LS, isSuper, personById, unitById, REQUEST_TYPES, greeting, me, plural, fmtDate, relTime, todayStr, appStatusById } from '../state.js';
+import { S, LS, isSuper, personById, unitById, REQUEST_TYPES, greeting, me, plural, fmtDate, relTime, todayStr, appStatusById, myDirection } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, menu, modal, field, emptyBlock, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView, link } from '../router.js';
@@ -369,13 +369,15 @@ function ceoBlocks(d, apps, reload) {
     { id: 'watch', title: 'Отслеживаю', col: 'right', render: () => watchBlock(apps, { openApp: id => openAppById(id, reload), openTask: peekTask, appIcon, appStatusCell, stageDots }) },
     { id: 'storeCheck', title: 'Проверка App Store', col: 'full', off: true, render: () => storeCheckBlock(apps, reload, { compact: true }) },
     // направления CEO (дизайн / меты / релизы): свои блоки включены сразу — по позиции, остальные — в «Настроить»
-    { id: 'designWork', title: 'Дизайн · в работе', col: 'left', off: !myPos('d_design'), render: () => trackBlock('design', 'work') },
-    { id: 'designReview', title: 'Дизайн · на ревью', col: 'right', off: !myPos('d_design'), render: () => trackBlock('design', 'review') },
-    { id: 'metaWork', title: 'Мета · в работе', col: 'left', off: !myPos('d_aso'), render: () => trackBlock('meta', 'work') },
-    { id: 'metaReview', title: 'Мета · на ревью', col: 'right', off: !myPos('d_aso'), render: () => trackBlock('meta', 'review') },
-    { id: 'relQueue', title: 'Релизы', col: 'left', off: !myPos('d_release'), render: () => releaseBlock() },
-    { id: 'relRejects', title: 'Реджекты', col: 'right', off: !myPos('d_release'), render: () => rejectsBlock(reload) },
-    { id: 'relAccounts', title: 'Аккаунты', col: 'right', off: !myPos('d_release'), render: () => accountsBlock() },
+    { id: 'designWork', title: 'Дизайн · в работе', col: 'left', off: myDirection() !== 'design', render: () => trackBlock('design', 'work') },
+    { id: 'designReview', title: 'Дизайн · на ревью', col: 'right', off: myDirection() !== 'design', render: () => trackBlock('design', 'review') },
+    { id: 'metaWork', title: 'Мета · в работе', col: 'left', off: myDirection() !== 'meta', render: () => trackBlock('meta', 'work') },
+    { id: 'metaReview', title: 'Мета · на ревью', col: 'right', off: myDirection() !== 'meta', render: () => trackBlock('meta', 'review') },
+    { id: 'textsWork', title: 'Тексты · в работе', col: 'left', off: myDirection() !== 'meta', render: () => trackBlock('texts', 'work') },
+    { id: 'textsReview', title: 'Тексты · на ревью', col: 'right', off: myDirection() !== 'meta', render: () => trackBlock('texts', 'review') },
+    { id: 'relQueue', title: 'Релизы', col: 'left', off: myDirection() !== 'release', render: () => releaseBlock() },
+    { id: 'relRejects', title: 'Реджекты', col: 'right', off: myDirection() !== 'release', render: () => rejectsBlock(reload) },
+    { id: 'relAccounts', title: 'Аккаунты', col: 'right', off: myDirection() !== 'release', render: () => accountsBlock() },
   ];
   // свои подборки
   for (const b of customBlocks()) blocks.push({ id: 'c:' + b.id, title: b.name, col: b.col || 'right', custom: true, render: () => customBlock(b, apps, reload) });
@@ -384,8 +386,6 @@ function ceoBlocks(d, apps, reload) {
 
 /* ---------- дизайн ---------- */
 
-/** Есть ли у меня позиция (направление CEO: d_design — дизайн, d_aso — меты, d_release — релизы). */
-const myPos = id => ((me() || {}).positionId || '') === id; // основная позиция, не любая из профиля
 
 // блоки одного направления берут данные одним запросом на перерисовку дашборда (кэш 15 с)
 const cache = {};
@@ -394,7 +394,7 @@ const cached = (key, fn) => {
   if (!c || Date.now() - c.at > 15000) cache[key] = { at: Date.now(), p: fn() };
   return cache[key].p;
 };
-const TRACK_TAG = { design: 'Дизайн', meta: 'Мета', release: 'Релизы' };
+const TRACK_TAG = { design: 'Дизайн', meta: 'Мета', texts: 'Тексты', release: 'Релизы' };
 const tagHead = (track, title, n, to) => h('div', { class: 'section-head' },
   h('h2', null, h('span', { class: 'design-tag tag-' + track }, TRACK_TAG[track]), title ? ' ' + title : '', n != null && h('span', { class: 'muted sec-n' }, n)),
   to && link(to, { class: 'link-btn' }, 'Все'));
@@ -449,7 +449,7 @@ function accountsBlock() {
  * Блок направления (дизайн / мета): work — в работе и ждут старта (просроченные сверху), review — отданы на ревью
  * (у кого и от кого). Пометка направления у заголовка — чтобы не путать с общими блоками.
  */
-function trackBlock(track, kind) {
+export function trackBlock(track, kind) {
   const title = kind === 'review' ? 'На ревью' : 'В работе';
   const body = h('div', { class: 'card-box rc-list' }, skeleton());
   const head = h('div', { class: 'section-head' }, h('h2', null, h('span', { class: 'design-tag tag-' + track }, TRACK_TAG[track]), ' ', title));

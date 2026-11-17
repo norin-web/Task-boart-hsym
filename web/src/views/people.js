@@ -1,5 +1,5 @@
 import Sortable from 'sortablejs';
-import { S, colorFor, unitById, activeDepts, deptById, activeTeams, teamById, PALETTE, ACCESS_LABELS, isStaff, isSuper, byOrder } from '../state.js';
+import { S, colorFor, unitById, activeDepts, deptById, activeTeams, teamById, PALETTE, ACCESS_LABELS, isStaff, isSuper, byOrder, DIRECTIONS } from '../state.js';
 import { h, icon, avatar, field, modal, confirmDlg, showErr, toast, fill, colorPicker, menu } from '../ui.js';
 import { send, call } from '../api.js';
 import { rerender, navigate } from '../router.js';
@@ -244,7 +244,12 @@ export function peopleManager({ search = false, bare = false } = {}) {
           [p.email || 'без email', !p.active ? 'доступ отключён' : p.linked ? 'вход есть' : mode === 'supabase' ? 'нет входа' : ''].filter(Boolean).join(' · '))),
       teamsPicker(() => p.teamIds || [], ids => { p.teamIds = ids; save(p, { teamIds: ids }); }, { disabled: !editableTarget, chips: bare }),
       positionsPicker(() => p.positionIds, ids => { p.positionIds = ids; save(p, { positionId: ids[0], extraPositionIds: ids.slice(1) }); }, { disabled: !editableTarget, chips: bare }),
-      isSuper() && p.id !== S.meId ? accessSelect(p.access, v => save(p, { access: v })) : h('span', { class: 'badge access-badge' }, ACCESS_LABELS[p.access]),
+      h('span', { class: 'access-cell' },
+        isSuper() && p.id !== S.meId ? accessSelect(p.access, v => save(p, { access: v })) : h('span', { class: 'badge access-badge' }, ACCESS_LABELS[p.access]),
+        // направление CEO (дизайн / меты / релизы): по нему «Мои задачи» и дашборд показывают свои блоки; меняет CEO
+        p.access === 'superadmin' && isSuper() && h('select', { class: 'inp dir-select', title: 'Направление CEO: какие блоки видны в «Моих задачах» и на дашборде', 'aria-label': 'Направление',
+          onchange: e => { p.direction = e.target.value; save(p, { direction: p.direction }); } },
+        DIRECTIONS.map(([v, label]) => h('option', { value: v, selected: (p.direction || '') === v }, label)))),
       editableTarget && p.id !== S.meId
         ? h('button', { class: 'icon-btn sm', title: 'Доступ', onclick: e => { e.stopPropagation(); accountMenu(e.currentTarget, p); } }, icon('more'))
         : h('span', { style: { width: '24px' } }));

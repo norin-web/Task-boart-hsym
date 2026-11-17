@@ -1521,3 +1521,21 @@ test('участник без входа: CEO заводит в юните, ли
   const zones = await api.as(admin, () => api('setGuestLead', { personId: g.id, leadId: '' }));
   assert.equal((zones[lead.id] || []).length, 0);
 });
+
+test('направление CEO: меняет только CEO; разово — Артём дизайн, Вадим меты, Сергей релизы', async () => {
+  const api = await setup();
+  const { admin, mod } = await team(api);
+  const v = await api('createPerson', { name: 'Вадим', email: 'vadim@x.ru', access: 'superadmin', positionId: 'd_po' });
+  const s = await api('createPerson', { name: 'Сергей', email: 'serg@x.ru', access: 'superadmin', positionId: 'd_po' });
+  await api.pg.query("delete from app_settings where key = 'once_ceo_directions'");
+  await api.pg.exec(SCHEMA);
+  const dir = async id => (await api.pg.query('select direction from people where id = $1', [id])).rows[0].direction;
+  assert.equal(await dir(v.id), 'meta');
+  assert.equal(await dir(s.id), 'release');
+  // CEO меняет; PM — нет
+  assert.equal((await api('updatePerson', { id: s.id, direction: 'design' })).direction, 'design');
+  assert.equal(await dir(s.id), 'design'); // записано в базу, а не только в ответе
+  assert.equal((await api('bootstrap', {})).people.find(x => x.id === s.id).direction, 'design'); // и приходит в браузер
+  await assert.rejects(api.as(mod, () => api.pg.query('update people set direction = $1 where id = $2', ['meta', mod.id])), /только CEO/);
+  assert.equal((await api('updatePerson', { id: admin.id, direction: 'чепуха' })).direction, '');
+});

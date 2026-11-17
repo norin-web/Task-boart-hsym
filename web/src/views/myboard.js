@@ -6,7 +6,7 @@
  * Свои колонки — people.prefs.myBoard.custom [{ id, name, group, color }]; по умолчанию их нет («Как у команды» — по кнопке).
  */
 import Sortable from 'sortablejs';
-import { S, me, personById, nameFrom, inAsoView, activeTeams, between, dueInfo, todayStr, PALETTE, isStaff, LS, plural } from '../state.js';
+import { S, me, personById, nameFrom, inAsoView, myDirection, activeTeams, between, dueInfo, todayStr, PALETTE, isStaff, LS, plural } from '../state.js';
 import { $, h, icon, topbar, fill, modal, showErr, statusDot, statusIcon, confirmDlg, menu, closeMenu, toast, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
@@ -26,7 +26,7 @@ const GROUPS = FIXED.map(c => c.group);
 const KIND_GROUP = { todo: 0, progress: 1, done: 3 };
 
 /** Я — ASO-специалист (основная позиция ASO): на доске переключатель «Мета / Тексты». */
-const isAso = () => ((me() || {}).positionId || '') === 'd_aso'; // только основная позиция — ASO-специалист
+const isAso = () => myDirection() === 'meta'; // ASO-специалист (основная позиция) или CEO с направлением «Меты»
 
 /** Шаблон моей команды (первая из моих команд, у которой он есть). */
 function teamTemplate() {
