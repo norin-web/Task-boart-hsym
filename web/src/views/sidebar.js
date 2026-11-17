@@ -10,8 +10,8 @@ import { personCaption } from './my.js';
 import { mode, supabase, resetLocalData } from '../data.js';
 
 // цифры меню: одним лёгким запросом navCounts раз в 30 с (раньше — Сводка, экран реджектов и все мои задачи целиком)
-let navN = { ready: 0, rejects: 0, mine: 0 }, navAt = 0, navWait = null;
-const navEls = { ready: new Set(), rejects: new Set(), mine: new Set() };
+let navN = { ready: 0, rejects: 0, mine: 0, accounts: 0 }, navAt = 0, navWait = null;
+const navEls = { ready: new Set(), rejects: new Set(), mine: new Set(), accounts: new Set() };
 function fetchNavCounts() {
   navAt = Date.now();
   navWait = call('navCounts', { personId: S.meId }).then(n => {
@@ -188,6 +188,8 @@ function drawSidebar() {
       staff && !ceoDefault() && navLink({ view: 'ready' }, 'rows', 'Сводка', readyCount()),
       ceo && navLink({ view: 'backlog' }, 'layers', 'Бэклог'),
       (ceo || (person && person.access === 'rm')) && navLink({ view: 'rejects' }, 'rejected', 'Реджекты', rejectCount()),
+      // аккаунты в сторе: этапы «Аккаунт» (RM — число своих, которые уже можно делать)
+      (ceo || (person && person.access === 'rm')) && navLink({ view: 'accounts' }, 'lock', 'Аккаунты', !ceo && navCount('accounts')),
       ceo && navLink({ view: 'analytics' }, 'chart', 'Аналитика'),
       // «Мои задачи» — один раздел для всех (доска и списки — виды внутри); у CEO и в «Обзоре»
       navLink({ view: 'my' }, 'list', 'Мои задачи', !staff && myCount()),

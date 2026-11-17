@@ -58,6 +58,11 @@ async function studio(api) {
 }
 
 /** Закрыть этап как положено: чеклист, опросник (iOS), ревью, аппрув. */
+/** Этап «Аккаунт»: прикрепить Google Doc и закрыть (RM — сам, без ревью). */
+const closeAccount = (api, who, id) => api.as(who, async () => {
+  await api('setTaskLink', { taskId: id, fieldId: 'lf_account', url: 'https://docs.google.com/document/d/acc' });
+  return api('updateTask', { id, patch: { status: 'done' } });
+});
 async function finish(api, who, pm, id) {
   const { rows } = await api.pg.query('select checklist from tasks where id = $1', [id]);
   const cl = (rows[0].checklist || []).map(i => ({ ...i, done: true }));
@@ -90,7 +95,7 @@ test('сценарии: роли × позиции × жизненный цик�
   await check('участник не раскладывает запрос', () => mustFail(api.as(ios, () => api('decomposeRequest', { taskId: request.id }))));
   await check('чужой PM не раскладывает запрос', () => mustFail(api.as(pmRf, () => api('decomposeRequest', { taskId: request.id }))));
   const st = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: request.id }))).map(t => [t.step, t]));
-  await check('10 этапов: дизайн, графика, iOS, QA, интеграция, тексты, метаданные, тексты в дизайне, локализации, релиз', async () => assert.deepEqual(Object.keys(st), ['design', 'art', 'ios', 'qa', 'integr', 'meta', 'store', 'retext', 'l10n', 'release']));
+  await check('11 этапов: дизайн, графика, iOS, QA, интеграция, тексты, метаданные, тексты в дизайне, локализации, аккаунт, релиз', async () => assert.deepEqual(Object.keys(st), ['design', 'art', 'ios', 'qa', 'integr', 'meta', 'store', 'retext', 'l10n', 'account', 'release']));
   await check('чеклист дизайна: экраны и PW; графики — OB и ASO', async () => { assert.equal(st.design.checklist.length, 2); assert.equal(st.art.checklist.length, 2); });
   await check('у каждого этапа исполнитель своей позиции', async () => {
     assert.equal(st.design.assigneeId, lead.id); assert.equal(st.ios.assigneeId, ios.id); assert.equal(st.qa.assigneeId, qa.id);
@@ -109,7 +114,7 @@ test('сценарии: роли × позиции × жизненный цик�
     }
   });
   await check('каждый видит свой этап: лид — дизайн', async () => assert.ok((await api.as(lead, () => api('getBoard', { unitId: gold.id }))).tasks.some(t => t.id === st.design.id)));
-  await check('PM видит всю цепочку', async () => assert.equal((await api.as(pm, () => api('getBoard', { unitId: gold.id }))).tasks.filter(t => t.step).length, 10));
+  await check('PM видит всю цепочку', async () => assert.equal((await api.as(pm, () => api('getBoard', { unitId: gold.id }))).tasks.filter(t => t.step).length, 11));
   await check('iOS не двигает чужой этап (дизайн)', () => mustFail(api.as(ios, () => api('updateTask', { id: st.design.id, patch: { status: 'in_progress' } }))));
   await check('сотрудник не создаёт задачи', () => mustFail(api.as(des, () => api('createTask', { unitId: gold.id, title: 'x' }))));
   await check('лид не создаёт задачи', () => mustFail(api.as(lead, () => api('createTask', { unitId: gold.id, title: 'x' }))));
@@ -153,6 +158,8 @@ test('сценарии: роли × позиции × жизненный цик�
   await check('локализации ждут текстов в дизайне — теперь открыты', async () => assert.ok((await api.as(aso, () => api('getBoard', { unitId: gold.id }))).tasks.some(t => t.id === st.l10n.id)));
   await check('релиз нельзя передать, пока не закрыты локализации', () => mustFail(api.as(pm, () => api('sendToRelease', { taskId: st.release.id })), /Локализации/));
   await finish(api, aso, pm, st.l10n.id);
+  await check('релиз ждёт аккаунт', () => mustFail(api.as(pm, () => api('sendToRelease', { taskId: st.release.id })), /Аккаунт/));
+  await closeAccount(api, rm, st.account.id);
 
   // ---------- релиз ----------
   await check('участник не передаёт в релиз', () => mustFail(api.as(ios, () => api('sendToRelease', { taskId: st.release.id }))));

@@ -186,7 +186,8 @@ create table if not exists link_fields (
 );
 insert into link_fields (id, name, kind, ord) values
   ('lf_figma', 'Figma', 'figma', 1), ('lf_github', 'GitHub', 'github', 2),
-  ('lf_drive', 'Google Drive', 'drive', 3), ('lf_texts', 'Тексты', 'meta', 3.5), ('lf_meta', 'Мета', 'meta', 4), ('lf_l10n', 'Локализации', 'drive', 5)
+  ('lf_drive', 'Google Drive', 'drive', 3), ('lf_texts', 'Тексты', 'meta', 3.5), ('lf_meta', 'Мета', 'meta', 4), ('lf_l10n', 'Локализации', 'drive', 5),
+  ('lf_account', 'Аккаунт', 'drive', 6)
 on conflict (id) do nothing;
 update link_fields set name = 'Мета' where id = 'lf_meta' and name in ('Metadata', 'Тексты и метаданные', 'Метаданные');
 
@@ -881,7 +882,7 @@ declare
 begin
   if app_system() or new.status is not distinct from old.status or can_manage(new.unit_id) then return new; end if;
   -- разработка: код-ревью нет — «готово» и есть «отдать на тестирование»; тестирование: «готово» от QA = приёмка
-  if new.step in ('ios', 'qa') then return new; end if;
+  if new.step in ('ios', 'qa', 'account') then return new; end if;  -- аккаунт RM закрывает сам (со ссылкой на док)
   select settings into st from units where id = new.unit_id;
   col := coalesce(st -> 'review' ->> 'column', '');
   if col = '' then return new; end if;
@@ -3089,7 +3090,8 @@ language sql stable security definer set search_path = public as $$
       join task_links l on l.task_id = s.id
      where r.id = p_task and r.step = 'release'
        and (r.assignee_id = my_person_id() or can_manage(r.unit_id))
-     order by l.field_id, l.url, s.created_at, s.id
+     -- ссылка «Аккаунт» — у этапа «Аккаунт» (общая ссылка иначе подписана первым этапом — дизайном)
+     order by l.field_id, l.url, (s.step = 'account' and l.field_id = 'lf_account') desc, s.created_at, s.id
   ) x order by created_at, field_id;
 $$;
 
@@ -3115,3 +3117,61 @@ begin
     insert into app_settings (key, value, updated_at) values ('once_links_family', 'true'::jsonb, '') on conflict (key) do nothing;
   end if;
 end $$;
+
+-- ---------- Этап «Аккаунт» в New App (2026-11-17) ----------
+-- После готового дизайна RM заводит аккаунт (почта, Terms / Privacy, Bundle ID, App ID, API-ключ) и кладёт данные
+-- в Google Doc — ссылка «Аккаунт» (общая на запрос: её видят все этапы). Релиз ждёт и этот этап.
+-- Флоу по умолчанию — в коде; сохранённые флоу студии и юнитов дополняем один раз (перед релизом, релиз ждёт аккаунт).
+create or replace function flow_add_account(f jsonb) returns jsonb language plpgsql immutable set search_path = public as $$
+declare out_ jsonb := '[]'::jsonb; e jsonb; has_design boolean;
+begin
+  if f is null or jsonb_typeof(f) <> 'array' then return f; end if;
+  if exists (select 1 from jsonb_array_elements(f) x where x ->> 'key' = 'account')
+     or not exists (select 1 from jsonb_array_elements(f) x where x ->> 'key' = 'release') then return f; end if;
+  has_design := exists (select 1 from jsonb_array_elements(f) x where x ->> 'key' = 'design');
+  for e in select x.v from jsonb_array_elements(f) with ordinality x(v, i) order by x.i loop
+    if e ->> 'key' = 'release' then
+      out_ := out_ || jsonb_build_array(jsonb_build_object('key', 'account', 'title', 'Аккаунт', 'positionId', 'd_release',
+        'dependsOn', case when has_design then '["design"]'::jsonb else '[]'::jsonb end, 'release', false,
+        'checklist', '["Почта", "Terms и Privacy", "Bundle ID", "App ID", "API-ключ", "Данные — в Google Doc, ссылка в поле «Аккаунт»"]'::jsonb));
+      e := jsonb_set(e, '{dependsOn}', coalesce(e -> 'dependsOn', '[]'::jsonb) || '["account"]'::jsonb);
+    end if;
+    out_ := out_ || jsonb_build_array(e);
+  end loop;
+  return out_;
+end $$;
+do $$
+begin
+  if not exists (select 1 from app_settings where key = 'once_account_step') then
+    update app_settings set value = jsonb_set(value, '{new_app}', flow_add_account(value -> 'new_app'))
+     where key = 'flows' and jsonb_typeof(value) = 'object' and value ? 'new_app';
+    update units set settings = jsonb_set(settings, '{flows,new_app}', flow_add_account(settings -> 'flows' -> 'new_app'))
+     where jsonb_typeof(settings -> 'flows') = 'object' and (settings -> 'flows') ? 'new_app';
+    insert into app_settings (key, value, updated_at) values ('once_account_step', 'true'::jsonb, '') on conflict (key) do nothing;
+  end if;
+end $$;
+
+-- Аккаунт готов (RM закрыл этап «Аккаунт») — разработчику: уведомление на его этап (iOS, интеграция) того же запроса,
+-- там уже видна ссылка «Аккаунт» на Google Doc (ссылка общая на запрос). kind 'account_ready'.
+create or replace function notify_account_ready() returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_actor text := coalesce(my_person_id(), '');
+  at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+begin
+  if new.step <> 'account' or new.kind <> 'stage' or coalesce(new.parent_id, '') = ''
+     or new.status is not distinct from old.status or not task_done(new.id) then return new; end if;
+  -- разнос по этапам (CEO, «Где сейчас») — аккаунт уже был, не уведомляем
+  if coalesce(current_setting('app.system', true), '') = 'on' then return new; end if;
+  if exists (select 1 from units u, jsonb_array_elements(u.settings -> 'columns') c
+              where u.id = new.unit_id and c ->> 'id' = old.status and c ->> 'kind' = 'done') then return new; end if;
+  insert into notifications (id, person_id, task_id, kind, actor_id, at)
+  select 'n_' || substr(md5(random()::text || clock_timestamp()::text || d.id), 1, 12), d.assignee_id, d.id, 'account_ready', v_actor, at_
+    from tasks d
+   where d.parent_id = new.parent_id and d.kind = 'stage' and d.step in ('ios', 'integr')
+     and d.assignee_id <> '' and d.assignee_id <> v_actor and not d.archived and not task_done(d.id)
+     and notify_test_ok(d.is_test, d.assignee_id)
+     and not exists (select 1 from notifications n where n.task_id = d.id and n.person_id = d.assignee_id and n.kind = 'account_ready' and n.read_at = '');
+  return new;
+end $$;
+drop trigger if exists notify_account_ready on tasks;
+create trigger notify_account_ready after update of status on tasks for each row execute function notify_account_ready();

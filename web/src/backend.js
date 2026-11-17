@@ -21,6 +21,9 @@ export const REQUEST_TYPES = { new_app: 'New App', update: 'Апдейт', other
  * но заблокирован (база не даст сдвинуть его из «не начато»), пока не закрыты те, от которых он зависит.
  * release — последний: исполнителя нет, пока PM не передаст его RM («Передать в релиз»).
  */
+/** Этап «Аккаунт» (New App): ведёт RM, закрыть — только со ссылкой «Аккаунт» (Google Doc с данными). */
+export const ACCOUNT_STEP = { key: 'account', title: 'Аккаунт', positionId: 'd_release', dependsOn: ['design'], checklist: ['Почта', 'Terms и Privacy', 'Bundle ID', 'App ID', 'API-ключ', 'Данные — в Google Doc, ссылка в поле «Аккаунт»'] };
+export const ACCOUNT_LINK = 'lf_account';
 export const DEFAULT_FLOWS = {
   new_app: [
     { key: 'design', title: 'Дизайн', positionId: 'd_design', dependsOn: [], checklist: ['Экраны приложения', 'Пейволл (PW)'] },
@@ -36,7 +39,9 @@ export const DEFAULT_FLOWS = {
     { key: 'store', title: 'Метаданные', positionId: 'd_aso', dependsOn: ['design'], checklist: ['Название и подзаголовок', 'Описание', 'Ключевые слова'] },
     { key: 'retext', title: 'Тексты в дизайне', positionId: 'd_design', dependsOn: ['meta'], checklist: ['Тексты OB заменены в макетах', 'Тексты PW заменены в макетах', 'Тексты ASO заменены в скриншотах', 'Исходники выгружены на Google Drive'] },
     { key: 'l10n', title: 'Локализации', positionId: 'd_aso', dependsOn: ['retext', 'store'], checklist: ['Переводы приложения и пейволла', 'Переводы метаданных', 'Скриншоты на языках'] },
-    { key: 'release', title: 'Релиз', positionId: 'd_release', dependsOn: ['design', 'art', 'ios', 'qa', 'integr', 'meta', 'store', 'retext', 'l10n'], release: true },
+    // аккаунт в сторе (почта, Terms / Privacy, Bundle ID, App ID, API-ключ) — RM после готового дизайна; данные — Google Doc в ссылке «Аккаунт»
+    ACCOUNT_STEP,
+    { key: 'release', title: 'Релиз', positionId: 'd_release', dependsOn: ['design', 'art', 'ios', 'qa', 'integr', 'meta', 'store', 'retext', 'l10n', 'account'], release: true },
   ],
   update: [
     { key: 'design', title: 'Дизайн', positionId: 'd_design', dependsOn: [] },
@@ -1509,6 +1514,10 @@ export function createBackend(db, opts = {}) {
           if (!t.started_at && kindOf(st, patch.status) !== 'todo') t.started_at = now(); // впервые взяли в работу (раньше «готово»)
           if (nowDone && !wasDone) t.done_at = now();
           if (!nowDone) t.done_at = '';
+          if (nowDone && !wasDone && t.kind === 'stage' && t.step === 'account') {
+            const l = await run(T('task_links').select('url').eq('task_id', t.id).eq('field_id', ACCOUNT_LINK).maybeSingle());
+            if (!l || !l.url) fail('Сначала прикрепите ссылку «Аккаунт» — Google Doc с данными аккаунта', 'RULE');
+          }
           t.status = patch.status;
         }
       }
@@ -2768,8 +2777,9 @@ export function createBackend(db, opts = {}) {
             }
             const steps = stages.map(t => t.step);
             const plan = {
-              design: [[], 'design'], ready: [['design', 'art'], ''], dev: [['design', 'art'], 'ios'],
-              qa: [['design', 'art', 'ios'], 'qa'], release: [steps.filter(k => k !== 'release'), ''], store: [steps, ''],
+              // уже в разработке — аккаунт, скорее всего, есть: этап «Аккаунт» закрыт; «готов к разработке» — RM его делает
+              design: [[], 'design'], ready: [['design', 'art'], ''], dev: [['design', 'art', 'account'], 'ios'],
+              qa: [['design', 'art', 'ios', 'account'], 'qa'], release: [steps.filter(k => k !== 'release'), ''], store: [steps, ''],
             }[stage];
             await rpc('fast_forward_request', { p_request: req.id, p_done: plan[0].filter(k => steps.includes(k)), p_progress: steps.includes(plan[1]) ? plan[1] : '' });
             const rel = stages.find(t => t.step === 'release');
@@ -3457,7 +3467,7 @@ export function createBackend(db, opts = {}) {
         all(() => T('tasks').select('id,unit_id,app_id,release').eq('step', 'release').eq('archived', false).neq('assignee_id', '').order('id')),
         all(() => T('apps').select('id,unit_id,status,archived').order('id')),
         appStatuses(),
-        me ? all(() => T('tasks').select('id,unit_id,status,depends_on').eq('assignee_id', me).eq('archived', false).order('id')) : [],
+        me ? all(() => T('tasks').select('id,unit_id,status,depends_on,step').eq('assignee_id', me).eq('archived', false).order('id')) : [],
       ]);
       const ST = Object.fromEntries(units.map(u => [u.id, unitSettings(u.settings)]));
       const kind = r => (ST[r.unit_id] ? kindOf(ST[r.unit_id], r.status) : 'todo');
@@ -3475,8 +3485,44 @@ export function createBackend(db, opts = {}) {
       const rejects = items.filter(x => x.rel.phase === 'rejected' || (!x.rel.phase && x.rel.rejectNo && x.rel.fixedAt)).length
         + apps.filter(a => !a.archived && rejectSt.has(a.status) && !withRel.has(a.id) && ST[a.unit_id]).length;
       const openUnits = new Set(units.filter(u => !u.archived).map(u => u.id));
-      const mine = (await hideWaiting(mineRows.filter(r => openUnits.has(r.unit_id)))).filter(r => kind(r) !== 'done').length;
-      return { ready, rejects, mine };
+      const mineOpen = (await hideWaiting(mineRows.filter(r => openUnits.has(r.unit_id)))).filter(r => kind(r) !== 'done');
+      // аккаунты: этапы «Аккаунт» на мне, которые уже можно делать (дизайн готов)
+      return { ready, rejects, mine: mineOpen.length, accounts: mineOpen.filter(r => r.step === 'account').length };
+    },
+
+    /**
+     * Вкладка «Аккаунты» (RM, CEO): этапы «Аккаунт» запросов New App. В работе — открытые (ждёт дизайн — blocked),
+     * готовые — со ссылкой на Google Doc. Видимость — правила базы (RM — позиция Release Manager в своих юнитах).
+     */
+    async getAccounts() {
+      const [rows, units, links] = await Promise.all([
+        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,due_date,app_id,parent_id,depends_on,done_at,created_at').eq('kind', 'stage').eq('step', 'account').eq('archived', false).order('created_at').order('id')),
+        all(() => T('units').select('id,key,settings,archived').order('id')),
+        all(() => T('task_links').select('task_id,url').eq('field_id', ACCOUNT_LINK).order('task_id')),
+      ]);
+      const U = Object.fromEntries(units.filter(u => !u.archived).map(u => [u.id, { key: u.key, st: unitSettings(u.settings) }]));
+      const list = rows.filter(t => U[t.unit_id]);
+      const depIds = [...new Set(list.flatMap(t => json(t.depends_on, []) || []))];
+      const appIds = [...new Set(list.map(t => t.app_id).filter(Boolean))];
+      // зависимости (дизайн) RM обычно не видит — какие из них не закрыты, спрашиваем у базы одним вопросом
+      const [openDeps, apps] = await Promise.all([
+        depIds.length ? rpc('open_task_ids', { p_ids: depIds }) : [],
+        appIds.length ? inChunks(appIds, ids => T('apps').select('id,name,color,icon_url,unit_id,archived').in('id', ids)) : [],
+      ]);
+      const kind = r => (U[r.unit_id] ? kindOf(U[r.unit_id].st, r.status) : 'todo');
+      const openSet = new Set((Array.isArray(openDeps) ? openDeps : openDeps ? [openDeps] : []).map(x => (x && typeof x === 'object' ? Object.values(x)[0] : x)));
+      const A = Object.fromEntries(apps.map(a => [a.id, a]));
+      const L = Object.fromEntries(links.map(l => [l.task_id, l.url]));
+      return list.filter(t => !t.app_id || (A[t.app_id] && !A[t.app_id].archived)).map(t => {
+        const a = A[t.app_id];
+        const done = kind(t) === 'done';
+        return {
+          id: t.id, unitId: t.unit_id, key: `${U[t.unit_id].key}-${t.num}`, title: t.title, assigneeId: t.assignee_id, dueDate: t.due_date,
+          requestId: t.parent_id || '', done, doneAt: t.done_at || '', createdAt: t.created_at, url: L[t.id] || '',
+          blocked: !done && (json(t.depends_on, []) || []).some(id => openSet.has(id)),
+          app: a ? { id: a.id, name: a.name, color: a.color, iconUrl: a.icon_url || '', unitId: a.unit_id } : null,
+        };
+      });
     },
 
     async getRmDashboard(p) {
@@ -3660,7 +3706,7 @@ export function createBackend(db, opts = {}) {
       const TT = Object.fromEntries(tasks.map(t => [t.id, t])), U = Object.fromEntries(units.map(u => [u.id, u]));
       const A = Object.fromEntries(apps.map(a => [a.id, { id: a.id, name: a.name, color: a.color || '', iconUrl: a.icon_url || '' }]));
       // одно уведомление на задачу: все непрочитанные события по ней — пометками, самое важное первым (решение заказчика)
-      const RANK = ['store_reject', 'overdue', 'returned', 'review', 'mention', 'store_live', 'due_soon', 'unblocked', 'task_done', 'approved', 'assigned', 'handoff'];
+      const RANK = ['store_reject', 'overdue', 'returned', 'review', 'mention', 'account_ready', 'store_live', 'due_soon', 'unblocked', 'task_done', 'approved', 'assigned', 'handoff'];
       const rank = k => { const i = RANK.indexOf(k); return i < 0 ? RANK.length : i; };
       const byTask = new Map();
       for (const r of rows) {

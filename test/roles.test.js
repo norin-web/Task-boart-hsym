@@ -1364,8 +1364,14 @@ test('лёгкие цифры меню (navCounts) и поиск в базе с�
     const d = await api.as(who, () => api('getRmDashboard', {}));
     const rejects = (d.rejected || []).length + (d.queue || []).filter(x => x.rejectNo && x.fixedAt).length + (d.rejectedApps || []).length;
     const mine = (await api.as(who, () => api('queryTasks', { assigneeId: who.id, limit: 500 }))).filter(t => t.statusKind !== 'done').length;
-    assert.deepEqual(n, { ready, rejects, mine }, who.name);
+    const accounts = (await api.as(who, () => api('getAccounts', {}))).filter(x => x.assigneeId === who.id && !x.done && !x.blocked).length;
+    assert.deepEqual(n, { ready, rejects, mine, accounts }, who.name);
   }
+  // аккаунт «Готов к iOS» (дизайн готов) — у RM в работе; «Пилим» уже в разработке — аккаунт закрыт
+  const acc = await api.as(rm, () => api('getAccounts', {}));
+  assert.deepEqual(acc.map(x => [x.app.name, x.done, x.blocked]).sort(), [['Готов к iOS', false, false], ['Пилим', true, false]]);
+  assert.equal((await api.as(rm, () => api('navCounts', { personId: rm.id }))).accounts, 1);
+  await api.as(dev, async () => assert.deepEqual(await api('getAccounts', {}), [])); // сотруднику не видны
   assert.equal((await api.as(admin, () => api('navCounts', { personId: admin.id }))).ready, 1);
   // поиск: по названию, по ключу, спецсимволы не ломают; сотрудник находит только видимое ему
   const found = await api.as(admin, () => api('queryTasks', { q: 'вёрстка', limit: 8 }));

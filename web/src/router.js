@@ -22,6 +22,7 @@ import { renderPmHome } from './views/pm.js';
 import { renderRmHome } from './views/rm.js';
 import { renderReady } from './views/ready.js';
 import { renderRejects } from './views/rejects.js';
+import { renderAccounts } from './views/accounts.js';
 import { renderBoardView, loadBoard, foldStages } from './views/board.js';
 import { renderTimeline } from './views/timeline.js';
 import { renderSettings } from './views/settings.js';
@@ -71,6 +72,7 @@ export function parseLocation() {
   if (path === '/dev') return { view: 'dev' };
   if (path === '/ready') return { view: 'ready' };
   if (path === '/rejects') return { view: 'rejects' };
+  if (path === '/accounts') return { view: 'accounts' };
   if (path === '/backlog') return { view: 'backlog' };
   if (path === '/info') return { view: 'infolist' };
   if (path === '/analytics') return { view: 'analytics' };
@@ -92,13 +94,13 @@ export function routeUrl(r) {
   }
   if (r.view === 'settings' || r.view === 'admin') return '#/settings' + (r.tab ? '?tab=' + r.tab : '');
   if (r.view === 'app') return '#/app/' + r.id;
-  return r.view === 'my' ? '#/my' : r.view === 'myboard' ? '#/board' : r.view === 'apps' ? '#/apps' : r.view === 'dev' ? '#/dev' : r.view === 'ready' ? '#/ready' : r.view === 'rejects' ? '#/rejects' : r.view === 'backlog' ? '#/backlog' : r.view === 'infolist' ? '#/info' : r.view === 'analytics' ? '#/analytics' + (r.tile ? '/' + r.tile : '') : '#/';
+  return r.view === 'my' ? '#/my' : r.view === 'myboard' ? '#/board' : r.view === 'apps' ? '#/apps' : r.view === 'dev' ? '#/dev' : r.view === 'ready' ? '#/ready' : r.view === 'rejects' ? '#/rejects' : r.view === 'accounts' ? '#/accounts' : r.view === 'backlog' ? '#/backlog' : r.view === 'infolist' ? '#/info' : r.view === 'analytics' ? '#/analytics' + (r.tile ? '/' + r.tile : '') : '#/';
 }
 
 // Внутренние экраны (карточка приложения, плитка аналитики, настройки): запоминаем, откуда в них зашли.
 // Откуда — в history.state, поэтому «Назад» работает и после перезагрузки; цепочка вложенная (плитка → приложение → …).
 let curFrom = (history.state && history.state.from) || null;
-const LABELS = { home: 'Дашборд', apps: 'Приложения', analytics: 'Аналитика', ready: 'Сводка', rejects: 'Реджекты', backlog: 'Бэклог', infolist: 'Инфо-лист', my: 'Мои задачи', myboard: 'Моя доска', settings: 'Настройки' };
+const LABELS = { home: 'Дашборд', apps: 'Приложения', analytics: 'Аналитика', ready: 'Сводка', rejects: 'Реджекты', accounts: 'Аккаунты', backlog: 'Бэклог', infolist: 'Инфо-лист', my: 'Мои задачи', myboard: 'Моя доска', settings: 'Настройки' };
 const isDetail = r => !r.unit && (r.view === 'app' || r.view === 'settings' || r.view === 'admin' || (r.view === 'analytics' && !!r.tile));
 const homeRoute = () => ({ view: 'home' });
 
@@ -210,14 +212,15 @@ export async function render() {
     if (r.view === 'analytics' && !isSuper()) return navigate({ view: 'home' }, { replace: true });
     if (r.view === 'ready' && (!isStaff() || ceoDefault())) return navigate({ view: 'home' }, { replace: true });
     if (r.view === 'rejects' && !isSuper() && myAccess() !== 'rm') return navigate({ view: 'home' }, { replace: true });
+    if (r.view === 'accounts' && !isSuper() && myAccess() !== 'rm') return navigate({ view: 'home' }, { replace: true });
     if (r.view === 'backlog' && !isSuper()) return navigate({ view: 'home' }, { replace: true });
     if ((r.view === 'apps' || r.view === 'app') && !seesApps()) return navigate({ view: 'home' }, { replace: true });
     const view = r.view;
-    const key = view === 'app' ? 'app:' + r.id : view === 'analytics' ? 'analytics:' + (r.tile || '') : ['my', 'myboard', 'apps', 'dev', 'ready', 'rejects', 'backlog', 'infolist'].includes(view) ? view : view === 'settings' ? 'settings:' + (r.tab || '') : 'home';
+    const key = view === 'app' ? 'app:' + r.id : view === 'analytics' ? 'analytics:' + (r.tile || '') : ['my', 'myboard', 'apps', 'dev', 'ready', 'rejects', 'accounts', 'backlog', 'infolist'].includes(view) ? view : view === 'settings' ? 'settings:' + (r.tab || '') : 'home';
     if (rendered !== key) {
       rendered = key;
-      document.title = ({ my: 'Мои задачи', myboard: 'Моя доска', settings: 'Настройки', analytics: 'Аналитика', apps: 'Приложения', ready: 'Сводка', rejects: 'Реджекты', backlog: 'Бэклог', infolist: 'Инфо-лист', dev: 'Режим разработчика' }[view] || (isStaff() ? 'Дашборд' : myAccess() === 'rm' ? 'Релизы' : 'Главная')) + ' · Tasks';
-      if (view === 'my') renderMy(); else if (view === 'myboard') renderMyBoard(); else if (view === 'apps') renderApps(); else if (view === 'app') renderAppPage(r.id); else if (view === 'dev') renderDev(); else if (view === 'ready') renderReady(); else if (view === 'rejects') renderRejects(); else if (view === 'backlog') renderBacklog(); else if (view === 'infolist') renderInfoList();
+      document.title = ({ my: 'Мои задачи', myboard: 'Моя доска', settings: 'Настройки', analytics: 'Аналитика', apps: 'Приложения', ready: 'Сводка', rejects: 'Реджекты', accounts: 'Аккаунты', backlog: 'Бэклог', infolist: 'Инфо-лист', dev: 'Режим разработчика' }[view] || (isStaff() ? 'Дашборд' : myAccess() === 'rm' ? 'Релизы' : 'Главная')) + ' · Tasks';
+      if (view === 'my') renderMy(); else if (view === 'myboard') renderMyBoard(); else if (view === 'apps') renderApps(); else if (view === 'app') renderAppPage(r.id); else if (view === 'dev') renderDev(); else if (view === 'ready') renderReady(); else if (view === 'rejects') renderRejects(); else if (view === 'accounts') renderAccounts(); else if (view === 'backlog') renderBacklog(); else if (view === 'infolist') renderInfoList();
       else if (view === 'settings') renderPrefs(r.tab || ''); else if (view === 'analytics') renderAnalytics(r.tile);
       else if (isSuper()) renderCeoHome(); else if (myAccess() === 'moderator') renderPmHome(); else if (myAccess() === 'rm') renderRmHome(); else renderHome();
     }

@@ -113,6 +113,7 @@ export function newsBlock({ history = false } = {}) {
       task_done: who ? [who, ' закрыл(а) ', q] : ['Закрыта задача ', q],
       mention: who ? [who, ' упомянул(а) вас в ', q] : ['Вас упомянули в ', q],
       unblocked: ['Можно начинать ', q],
+      account_ready: ['Аккаунт готов — ссылка на данные в ', q],
       due_soon: ['Срок ' + (n.dueDate === todayStr() ? 'сегодня' : 'завтра') + ': ', q],
       overdue: ['Просрочено: ', q],
       store_live: ['Вышло в App Store: ', q],
