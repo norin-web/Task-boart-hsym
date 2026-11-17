@@ -387,12 +387,18 @@ export async function renderReady() {
   const rowMenu = (anchor, r) => menu(anchor, r.free
     ? [{ label: 'Удалить строку', icon: 'trash', danger: true, action: () => { sheet.rows = sheet.rows.filter(x => x.id !== r.freeId); delete sheet.vals[r.key]; persist(); draw(); } }]
     : [{ label: 'Открыть приложение', icon: 'link', action: () => openAppById(r.appId, load) },
+      // дизайн закрыли по ошибке (например, при разносе «Где сейчас») — вернуть его в работу, iOS снова ждёт
+      r.ready && r.stages.design && { label: 'Вернуть дизайн в работу', icon: 'back', action: () => {
+        const u = unitById(r.unitId), col = u && u.settings && u.settings.columns.find(c => c.kind === 'progress');
+        if (!col) return;
+        send('updateTask', { id: r.stages.design.id, patch: { status: col.id } }).then(() => { toast('Дизайн снова в работе — iOS ждёт его'); load(); }, showErr);
+      } },
       { label: 'Скрыть строку', icon: 'eye', action: () => { sheet.hide = [...sheet.hide, r.appId]; persist(); draw(); toast('Строка скрыта — вернуть можно в плашке «Скрыто»'); } }], { align: 'left' });
   const groupName = r => {
     switch (sheet.group) {
       case 'unit': { const u = unitById(r.unitId); return u ? u.name : 'Без юнита'; }
       case 'status': { const st = S.appStatuses.find(x => x.id === r.status); return st ? st.name : 'Без статуса'; }
-      case 'queue': return r.free ? 'Свои строки' : r.ready ? 'Ждут разработки' : 'Остальные';
+      case 'queue': return r.free ? 'Свои строки' : r.ready ? 'Дизайн готов, iOS не начат' : 'Остальные';
       case 'designer': { const p = personById((r.stages.design || {}).assigneeId); return p ? p.name : 'Без дизайнера'; }
       default: return '';
     }
@@ -440,7 +446,7 @@ export async function renderReady() {
       const m = new Map();
       for (const r of list) { const n = groupName(r); if (!m.has(n)) m.set(n, []); m.get(n).push(r); }
       blocks = [...m].map(([name, rs]) => ({ name, rs }));
-      if (sheet.group === 'queue') blocks.sort((a, b) => (b.name === 'Ждут разработки') - (a.name === 'Ждут разработки'));
+      if (sheet.group === 'queue') blocks.sort((a, b) => (b.name === 'Дизайн готов, iOS не начат') - (a.name === 'Дизайн готов, iOS не начат'));
     }
     groupNames = blocks.map(b => b.name);
 
@@ -536,8 +542,8 @@ export async function renderReady() {
       h('div', { class: 'rd-sum' },
         h('button', { class: 'rd-queue' + (!onlyReady ? ' on' : ''), type: 'button', 'aria-pressed': String(!onlyReady), title: 'Показать все приложения', onclick: () => { onlyReady = false; draw(); } },
           icon('rows', 13), `Все приложения: ${inUnit.length}`),
-        h('button', { class: 'rd-queue' + (onlyReady ? ' on' : ''), type: 'button', 'aria-pressed': String(onlyReady), title: 'Дизайн закрыт, разработка ещё не начата', onclick: () => { onlyReady = !onlyReady; draw(); } },
-          icon('layers', 13), `Ждут разработки: ${queue.length}`, late > 0 && h('span', { class: 'rd-late' }, ` · дольше недели ${late}`)),
+        h('button', { class: 'rd-queue' + (onlyReady ? ' on' : ''), type: 'button', 'aria-pressed': String(onlyReady), title: 'Этап «Дизайн» в трекере закрыт, этап «Разработка iOS» ещё не начат. Статус приложения — общий и тут ни при чём', onclick: () => { onlyReady = !onlyReady; draw(); } },
+          icon('layers', 13), `Дизайн готов, iOS не начат: ${queue.length}`, late > 0 && h('span', { class: 'rd-late' }, ` · из них ждут дольше недели: ${late}`)),
         hidden.length > 0 && h('button', { class: 'rd-queue', type: 'button', 'aria-haspopup': 'menu', title: 'Строки, скрытые из сводки', onclick: e => menu(e.currentTarget, [
           { title: 'Скрытые строки' },
           ...hidden.map(r => ({ label: r.appName, icon: 'eye', action: () => { sheet.hide = sheet.hide.filter(x => x !== r.appId); persist(); draw(); } })),
