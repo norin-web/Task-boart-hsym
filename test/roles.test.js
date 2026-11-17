@@ -711,7 +711,16 @@ test('Lead: видит и ведёт только свою зону — пози
   // PM юнита выдаёт людей лиду своего юнита; сотрудник и чужой лид — нет; список не для не-лида
   await api.as(mod, () => api('setLeadPeople', { leadId: L.id, personIds: [dev.id] }));
   assert.ok((await api.as(L, titles)).includes('Вёрстка'));
-  await assert.rejects(api.as(designer, () => api('setLeadPeople', { leadId: L.id, personIds: [] })), forbidden);
+  // ссылки в задаче своего человека лид ставит, меняет и убирает (раньше — только исполнитель и CEO/PM)
+  await api.as(L, () => api('setTaskLink', { taskId: t2.id, fieldId: 'lf_github', url: 'https://github.com/x/a' }));
+  await api.as(L, () => api('setTaskLink', { taskId: t2.id, fieldId: 'lf_github', url: 'https://github.com/x/b' }));
+  assert.equal((await api.as(dev, () => api('getBoard', { unitId: A.id }))).tasks.find(x => x.id === t2.id).links.lf_github, 'https://github.com/x/b');
+  await api.as(L, () => api('setTaskLink', { taskId: t2.id, fieldId: 'lf_github', url: '' }));
+  // вне зоны — нельзя
+  await api.as(admin, () => api('setLeadPeople', { leadId: L.id, personIds: [] }));
+  await assert.rejects(api.as(L, () => api('setTaskLink', { taskId: t2.id, fieldId: 'lf_github', url: 'https://github.com/x/c' })));
+  await api.as(mod, () => api('setLeadPeople', { leadId: L.id, personIds: [dev.id] }));
+  await assert.rejects(api.as(designer,() => api('setLeadPeople', { leadId: L.id, personIds: [] })), forbidden);
   await assert.rejects(api.as(admin, () => api('setLeadPeople', { leadId: designer.id, personIds: [] })));
   // человек не из юнита лида в зону не попадает
   const out = await api('createPerson', { name: 'Посторонний', positionId: 'd_ios' });

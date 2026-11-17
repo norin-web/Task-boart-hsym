@@ -3010,6 +3010,32 @@ create policy task_links_read on task_links for select to authenticated
   using (((select is_staff()) or field_id = any(coalesce((select my_link_field_ids()), '{}')))
          and exists (select 1 from tasks t where t.id = task_id));
 
+-- ---------- Ссылки ставит тот, кто ведёт задачу (2026-11-17) ----------
+-- Раньше — только CEO/PM и исполнитель: лид не мог поставить GitHub в задаче своего человека.
+-- Теперь как у правки задачи: CEO/PM юнита, исполнитель, ревью, лид в своей зоне.
+-- Запись — отдельными правилами (вставка / правка / удаление), чтобы чтение не считало эту проверку на каждой строке.
+create or replace function can_edit_task_links(p_task text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from tasks t where t.id = p_task and (
+    can_manage(t.unit_id) or t.assignee_id = my_person_id() or t.review_from = my_person_id() or t.reviewer_id = my_person_id()
+    or in_lead_zone(t.unit_id, t.department_id, t.assignee_id)));
+$$;
+revoke execute on function can_edit_task_links(text) from public, anon;
+grant execute on function can_edit_task_links(text) to authenticated;
+drop policy if exists task_links_write on task_links;
+drop policy if exists task_links_ins on task_links;
+create policy task_links_ins on task_links for insert to authenticated
+  with check (can_see_link(field_id) and can_edit_task_links(task_id)
+    and exists (select 1 from tasks t where t.id = task_id and t.unit_id = task_links.unit_id));
+drop policy if exists task_links_upd on task_links;
+create policy task_links_upd on task_links for update to authenticated
+  using (can_see_link(field_id) and can_edit_task_links(task_id))
+  with check (can_see_link(field_id) and can_edit_task_links(task_id)
+    and exists (select 1 from tasks t where t.id = task_id and t.unit_id = task_links.unit_id));
+drop policy if exists task_links_del on task_links;
+create policy task_links_del on task_links for delete to authenticated
+  using (can_see_link(field_id) and can_edit_task_links(task_id));
+
 -- ---------- Ссылки — общие на весь запрос (2026-11-16) ----------
 -- Ссылку поставили на этапе (Figma у дизайна) — она нужна и разработке: уходит в запрос и во все его этапы и подзадачи,
 -- где поле пустое или стояло прежнее значение (свою другую ссылку этапа не трогаем). Вне запроса — как раньше, вниз.
@@ -3021,7 +3047,7 @@ declare
 begin
   select * into v_cur from tasks where id = p_task;
   if v_cur.id is null or not can_see_link(p_field) then return 0; end if;
-  if not (can_manage(v_cur.unit_id) or v_cur.assignee_id = my_person_id() or v_cur.review_from = my_person_id()) then
+  if not can_edit_task_links(p_task) then
     raise exception 'Недостаточно прав для этого действия' using errcode = '42501';
   end if;
   -- корень семьи: запрос, к которому относится задача (сам запрос, этап, подзадача этапа); иначе — сама задача
