@@ -368,9 +368,14 @@ function ceoBlocks(d, apps, reload) {
     { id: 'recent', title: 'Недавнее', col: 'right', render: () => recent(d, reload) },
     { id: 'watch', title: 'Отслеживаю', col: 'right', render: () => watchBlock(apps, { openApp: id => openAppById(id, reload), openTask: peekTask, appIcon, appStatusCell, stageDots }) },
     { id: 'storeCheck', title: 'Проверка App Store', col: 'full', off: true, render: () => storeCheckBlock(apps, reload, { compact: true }) },
-    // дизайн (CEO ведёт и дизайн): по умолчанию скрыты — включаются в «Настроить»
-    { id: 'designWork', title: 'Дизайн · в работе', col: 'left', off: true, render: () => designBlock('work') },
-    { id: 'designReview', title: 'Дизайн · на ревью', col: 'right', off: true, render: () => designBlock('review') },
+    // направления CEO (дизайн / меты / релизы): свои блоки включены сразу — по позиции, остальные — в «Настроить»
+    { id: 'designWork', title: 'Дизайн · в работе', col: 'left', off: !myPos('d_design'), render: () => trackBlock('design', 'work') },
+    { id: 'designReview', title: 'Дизайн · на ревью', col: 'right', off: !myPos('d_design'), render: () => trackBlock('design', 'review') },
+    { id: 'metaWork', title: 'Мета · в работе', col: 'left', off: !myPos('d_aso'), render: () => trackBlock('meta', 'work') },
+    { id: 'metaReview', title: 'Мета · на ревью', col: 'right', off: !myPos('d_aso'), render: () => trackBlock('meta', 'review') },
+    { id: 'relQueue', title: 'Релизы', col: 'left', off: !myPos('d_release'), render: () => releaseBlock() },
+    { id: 'relRejects', title: 'Реджекты', col: 'right', off: !myPos('d_release'), render: () => rejectsBlock(reload) },
+    { id: 'relAccounts', title: 'Аккаунты', col: 'right', off: !myPos('d_release'), render: () => accountsBlock() },
   ];
   // свои подборки
   for (const b of customBlocks()) blocks.push({ id: 'c:' + b.id, title: b.name, col: b.col || 'right', custom: true, render: () => customBlock(b, apps, reload) });
@@ -379,22 +384,76 @@ function ceoBlocks(d, apps, reload) {
 
 /* ---------- дизайн ---------- */
 
-// оба блока дизайна берут данные одним запросом на перерисовку дашборда
-let designLoad = null, designAt = 0;
-const designData = () => {
-  if (!designLoad || Date.now() - designAt > 15000) { designAt = Date.now(); designLoad = call('getDesignOverview', { today: todayStr() }); }
-  return designLoad;
+/** Есть ли у меня позиция (направление CEO: d_design — дизайн, d_aso — меты, d_release — релизы). */
+const myPos = id => (((me() || {}).positionIds) || [(me() || {}).positionId]).includes(id);
+
+// блоки одного направления берут данные одним запросом на перерисовку дашборда (кэш 15 с)
+const cache = {};
+const cached = (key, fn) => {
+  const c = cache[key];
+  if (!c || Date.now() - c.at > 15000) cache[key] = { at: Date.now(), p: fn() };
+  return cache[key].p;
 };
+const TRACK_TAG = { design: 'Дизайн', meta: 'Мета', release: 'Релизы' };
+const tagHead = (track, title, n, to) => h('div', { class: 'section-head' },
+  h('h2', null, h('span', { class: 'design-tag tag-' + track }, TRACK_TAG[track]), title ? ' ' + title : '', n != null && h('span', { class: 'muted sec-n' }, n)),
+  to && link(to, { class: 'link-btn' }, 'Все'));
+const rowSub = text => h('small', { class: 'muted', style: { display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, text);
+
+/** Релизы (CEO-релизы): очередь на отправку и на ревью Apple — из того же, что видит RM. */
+function releaseBlock() {
+  const box = h('section', null, tagHead('release', 'Очередь и ревью Apple', null), h('div', { class: 'card-box rc-list' }, skeleton()));
+  cached('rm', () => call('getRmDashboard', {})).then(d => {
+    const rows = [...(d.queue || []).map(x => ({ x, sub: x.fixedAt ? `реджект №${x.rejectNo} исправлен — отправить снова` : x.missing.length ? 'в очереди · не заполнено: ' + x.missing.join(', ') : 'в очереди · готово к отправке' })),
+      ...(d.review || []).map(x => ({ x, sub: 'на ревью Apple' + (x.submittedAt ? ' с ' + fmtDate(x.submittedAt.slice(0, 10)) : '') }))];
+    fill(box, tagHead('release', 'Очередь и ревью Apple', rows.length),
+      h('div', { class: 'card-box rc-list' }, rows.length ? paged(rows, ({ x, sub }) => h('button', { class: 'rc-row stale-row design-row', onclick: () => (x.appOnly ? openAppById(x.app.id) : peekTask(x.unitId, x.id)) },
+        x.app ? appIcon(x.app, 'xs') : h('span', { class: 'design-noapp' }, icon('rocket', 13)),
+        h('span', { class: 'rc-main' }, h('b', null, x.app ? x.app.name : x.title), rowSub(sub)), h('span')), 8, 'blk-more', 5)
+        : emptyBlock('Очередь пуста, на ревью ничего', { ok: true })));
+  }).catch(e => fill(box, emptyBlock('Не загрузилось: ' + e.message)));
+  return box;
+}
+
+/** Реджекты: релизы в реджекте и приложения со статусом «Реджект» — как на экране «Реджекты». */
+function rejectsBlock(reload) {
+  const box = h('section', null, tagHead('release', 'Реджекты', null, { view: 'rejects' }), h('div', { class: 'card-box rc-list' }, skeleton()));
+  cached('rm', () => call('getRmDashboard', {})).then(d => {
+    const rows = [...(d.rejected || []).map(x => ({ app: x.app, sub: `№${x.rejectNo || ''} · ${x.reason || 'без причины'}`, open: () => peekTask(x.unitId, x.id) })),
+      ...(d.rejectedApps || []).map(x => ({ app: x.app, sub: 'статус «Реджект»' + (x.at ? ' с ' + fmtDate(x.at.slice(0, 10)) : ''), open: () => openAppById(x.app.id, reload) }))];
+    fill(box, tagHead('release', 'Реджекты', rows.length, { view: 'rejects' }),
+      h('div', { class: 'card-box rc-list' }, rows.length ? paged(rows, r => h('button', { class: 'rc-row stale-row design-row', onclick: r.open },
+        r.app ? appIcon(r.app, 'xs') : h('span', { class: 'design-noapp' }, icon('rejected', 13)),
+        h('span', { class: 'rc-main' }, h('b', null, r.app ? r.app.name : '—'), rowSub(r.sub)), h('span')), 8, 'blk-more', 5)
+        : emptyBlock('Реджектов нет', { ok: true })));
+  }).catch(e => fill(box, emptyBlock('Не загрузилось: ' + e.message)));
+  return box;
+}
+
+/** Аккаунты: заявки и в работе (этапы «Аккаунт»). */
+function accountsBlock() {
+  const box = h('section', null, tagHead('release', 'Аккаунты', null, { view: 'accounts' }), h('div', { class: 'card-box rc-list' }, skeleton()));
+  call('getAccounts', {}).then(list => {
+    const rows = list.filter(x => !x.done && !x.blocked).sort((a, b) => (a.state === 'todo') - (b.state === 'todo') || String(a.dueDate || '9').localeCompare(String(b.dueDate || '9')));
+    fill(box, tagHead('release', 'Аккаунты', rows.length, { view: 'accounts' }),
+      h('div', { class: 'card-box rc-list' }, rows.length ? paged(rows, x => h('button', { class: 'rc-row stale-row design-row', onclick: () => peekTask(x.unitId, x.id) },
+        x.app ? appIcon(x.app, 'xs') : h('span', { class: 'design-noapp' }, icon('lock', 13)),
+        h('span', { class: 'rc-main' }, h('b', null, x.app ? x.app.name : x.title), rowSub(x.state === 'todo' ? 'заявка — завести аккаунт' : x.url ? 'в работе · док прикреплён' : 'в работе')),
+        x.dueDate ? h('span', { class: 'rc-at muted' }, fmtDate(x.dueDate)) : h('span')), 8, 'blk-more', 5)
+        : emptyBlock('Заявок на аккаунты нет', { ok: true })));
+  }).catch(e => fill(box, emptyBlock('Не загрузилось: ' + e.message)));
+  return box;
+}
 
 /**
- * Блок дизайна: work — в работе и ждут старта (просроченные сверху), review — отданы на ревью (у кого и от кого).
- * Пометка «Дизайн» у заголовка — чтобы не путать с общими блоками.
+ * Блок направления (дизайн / мета): work — в работе и ждут старта (просроченные сверху), review — отданы на ревью
+ * (у кого и от кого). Пометка направления у заголовка — чтобы не путать с общими блоками.
  */
-function designBlock(kind) {
+function trackBlock(track, kind) {
   const title = kind === 'review' ? 'На ревью' : 'В работе';
   const body = h('div', { class: 'card-box rc-list' }, skeleton());
-  const head = h('div', { class: 'section-head' }, h('h2', null, h('span', { class: 'design-tag' }, 'Дизайн'), ' ', title));
-  designData().then(rows => {
+  const head = h('div', { class: 'section-head' }, h('h2', null, h('span', { class: 'design-tag tag-' + track }, TRACK_TAG[track]), ' ', title));
+  cached(track, () => call('getDesignOverview', { today: todayStr(), track })).then(rows => {
     const mine = rows.filter(x => (kind === 'review' ? x.state === 'review' : x.state !== 'review'));
     head.querySelector('h2').append(h('span', { class: 'muted sec-n' }, mine.length));
     const row = x => {
@@ -409,7 +468,7 @@ function designBlock(kind) {
         x.dueDate ? h('span', { class: 'rc-at ' + (x.overdue ? 'danger-text' : 'muted') }, (x.overdue ? 'просрочено · ' : '') + fmtDate(x.dueDate)) : h('span'));
     };
     fill(body, mine.length ? paged(mine, row, 8, 'blk-more', 5)
-      : emptyBlock(kind === 'review' ? 'На ревью ничего' : 'Дизайн сейчас без задач', { ok: true }));
+      : emptyBlock(kind === 'review' ? 'На ревью ничего' : `${TRACK_TAG[track]}: сейчас без задач`, { ok: true }));
   }).catch(e => fill(body, emptyBlock('Не загрузилось: ' + e.message)));
   return h('section', null, head, body);
 }

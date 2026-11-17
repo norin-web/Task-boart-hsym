@@ -3391,3 +3391,5 @@ a.bug-title:hover { text-decoration: underline; }
 /* ASO: «Мета / Тексты» — крупный переключатель над доской */
 .aso-seg { height: 44px; padding: 4px; }
 .aso-seg button { height: 36px; padding: 0 18px; gap: 6px; font-size: 14px; font-weight: 600; }
+.design-tag.tag-meta { background: color-mix(in srgb, #0ea5e9 16%, transparent); color: #0369a1; }
+.design-tag.tag-release { background: color-mix(in srgb, #10b981 16%, transparent); color: #047857; }

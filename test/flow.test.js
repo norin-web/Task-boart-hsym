@@ -1133,3 +1133,18 @@ test('«На тесте»: сданный этап iOS у разработчик
   assert.ok(!b.tasks.some(x => x.id === by.ios.id));
   assert.equal(b.doneHidden, 1);
 });
+
+test('статус приложения «Реджект», а релиз в очереди — приложение на экране «Реджекты» и в цифре меню', async () => {
+  const api = await setup();
+  const { ceo, pm, rm, lead, ios, qa, aso, gold } = await studio(api);
+  const { app, request } = await api.as(ceo, () => api('createApp', { name: 'Spy', unitId: gold.id }));
+  const st = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: request.id }))).map(t => [t.step, t]));
+  for (const [who, k] of [[lead, 'design'], [lead, 'art'], [ios, 'ios'], [qa, 'qa'], [ios, 'integr'], [aso, 'meta'], [aso, 'store'], [lead, 'retext'], [aso, 'l10n']]) await finish(api, who, pm, st[k].id);
+  await closeAccount(api, rm, st.account.id);
+  await api.as(pm, () => api('sendToRelease', { taskId: st.release.id }));
+  const rejectId = (await api.as(ceo, () => api('getCeoDashboard', {}))).statuses.find(s => s.kind === 'reject').id;
+  await api.as(ceo, () => api('updateApp', { id: app.id, status: rejectId }));
+  const d = await api.as(rm, () => api('getRmDashboard', {}));
+  assert.ok(d.rejectedApps.some(x => x.app.id === app.id), 'приложение в «Реджектах»');
+  assert.equal((await api.as(rm, () => api('navCounts', { personId: rm.id }))).rejects, 1);
+});

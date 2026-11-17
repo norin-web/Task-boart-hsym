@@ -1,4 +1,4 @@
-import { S, todayStr, dueInfo, KIND_COLORS, KIND_LABELS, deptById, ACCESS_LABELS, LS, plural, isStaff, personById, STEP_NAMES, me, asoTrack } from '../state.js';
+import { S, todayStr, dueInfo, KIND_COLORS, KIND_LABELS, deptById, ACCESS_LABELS, LS, plural, isStaff, personById, STEP_NAMES, me, asoTrack, appById, appStatusById, myAccess } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, statusIcon, emptyBlock, skeleton } from '../ui.js';
 import { call, keep, peek } from '../api.js';
 import { currentView, taskLink, link } from '../router.js';
@@ -208,14 +208,26 @@ export function workBlocks(tasks) {
   const pos = (me() || {}).positionIds || [(me() || {}).positionId];
   const designOn = pos.includes('d_design') || tasks.some(isDesign);
   const metaOn = pos.includes('d_aso') || tasks.some(isMeta);
+  // релизы: этап «Релиз» на мне и запросы, где остался только релиз; реджекты — приложение в «Реджекте» или задача «Реджект №»
+  const appRejected = t => { const a = t.appId && appById(t.appId); return !!a && (appStatusById(a.status) || {}).kind === 'reject'; };
+  // этапы дизайна/мет по приложению в реджекте остаются в своих блоках — сюда только запросы и «Реджект №»
+  const isRejectTask = t => /^Реджект №/.test(t.title || '') || (isReq(t) && appRejected(t));
+  const onlyRelease = t => isReq(t) && t.stages && t.stages.total > 0 && (t.stages.left || []).length === 1 && t.stages.left[0] === 'release';
+  const isRelease = t => t.step === 'release' || onlyRelease(t);
+  const relOn = pos.includes('d_release') || myAccess() === 'rm';
+  // «Разложить» и «Веду как PM» — работа PM; у CEO и остальных блоки есть, только если в них что-то попало
+  const pmOn = myAccess() === 'moderator';
+  const has = test => tasks.some(test);
   const sections = [
-    { id: 'place', title: 'Разложить по этапам', hint: 'Новые приложения и запросы, где PM — вы: этапов ещё нет',
+    relOn || has(isRejectTask) ? { id: 'rejects', title: 'Реджекты', hint: 'Приложения в реджекте и задачи «Реджект №» на вас', test: isRejectTask, prog: t => t.stages || checklist(t) } : null,
+    relOn || has(isRelease) ? { id: 'releases', title: 'Релизы', hint: 'Этапы «Релиз» и запросы, где остался только релиз', test: isRelease, prog: t => t.stages || checklist(t) } : null,
+    (pmOn || has(t => isReq(t) && !(t.stages && t.stages.total))) && { id: 'place', title: 'Разложить по этапам', hint: 'Новые приложения и запросы, где PM — вы: этапов ещё нет',
       test: t => isReq(t) && !(t.stages && t.stages.total), prog: () => null },
     metaOn && { id: 'metaReview', title: 'Мета · на ревью', hint: 'Меты, которые прислали вам на проверку: «Аппрув» или «Правки»', test: t => isMeta(t) && toReview(t), prog: checklist },
     metaOn && { id: 'meta', title: 'Мета · веду сам', hint: 'Меты, которые вы делаете сами: прогресс — по чек-листу', test: t => isMeta(t) && !toReview(t), prog: checklist },
     designOn && { id: 'design', title: 'Дизайн', hint: 'Ваши этапы дизайна: прогресс — по чек-листу', test: isDesign, prog: checklist },
     // как в Сводке: ближе к финишу — выше (больше готовых этапов); просроченные и «в работе» — по-прежнему первыми
-    { id: 'pm', title: 'Веду как PM', hint: 'Разложенные запросы: прогресс — сколько этапов готово', test: t => isReq(t) && t.stages && t.stages.total > 0, prog: t => t.stages,
+    (pmOn || has(t => isReq(t) && t.stages && t.stages.total > 0 && !isRelease(t) && !isRejectTask(t))) && { id: 'pm', title: 'Веду как PM', hint: 'Разложенные запросы: прогресс — сколько этапов готово', test: t => isReq(t) && t.stages && t.stages.total > 0, prog: t => t.stages,
       sort: (a, b) => rank(a) - rank(b) || (b.stages.done || 0) - (a.stages.done || 0) || (a.dueDate || '9999').localeCompare(b.dueDate || '9999') },
     { id: 'rest', title: 'Остальное', hint: 'Все прочие задачи на вас', test: () => true, prog: checklist },
   ].filter(Boolean);

@@ -1185,13 +1185,14 @@ export function createBackend(db, opts = {}) {
       rows = rows.slice(0, Math.min(Number(p.limit) || 50, 500));
       // у запросов — сколько этапов и сколько из них готово («Мои задачи»: разложить / веду как PM)
       const reqIds = rows.filter(r => r.kind === 'request').map(r => r.id);
-      const kids = reqIds.length ? await inChunks(reqIds, ids => T('tasks').select('id,unit_id,status,parent_id').in('parent_id', ids).eq('archived', false).order('id')) : [];
+      const kids = reqIds.length ? await inChunks(reqIds, ids => T('tasks').select('id,unit_id,status,parent_id,step').in('parent_id', ids).eq('archived', false).order('id')) : [];
       const stagesOf = {};
       for (const k of kids) {
         const u = units[k.unit_id];
-        const c = stagesOf[k.parent_id] || (stagesOf[k.parent_id] = { total: 0, done: 0 });
+        // left — какие этапы ещё не закрыты (остался один релиз — запрос у релиз-менеджера, а не у PM)
+        const c = stagesOf[k.parent_id] || (stagesOf[k.parent_id] = { total: 0, done: 0, left: [] });
         c.total++;
-        if (u && kindOf(unitSettings(u.settings), k.status) === 'done') c.done++;
+        if (u && kindOf(unitSettings(u.settings), k.status) === 'done') c.done++; else if (k.step) c.left.push(k.step);
       }
       return rows.map(r => {
         const u = units[r.unit_id];
@@ -2686,8 +2687,16 @@ export function createBackend(db, opts = {}) {
      */
     async getDesignOverview(p) {
       const today_ = today(p.today);
+      const COLS = 'id,unit_id,num,title,status,assignee_id,review_from,due_date,app_id,step,kind,depends_on,updated_at,department_id';
+      // track: design — задачи позиции дизайна; meta — этап «Метаданные» и обычные задачи ASO
+      const meta = p.track === 'meta';
       const [rows, units] = await Promise.all([
-        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,review_from,due_date,app_id,step,kind,depends_on,updated_at').eq('department_id', 'd_design').eq('archived', false).eq('done_at', '').order('id')),
+        meta
+          ? Promise.all([
+            all(() => T('tasks').select(COLS).eq('step', 'store').eq('archived', false).eq('done_at', '').order('id')),
+            all(() => T('tasks').select(COLS).eq('department_id', 'd_aso').neq('kind', 'stage').eq('archived', false).eq('done_at', '').order('id')),
+          ]).then(([a, b]) => [...a, ...b.filter(x => !a.some(y => y.id === x.id))])
+          : all(() => T('tasks').select(COLS).eq('department_id', 'd_design').eq('archived', false).eq('done_at', '').order('id')),
         all(() => T('units').select('id,key,settings,archived').order('id')),
       ]);
       const U = Object.fromEntries(units.filter(u => !u.archived).map(u => [u.id, { key: u.key, st: unitSettings(u.settings) }]));
@@ -3519,7 +3528,7 @@ export function createBackend(db, opts = {}) {
       // реджекты: релиз в реджекте, исправленный и ждущий повторной отправки, приложения в статусе «Реджект» без релиза
       const rejectSt = new Set(statuses.filter(x => x.kind === 'reject').map(x => x.id));
       const items = rels.filter(t => ST[t.unit_id]).map(t => ({ app: t.app_id, rel: json(t.release, {}) || {} })).filter(x => x.rel.phase !== 'live');
-      const withRel = new Set(items.map(x => x.app));
+      const withRel = new Set(items.filter(x => x.rel.phase === 'rejected' || (!x.rel.phase && x.rel.rejectNo)).map(x => x.app));
       const rejects = items.filter(x => x.rel.phase === 'rejected' || (!x.rel.phase && x.rel.rejectNo && x.rel.fixedAt)).length
         + apps.filter(a => !a.archived && rejectSt.has(a.status) && !withRel.has(a.id) && ST[a.unit_id]).length;
       const openUnits = new Set(units.filter(u => !u.archived).map(u => u.id));
@@ -3613,7 +3622,9 @@ export function createBackend(db, opts = {}) {
       }
       // и со статусом «Реджект» без открытого реджекта релиза — на экран «Реджекты»
       // у кого есть релиз в трекере — реджект виден по релизу; «по статусу» — только приложения без релиза
-      const withReject = new Set(items.filter(x => x.app).map(x => x.app.id));
+      // по релизу реджект виден, только если сам релиз в реджекте (у PM или исправлен и ждёт отправки);
+      // релиз в очереди / на ревью, а статус приложения «Реджект» — показываем по статусу, иначе оно пропадает отовсюду
+      const withReject = new Set(items.filter(x => x.app && (x.phase === 'rejected' || (!x.phase && x.rejectNo))).map(x => x.app.id));
       const rejectedApps = apps.filter(a => !a.archived && rejectSt.has(a.status) && !withReject.has(a.id) && U[a.unit_id])
         .map(a => ({ appOnly: true, unitId: a.unit_id, app: A[a.id], at: a.status_at || '' }));
       return {
