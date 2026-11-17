@@ -302,3 +302,15 @@ export function setPeople(list) {
 
 /** Этапы флоу приложения: ключ step → название. */
 export const STEP_NAMES = { design: 'Дизайн', art: 'Онбординг и ASO-графика', ios: 'Разработка iOS', qa: 'Тестирование', integr: 'Интеграция', meta: 'Тексты OB / PW / ASO', store: 'Метаданные', retext: 'Тексты в дизайне', l10n: 'Локализации', release: 'Релиз' };
+
+/**
+ * ASO: две сущности работы — «Мета» (этап «Метаданные») и «Тексты» (тексты OB / PW / ASO, локализации).
+ * Доска команды ASO и личная доска ASO-специалиста переключаются между ними; обычные задачи (не этапы) — в обеих.
+ */
+export const ASO_TRACKS = [['meta', 'Мета'], ['texts', 'Тексты']];
+const ASO_STEP = { store: 'meta', meta: 'texts', l10n: 'texts' };
+export const asoTrack = t => ASO_STEP[t && t.step] || '';
+export const asoView = () => (LS.get('asoTrack', 'meta') === 'texts' ? 'texts' : 'meta');
+export const setAsoView = v => LS.set('asoTrack', v === 'texts' ? 'texts' : 'meta');
+/** Задача видна во вкладке ASO: этап своей сущности или обычная задача. */
+export const inAsoView = t => !asoTrack(t) || asoTrack(t) === asoView();

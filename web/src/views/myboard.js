@@ -6,12 +6,13 @@
  * Свои колонки — people.prefs.myBoard.custom [{ id, name, group, color }]; по умолчанию их нет («Как у команды» — по кнопке).
  */
 import Sortable from 'sortablejs';
-import { S, me, personById, nameFrom, activeTeams, between, dueInfo, todayStr, PALETTE, isStaff, LS, plural } from '../state.js';
+import { S, me, personById, nameFrom, inAsoView, activeTeams, between, dueInfo, todayStr, PALETTE, isStaff, LS, plural } from '../state.js';
 import { $, h, icon, topbar, fill, modal, showErr, statusDot, statusIcon, confirmDlg, menu, closeMenu, toast, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
 import { reviewButtons } from './review.js';
+import { asoSwitch } from './board.js';
 import { typeOf, typeName, typeRank, myViewSeg } from './my.js';
 
 /** Обязательные колонки: одинаковы у всех, их не убрать и не переставить. */
@@ -23,6 +24,9 @@ export const FIXED = [
 ];
 const GROUPS = FIXED.map(c => c.group);
 const KIND_GROUP = { todo: 0, progress: 1, done: 3 };
+
+/** Я — ASO-специалист (позиция ASO): на доске переключатель «Мета / Тексты». */
+const isAso = () => ((me() || {}).positionIds || [(me() || {}).positionId]).includes('d_aso');
 
 /** Шаблон моей команды (первая из моих команд, у которой он есть). */
 function teamTemplate() {
@@ -101,6 +105,8 @@ export async function renderMyBoard() {
   $('#main .topbar').replaceWith(top()); // роль известна только после загрузки людей
   const drawControls = () => fill(controls,
     myViewSeg('board'),
+    // ASO-специалист: две сущности работы — «Мета» и «Тексты», доска та же
+    isAso() && asoSwitch(() => { drawControls(); drawTypes(); draw(host, data); }),
     h('label', { class: 'my-search' }, icon('search', 15),
       h('input', { type: 'search', placeholder: 'Поиск по задачам', value: mbQuery, oninput: e => { mbQuery = e.target.value; draw(host, data); } })),
     data.units.length > 1 && [
@@ -114,7 +120,7 @@ export async function renderMyBoard() {
   const types = h('div', { class: 'my-types mb-types', role: 'radiogroup', 'aria-label': 'Тип задач' });
   controls.after(types);
   const drawTypes = () => {
-    const pool = data.tasks.filter(t => !mbUnit || t.unitId === mbUnit);
+    const pool = data.tasks.filter(t => (!mbUnit || t.unitId === mbUnit) && (!isAso() || inAsoView(t)));
     const counts = new Map();
     for (const t of pool) { const k = typeOf(t); counts.set(k, (counts.get(k) || 0) + 1); }
     const keys = [...counts.keys()].sort((a, b) => typeRank(a) - typeRank(b) || typeName(a).localeCompare(typeName(b), 'ru'));
@@ -158,7 +164,8 @@ function draw(page, data) {
   const cols = allColumns(myCustom());
   const unitById = id => data.units.find(u => u.id === id);
   const q = mbQuery.trim().toLowerCase();
-  const items = data.tasks.filter(t => (!mbUnit || t.unitId === mbUnit) && (!mbType || typeOf(t) === mbType) && (!q || t.title.toLowerCase().includes(q))).map(t => ({ t, ...placeOf(data, cols, t) }));
+  const aso = isAso();
+  const items = data.tasks.filter(t => (!aso || inAsoView(t)) && (!mbUnit || t.unitId === mbUnit) && (!mbType || typeOf(t) === mbType) && (!q || t.title.toLowerCase().includes(q))).map(t => ({ t, ...placeOf(data, cols, t) }));
 
   const card = ({ t }) => {
     const u = unitById(t.unitId);

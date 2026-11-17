@@ -3388,3 +3388,6 @@ a.bug-title:hover { text-decoration: underline; }
 .acc-list > * { min-width: 0; }
 .acc-actions > .acc-doc { display: inline-flex; align-items: center; gap: 4px; }
 @media (max-width: 1000px) { .acc-board { grid-template-columns: minmax(0, 1fr); } }
+/* ASO: «Мета / Тексты» — крупный переключатель над доской */
+.aso-seg { height: 44px; padding: 4px; }
+.aso-seg button { height: 36px; padding: 0 18px; gap: 6px; font-size: 14px; font-weight: 600; }

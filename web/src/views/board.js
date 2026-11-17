@@ -1,5 +1,5 @@
 import Sortable from 'sortablejs';
-import { S, taskById, appById, personById, activeFields, missingFor, missingNext, priorityOf, priorityField, byPriority, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder, between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, unitById, emptyCounts, freshFilters, saveBoardView, activeDepts, deptById, teamById, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS, me, ownTeamsOnly, visibleLinkFields, KINDS, LS, isSuper, isReworkColumn, setPeople } from '../state.js';
+import { S, ASO_TRACKS, asoView, setAsoView, inAsoView, taskById, appById, personById, activeFields, missingFor, missingNext, priorityOf, priorityField, byPriority, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder, between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, unitById, emptyCounts, freshFilters, saveBoardView, activeDepts, deptById, teamById, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS, me, ownTeamsOnly, visibleLinkFields, KINDS, LS, isSuper, isReworkColumn, setPeople } from '../state.js';
 import { $, h, icon, avatar, menu, closeMenu, modal, field, confirmDlg, promptDlg, toast, showErr, statusDot, statusIcon, fill, prioMark, isModalOpen, isMenuOpen } from '../ui.js';
 import { call, send } from '../api.js';
 import { navigate, link } from '../router.js';
@@ -65,9 +65,20 @@ export function renderBoardView() {
       }, h('span', { class: 'btn-label' }, 'Задача'), isSuper() && icon('chevron', 14)),
     ], team),
     !team && h('div', { class: 'vs-line' }, viewSwitch(mode === 'list' ? 'list' : 'board')),
+    isAsoTeam(team) && h('div', { class: 'vs-line' }, asoSwitch(() => { renderBoardView(); })),
     filterBar(),
     h('div', { id: 'tasks', class: mode === 'list' ? 'view-body' : 'board' }));
   renderTasks();
+}
+
+/** Команда ASO: её позиции — ASO Specialist. */
+export const isAsoTeam = team => !!team && ((team.departmentIds || []).includes('d_aso') || team.id === 't_aso');
+
+/** Переключатель ASO «Мета / Тексты»: крупный, сразу видно, в какой сущности работаешь. */
+export function asoSwitch(onChange) {
+  return h('div', { class: 'seg aso-seg', role: 'radiogroup', 'aria-label': 'Мета или тексты' }, ASO_TRACKS.map(([v, label]) =>
+    h('button', { class: asoView() === v ? 'on' : '', role: 'radio', 'aria-checked': String(asoView() === v),
+      onclick: () => { if (asoView() === v) return; setAsoView(v); onChange(); } }, icon(v === 'meta' ? 'meta' : 'edit', 14), label)));
 }
 
 /** Люди команды в этом юните. */
@@ -283,7 +294,10 @@ export function filterTasks(opts = {}) {
   const ceo = isSuper();
   const teamDepts = team && (team.departmentIds || []).length ? new Set(team.departmentIds) : null;
   const qaTeam = !!(teamDepts && teamDepts.has('d_qa'));
+  const asoTeam = isAsoTeam(team);
   return S.board.tasks.filter(t => {
+    // ASO: вкладка «Мета» или «Тексты»
+    if (asoTeam && !inAsoView(t)) return false;
     if (byId && (t.kind === 'stage' || t.step === 'part') && foldedChild(t, byId)) return false;
     // у QA на доске — и задачи разработчиков, которые тестировщики вернули в «Доработку»
     const qaBack = qaTeam && isReworkColumn(colById(t.status));
