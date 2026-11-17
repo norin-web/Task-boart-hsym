@@ -92,8 +92,9 @@ export function batchClient(db) {
       client.timer = null;
       const items = client.queue.splice(0);
       if (!items.length) return;
-      // одна выборка — без пакета; иначе одинаковые выборки — один раз
-      if (items.length === 1) { items[0].resolve(items[0].query.direct()); return; }
+      // одна короткая выборка — без пакета; длинную (большой список id) — пакетом: в адресе GET она не поместится
+      // (сервер отвечает «Bad Request»), а тело POST не ограничено. Одинаковые выборки — один раз.
+      if (items.length === 1 && JSON.stringify(items[0].spec).length < 1500) { items[0].resolve(items[0].query.direct()); return; }
       const keys = [], uniq = new Map();
       for (const it of items) {
         const k = JSON.stringify(it.spec);

@@ -80,3 +80,20 @@ test('потомки задач одной функцией (task_descendants) �
   assert.deepEqual(tree(a)['Корень'].tree, { total: 4, done: 1, overdue: 1 });
   assert.equal(tree(a)['Внучка'].parent, 'Дочь 1');
 });
+
+test('одна выборка с длинным списком id идёт пакетом (POST), а не адресом', async () => {
+  const pg = new PGlite();
+  await pg.exec(AUTH_STUB_SQL);
+  await pg.exec(SCHEMA);
+  const raw = pgliteClient(pg);
+  let batches = 0, direct = 0;
+  const counted = { from: t => { direct++; return raw.from(t); }, rpc: (fn, a) => { if (fn === 'read_batch') batches++; return raw.rpc(fn, a); } };
+  const b = batchClient(counted);
+  const ids = Array.from({ length: 400 }, (_, i) => 't_' + String(i).padStart(12, '0'));
+  const r = await b.from('tasks').select('id').in('id', ids);
+  assert.deepEqual(r.data, []);
+  assert.equal(batches, 1);
+  assert.equal(direct, 0);
+  await b.from('units').select('id').eq('id', 'x'); // короткая — напрямую
+  assert.equal(direct, 1);
+});
