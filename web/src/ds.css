@@ -2404,6 +2404,8 @@ body:has(#modal-root .modal-wrap) #panel-root { visibility: hidden; }
 /* что можно менять, видно сразу: стрелка у выпадающих списков панели */
 .panel-side .status-wrap::after { z-index: 1; border-color: var(--text); }
 .panel-side .prop select.inp:not(:disabled) { padding-right: 26px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23111318' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; }
+/* у статуса стрелка — та же, что у остальных полей (фон select); своя ::after давала вторую */
+.panel-side .status-wrap::after { content: none; }
 .panel-side .prop select.inp:disabled { cursor: default; }
 .panel-side .status-wrap:has(select:disabled)::after { display: none; }
 /* входящие от CEO: вся строка кликабельна, наведение подсвечивает её целиком */
@@ -3334,3 +3336,25 @@ a.bug-title:hover { text-decoration: underline; }
 .mb-done-hidden { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 20px 12px; border: 1px dashed var(--border-strong); border-radius: 16px; text-align: center; font-size: 13px; }
 .mb-done-hidden .muted { font-size: 12px; }
 .mb-done-hidden .btn { margin-top: 6px; }
+
+/* Баги в карточке тестирования / разработки: список репортов и форма нового — рабочее место QA и разработчика */
+.bugs-work { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: 20px; background: var(--surface); }
+.bugs-work .bugs-block { display: grid; gap: 8px; }
+.bugs-work .block-title { margin: 0; font-size: 15px; font-weight: 700; }
+.bug-all { font-size: 12px; font-weight: 500; }
+.bug-empty { font-size: 13px; }
+.bug-compose { display: grid; gap: 8px; padding: 12px; border-radius: 16px; background: var(--surface-2); }
+.bug-compose-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--text); }
+.bug-compose-title .i { color: var(--danger); }
+.bug-compose .inp { background: var(--surface); }
+.bug-compose .bug-ta { min-height: 76px; }
+.bug-compose-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.links-title { display: flex; align-items: center; gap: 8px; }
+.links-title .links-who { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.links-title .links-who:hover { color: var(--text); }
+.blk-more-row { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+.blk-more-row .blk-more { margin: 8px 0 4px; }
+/* блоки дизайна на дашборде CEO: пометка «Дизайн» у заголовка */
+.design-tag { display: inline-block; vertical-align: 2px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .02em; background: color-mix(in srgb, #ec4899 16%, transparent); color: #be185d; }
+.design-noapp { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; background: var(--surface-2); color: var(--muted); }
+.rc-row.design-row .rc-main b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

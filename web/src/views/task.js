@@ -122,11 +122,8 @@ function buildPanel(t) {
         h('span', null, 'На ревью у ' + ((personById(t.assigneeId) || {}).name || 'ревьюера') + '. Что-то забыли?'),
         h('button', { class: 'btn sm', onclick: () => recallReview(t) }, icon('back', 13), 'Забрать из ревью'))
       : !editable && h('div', { class: 'readonly-note' }, icon('alert', 14), 'Только просмотр: менять можно свои задачи'),
-    // тестирование: нашли баги — вернуть предыдущий этап (разработку) в работу со списком багов
-    t.step === 'qa' && !taskDone(t) && (t.assigneeId === S.meId || isStaff()) && h('div', { class: 'qa-bar' }, icon('alert', 15),
-      h('span', null, 'Есть баги?'), h('span', { class: 'spacer' }),
-      h('button', { class: 'btn sm', onclick: () => openQaReturn(t) }, icon('back', 13), 'Вернуть в разработку')),
-    (t.bugs || []).length > 0 && bugsBlock(t),
+    // тестирование: рабочее место QA и разработчика — баг-репорты (написать здесь же и вернуть в разработку) и их список
+    (t.step === 'qa' || (t.bugs || []).length > 0) && bugsWork(t, u),
     t.kind === 'request' && /^Реджект №/.test(t.title) && shotsStrip(t.id, '', 'Скриншоты реджекта'),
     // разработка без код-ревью: исполнитель сразу отдаёт на тестирование (этап «готово» → QA получает «можно начинать»)
     t.step === 'ios' && !taskDone(t) && t.assigneeId === S.meId && h('div', { class: 'qa-bar dev-bar' }, icon('send', 15),
@@ -339,16 +336,54 @@ function handoverPeople(t) {
     .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 }
 
+/**
+ * Баги (этап «Тестирование» и разработка с багами): QA пишет баг-репорт прямо здесь — текст и/или ссылка — и возвращает
+ * в разработку (№N уходит в карточку разработчика); «Багов нет — принять» закрывает тестирование. Ниже — все репорты.
+ */
+function bugsWork(t, u) {
+  const canQa = t.step === 'qa' && !taskDone(t) && (t.assigneeId === S.meId || isStaff());
+  // баг отправлен и ещё не исправлен — разработка чинит, новый репорт писать рано
+  const waitFix = (t.bugs || []).some(b => !b.fixedAt && !b.closedAt);
+  const n = (t.bugs || []).length + 1;
+  const box = h('div', { class: 'block bugs-work' });
+  const ta = h('textarea', { class: 'inp bug-ta', rows: 3, maxlength: 5000, placeholder: 'Что сломано: шаги, что ожидали, что получили…' });
+  const url = h('input', { class: 'inp', type: 'url', maxlength: 2000, placeholder: 'Ссылка на баг-репорт (необязательно)' });
+  const send_ = h('button', { class: 'btn primary sm', onclick: async () => {
+    if (!ta.value.trim() && !url.value.trim()) { ta.focus(); return; }
+    send_.disabled = true;
+    try {
+      await send('qaReturn', { taskId: t.id, url: url.value.trim(), text: ta.value.trim() });
+      toast(`Баг-репорт №${n} отправлен — разработка снова в работе`);
+      if (S.board && S.board.unit.id === t.unitId) await reloadBoard().catch(() => {});
+      refreshPanel(t);
+    } catch (e) { send_.disabled = false; showErr(e); }
+  } }, icon('back', 13), `Вернуть в разработку · №${n}`);
+  const accept = h('button', { class: 'btn sm', title: 'Тестирование пройдено — этап в «Готово»', onclick: async () => {
+    const done = (u.settings.columns.find(c => c.kind === 'done') || {}).id;
+    if (!done) return;
+    accept.disabled = true;
+    try { await patchTask(t, { status: done }); toast('Тестирование принято'); refreshPanel(t); } catch (e) { accept.disabled = false; showErr(e); }
+  } }, icon('check', 13), 'Багов нет — принять');
+  return fill(box,
+    bugsList(t, canQa),
+    canQa && waitFix && h('div', { class: 'muted bug-empty' }, 'Разработка исправляет — когда сдаст, этап снова откроется для проверки'),
+    canQa && !waitFix && h('div', { class: 'bug-compose' },
+      h('div', { class: 'bug-compose-title' }, icon('alert', 14), `Новый баг-репорт №${n}`),
+      ta, url,
+      h('div', { class: 'bug-compose-actions' }, accept, h('span', { class: 'spacer' }), send_)));
+}
+
 /** Баг-репорты QA: №, дата, кто, ссылка; открыт — пока QA не принял тестирование. Новые — сверху. */
-function bugsBlock(t) {
+function bugsList(t, canQa) {
   const list = [...(t.bugs || [])].reverse();
   const open = list.filter(b => !b.closedAt && !b.fixedAt).length;
   // открыт → исправлен (разработчик сдал, QA проверяет) → закрыт (QA принял)
   const state = b => (b.closedAt ? 'closed' : b.fixedAt ? 'fixed' : 'open');
   const LABEL = { open: 'открыт', fixed: 'исправлен · на проверке', closed: 'закрыт' };
-  return h('div', { class: 'block bugs-block' },
-    h('div', { class: 'block-title' }, 'Баг-репорты', open > 0 && h('span', { class: 'bug-open-count' }, `открыто ${open}`)),
-    h('div', { class: 'bug-list' }, list.map(b => h('div', { class: 'bug-row ' + state(b) + (b.closedAt ? ' closed' : '') },
+  return h('div', { class: 'bugs-block' },
+    h('div', { class: 'block-title' }, 'Баги', open > 0 ? h('span', { class: 'bug-open-count' }, `открыто ${open}`) : list.length > 0 && h('span', { class: 'muted bug-all' }, `всего ${list.length}`)),
+    !list.length && h('div', { class: 'muted bug-empty' }, canQa ? 'Баг-репортов пока нет. Нашли баг — опишите ниже и верните в разработку.' : 'Баг-репортов пока нет'),
+    list.length > 0 && h('div', { class: 'bug-list' }, list.map(b => h('div', { class: 'bug-row ' + state(b) + (b.closedAt ? ' closed' : '') },
       h('span', { class: 'bug-ic' }, icon(state(b) === 'open' ? 'alert' : 'check', 14)),
       h('div', { class: 'bug-main' },
         h('div', { class: 'bug-head' },
@@ -556,7 +591,13 @@ function linksBlock(t, editable) {
     view();
     return el;
   };
-  const draw = () => [h('div', { class: 'block-title' }, 'Ссылки'),
+  // CEO: кому какие ссылки видны — настраивается по позициям («Настройки → Автоматизации → Ссылки»)
+  const who = isSuper() && h('button', { class: 'link-btn links-who', title: 'Какие ссылки видит каждая позиция', onclick: () => {
+    location.hash = '#/settings?tab=automations';
+    const go = (n = 0) => { const el = document.getElementById('link-fields'); if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' }); else if (n < 20) setTimeout(() => go(n + 1), 150); };
+    go();
+  } }, icon('eye', 13), 'Кому видно');
+  const draw = () => [h('div', { class: 'block-title links-title' }, 'Ссылки', who),
     h('div', { class: 'links' }, fields.filter(f => editable || links[f.id]).map(row))];
   fill(box, ...draw());
   return box;

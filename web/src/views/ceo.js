@@ -119,7 +119,7 @@ export function attention(d, reload, { two = false } = {}) {
   // этапы лежат в юните запроса; реджект — карточка приложения
   const open = x => (x.request ? peekTask(x.request.unitId, x.task ? x.task.id : x.request.id) : openAppById(x.app.id, reload));
   return h('section', null,
-    h('div', { class: 'section-head' }, h('h2', null, 'Требует внимания')),
+    h('div', { class: 'section-head' }, h('h2', null, 'Требует внимания', rows.length > 3 && h('span', { class: 'muted sec-n' }, rows.length))),
     rows.length
       ? h('div', { class: 'card-box att-list' }, paged(rows, x => {
         const a = ATT[x.type];
@@ -135,21 +135,24 @@ export function attention(d, reload, { two = false } = {}) {
         return h('button', { class: 'att-row', onclick: () => open(x), title: p ? p.name : '' },
           h('span', { class: 'att-main' }, h('b', null, x.app.name), ' · ', h('span', { class: a.cls === 'danger' ? 'danger-text' : '' }, [what(x), a.text(x)].filter(Boolean).join(', '))),
           appStatusCell(appStatusById(x.app.status), x.app));
-      }, 12))
+      }, 12, 'blk-more', 3)) // сразу 3 — длинный список не растягивает дашборд
       : emptyBlock('Всё по плану', { ok: true }));
 }
 
 /* ---------- работы в ходу ---------- */
 
 /** Длинный список блока — по step строк, «Показать ещё» дорисовывает следующие на месте (без перерисовки дашборда). */
-function paged(items, renderRow, step = 15, cls = 'blk-more') {
+/** first — сколько строк сразу (по умолчанию step); раскрыли больше — «Свернуть» возвращает к first. */
+function paged(items, renderRow, step = 15, cls = 'blk-more', first = step) {
   const box = h('div', { style: { display: 'contents' } });
-  let n = step;
+  let n = first;
   const draw = () => {
     const rest = items.length - n;
     fill(box, items.slice(0, n).map(renderRow),
-      rest > 0 && h('button', { class: cls, type: 'button', onclick: e => { e.stopPropagation(); n += step; draw(); } },
-        `Показать ещё ${Math.min(step, rest)}`, rest > step && h('span', { class: 'muted' }, ` · осталось ${rest}`)));
+      (rest > 0 || n > first) && h('div', { class: 'blk-more-row' },
+        rest > 0 && h('button', { class: cls, type: 'button', onclick: e => { e.stopPropagation(); n += step; draw(); } },
+          `Показать ещё ${Math.min(step, rest)}`, rest > step && h('span', { class: 'muted' }, ` · осталось ${rest}`)),
+        n > first && h('button', { class: cls, type: 'button', onclick: e => { e.stopPropagation(); n = first; draw(); } }, 'Свернуть')));
   };
   draw();
   return box;
@@ -365,10 +368,50 @@ function ceoBlocks(d, apps, reload) {
     { id: 'recent', title: 'Недавнее', col: 'right', render: () => recent(d, reload) },
     { id: 'watch', title: 'Отслеживаю', col: 'right', render: () => watchBlock(apps, { openApp: id => openAppById(id, reload), openTask: peekTask, appIcon, appStatusCell, stageDots }) },
     { id: 'storeCheck', title: 'Проверка App Store', col: 'full', off: true, render: () => storeCheckBlock(apps, reload, { compact: true }) },
+    // дизайн (CEO ведёт и дизайн): по умолчанию скрыты — включаются в «Настроить»
+    { id: 'designWork', title: 'Дизайн · в работе', col: 'left', off: true, render: () => designBlock('work') },
+    { id: 'designReview', title: 'Дизайн · на ревью', col: 'right', off: true, render: () => designBlock('review') },
   ];
   // свои подборки
   for (const b of customBlocks()) blocks.push({ id: 'c:' + b.id, title: b.name, col: b.col || 'right', custom: true, render: () => customBlock(b, apps, reload) });
   return blocks;
+}
+
+/* ---------- дизайн ---------- */
+
+// оба блока дизайна берут данные одним запросом на перерисовку дашборда
+let designLoad = null, designAt = 0;
+const designData = () => {
+  if (!designLoad || Date.now() - designAt > 15000) { designAt = Date.now(); designLoad = call('getDesignOverview', { today: todayStr() }); }
+  return designLoad;
+};
+
+/**
+ * Блок дизайна: work — в работе и ждут старта (просроченные сверху), review — отданы на ревью (у кого и от кого).
+ * Пометка «Дизайн» у заголовка — чтобы не путать с общими блоками.
+ */
+function designBlock(kind) {
+  const title = kind === 'review' ? 'На ревью' : 'В работе';
+  const body = h('div', { class: 'card-box rc-list' }, skeleton());
+  const head = h('div', { class: 'section-head' }, h('h2', null, h('span', { class: 'design-tag' }, 'Дизайн'), ' ', title));
+  designData().then(rows => {
+    const mine = rows.filter(x => (kind === 'review' ? x.state === 'review' : x.state !== 'review'));
+    head.querySelector('h2').append(h('span', { class: 'muted sec-n' }, mine.length));
+    const row = x => {
+      const p = personById(x.assigneeId), from = personById(x.reviewFrom);
+      const sub = kind === 'review'
+        ? [x.title.split(' · ')[0], from && 'от ' + from.name.split(' ')[0], p && 'у ' + p.name.split(' ')[0]].filter(Boolean).join(' · ')
+        : [x.title.split(' · ')[0], x.state === 'todo' ? 'не начато' : 'в работе', p && p.name.split(' ')[0]].filter(Boolean).join(' · ');
+      return h('button', { class: 'rc-row stale-row design-row', onclick: () => peekTask(x.unitId, x.id), title: x.key },
+        x.app ? appIcon(x.app, 'xs') : h('span', { class: 'design-noapp' }, icon('layers', 13)),
+        h('span', { class: 'rc-main' }, h('b', null, x.app ? x.app.name : x.title),
+          h('small', { class: 'muted', style: { display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, sub)),
+        x.dueDate ? h('span', { class: 'rc-at ' + (x.overdue ? 'danger-text' : 'muted') }, (x.overdue ? 'просрочено · ' : '') + fmtDate(x.dueDate)) : h('span'));
+    };
+    fill(body, mine.length ? paged(mine, row, 8, 'blk-more', 5)
+      : emptyBlock(kind === 'review' ? 'На ревью ничего' : 'Дизайн сейчас без задач', { ok: true }));
+  }).catch(e => fill(body, emptyBlock('Не загрузилось: ' + e.message)));
+  return h('section', null, head, body);
 }
 
 /* ---------- свои блоки (подборки приложений по фильтрам) ---------- */

@@ -364,7 +364,7 @@ function linkFieldsManager() {
   };
   name.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); add().catch(showErr); } });
   draw();
-  return h('div', null,
+  return h('div', { id: 'link-fields' },
     h('h2', { style: { marginTop: 0, fontSize: '16px' } }, 'Ссылки в карточке задачи'),
     h('p', { class: 'hint', style: { marginTop: 0 } }, 'Общие для всех юнитов. Сотрудник видит поле, только если оно открыто его позиции. Скрытые ссылки не уходят ему даже в браузер.'),
     list,

@@ -2678,6 +2678,36 @@ export function createBackend(db, opts = {}) {
       return { x, series, total, unit: kind === 'avg' ? 'дн.' : '', chart: c };
     },
 
+    /**
+     * Дизайн для дашборда CEO (блоки «Дизайн · в работе» / «на ревью»): открытые задачи позиции UX/UI Designer —
+     * этапы дизайна, графики, текстов в макетах и обычные задачи дизайна. Видимость — правила базы.
+     */
+    async getDesignOverview(p) {
+      const today_ = today(p.today);
+      const [rows, units] = await Promise.all([
+        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,review_from,due_date,app_id,step,kind,depends_on,updated_at').eq('department_id', 'd_design').eq('archived', false).eq('done_at', '').order('id')),
+        all(() => T('units').select('id,key,settings,archived').order('id')),
+      ]);
+      const U = Object.fromEntries(units.filter(u => !u.archived).map(u => [u.id, { key: u.key, st: unitSettings(u.settings) }]));
+      const list = (await hideWaiting(rows.filter(t => U[t.unit_id])));
+      const appIds = [...new Set(list.map(t => t.app_id).filter(Boolean))];
+      const apps = appIds.length ? await inChunks(appIds, ids => T('apps').select('id,name,color,icon_url,archived').in('id', ids)) : [];
+      const A = Object.fromEntries(apps.map(a => [a.id, a]));
+      const out = list.filter(t => !t.app_id || (A[t.app_id] && !A[t.app_id].archived)).map(t => {
+        const st = U[t.unit_id].st;
+        const kind = kindOf(st, t.status);
+        const review = !!(st.review && st.review.column && st.review.column === t.status);
+        const a = A[t.app_id];
+        return {
+          id: t.id, unitId: t.unit_id, key: `${U[t.unit_id].key}-${t.num}`, title: t.title, step: t.step || '', assigneeId: t.assignee_id,
+          reviewFrom: t.review_from || '', dueDate: t.due_date, overdue: !!t.due_date && t.due_date < today_, updatedAt: t.updated_at,
+          state: review ? 'review' : kind === 'todo' ? 'todo' : 'progress',
+          app: a ? { id: a.id, name: a.name, color: a.color, iconUrl: a.icon_url || '' } : null,
+        };
+      });
+      return out.sort((x, y) => (y.overdue - x.overdue) || String(x.dueDate || '9').localeCompare(String(y.dueDate || '9')));
+    },
+
     async getCeoDashboard(p) {
       const day = today(p.today);
       const [apps, statuses, staleRow] = await Promise.all([methods.listApps({}), appStatuses(), setting('staleDays')]);
