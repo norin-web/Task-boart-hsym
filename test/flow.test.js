@@ -1113,3 +1113,23 @@ test('сохранённый флоу New App без аккаунта допол
   assert.deepEqual(f[2].dependsOn, ['design']);
   assert.deepEqual(f[3].dependsOn, ['design', 'ios', 'account']);
 });
+
+test('«На тесте»: сданный этап iOS у разработчика — в «В ревью», пока QA не принял; вернул с багом — снова в работе', async () => {
+  const api = await setup();
+  const { ceo, pm, lead, ios, qa, gold } = await studio(api);
+  const { request } = await api.as(ceo, () => api('createApp', { name: 'Tide', unitId: gold.id }));
+  const by = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: request.id }))).map(t => [t.step, t]));
+  await finish(api, lead, pm, by.design.id);
+  const board = () => api.as(ios, () => api('getMyBoard', { personId: ios.id, withDone: false }));
+  assert.ok(!(await board()).tasks.find(t => t.id === by.ios.id).onTest);
+  await finish(api, ios, pm, by.ios.id); // «Отдать на тестирование»
+  let b = await board();
+  const t = b.tasks.find(x => x.id === by.ios.id);
+  assert.deepEqual(t && t.onTest, { qaId: qa.id }); // готовые скрыты, а сданный на тест — на доске
+  assert.equal(b.doneHidden, 0);
+  // QA принял — уходит в «Готово» (скрыто)
+  await api.as(qa, () => api('updateTask', { id: by.qa.id, patch: { status: 'done' } }));
+  b = await board();
+  assert.ok(!b.tasks.some(x => x.id === by.ios.id));
+  assert.equal(b.doneHidden, 1);
+});

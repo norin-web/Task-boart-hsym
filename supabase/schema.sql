@@ -3175,3 +3175,16 @@ begin
 end $$;
 drop trigger if exists notify_account_ready on tasks;
 create trigger notify_account_ready after update of status on tasks for each row execute function notify_account_ready();
+
+-- «На тесте» у разработчика (2026-11-17): этап iOS сдан («Отдать на тестирование» = готово), а QA этого запроса ещё
+-- не принял — на личной доске разработчика задача стоит в «В ревью» с пометкой «На тесте у …». Этап QA разработчику
+-- не виден по правилам, поэтому — функцией: только мои сданные этапы iOS и кто их тестирует.
+create or replace function my_on_test() returns table (task_id text, qa_id text)
+language sql stable security definer set search_path = public as $$
+  select i.id, coalesce(q.assignee_id, '')
+    from tasks i join tasks q on q.parent_id = i.parent_id and q.kind = 'stage' and q.step = 'qa' and not q.archived
+   where i.assignee_id = my_person_id() and i.kind = 'stage' and i.step = 'ios' and not i.archived
+     and coalesce(i.parent_id, '') <> '' and task_done(i.id) and not task_done(q.id);
+$$;
+revoke execute on function my_on_test() from public, anon;
+grant execute on function my_on_test() to authenticated;

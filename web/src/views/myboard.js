@@ -3,10 +3,10 @@
  * Колонки: четыре обязательные — To Do / In Progress / Review / Done (одни у всех: по ним синхронизируется статус в юните)
  * и свои между ними (видны только мне; своя колонка считается той обязательной, что слева).
  * Перенос в In Progress / Done меняет статус задачи в юните, в Review — отдаёт на ревью (колонка ревью юнита, ревьюер — по позиции).
- * Свои колонки — people.prefs.myBoard.custom [{ id, name, group, color }]; старт — шаблон моей команды.
+ * Свои колонки — people.prefs.myBoard.custom [{ id, name, group, color }]; по умолчанию их нет («Как у команды» — по кнопке).
  */
 import Sortable from 'sortablejs';
-import { S, me, activeTeams, between, dueInfo, todayStr, PALETTE, isStaff, LS, plural } from '../state.js';
+import { S, me, personById, nameFrom, activeTeams, between, dueInfo, todayStr, PALETTE, isStaff, LS, plural } from '../state.js';
 import { $, h, icon, topbar, fill, modal, showErr, statusDot, statusIcon, confirmDlg, menu, closeMenu, toast, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
@@ -46,13 +46,15 @@ function fromStages(stages) {
   return out;
 }
 
-/** Мои свои колонки: сохранённые, иначе — из прежних этапов доски, иначе — из шаблона команды. */
+/**
+ * Мои свои колонки: сохранённые, иначе — из прежних этапов доски, иначе — только обязательные четыре.
+ * Шаблон команды сам не подставляется (решение заказчика): человек добавляет свои колонки сам или «Как у команды».
+ */
 function myCustom() {
   const mb = (me() && me().prefs && me().prefs.myBoard) || null;
   if (mb && Array.isArray(mb.custom)) return mb.custom.filter(c => GROUPS.includes(c.group));
   if (mb && Array.isArray(mb.columns) && mb.columns.length) return fromStages(mb.columns);
-  const tpl = teamTemplate();
-  return tpl ? fromStages(tpl.boardTemplate) : [];
+  return [];
 }
 
 /** Все колонки по порядку: обязательная, за ней — свои этой группы. */
@@ -131,6 +133,7 @@ export async function renderMyBoard() {
 
 /** Группа задачи по её статусу в юните: не начато / в работе / на ревью (колонка ревью юнита) / готово. */
 function groupOf(data, t) {
+  if (t.onTest) return 'review'; // сдал на тестирование, QA ещё не принял — «В ревью» с пометкой «На тесте»
   const u = data.units.find(x => x.id === t.unitId);
   const c = u && (u.columns.find(x => x.id === t.status) || u.columns[0]);
   if (!c) return 'todo';
@@ -162,11 +165,13 @@ function draw(page, data) {
     const isDone = groupOf(data, t) === 'done';
     const due = dueInfo(t.dueDate, isDone);
     // готовые — приглушены и зачёркнуты, как на доске юнита
-    return h('article', { class: 'card my-card' + (isDone ? ' done' : ''), dataset: { id: t.id }, tabindex: '0', onclick: () => peekTask(t.unitId, t.id) },
+    const qa = t.onTest && personById(t.onTest.qaId);
+    return h('article', { class: 'card my-card' + (isDone && !t.onTest ? ' done' : '') + (t.onTest ? ' on-test' : ''), title: t.onTest ? 'Отдано на тестирование — QA ещё не принял. Вернёт с багом — задача снова у вас в работе' : '', dataset: { id: t.id }, tabindex: '0', onclick: () => peekTask(t.unitId, t.id) },
       u && h('div', { class: 'card-sub my-key', title: u.name }, h('span', { class: 'dot', style: { background: u.color } }), u.key + '-' + t.num),
       h('div', { class: 'card-title' }, t.title),
       h('div', { class: 'card-foot' },
-        due ? h('span', { class: 'due ' + due.cls, title: due.hint }, icon('calendar', 14), due.text) : h('span', { class: 'muted my-nodue' }, 'Без срока'),
+        t.onTest ? h('span', { class: 'my-ontest' }, icon('eye', 13), qa ? 'На тесте у ' + nameFrom(qa.name) : 'На тесте')
+          : due ? h('span', { class: 'due ' + due.cls, title: due.hint }, icon('calendar', 14), due.text) : h('span', { class: 'muted my-nodue' }, 'Без срока'),
         h('span', { class: 'spacer' }),
         // я ревьюер — решение прямо на карточке
         // отправил на ревью сам — можно забрать обратно (что-то забыл)
@@ -189,7 +194,7 @@ function draw(page, data) {
           data.onShowDone && h('button', { class: 'btn sm', type: 'button', onclick: () => data.onShowDone() }, icon('eye', 14), 'Показать'))
         : h('div', { class: 'col-empty' }, c.group === 'review' && c.fixed ? 'Перетащите сюда — уйдёт на ревью' : 'Пусто')));
     sortables.push(Sortable.create(list, {
-      group: 'myboard', animation: 150, draggable: '.card', ghostClass: 'sortable-ghost', fallbackClass: 'sortable-drag', forceFallback: true, fallbackTolerance: 4,
+      group: 'myboard', animation: 150, draggable: '.card:not(.on-test)', ghostClass: 'sortable-ghost', fallbackClass: 'sortable-drag', forceFallback: true, fallbackTolerance: 4,
       onEnd: evt => {
         // «Пусто» — не карточка: убираем сразу, иначе брошенная карта на миг встаёт под надпись и прыгает при перерисовке
         const ph = evt.to.querySelector(':scope > .col-empty');

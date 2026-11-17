@@ -909,6 +909,9 @@ button.fb-title:hover { color: var(--text); text-decoration: none; opacity: .8; 
 .my-card .due .i { color: currentColor; }
 .my-card .due.overdue { background: transparent; padding: 0; color: var(--danger); font-weight: 600; }
 .my-nodue { font-size: 12px; line-height: 16px; font-weight: 500; }
+/* сдано на тестирование: пометка «На тесте у …» вместо срока; карточку не перетащить — её ведёт QA */
+.my-ontest { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; line-height: 16px; font-weight: 600; background: color-mix(in srgb, var(--review) 14%, transparent); color: var(--text); }
+.my-card.on-test { cursor: pointer; }
 /* Мои задачи (20): группы через 12 */
 .unit-groups { align-content: start; }
 .unit-groups .ugroup { margin: 0; }

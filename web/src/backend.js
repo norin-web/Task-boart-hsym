@@ -1826,12 +1826,18 @@ export function createBackend(db, opts = {}) {
       const withDone = p.withDone !== false;
       const q = build => (withDone ? build : build.eq('done_at', ''));
       // свои задачи + отправленные мной на ревью (они у ревьюера, но видны мне в Review — можно забрать обратно)
-      const [mine, sent, doneIds] = await Promise.all([
+      const myId = (await rpc('my_person_id', {}).catch(() => '')) || '';
+      const [mine, sent, doneIds, testRows] = await Promise.all([
         all(() => q(T('tasks').select('*').eq('assignee_id', me).eq('archived', false)).order('id')),
         all(() => q(T('tasks').select('*').eq('review_from', me).eq('archived', false)).order('id')),
         withDone ? [] : all(() => T('tasks').select('id,unit_id').eq('assignee_id', me).eq('archived', false).neq('done_at', '').order('id')),
+        // сданные на тестирование этапы iOS (QA ещё не принял) — только на своей доске (не «смотреть как»)
+        me && me === myId ? rpc('my_on_test', {}).catch(() => []) : [],
       ]);
-      const rows = await hideWaiting([...mine, ...sent.filter(t => !mine.some(x => x.id === t.id))]);
+      const onTest = Object.fromEntries((Array.isArray(testRows) ? testRows : testRows ? [testRows] : []).map(r => [r.task_id, r.qa_id || '']));
+      // готовые скрыты — сданные на тест всё равно нужны: догружаем их
+      const extra = withDone ? [] : await inChunks(Object.keys(onTest).filter(id => !mine.some(x => x.id === id)), ids => T('tasks').select('*').in('id', ids));
+      const rows = await hideWaiting([...mine, ...extra, ...sent.filter(t => !mine.some(x => x.id === t.id) && !extra.some(x => x.id === t.id))]);
       const unitIds = [...new Set(rows.map(t => t.unit_id))];
       const [units, places] = await Promise.all([
         unitIds.length ? run(T('units').select('id,name,key,color,settings,archived').in('id', unitIds)) : [],
@@ -1840,8 +1846,8 @@ export function createBackend(db, opts = {}) {
       const live = new Set(units.filter(u => !u.archived).map(u => u.id));
       return {
         // сколько готовых скрыто (для «Показывать готовые · N»)
-        doneHidden: withDone ? 0 : doneIds.length,
-        tasks: rows.filter(t => live.has(t.unit_id)).map(taskOut),
+        doneHidden: withDone ? 0 : doneIds.filter(r => !(r.id in onTest)).length,
+        tasks: rows.filter(t => live.has(t.unit_id)).map(t => (t.id in onTest ? { ...taskOut(t), onTest: { qaId: onTest[t.id] } } : taskOut(t))),
         units: units.filter(u => !u.archived).map(u => ({ id: u.id, name: u.name, key: u.key, color: u.color, columns: unitSettings(u.settings).columns })),
         placement: Object.fromEntries(places.map(r => [r.task_id, { stage: r.stage, order: Number(r.ord) }])),
       };
