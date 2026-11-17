@@ -3551,8 +3551,10 @@ export function createBackend(db, opts = {}) {
       const L = Object.fromEntries(links.map(l => [l.task_id, l.url]));
       return list.filter(t => !t.app_id || (A[t.app_id] && !A[t.app_id].archived)).map(t => {
         const a = A[t.app_id];
-        const done = kind(t) === 'done';
+        const k = kind(t), done = k === 'done';
         return {
+          // заявка (не начато) → в работе → готово; док прикрепили, не взяв в работу, — тоже «в работе»
+          state: done ? 'done' : k === 'todo' && !L[t.id] ? 'todo' : 'progress',
           id: t.id, unitId: t.unit_id, key: `${U[t.unit_id].key}-${t.num}`, title: t.title, assigneeId: t.assignee_id, dueDate: t.due_date,
           requestId: t.parent_id || '', done, doneAt: t.done_at || '', createdAt: t.created_at, url: L[t.id] || '',
           blocked: !done && (json(t.depends_on, []) || []).some(id => openSet.has(id)),
