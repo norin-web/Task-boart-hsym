@@ -1945,9 +1945,11 @@ export function createBackend(db, opts = {}) {
       await updateOne('units', u.id, { pm_id: pm.id, updated_at: now() });
       await log([{ unitId: u.id, action: 'unit_pm', to: pm.name }], ctx);
       for (const id of old) await methods.removeMember({ unitId: u.id, personId: id });
-      if (old.length) {
+      // запросы прежнего ответственного переходят новому — и если прежним был CEO (его из состава не убираем)
+      const from = [...new Set([...old, u.pm_id || ''].filter(id => id && id !== pm.id))];
+      if (from.length) {
         const st = unitSettings(u.settings);
-        const open = (await run(T('tasks').select('id,status').eq('unit_id', u.id).eq('kind', 'request').eq('archived', false).in('assignee_id', old)))
+        const open = (await run(T('tasks').select('id,status').eq('unit_id', u.id).eq('kind', 'request').eq('archived', false).in('assignee_id', from)))
           .filter(t => kindOf(st, t.status) !== 'done');
         for (const t of open) await methods.updateTask({ id: t.id, patch: { assigneeId: pm.id } });
       }

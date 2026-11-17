@@ -97,6 +97,13 @@ test('ответственный за юнит: CEO может им быть, м
   // обратно на PM — работает
   await api('setUnitPm', { unitId: A.id, personId: mod.id });
   assert.equal((await api.pg.query('select unit_pm($1) as p', [A.id])).rows[0].p, mod.id);
+  // открытый запрос, который был у CEO как ответственного, переходит новому PM
+  assert.equal((await api.pg.query('select assignee_id from tasks where id = $1', [request.id])).rows[0].assignee_id, mod.id);
+  // старые данные: запрос остался на CEO при ответственном PM — разовая правка схемы передаёт его PM
+  await api.pg.query('update tasks set assignee_id = $1 where id = $2', [admin.id, request.id]);
+  await api.pg.query("delete from app_settings where key = 'once_ceo_requests_to_pm'");
+  await api.pg.exec(SCHEMA);
+  assert.equal((await api.pg.query('select assignee_id from tasks where id = $1', [request.id])).rows[0].assignee_id, mod.id);
 });
 
 test('участник: только свои задачи, обязательные поля перед переносом', async () => {

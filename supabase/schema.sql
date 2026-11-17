@@ -3188,3 +3188,19 @@ language sql stable security definer set search_path = public as $$
 $$;
 revoke execute on function my_on_test() from public, anon;
 grant execute on function my_on_test() to authenticated;
+
+-- Один раз (2026-11-17): открытые запросы, оставшиеся на CEO в юнитах, где ответственный — другой PM
+-- (ответственного сменили с CEO на PM, а запросы раньше не переезжали) — этому PM.
+do $$
+begin
+  if not exists (select 1 from app_settings where key = 'once_ceo_requests_to_pm') then
+    perform set_config('app.system', 'on', true);
+    update tasks t set assignee_id = unit_pm(t.unit_id), updated_at = to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+     where t.kind = 'request' and not t.archived and t.done_at = ''
+       and exists (select 1 from people p where p.id = t.assignee_id and p.access = 'superadmin')
+       and unit_pm(t.unit_id) <> '' and unit_pm(t.unit_id) <> t.assignee_id
+       and exists (select 1 from people q where q.id = unit_pm(t.unit_id) and q.access = 'moderator');
+    perform set_config('app.system', 'off', true);
+    insert into app_settings (key, value, updated_at) values ('once_ceo_requests_to_pm', 'true'::jsonb, '') on conflict (key) do nothing;
+  end if;
+end $$;
