@@ -1,4 +1,4 @@
-import { S, LS, todayStr, me, priorityOf, taskById, personById, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDate, fmtDateTime, relTime, addDays, unitById, safeUrl, visibleLinkFields, plural, appById, isSuper, ceoDefault, KIND_COLORS, whoName, colById, colColor, taskDone, isStaff, canEditTask, inMyZone, fmtValue, activeFields } from '../state.js';
+import { S, LS, todayStr, me, priorityOf, taskById, personById, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDate, fmtDateTime, relTime, addDays, unitById, safeUrl, visibleLinkFields, plural, appById, isSuper, ceoDefault, KIND_COLORS, whoName, colById, colColor, taskDone, isStaff, canEditTask, inMyZone, fmtValue, activeFields, deptById } from '../state.js';
 import { $, h, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, statusIcon, fill, prioMark, prioSelect } from '../ui.js';
 import { call, send } from '../api.js';
 import { navigate, rerender } from '../router.js';
@@ -896,8 +896,16 @@ function metaLines(t) {
  * Исполнитель: только участники команды (юнита). Текущий исполнитель вне команды тоже показывается.
  * ids — состав, если не текущая доска (например, форма создания с главной).
  */
+/** «Настя · QA»: имя и позиция человека — в списках выбора видно, кто есть кто. */
+export const nameWithPos = p => {
+  const d = deptById(p.positionId);
+  return d ? `${p.name} · ${d.name}` : p.name;
+};
+
 export function assigneeSelect(value, onChange, { ids, unitId, teamId } = {}) {
   const team = ids || S.board.members.map(m => m.personId);
+  // на доске команды (QA Team и т. п.) — только люди этой команды
+  if (teamId === undefined && S.route && S.route.team && (!unitId || unitId === S.route.unit)) teamId = S.route.team;
   // teamId — показываем только людей этой команды; текущий исполнитель остаётся в списке
   const ofTeam = p => !teamId || (p.teamIds || []).includes(teamId);
   const people = team.map(personById).filter(p => p && ((p.active && ofTeam(p)) || p.id === value));
@@ -910,7 +918,7 @@ export function assigneeSelect(value, onChange, { ids, unitId, teamId } = {}) {
         const added = await addMemberDialog(unitId || S.board.unit.id);
         if (added) {
           value = added;
-          e.target.insertBefore(h('option', { value: added }, personById(added).name), e.target.querySelector('option[value="__add"]'));
+          e.target.insertBefore(h('option', { value: added }, nameWithPos(personById(added))), e.target.querySelector('option[value="__add"]'));
           e.target.value = added;
           onChange(added);
         }
@@ -921,9 +929,9 @@ export function assigneeSelect(value, onChange, { ids, unitId, teamId } = {}) {
     },
   },
   h('option', { value: '' }, '— не назначен —'),
-  people.map(p => h('option', { value: p.id }, p.name + (ofTeam(p) ? '' : ' (не из этой команды)'))),
+  people.map(p => h('option', { value: p.id }, nameWithPos(p) + (ofTeam(p) ? '' : ' (не из этой команды)'))),
   // CEO и RM работают во всех юнитах: пометка «не в юните» к ним не относится
-  outsider && h('option', { value: outsider.id }, outsider.name + (['superadmin', 'rm'].includes(outsider.access) ? '' : ' (не в юните)')),
+  outsider && h('option', { value: outsider.id }, nameWithPos(outsider) + (['superadmin', 'rm'].includes(outsider.access) ? '' : ' (не в юните)')),
   isSuper() && h('option', { value: '__add' }, '＋ Добавить в команду…'));
   return sel;
 }
