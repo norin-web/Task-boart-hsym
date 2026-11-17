@@ -1,4 +1,4 @@
-import { S, todayStr, dueInfo, KIND_COLORS, KIND_LABELS, deptById, ACCESS_LABELS, LS, plural, isStaff, personById, STEP_NAMES } from '../state.js';
+import { S, todayStr, dueInfo, KIND_COLORS, KIND_LABELS, deptById, ACCESS_LABELS, LS, plural, isStaff, personById, STEP_NAMES, me, asoTrack } from '../state.js';
 import { $, h, icon, avatar, topbar, showErr, fill, statusIcon, emptyBlock, skeleton } from '../ui.js';
 import { call, keep, peek } from '../api.js';
 import { currentView, taskLink, link } from '../router.js';
@@ -201,15 +201,24 @@ export function workBlocks(tasks) {
   // обычная задача и подзадача — по позиции
   const isDesign = t => !isReq(t) && (t.step && t.step !== 'part' ? t.step === 'design' : t.departmentId === 'd_design');
   const checklist = t => { const c = t.checklist || []; return c.length ? { done: c.filter(i => i.done).length, total: c.length } : null; };
+  // мета: этап «Метаданные» и обычные задачи ASO; на ревью — пришли ко мне на проверку (отдал другой)
+  const isMeta = t => !isReq(t) && (t.step && t.step !== 'part' ? asoTrack(t) === 'meta' : t.departmentId === 'd_aso');
+  const toReview = t => !!t.reviewFrom && t.reviewFrom !== S.meId && t.statusKind !== 'done';
+  // блоки по ролям человека: дизайн — дизайнеру, мета — ASO; у кого таких задач нет и позиции нет — блока нет и в «Настроить»
+  const pos = (me() || {}).positionIds || [(me() || {}).positionId];
+  const designOn = pos.includes('d_design') || tasks.some(isDesign);
+  const metaOn = pos.includes('d_aso') || tasks.some(isMeta);
   const sections = [
     { id: 'place', title: 'Разложить по этапам', hint: 'Новые приложения и запросы, где PM — вы: этапов ещё нет',
       test: t => isReq(t) && !(t.stages && t.stages.total), prog: () => null },
-    { id: 'design', title: 'Дизайн', hint: 'Ваши этапы дизайна: прогресс — по чек-листу', test: isDesign, prog: checklist },
+    metaOn && { id: 'metaReview', title: 'Мета · на ревью', hint: 'Меты, которые прислали вам на проверку: «Аппрув» или «Правки»', test: t => isMeta(t) && toReview(t), prog: checklist },
+    metaOn && { id: 'meta', title: 'Мета · веду сам', hint: 'Меты, которые вы делаете сами: прогресс — по чек-листу', test: t => isMeta(t) && !toReview(t), prog: checklist },
+    designOn && { id: 'design', title: 'Дизайн', hint: 'Ваши этапы дизайна: прогресс — по чек-листу', test: isDesign, prog: checklist },
     // как в Сводке: ближе к финишу — выше (больше готовых этапов); просроченные и «в работе» — по-прежнему первыми
     { id: 'pm', title: 'Веду как PM', hint: 'Разложенные запросы: прогресс — сколько этапов готово', test: t => isReq(t) && t.stages && t.stages.total > 0, prog: t => t.stages,
       sort: (a, b) => rank(a) - rank(b) || (b.stages.done || 0) - (a.stages.done || 0) || (a.dueDate || '9999').localeCompare(b.dueDate || '9999') },
     { id: 'rest', title: 'Остальное', hint: 'Все прочие задачи на вас', test: () => true, prog: checklist },
-  ];
+  ].filter(Boolean);
   const taken = new Set();
   return sections.map(sc => {
     const items = tasks.filter(t => !taken.has(t.id) && sc.test(t));
