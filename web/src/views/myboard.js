@@ -25,8 +25,8 @@ export const FIXED = [
 const GROUPS = FIXED.map(c => c.group);
 const KIND_GROUP = { todo: 0, progress: 1, done: 3 };
 
-/** Я — ASO-специалист (позиция ASO): на доске переключатель «Мета / Тексты». */
-const isAso = () => ((me() || {}).positionIds || [(me() || {}).positionId]).includes('d_aso');
+/** Я — ASO-специалист (основная позиция ASO): на доске переключатель «Мета / Тексты». */
+const isAso = () => ((me() || {}).positionId || '') === 'd_aso'; // только основная позиция — ASO-специалист
 
 /** Шаблон моей команды (первая из моих команд, у которой он есть). */
 function teamTemplate() {

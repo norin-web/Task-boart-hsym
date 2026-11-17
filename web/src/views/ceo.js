@@ -385,7 +385,7 @@ function ceoBlocks(d, apps, reload) {
 /* ---------- дизайн ---------- */
 
 /** Есть ли у меня позиция (направление CEO: d_design — дизайн, d_aso — меты, d_release — релизы). */
-const myPos = id => (((me() || {}).positionIds) || [(me() || {}).positionId]).includes(id);
+const myPos = id => ((me() || {}).positionId || '') === id; // основная позиция, не любая из профиля
 
 // блоки одного направления берут данные одним запросом на перерисовку дашборда (кэш 15 с)
 const cache = {};
