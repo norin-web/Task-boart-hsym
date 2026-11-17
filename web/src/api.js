@@ -32,14 +32,16 @@ async function callNow(method, payload) {
   try {
     r = await timeCall(method, () => getBackend().call(method, payload || {}, { actorId: S.meId || '' }));
   } catch (e) {
-    throw new Error(/fetch|network/i.test(String(e && e.message)) ? 'Нет связи с сервером' : String(e && e.message || e));
+    throw new Error(/fetch|network|load failed/i.test(String(e && e.message)) ? 'Нет связи с сервером' : String(e && e.message || e));
   }
   if (r.ok) return r.data;
   // неожиданные ошибки (база не по правилам, сбой кода) — в мониторинг (monitor.js); отказы по правам и правилам — нет
-  if ((r.code === 'DB' || r.code === 'INTERNAL') && method !== 'logClientError') {
+  // обрыв сети — не сбой кода: «Failed to fetch» (Chrome), «NetworkError» (Firefox), «Load failed» (Safari)
+  const offline = /Failed to fetch|NetworkError|Load failed|network connection was lost/i.test(r.error || '');
+  if ((r.code === 'DB' || r.code === 'INTERNAL') && method !== 'logClientError' && !offline) {
     document.dispatchEvent(new CustomEvent('tasks:apierror', { detail: { method, error: r.error } }));
   }
-  const e = new Error(/Failed to fetch|NetworkError/i.test(r.error) ? 'Нет связи с сервером' : r.error || 'Ошибка сервера');
+  const e = new Error(offline ? 'Нет связи с сервером' : r.error || 'Ошибка сервера');
   e.code = r.code;
   e.data = r.data;
   throw e;
