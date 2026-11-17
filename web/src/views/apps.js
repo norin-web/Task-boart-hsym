@@ -1150,12 +1150,21 @@ const prioPicker = value => prioSelect(S.priorityOptions, value);
 
 /** Имя для сравнения: без регистра и лишних пробелов (как app_name_key в базе). */
 export const appNameKey = v => String(v || '').trim().replace(/\s+/g, ' ').toLowerCase();
+/** Имя «по сути» — для поиска повторов: без служебных приставок и хвостов («removed - …», «old: …», «… (copy)»). */
+const SERVICE_HEAD = /^(removed|deleted|old|archived?|dup(licate)?|copy|удален[оаы]?|удалить|архив|старое|копия|дубль)\s*[-–—:|]\s*/i;
+const SERVICE_TAIL = /\s*[-–—(]\s*(removed|deleted|old|archived?|dup(licate)?|copy|удален[оаы]?|архив|старое|копия|дубль)\)?$/i;
+export const appCoreKey = v => {
+  let k = appNameKey(v);
+  for (let i = 0; i < 3; i++) { const n = k.replace(SERVICE_HEAD, '').replace(SERVICE_TAIL, ''); if (n === k) break; k = n; }
+  return k;
+};
+const appStoreId = a => { const sf = storeField(); return storeId(sf && a.info && a.info[sf.id]); };
 
 /**
  * Подсказка под названием: такие же и похожие приложения юнита, в том числе убранные.
  * check() → true, если имя занято (создать нельзя — база тоже не даст).
  */
-function nameMatches(input, unitOf) {
+function nameMatches(input, unitOf, storeOf = () => '') {
   const box = h('div', { class: 'name-matches' });
   // приложения юнита вместе с убранными — свежие из базы (в S.apps после экранов приложений убранных нет)
   const pool = new Map();
@@ -1174,23 +1183,31 @@ function nameMatches(input, unitOf) {
     const k = appNameKey(input.value);
     return !!k && appsOf(unitOf()).some(a => appNameKey(a.name) === k);
   };
+  // то же приложение под другим именем: совпадает имя без служебных приставок («removed - …») или ссылка App Store
+  const twins = () => {
+    const k = appNameKey(input.value), core = appCoreKey(input.value), sid = storeId(storeOf());
+    return appsOf(unitOf()).filter(a => appNameKey(a.name) !== k && ((core.length >= 2 && appCoreKey(a.name) === core) || (sid && appStoreId(a) === sid)));
+  };
   const draw = () => {
     load(unitOf());
     const k = appNameKey(input.value);
-    if (k.length < 2) { fill(box); input.classList.remove('invalid'); return; }
+    const tw = twins();
+    if (k.length < 2 && !tw.length) { fill(box); input.classList.remove('invalid'); return; }
     const same = appsOf(unitOf());
-    const exact = same.find(a => appNameKey(a.name) === k);
-    const like = same.filter(a => a !== exact && appNameKey(a.name).includes(k))
+    const exact = k.length >= 2 && same.find(a => appNameKey(a.name) === k);
+    const like = k.length < 2 ? [] : same.filter(a => a !== exact && !tw.includes(a) && appNameKey(a.name).includes(k))
       .sort((x, y) => x.name.localeCompare(y.name, 'ru', { numeric: true })).slice(0, 5);
     input.classList.toggle('invalid', !!exact);
     const tag = a => (a.archived ? h('span', { class: 'muted' }, ' · ' + (SHELVES[a.shelf] || 'убрано')) : null);
     fill(box,
       exact && h('div', { class: 'danger-text' }, 'Уже есть в этом юните: «', exact.name, '»', tag(exact), '. Укажите другую версию в названии.'),
+      !exact && tw.length > 0 && h('div', { class: 'warn-text' }, 'Похоже, это приложение уже есть: ',
+        tw.map((a, i) => [i > 0 && ', ', '«', h('b', null, a.name), '»', tag(a)]), storeId(storeOf()) && tw.some(a => appStoreId(a) === storeId(storeOf())) ? ' — та же ссылка App Store' : ''),
       like.length > 0 && h('div', { class: 'muted' }, exact ? 'Ещё похожие: ' : 'Похожие в юните: ',
         like.map((a, i) => [i > 0 && ', ', h('span', { class: 'name-match' }, a.name), tag(a)])));
   };
   input.addEventListener('input', draw);
-  return { el: box, draw, taken };
+  return { el: box, draw, taken, twins };
 }
 
 /** unitId — сразу в этот юнит (со страницы юнита). */
@@ -1213,7 +1230,8 @@ export function openCreateApp(onDone, unitId) {
   store.addEventListener('paste', () => setTimeout(pull, 0));
   const unit = h('select', { class: 'inp' }, list.map(u => h('option', { value: u.id }, u.name)));
   const pm = pmPicker(list[0] && list[0].id);
-  const matches = nameMatches(name, () => unit.value);
+  const matches = nameMatches(name, () => unit.value, () => store.value);
+  store.addEventListener('input', () => matches.draw());
   unit.addEventListener('change', () => { pm.setUnit(unit.value); matches.draw(); });
   matches.draw(); // сразу подгрузить приложения юнита (с убранными)
   const due = h('input', { class: 'inp', type: 'date' });
@@ -1237,6 +1255,8 @@ export function openCreateApp(onDone, unitId) {
       action: async close => {
         if (!name.value.trim()) { name.focus(); return; }
         if (matches.taken()) { matches.draw(); name.focus(); return; }
+        const tw = matches.twins();
+        if (tw.length && !(await confirmDlg(`Похоже, это приложение уже есть: «${tw[0].name}»${tw[0].archived ? ' (' + (SHELVES[tw[0].shelf] || 'убрано') + ')' : ''}. Всё равно создать новое?`, { ok: 'Создать новое' }))) return;
         const stage = place.value;
         const made = await send('createApp', { name: name.value, unitId: unit.value, pmId: pm.el.value, dueDate: due.value, priority: prio.value, description: desc.value, storeUrl: store.value.trim(), iconUrl, storeName, noRequest: stage !== 'new' });
         if (!S.apps.some(a => a.id === made.app.id)) S.apps.push(made.app); // следующее «Новое приложение» уже видит это имя
@@ -1543,7 +1563,15 @@ export function openImportApps(onDone, unitId) {
   const live = S.appStatuses.find(x => x.kind === 'live');
   const status = h('select', { class: 'inp' }, S.appStatuses.map(st => h('option', { value: st.id, selected: live && st.id === live.id }, st.name)));
   const sf = storeField();
+  // приложения со убранными (в S.apps их может не быть) — для пропуска повторов по ссылке и по имени
+  let pool = S.apps;
   const known = new Set(S.apps.map(a => storeId(sf && a.info && a.info[sf.id])).filter(Boolean));
+  call('listApps', { archived: true, bare: true }).then(list => {
+    const ids = new Set(S.apps.map(a => a.id));
+    pool = [...S.apps, ...list.filter(a => !ids.has(a.id))];
+    pool.forEach(a => { const id = appStoreId(a); if (id) known.add(id); });
+    count();
+  }).catch(() => {});
   const summary = h('span');
   const parse = () => text.value.split('\n').map(l => {
     const url = (/https?:\/\/\S+/.exec(l) || [''])[0];
@@ -1551,9 +1579,9 @@ export function openImportApps(onDone, unitId) {
   }).filter(x => x.name);
   // такое имя уже есть в выбранном юните (или повторяется в самом списке) — тоже пропускаем
   const skip = rows => {
-    const names = new Set(S.apps.filter(a => a.unitId === unit.value).map(a => appNameKey(a.name)));
+    const names = new Set(pool.filter(a => a.unitId === unit.value).map(a => appCoreKey(a.name)));
     return rows.map(x => {
-      const k = appNameKey(x.name);
+      const k = appCoreKey(x.name);
       const out = known.has(storeId(x.url)) || names.has(k);
       names.add(k);
       return out;
