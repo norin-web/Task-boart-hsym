@@ -3462,3 +3462,10 @@ a.bug-title:hover { text-decoration: underline; }
 .va-row > .i:last-child { justify-self: end; color: var(--muted); transform: rotate(-90deg); }
 .dev-card { container-type: inline-size; }
 @container (max-width: 560px) { .va-row { grid-template-columns: 28px minmax(0, 1fr) 90px 24px; } .va-pos, .va-dir { display: none; } }
+
+/* Массовое редактирование на доске: выделенные карточки и панель снизу */
+.card.picked { outline: 2px solid var(--accent, #6366f1); outline-offset: 1px; background: color-mix(in srgb, var(--accent, #6366f1) 6%, var(--surface)); }
+.bulk-bar { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 16px; border-radius: 999px; background: var(--surface); box-shadow: 0 12px 32px #11131833, 0 0 0 1px var(--border); font-size: 13px; max-width: calc(100vw - 32px); flex-wrap: wrap; }
+.bulk-bar .btn { display: inline-flex; align-items: center; gap: 6px; }
+.bulk-hint { font-size: 12px; }
+@media (max-width: 1180px) { .bulk-hint { display: none; } }

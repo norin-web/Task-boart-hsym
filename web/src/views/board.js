@@ -110,6 +110,60 @@ export function renderTasks() {
   else if (S.lanes && isStaff() && (S.lanes !== 'kind' || S.board.tasks.some(t => t.kind === 'request')) && (S.lanes !== 'app' || S.board.tasks.some(t => t.appId))) renderLanes(el);
   else renderColumns(el);
   syncCounts();
+  drawBulk();
+}
+
+/* ---------- массовое редактирование: Ctrl/⌘ + клик выделяет карточки, панель снизу меняет всем сразу ---------- */
+
+const picked = new Set();
+/** Выделить / снять карточку (Ctrl или ⌘ + клик). */
+function togglePick(t, el) {
+  if (picked.has(t.id)) picked.delete(t.id); else picked.add(t.id);
+  if (el) el.classList.toggle('picked', picked.has(t.id));
+  drawBulk();
+}
+export function clearPicked() {
+  picked.clear();
+  document.querySelectorAll('.card.picked').forEach(el => el.classList.remove('picked'));
+  drawBulk();
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && picked.size && !isModalOpen() && !isMenuOpen()) clearPicked(); });
+// ушли с досок юнита — выделение снимаем (панель не висит на других экранах)
+window.addEventListener('hashchange', () => { if (picked.size && !location.hash.startsWith('#/u/')) clearPicked(); });
+
+/** Применить изменение ко всем выбранным: по одной задаче (права и правила — для каждой), итог — одним сообщением. */
+async function bulkApply(patch, label) {
+  const ids = [...picked].filter(id => taskById(id));
+  let ok = 0;
+  const fails = [];
+  for (const id of ids) {
+    try { await send('updateTask', { id, patch }); ok++; } catch (e) { fails.push(`${taskById(id).title}: ${e.message}`); }
+  }
+  clearPicked();
+  await reloadBoard();
+  if (!fails.length) toast(`${label}: изменено ${ok}`);
+  else showErr(new Error(`${label}: изменено ${ok} из ${ids.length}. Не получилось — ${fails.slice(0, 3).join('; ')}${fails.length > 3 ? ` и ещё ${fails.length - 3}` : ''}`));
+}
+
+function drawBulk() {
+  let bar = document.getElementById('bulk-bar');
+  // выбранные, которых уже нет на доске (перешли в другой юнит, удалены), — снимаем
+  for (const id of [...picked]) if (!S.board || !taskById(id)) picked.delete(id);
+  if (!picked.size || !document.getElementById('tasks')) { if (bar) bar.remove(); return; }
+  if (!bar) { bar = h('div', { id: 'bulk-bar', class: 'bulk-bar', role: 'toolbar', 'aria-label': 'Массовое редактирование' }); document.body.append(bar); }
+  const posOf = p => (deptById(p.positionId) || {}).name;
+  const people = () => S.board.members.map(m => personById(m.personId)).filter(p => p && p.active).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  fill(bar,
+    h('b', null, `Выбрано ${picked.size}`),
+    h('button', { class: 'btn sm', onclick: e => { e.stopPropagation(); menu(e.currentTarget, [{ title: 'Исполнитель для всех' },
+      { label: 'Не назначен', icon: 'user', action: () => bulkApply({ assigneeId: '' }, 'Исполнитель') },
+      ...people().map(p => ({ label: posOf(p) ? `${p.name} · ${posOf(p)}` : p.name, icon: 'user', action: () => bulkApply({ assigneeId: p.id }, 'Исполнитель') }))], { align: 'left' }); } },
+    icon('user', 14), 'Исполнитель', icon('chevron', 12)),
+    h('button', { class: 'btn sm', onclick: e => { e.stopPropagation(); menu(e.currentTarget, [{ title: 'Статус для всех' },
+      ...columns().map(c => ({ label: c.name, icon: 'blank', action: () => bulkApply({ status: c.id }, 'Статус') }))], { align: 'left' }); } },
+    icon('progress', 14), 'Статус', icon('chevron', 12)),
+    h('button', { class: 'btn ghost sm', onclick: clearPicked, title: 'Esc' }, 'Снять выделение'),
+    h('span', { class: 'muted bulk-hint' }, 'Ctrl / ⌘ + клик — добавить карточку'));
 }
 
 function syncCounts() {
@@ -555,9 +609,10 @@ function taskCard(t, inLane) {
 
   return h('article', {
     class: 'card' + (t.archived ? ' archived' : '') + (taskDone(t) ? ' done' : '') + (t._temp ? ' temp' : '') + (canEditTask(t) ? '' : ' locked')
-      + (prio ? ' prio' : ''),
+      + (prio ? ' prio' : '') + (picked.has(t.id) ? ' picked' : ''),
     style: prio ? { '--prio': prio.opt.color } : null, dataset: { id: t.id }, tabindex: '0',
-    onclick: () => { if (!t._temp) navigate({ unit: S.board.unit.id, mode: S.route.mode, task: t.id }); },
+    // Ctrl / ⌘ + клик — выделить для массового редактирования; обычный клик — открыть
+    onclick: e => { if (t._temp) return; if (e.metaKey || e.ctrlKey) { e.preventDefault(); togglePick(t, e.currentTarget); return; } if (picked.size) { clearPicked(); } navigate({ unit: S.board.unit.id, mode: S.route.mode, task: t.id }); },
     onkeydown: e => { if (e.key === 'Enter' && !t._temp) navigate({ unit: S.board.unit.id, mode: S.route.mode, task: t.id }); },
     oncontextmenu: e => { if (t._temp) return; e.preventDefault(); cardMenu({ x: e.clientX, y: e.clientY }, t); },
   },
