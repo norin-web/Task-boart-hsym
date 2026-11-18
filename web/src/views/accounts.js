@@ -1,6 +1,6 @@
 /**
  * Аккаунты (RM и CEO): этапы «Аккаунт» запросов New App — три области на всю ширину:
- * «Заявки» (дизайн готов, аккаунт нужно завести; ждущие дизайн — внизу, приглушены) → «В работе» → «Готово».
+ * «Заявки» (разработчик оставил заявку кнопкой в своём этапе; ждущие предыдущий этап — внизу) → «В работе» → «Готово».
  * RM прикрепляет Google Doc с данными (почта, Terms / Privacy, Bundle ID, App ID, API-ключ) — ссылку «Аккаунт»;
  * она общая на запрос: её видят все этапы. Закрыть — только со ссылкой.
  */
@@ -14,7 +14,7 @@ import { onRemote } from '../live.js';
 
 const LINK = 'lf_account';
 const COLS = [
-  { id: 'todo', name: 'Заявки', hint: 'Дизайн готов — нужно завести аккаунт', empty: 'Новых заявок нет', color: 'var(--st-todo)', ic: 'todo' },
+  { id: 'todo', name: 'Заявки', hint: 'Разработчик оставил заявку — нужно завести аккаунт', empty: 'Новых заявок нет', color: 'var(--st-todo)', ic: 'todo' },
   { id: 'progress', name: 'В работе', hint: 'Заводится, данные — в Google Doc', empty: 'Сейчас ничего не заводится', color: 'var(--st-progress)', ic: 'progress' },
   { id: 'done', name: 'Готово', hint: 'Аккаунт заведён, док у разработки', empty: 'Готовых пока нет', color: 'var(--st-done)', ic: 'done' },
 ];
@@ -81,8 +81,9 @@ export async function renderAccounts() {
           h('div', { class: 'acc-meta' },
             u && h('span', { class: 'rj-unit', style: { '--c': u.color } }, u.name),
             h('span', null, x.key)))),
+      x.comment && h('div', { class: 'acc-comment', title: x.comment }, x.comment),
       h('div', { class: 'acc-sub' },
-        x.blocked ? h('span', { class: 'acc-wait' }, icon('lock', 12), 'Ждёт дизайн')
+        x.blocked ? h('span', { class: 'acc-wait' }, icon('lock', 12), 'Ждёт предыдущий этап')
           : x.done ? h('span', null, 'Готово' + (x.doneAt ? ' · ' + fmtDate(x.doneAt.slice(0, 10)) : ''))
             : x.dueDate ? h('span', { class: overdue ? 'danger-text' : '' }, (overdue ? 'Просрочено · ' : 'Срок ') + fmtDate(x.dueDate)) : h('span', null, 'Без срока'),
         who && !mine && h('span', null, who.name.split(' ')[0])),
@@ -104,7 +105,7 @@ export async function renderAccounts() {
           h('span', { class: 'acc-dot' }),
           h('h2', null, c.name),
           h('span', { class: 'acc-n' }, list.length - waiting)),
-        h('div', { class: 'muted acc-hint' }, c.hint, waiting > 0 && ` · ещё ${waiting} ${plural(waiting, ['ждёт', 'ждут', 'ждут'])} дизайн`),
+        h('div', { class: 'muted acc-hint' }, c.hint, waiting > 0 && ` · ещё ${waiting} ${plural(waiting, ['ждёт', 'ждут', 'ждут'])} предыдущий этап`),
         h('div', { class: 'acc-list' }, list.length ? list.map(card) : h('div', { class: 'acc-empty' }, c.empty)));
     }));
   }

@@ -21,9 +21,10 @@ export const REQUEST_TYPES = { new_app: 'New App', update: 'Апдейт', other
  * но заблокирован (база не даст сдвинуть его из «не начато»), пока не закрыты те, от которых он зависит.
  * release — последний: исполнителя нет, пока PM не передаст его RM («Передать в релиз»).
  */
-/** Этап «Аккаунт» (New App): ведёт RM, закрыть — только со ссылкой «Аккаунт» (Google Doc с данными). */
-export const ACCOUNT_STEP = { key: 'account', title: 'Аккаунт', positionId: 'd_release', dependsOn: ['design'], checklist: ['Почта', 'Terms и Privacy', 'Bundle ID', 'App ID', 'API-ключ', 'Данные — в Google Doc, ссылка в поле «Аккаунт»'] };
-export const ACCOUNT_LINK = 'lf_account';
+/**
+ * Этап «Аккаунт»: по флоу не создаётся — его заводит разработчик кнопкой «Оставить заявку на аккаунт» (request_account в базе).
+ * Ведёт RM, закрыть — только со ссылкой «Аккаунт» (Google Doc с данными); релиз ждёт его, если заявка есть.
+ */export const ACCOUNT_LINK = 'lf_account';
 export const DEFAULT_FLOWS = {
   new_app: [
     { key: 'design', title: 'Дизайн', positionId: 'd_design', dependsOn: [], checklist: ['Экраны приложения', 'Пейволл (PW)'] },
@@ -39,9 +40,7 @@ export const DEFAULT_FLOWS = {
     { key: 'store', title: 'Метаданные', positionId: 'd_aso', dependsOn: ['design'], checklist: ['Название и подзаголовок', 'Описание', 'Ключевые слова'] },
     { key: 'retext', title: 'Тексты в дизайне', positionId: 'd_design', dependsOn: ['meta'], checklist: ['Тексты OB заменены в макетах', 'Тексты PW заменены в макетах', 'Тексты ASO заменены в скриншотах', 'Исходники выгружены на Google Drive'] },
     { key: 'l10n', title: 'Локализации', positionId: 'd_aso', dependsOn: ['retext', 'store'], checklist: ['Переводы приложения и пейволла', 'Переводы метаданных', 'Скриншоты на языках'] },
-    // аккаунт в сторе (почта, Terms / Privacy, Bundle ID, App ID, API-ключ) — RM после готового дизайна; данные — Google Doc в ссылке «Аккаунт»
-    ACCOUNT_STEP,
-    { key: 'release', title: 'Релиз', positionId: 'd_release', dependsOn: ['design', 'art', 'ios', 'qa', 'integr', 'meta', 'store', 'retext', 'l10n', 'account'], release: true },
+    { key: 'release', title: 'Релиз', positionId: 'd_release', dependsOn: ['design', 'art', 'ios', 'qa', 'integr', 'meta', 'store', 'retext', 'l10n'], release: true },
   ],
   update: [
     { key: 'design', title: 'Дизайн', positionId: 'd_design', dependsOn: [] },
@@ -3539,9 +3538,22 @@ export function createBackend(db, opts = {}) {
      * Вкладка «Аккаунты» (RM, CEO): этапы «Аккаунт» запросов New App. В работе — открытые (ждёт дизайн — blocked),
      * готовые — со ссылкой на Google Doc. Видимость — правила базы (RM — позиция Release Manager в своих юнитах).
      */
+    /** Разработчик (или лид / PM / CEO) из этапа запроса — заявка на аккаунт RM с комментарием. */
+    async requestAccount(p) {
+      const t = await findTask(p.taskId);
+      const id = await rpc('request_account', { p_task: t.id, p_comment: str(p.comment, 5000) });
+      return { id: typeof id === 'object' && id ? Object.values(id)[0] : id };
+    },
+    /** Состояние заявки на аккаунт для карточки этапа: null — заявки нет. */
+    async getAccountRequest(p) {
+      const r = await rpc('account_request_of', { p_task: str(p.taskId, 40) });
+      const v = Array.isArray(r) ? r[0] : r;
+      return (v && typeof v === 'object' && 'account_request_of' in v ? v.account_request_of : v) || null;
+    },
+
     async getAccounts() {
       const [rows, units, links] = await Promise.all([
-        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,due_date,app_id,parent_id,depends_on,done_at,created_at').eq('kind', 'stage').eq('step', 'account').eq('archived', false).order('created_at').order('id')),
+        all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,due_date,app_id,parent_id,depends_on,done_at,created_at,created_by,description').eq('kind', 'stage').eq('step', 'account').eq('archived', false).order('created_at').order('id')),
         all(() => T('units').select('id,key,settings,archived').order('id')),
         all(() => T('task_links').select('task_id,url').eq('field_id', ACCOUNT_LINK).order('task_id')),
       ]);
@@ -3566,6 +3578,8 @@ export function createBackend(db, opts = {}) {
           state: done ? 'done' : k === 'todo' && !L[t.id] ? 'todo' : 'progress',
           id: t.id, unitId: t.unit_id, key: `${U[t.unit_id].key}-${t.num}`, title: t.title, assigneeId: t.assignee_id, dueDate: t.due_date,
           requestId: t.parent_id || '', done, doneAt: t.done_at || '', createdAt: t.created_at, url: L[t.id] || '',
+          // заявка разработчика: кто оставил и его комментарий (описание после первой строки «Заявка на аккаунт от …»)
+          createdBy: t.created_by || '', comment: String(t.description || '').split('\n\n').slice(1).join('\n\n').trim(),
           blocked: !done && (json(t.depends_on, []) || []).some(id => openSet.has(id)),
           app: a ? { id: a.id, name: a.name, color: a.color, iconUrl: a.icon_url || '', unitId: a.unit_id } : null,
         };

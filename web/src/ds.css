@@ -3426,3 +3426,4 @@ a.bug-title:hover { text-decoration: underline; }
 .trow-app .uc-icon { width: 22px; height: 22px; border-radius: 6px; flex: none; font-size: 11px; }
 @container (max-width: 760px) { .trow-app { width: 140px; } }
 @media (max-width: 760px) { .trow-app { width: auto; max-width: 40%; } }
+.acc-comment { font-size: 12px; line-height: 16px; color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; padding: 8px 10px; border-radius: 12px; background: var(--surface); }

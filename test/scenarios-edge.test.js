@@ -61,13 +61,13 @@ const check = async (label, fn) => { try { await fn(); } catch (e) { failed.push
 const mustFail = (p, re) => p.then(() => { throw new Error('ожидали отказ, а действие прошло'); }, e => { if (re) assert.match(e.message, re); });
 const stagesOf = async (api, pm, req) => Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: req.id }))).map(t => [t.step, t]));
 /** Этап «Аккаунт»: прикрепить Google Doc и закрыть (RM — сам, без ревью). */
-const closeAccount = (api, who, id) => api.as(who, async () => {
+const closeAccount = (api, who, id) => (!id ? null : api.as(who, async () => {
   await api('setTaskLink', { taskId: id, fieldId: 'lf_account', url: 'https://docs.google.com/document/d/acc' });
   return api('updateTask', { id, patch: { status: 'done' } });
-});
+}));
 const toRelease = async (api, who, st) => {
   for (const [k, p] of [['design', who.lead], ['art', who.lead], ['ios', who.ios], ['qa', who.qa], ['integr', who.ios], ['meta', who.aso], ['store', who.aso], ['retext', who.lead], ['l10n', who.aso]]) await finish(api, p, who.pm, st[k].id);
-  await closeAccount(api, who.rm, st.account.id);
+  await closeAccount(api, who.rm, (st.account || {}).id);
   return api.as(who.pm, () => api('sendToRelease', { taskId: st.release.id }));
 };
 const ready = (api, who, st) => api.as(who.rm, async () => {
@@ -114,7 +114,7 @@ test('крайние случаи: реджекты, перенос, уход л
   const a2 = await api.as(ceo, () => api('createApp', { name: 'B', unitId: lone.id }));
   const s2 = await stagesOf(api, noRm.pm, a2.request);
   for (const [k, p] of [['design', noRm.lead], ['art', noRm.lead], ['ios', noRm.ios], ['qa', noRm.qa], ['integr', noRm.ios], ['meta', noRm.aso], ['store', noRm.aso], ['retext', noRm.lead], ['l10n', noRm.aso]]) await finish(api, p, noRm.pm, s2[k].id);
-  await closeAccount(api, noRm.pm, s2.account.id); // без RM аккаунт закрывает PM
+  await closeAccount(api, noRm.pm, (s2.account || {}).id); // без RM аккаунт закрывает PM
   await check('юнит без RM: понятный отказ', () => mustFail(api.as(noRm.pm, () => api('sendToRelease', { taskId: s2.release.id })), /нет релиз-менеджера/));
 
   // юнит без PM: запрос никому не уходит — это видно

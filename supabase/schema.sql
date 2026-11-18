@@ -3119,38 +3119,10 @@ begin
   end if;
 end $$;
 
--- ---------- Этап «Аккаунт» в New App (2026-11-17) ----------
--- После готового дизайна RM заводит аккаунт (почта, Terms / Privacy, Bundle ID, App ID, API-ключ) и кладёт данные
--- в Google Doc — ссылка «Аккаунт» (общая на запрос: её видят все этапы). Релиз ждёт и этот этап.
--- Флоу по умолчанию — в коде; сохранённые флоу студии и юнитов дополняем один раз (перед релизом, релиз ждёт аккаунт).
-create or replace function flow_add_account(f jsonb) returns jsonb language plpgsql immutable set search_path = public as $$
-declare out_ jsonb := '[]'::jsonb; e jsonb; has_design boolean;
-begin
-  if f is null or jsonb_typeof(f) <> 'array' then return f; end if;
-  if exists (select 1 from jsonb_array_elements(f) x where x ->> 'key' = 'account')
-     or not exists (select 1 from jsonb_array_elements(f) x where x ->> 'key' = 'release') then return f; end if;
-  has_design := exists (select 1 from jsonb_array_elements(f) x where x ->> 'key' = 'design');
-  for e in select x.v from jsonb_array_elements(f) with ordinality x(v, i) order by x.i loop
-    if e ->> 'key' = 'release' then
-      out_ := out_ || jsonb_build_array(jsonb_build_object('key', 'account', 'title', 'Аккаунт', 'positionId', 'd_release',
-        'dependsOn', case when has_design then '["design"]'::jsonb else '[]'::jsonb end, 'release', false,
-        'checklist', '["Почта", "Terms и Privacy", "Bundle ID", "App ID", "API-ключ", "Данные — в Google Doc, ссылка в поле «Аккаунт»"]'::jsonb));
-      e := jsonb_set(e, '{dependsOn}', coalesce(e -> 'dependsOn', '[]'::jsonb) || '["account"]'::jsonb);
-    end if;
-    out_ := out_ || jsonb_build_array(e);
-  end loop;
-  return out_;
-end $$;
-do $$
-begin
-  if not exists (select 1 from app_settings where key = 'once_account_step') then
-    update app_settings set value = jsonb_set(value, '{new_app}', flow_add_account(value -> 'new_app'))
-     where key = 'flows' and jsonb_typeof(value) = 'object' and value ? 'new_app';
-    update units set settings = jsonb_set(settings, '{flows,new_app}', flow_add_account(settings -> 'flows' -> 'new_app'))
-     where jsonb_typeof(settings -> 'flows') = 'object' and (settings -> 'flows') ? 'new_app';
-    insert into app_settings (key, value, updated_at) values ('once_account_step', 'true'::jsonb, '') on conflict (key) do nothing;
-  end if;
-end $$;
+-- ---------- Этап «Аккаунт» (2026-11-17, с 2026-11-18 — по заявке разработчика) ----------
+-- RM заводит аккаунт (почта, Terms / Privacy, Bundle ID, App ID, API-ключ) и кладёт данные в Google Doc — ссылка «Аккаунт»
+-- (общая на запрос: её видят все этапы). Сам по флоу этап больше не создаётся — его заводит разработчик кнопкой
+-- «Оставить заявку на аккаунт» (request_account ниже).
 
 -- Аккаунт готов (RM закрыл этап «Аккаунт») — разработчику: уведомление на его этап (iOS, интеграция) того же запроса,
 -- там уже видна ссылка «Аккаунт» на Google Doc (ссылка общая на запрос). kind 'account_ready'.
@@ -3229,5 +3201,94 @@ begin
     update people set direction = 'release' where access = 'superadmin' and direction = '' and name ilike 'Сергей%';
     perform set_config('app.system', 'off', true);
     insert into app_settings (key, value, updated_at) values ('once_ceo_directions', 'true'::jsonb, '') on conflict (key) do nothing;
+  end if;
+end $$;
+
+-- ---------- Заявка на аккаунт — по кнопке разработчика (2026-11-18) ----------
+-- Разработчик (исполнитель этапа запроса), лид в зоне, PM/CEO — «Оставить заявку на аккаунт» с комментарием:
+-- в запросе появляется этап «Аккаунт» на RM юнита, релиз ждёт его. Одна открытая заявка на запрос.
+create or replace function request_account(p_task text, p_comment text) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  t tasks; r tasks; u units; v_id text; v_rm text; v_me text := coalesce(my_person_id(), '');
+  at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+  who text;
+begin
+  select * into t from tasks where id = p_task;
+  if t.id is null or coalesce(t.parent_id, '') = '' or t.kind <> 'stage' then raise exception 'Заявку на аккаунт оставляют из этапа запроса' using errcode = 'P0001'; end if;
+  if not can_edit_task_links(t.id) then raise exception 'Недостаточно прав для этого действия' using errcode = '42501'; end if;
+  select * into r from tasks where id = t.parent_id;
+  if exists (select 1 from tasks a where a.parent_id = r.id and a.kind = 'stage' and a.step = 'account' and not a.archived) then
+    raise exception 'Заявка на аккаунт по этому приложению уже есть' using errcode = 'P0001';
+  end if;
+  select * into u from units where id = t.unit_id;
+  select m.person_id into v_rm from unit_members m join people p on p.id = m.person_id
+   where m.unit_id = t.unit_id and p.access = 'rm' and p.active order by m.created_at limit 1;
+  select name into who from people where id = v_me;
+  v_id := 't_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12);
+  -- права проверены выше; защита задач (сотрудник не создаёт задач и не трогает релиз) здесь не нужна
+  perform set_config('app.system', 'on', true);
+  insert into tasks (id, unit_id, num, title, description, status, assignee_id, department_id, due_date, ord, fields, checklist,
+                     archived, done_at, created_by, created_at, updated_at, parent_id, kind, step, app_id, is_test, depends_on)
+  values (v_id, t.unit_id, next_task_num(t.unit_id), left('Аккаунт · ' || regexp_replace(r.title, '^New App:\s*', ''), 500),
+          'Заявка на аккаунт' || case when coalesce(who, '') <> '' then ' от ' || who else '' end || '.'
+            || case when coalesce(trim(p_comment), '') <> '' then chr(10) || chr(10) || left(trim(p_comment), 5000) else '' end,
+          u.settings -> 'columns' -> 0 ->> 'id', coalesce(v_rm, ''), 'd_release', r.due_date, 0,
+          case when coalesce(r.fields, '{}'::jsonb) ? 'f_priority' then jsonb_build_object('f_priority', r.fields -> 'f_priority') else '{}'::jsonb end,
+          (select jsonb_agg(jsonb_build_object('id', 'k_' || substr(md5(x || random()::text), 1, 10), 'text', x, 'done', false))
+             from unnest(array['Почта', 'Terms и Privacy', 'Bundle ID', 'App ID', 'API-ключ', 'Данные — в Google Doc, ссылка в поле «Аккаунт»']) x),
+          false, '', v_me, at_, at_, r.id, 'stage', 'account', r.app_id, r.is_test, '[]'::jsonb);
+  -- релиз запроса (если ещё не закрыт) ждёт и аккаунт
+  update tasks set depends_on = coalesce(depends_on, '[]'::jsonb) || jsonb_build_array(v_id), updated_at = at_
+   where parent_id = r.id and kind = 'stage' and step = 'release' and not archived and not task_done(id);
+  perform set_config('app.system', 'off', true);
+  return v_id;
+end $$;
+revoke execute on function request_account(text, text) from public, anon;
+grant execute on function request_account(text, text) to authenticated;
+
+-- Состояние заявки на аккаунт для карточки этапа (разработчику сам этап «Аккаунт» не виден по правилам):
+-- нет заявки — null; иначе этап, состояние (todo / progress / done), RM, ссылка на док.
+create or replace function account_request_of(p_task text) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('id', a.id, 'assigneeId', a.assignee_id, 'createdBy', a.created_by, 'createdAt', a.created_at,
+           'state', case when task_done(a.id) then 'done'
+                         when coalesce((select c ->> 'kind' from units u, jsonb_array_elements(u.settings -> 'columns') c where u.id = a.unit_id and c ->> 'id' = a.status), 'todo') = 'todo' then 'todo'
+                         else 'progress' end,
+           'url', coalesce((select l.url from task_links l where l.task_id = a.id and l.field_id = 'lf_account'), ''))
+    from tasks t join tasks a on a.parent_id = t.parent_id and a.kind = 'stage' and a.step = 'account' and not a.archived
+   where t.id = p_task and coalesce(t.parent_id, '') <> '' and can_edit_task_links(t.id)
+   order by a.created_at desc limit 1;
+$$;
+revoke execute on function account_request_of(text) from public, anon;
+grant execute on function account_request_of(text) to authenticated;
+
+-- Один раз: этап «Аккаунт» убираем из сохранённых флоу (студии и юнитов) и из зависимостей релиза в них;
+-- автоматически созданные и ещё не начатые заявки (без дока) — в архив, кто их ждал — больше не ждёт.
+create or replace function flow_drop_account(f jsonb) returns jsonb language sql immutable set search_path = public as $$
+  select case when f is null or jsonb_typeof(f) <> 'array' then f else coalesce((
+    select jsonb_agg(case when x.v ? 'dependsOn' then jsonb_set(x.v, '{dependsOn}',
+             coalesce((select jsonb_agg(d) from jsonb_array_elements(x.v -> 'dependsOn') d where d <> '"account"'::jsonb), '[]'::jsonb)) else x.v end order by x.i)
+      from jsonb_array_elements(f) with ordinality x(v, i) where x.v ->> 'key' <> 'account'), '[]'::jsonb) end;
+$$;
+do $$
+declare s record;
+begin
+  if not exists (select 1 from app_settings where key = 'once_account_manual') then
+    perform set_config('app.system', 'on', true);
+    update app_settings set value = jsonb_set(value, '{new_app}', flow_drop_account(value -> 'new_app'))
+     where key = 'flows' and jsonb_typeof(value) = 'object' and value ? 'new_app';
+    update units set settings = jsonb_set(settings, '{flows,new_app}', flow_drop_account(settings -> 'flows' -> 'new_app'))
+     where jsonb_typeof(settings -> 'flows') = 'object' and (settings -> 'flows') ? 'new_app';
+    for s in select a.id from tasks a join units u on u.id = a.unit_id
+              where a.kind = 'stage' and a.step = 'account' and not a.archived and a.done_at = ''
+                and coalesce((select c ->> 'kind' from jsonb_array_elements(u.settings -> 'columns') c where c ->> 'id' = a.status), 'todo') = 'todo'
+                and not exists (select 1 from task_links l where l.task_id = a.id and l.field_id = 'lf_account' and l.url <> '') loop
+      update tasks set depends_on = (select coalesce(jsonb_agg(d), '[]'::jsonb) from jsonb_array_elements(depends_on) d where d <> to_jsonb(s.id))
+       where depends_on ? s.id;
+      update tasks set archived = true where id = s.id;
+    end loop;
+    perform set_config('app.system', 'off', true);
+    insert into app_settings (key, value, updated_at) values ('once_account_manual', 'true'::jsonb, '') on conflict (key) do nothing;
   end if;
 end $$;

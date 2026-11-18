@@ -132,6 +132,8 @@ function buildPanel(t) {
         const done = (u.settings.columns.find(c => c.kind === 'done') || {}).id;
         if (done) patchTask(t, { status: done }).then(() => { toast('Отдано на тестирование'); refreshPanel(t); }).catch(() => {});
       } }, 'Отдать на тестирование')),
+    // аккаунт в сторе: разработчик оставляет заявку RM (с комментарием); дальше видно, где она и ссылка на док
+    ['ios', 'integr'].includes(t.step) && t.parentId && (t.assigneeId === S.meId || editable) && accountRequestBlock(t),
     // опросник — у этапа iOS (по умолчанию) или у интеграции, если PM так решил (dev_form.need)
     ((t.step === 'ios' && (t.devForm || {}).need !== false) || (t.step === 'integr' && (t.devForm || {}).need === true)) && devFormBlock(t, t.assigneeId === S.meId || isStaff()),
     t.step === 'release' && t.assigneeId && releaseBlock(t, () => reloadBoard().catch(() => {})),
@@ -392,6 +394,46 @@ function bugsList(t, canQa) {
           h('span', { class: 'bug-pill' }, LABEL[state(b)])),
         h('div', { class: 'bug-meta' }, [fmtDate(String(b.at).slice(0, 10)), (personById(b.by) || {}).name].filter(Boolean).join(' · ')),
         b.text && h('div', { class: 'bug-text' }, b.text))))));
+}
+
+/**
+ * «Аккаунт в сторе» в карточке разработчика: заявки нет — «Оставить заявку на аккаунт» (окно с комментарием для RM);
+ * есть — у кого она и в каком состоянии, готово — ссылка на Google Doc с данными.
+ */
+function accountRequestBlock(t) {
+  const box = h('div', { class: 'qa-bar acc-req-bar' }, icon('lock', 15), h('span', { class: 'muted' }, 'Аккаунт в сторе…'));
+  const paint = a => {
+    if (!a) {
+      return fill(box, icon('lock', 15), h('span', null, 'Нужен аккаунт в сторе?'), h('span', { class: 'spacer' }),
+        h('button', { class: 'btn primary sm', onclick: () => openAccountRequest(t, paint) }, 'Оставить заявку на аккаунт'));
+    }
+    const rm = personById(a.assigneeId);
+    const STATE = { todo: 'заявка у RM', progress: 'RM заводит', done: 'готов' };
+    fill(box, icon(a.state === 'done' ? 'check' : 'lock', 15),
+      h('span', null, 'Аккаунт: ', h('b', null, STATE[a.state] || a.state), rm && a.state !== 'done' ? ' · ' + rm.name : ''),
+      h('span', { class: 'spacer' }),
+      a.url && h('a', { class: 'btn sm', href: safeUrl(a.url), target: '_blank', rel: 'noopener noreferrer', title: a.url }, icon('link', 13), 'Google Doc'));
+  };
+  call('getAccountRequest', { taskId: t.id }).then(paint).catch(() => box.remove());
+  return box;
+}
+
+/** Окно заявки на аккаунт: комментарий для RM (нюансы: аккаунт клиента, бандл, особые условия…). */
+function openAccountRequest(t, onDone) {
+  const ta = h('textarea', { class: 'inp', rows: 4, maxlength: 5000, placeholder: 'Нюансы для RM: чей аккаунт, Bundle ID, особые условия…' });
+  modal({
+    title: 'Заявка на аккаунт',
+    cls: 'dlg',
+    body: [h('p', { class: 'hint' }, 'RM получит задачу «Аккаунт» и заведёт аккаунт в сторе. Данные (почта, Terms / Privacy, Bundle ID, App ID, API-ключ) он положит в Google Doc — ссылка появится здесь. Релиз будет ждать аккаунт.'),
+      field('Комментарий', ta)],
+    actions: [{ label: 'Отмена' }, { label: 'Оставить заявку', primary: true, action: async close => {
+      await send('requestAccount', { taskId: t.id, comment: ta.value.trim() });
+      close();
+      toast('Заявка на аккаунт ушла RM');
+      onDone(await call('getAccountRequest', { taskId: t.id }).catch(() => null));
+    } }],
+  });
+  setTimeout(() => ta.focus(), 0);
 }
 
 /** QA: «Вернуть в разработку» — баг-репорт №N (ссылка и/или текст) уйдёт в этап разработки, он снова в работе, тестирование ждёт. */
