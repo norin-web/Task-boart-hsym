@@ -3218,6 +3218,8 @@ begin
   if t.id is null or coalesce(t.parent_id, '') = '' or t.kind <> 'stage' then raise exception 'Заявку на аккаунт оставляют из этапа запроса' using errcode = 'P0001'; end if;
   if not can_edit_task_links(t.id) then raise exception 'Недостаточно прав для этого действия' using errcode = '42501'; end if;
   select * into r from tasks where id = t.parent_id;
+  -- аккаунт заводят только новым приложениям (запрос New App); у апдейта приложение уже в сторе
+  if coalesce(r.request_type, '') <> 'new_app' then raise exception 'Заявка на аккаунт — только для нового приложения (New App)' using errcode = 'P0001'; end if;
   if exists (select 1 from tasks a where a.parent_id = r.id and a.kind = 'stage' and a.step = 'account' and not a.archived) then
     raise exception 'Заявка на аккаунт по этому приложению уже есть' using errcode = 'P0001';
   end if;
@@ -3390,3 +3392,11 @@ begin
 end $$;
 revoke execute on function share_app_link_to_tasks(text, text, text, text) from public, anon;
 grant execute on function share_app_link_to_tasks(text, text, text, text) to authenticated;
+
+-- Можно ли из этапа оставить заявку на аккаунт: этап запроса New App (новое приложение, ещё не в сторе)
+create or replace function account_request_allowed(p_task text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from tasks t join tasks r on r.id = t.parent_id where t.id = p_task and r.kind = 'request' and r.request_type = 'new_app');
+$$;
+revoke execute on function account_request_allowed(text) from public, anon;
+grant execute on function account_request_allowed(text) to authenticated;

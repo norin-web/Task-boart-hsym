@@ -403,6 +403,7 @@ function bugsList(t, canQa) {
 function accountRequestBlock(t) {
   const box = h('div', { class: 'qa-bar acc-req-bar' }, icon('lock', 15), h('span', { class: 'muted' }, 'Аккаунт в сторе…'));
   const paint = a => {
+    if (a && a.notAllowed) return box.remove(); // не New App — аккаунт уже есть, заявка не нужна
     if (!a) {
       return fill(box, icon('lock', 15), h('span', null, 'Нужен аккаунт в сторе?'), h('span', { class: 'spacer' }),
         h('button', { class: 'btn primary sm', onclick: () => openAccountRequest(t, paint) }, 'Оставить заявку на аккаунт'));

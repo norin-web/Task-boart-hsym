@@ -3562,9 +3562,13 @@ export function createBackend(db, opts = {}) {
     },
     /** Состояние заявки на аккаунт для карточки этапа: null — заявки нет. */
     async getAccountRequest(p) {
-      const r = await rpc('account_request_of', { p_task: str(p.taskId, 40) });
+      const id = str(p.taskId, 40);
+      const [r, ok] = await Promise.all([rpc('account_request_of', { p_task: id }), rpc('account_request_allowed', { p_task: id }).catch(() => true)]);
       const v = Array.isArray(r) ? r[0] : r;
-      return (v && typeof v === 'object' && 'account_request_of' in v ? v.account_request_of : v) || null;
+      const req = (v && typeof v === 'object' && 'account_request_of' in v ? v.account_request_of : v) || null;
+      // заявки нет и оставить нельзя (апдейт — приложение уже в сторе) — блока в карточке нет
+      if (!req && !(ok === true || (ok && Object.values(ok)[0] === true))) return { notAllowed: true };
+      return req;
     },
 
     async getAccounts() {

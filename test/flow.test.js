@@ -1078,6 +1078,11 @@ test('аккаунт по заявке разработчика: кнопка в
   await assert.rejects(api.as(qa, () => api('requestAccount', { taskId: by.ios.id, comment: '' })));
   const { id } = await api.as(ios, () => api('requestAccount', { taskId: by.ios.id, comment: 'Аккаунт клиента, бандл com.x.calm' }));
   await assert.rejects(api.as(ios, () => api('requestAccount', { taskId: by.ios.id, comment: '' })), /уже есть/);
+  // у апдейта приложение уже в сторе — заявки на аккаунт нет
+  const upd = await api.as(ceo, () => api('createRequest', { appId: request.appId, type: 'update', title: 'Апдейт' }));
+  const ub = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: upd.id }))).map(t => [t.step, t]));
+  assert.deepEqual(await api.as(ios, () => api('getAccountRequest', { taskId: ub.ios.id })), { notAllowed: true });
+  await assert.rejects(api.as(ceo, () => api('requestAccount', { taskId: ub.ios.id, comment: '' })), /только для нового приложения/);
   let st = await api.as(ios, () => api('getAccountRequest', { taskId: by.ios.id }));
   assert.deepEqual([st.id, st.state, st.assigneeId, st.url], [id, 'todo', rm.id, '']);
   // у RM — задача с комментарием, в «Аккаунтах» и в меню; уведомление о назначении
