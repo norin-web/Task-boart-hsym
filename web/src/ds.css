@@ -3475,10 +3475,11 @@ a.bug-title:hover { text-decoration: underline; }
 .card-app .uc-icon { width: 20px; height: 20px; border-radius: 6px; flex: none; font-size: 10px; }
 
 /* Карточка доски, как в Jira: приоритет — полоса цвета приоритета по левому краю на всю высоту; ключ — внизу слева */
-/* приоритет — прямая палочка внутри карточки у левого края: почти на всю высоту, без загибов;
-   скругление самой карточки остаётся, палочка в него не заходит */
-.card.prio { position: relative; }
-.card.card.prio::before { display: block; content: ''; position: absolute; left: 6px; top: 12px; bottom: 12px; width: 3px; border-radius: 0; background: var(--prio); }
+/* карточка доски — по макету Paper («Canva» → Page 11): скругление 14; приоритет — полоса 3px по левому краю
+   на всю высоту, карточка обрезает её по своему скруглению (overflow: clip — не сжимает карточку в колонке, как hidden) */
+.card.card { border-radius: 14px; }
+.card.prio { position: relative; overflow: clip; }
+.card.card.prio::before { display: block; content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; border-radius: 0; background: var(--prio); }
 .card-foot .card-key { font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; letter-spacing: .01em; }
 
 /* «Показать все · N» под длинными списками — синяя (правило владельца: 5 строк + синяя кнопка) */
