@@ -617,6 +617,12 @@ export function deptChip(id) {
 
 function taskCard(t, inLane) {
   const plainApp = !t.kind && !t.parentId && appById(t.appId);
+  // у запроса (апдейт, реджект, задача CEO) — к какому приложению он: иконка и название; в «New App: X» имя уже в заголовке
+  const reqApp = t.kind === 'request' && appById(t.appId);
+  const reqAppLine = reqApp && !(t.title || '').includes(reqApp.name) && h('div', { class: 'card-app', title: 'Приложение' },
+    reqApp.iconUrl ? h('img', { class: 'uc-icon app-img xs', src: reqApp.iconUrl, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' })
+      : h('span', { class: 'uc-icon xs', style: { background: reqApp.color || 'var(--muted)' }, 'aria-hidden': 'true' }, reqApp.name.slice(0, 1).toUpperCase()),
+    h('span', null, reqApp.name));
   const B = S.board.unit.settings.builtins;
   const fields = activeFields();
   const chips = [
@@ -654,6 +660,7 @@ function taskCard(t, inLane) {
     }, icon('more'))),
   // доработка по багам QA: на карточке видно, что это возврат с баг-репортом, а не новая задача
   (() => { const b = (t.bugs || []).filter(x => !x.closedAt && !x.fixedAt).pop(); return b && !taskDone(t) && h('div', { class: 'card-bug' }, icon('alert', 12), `Баг-репорт №${b.n}`); })(),
+  reqAppLine,
   // вторая строка, как в макете: «откуда · состояние» — запрос CEO у этапа, «Запрос · 0 из 7» у самого запроса
   // у обычной задачи — её приложение
   (t.parent || TASK_KINDS[t.kind] || waits.length > 0 || plainApp) && h('div', { class: 'card-sub', title: t.parent ? t.parent.unit.name + ' · ' + t.parent.key : plainApp ? 'Приложение' : '' },

@@ -3469,3 +3469,7 @@ a.bug-title:hover { text-decoration: underline; }
 .bulk-bar .btn { display: inline-flex; align-items: center; gap: 6px; }
 .bulk-hint { font-size: 12px; }
 @media (max-width: 1180px) { .bulk-hint { display: none; } }
+/* карточка запроса на доске: приложение — иконкой и названием */
+.card-app { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 2px 0 2px; font-size: 13px; font-weight: 600; color: var(--text); }
+.card-app > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-app .uc-icon { width: 20px; height: 20px; border-radius: 6px; flex: none; font-size: 10px; }
