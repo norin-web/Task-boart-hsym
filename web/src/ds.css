@@ -3490,3 +3490,7 @@ a.bug-title:hover { text-decoration: underline; }
 .menu-item.card-show-item:hover, .menu-item.card-show-item.on:hover { background: var(--surface-2); }
 .card-show-item .aud-check { width: 18px; height: 18px; border-radius: 5px; }
 .card-show-item.on .aud-check { background: var(--text); border-color: var(--text); }
+/* «Фокус» на дашборде (все роли): строки при наведении не подсвечиваем — только курсор-рука */
+.fc-list .fc-row, .fc-list .fc-row:hover { background: none; cursor: pointer; }
+/* карточки досок: при наведении без тени (правило владельца) */
+.card.card:hover { box-shadow: none; }
