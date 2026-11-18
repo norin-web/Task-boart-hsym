@@ -119,9 +119,9 @@ export function attention(d, reload, { two = false } = {}) {
   // этапы лежат в юните запроса; реджект — карточка приложения
   const open = x => (x.request ? peekTask(x.request.unitId, x.task ? x.task.id : x.request.id) : openAppById(x.app.id, reload));
   return h('section', null,
-    h('div', { class: 'section-head' }, h('h2', null, 'Требует внимания', rows.length > 3 && h('span', { class: 'muted sec-n' }, rows.length))),
+    h('div', { class: 'section-head' }, h('h2', null, 'Требует внимания', rows.length > 5 && h('span', { class: 'muted sec-n' }, rows.length))),
     rows.length
-      ? h('div', { class: 'card-box att-list' }, paged(rows, x => {
+      ? h('div', { class: 'card-box att-list' }, folded(rows, x => {
         const a = ATT[x.type];
         const p = who(x);
         if (two) {
@@ -135,28 +135,11 @@ export function attention(d, reload, { two = false } = {}) {
         return h('button', { class: 'att-row', onclick: () => open(x), title: p ? p.name : '' },
           h('span', { class: 'att-main' }, h('b', null, x.app.name), ' · ', h('span', { class: a.cls === 'danger' ? 'danger-text' : '' }, [what(x), a.text(x)].filter(Boolean).join(', '))),
           appStatusCell(appStatusById(x.app.status), x.app));
-      }, 12, 'blk-more', 3)) // сразу 3 — длинный список не растягивает дашборд
+      }, 5)) // сразу 5 и «Показать все · N»
       : emptyBlock('Всё по плану', { ok: true }));
 }
 
 /* ---------- работы в ходу ---------- */
-
-/** Длинный список блока — по step строк, «Показать ещё» дорисовывает следующие на месте (без перерисовки дашборда). */
-/** first — сколько строк сразу (по умолчанию step); раскрыли больше — «Свернуть» возвращает к first. */
-function paged(items, renderRow, step = 15, cls = 'blk-more', first = step) {
-  const box = h('div', { style: { display: 'contents' } });
-  let n = first;
-  const draw = () => {
-    const rest = items.length - n;
-    fill(box, items.slice(0, n).map(renderRow),
-      (rest > 0 || n > first) && h('div', { class: 'blk-more-row' },
-        rest > 0 && h('button', { class: cls, type: 'button', onclick: e => { e.stopPropagation(); n += step; draw(); } },
-          `Показать ещё ${Math.min(step, rest)}`, rest > step && h('span', { class: 'muted' }, ` · осталось ${rest}`)),
-        n > first && h('button', { class: cls, type: 'button', onclick: e => { e.stopPropagation(); n = first; draw(); } }, 'Свернуть')));
-  };
-  draw();
-  return box;
-}
 
 /** Первые limit строк, остальное — «Показать все · N» раскрывает список на месте, «Свернуть» — обратно. */
 function folded(items, renderRow, limit = 5) {
@@ -186,12 +169,12 @@ export function inProgress(d, reload, { brief = false } = {}) {
         h('span', { class: 'wip-brief-due' + (r.dueDate && r.dueDate < today ? ' danger-text' : '') }, r.dueDate ? fmtDate(r.dueDate) : '—'))))
       : emptyBlock('Нет работ', { ic: 'progress' }));
   return h('section', null,
-    h('div', { class: 'section-head' }, h('h2', null, 'Работы в процессе', rows.length > 3 && h('span', { class: 'muted sec-n' }, rows.length))),
+    h('div', { class: 'section-head' }, h('h2', null, 'Работы в процессе', rows.length > 5 && h('span', { class: 'muted sec-n' }, rows.length))),
     rows.length
       ? h('div', { class: 'card-box wip-list' },
         h('div', { class: 'wip-row wip-head', 'aria-hidden': 'true' },
           h('span', null, 'Приложение'), h('span', null, 'Задача'), h('span', null, 'Сейчас'), h('span', null, 'Этапы'), h('span', null, 'Срок'), h('span', null, 'PM')),
-        paged(rows, ({ app, request: r, current }) => {
+        folded(rows, ({ app, request: r, current }) => {
           const late = r.dueDate && r.dueDate < today;
           const pm = personById(r.assigneeId);
           return h('button', { class: 'wip-row', onclick: () => openAppById(app.id, reload) },
@@ -202,7 +185,7 @@ export function inProgress(d, reload, { brief = false } = {}) {
             h('span', { class: 'wip-stages', title: r.stages.length ? r.progress + '%' : '' }, r.stages.length ? stageDots(r.stages) : h('span', { class: 'muted' }, '—')),
             h('span', { class: 'wip-due' + (late ? ' late' : '') }, r.dueDate ? fmtDate(r.dueDate) : h('span', { class: 'muted' }, '—')),
             pm ? avatar(pm, 'sm') : h('span', { class: 'muted' }, '—'));
-        }, 12, 'blk-more', 3)) // сразу 3 — «Показать ещё» / «Свернуть»: блок не растягивает дашборд
+        }, 5)) // сразу 5 и «Показать все · N» — блок не растягивает дашборд
       : emptyBlock('Нет работ', { ic: 'progress' }));
 }
 
@@ -407,9 +390,9 @@ function releaseBlock() {
     const rows = [...(d.queue || []).map(x => ({ x, sub: x.fixedAt ? `реджект №${x.rejectNo} исправлен — отправить снова` : x.missing.length ? 'в очереди · не заполнено: ' + x.missing.join(', ') : 'в очереди · готово к отправке' })),
       ...(d.review || []).map(x => ({ x, sub: 'на ревью Apple' + (x.submittedAt ? ' с ' + fmtDate(x.submittedAt.slice(0, 10)) : '') }))];
     fill(box, tagHead('release', 'Очередь и ревью Apple', rows.length),
-      h('div', { class: 'card-box rc-list' }, rows.length ? paged(rows, ({ x, sub }) => h('button', { class: 'rc-row stale-row design-row', onclick: () => (x.appOnly ? openAppById(x.app.id) : peekTask(x.unitId, x.id)) },
+      h('div', { class: 'card-box rc-list' }, rows.length ? folded(rows, ({ x, sub }) => h('button', { class: 'rc-row stale-row design-row', onclick: () => (x.appOnly ? openAppById(x.app.id) : peekTask(x.unitId, x.id)) },
         x.app ? appIcon(x.app, 'xs') : h('span', { class: 'design-noapp' }, icon('rocket', 13)),
-        h('span', { class: 'rc-main' }, h('b', null, x.app ? x.app.name : x.title), rowSub(sub)), h('span')), 8, 'blk-more', 5)
+        h('span', { class: 'rc-main' }, h('b', null, x.app ? x.app.name : x.title), rowSub(sub)), h('span')), 5)
         : emptyBlock('Очередь пуста, на ревью ничего', { ok: true })));
   }).catch(e => fill(box, emptyBlock('Не загрузилось: ' + e.message)));
   return box;
@@ -422,9 +405,9 @@ function rejectsBlock(reload) {
     const rows = [...(d.rejected || []).map(x => ({ app: x.app, sub: `№${x.rejectNo || ''} · ${x.reason || 'без причины'}`, open: () => peekTask(x.unitId, x.id) })),
       ...(d.rejectedApps || []).map(x => ({ app: x.app, sub: 'статус «Реджект»' + (x.at ? ' с ' + fmtDate(x.at.slice(0, 10)) : ''), open: () => openAppById(x.app.id, reload) }))];
     fill(box, tagHead('release', 'Реджекты', rows.length, { view: 'rejects' }),
-      h('div', { class: 'card-box rc-list' }, rows.length ? paged(rows, r => h('button', { class: 'rc-row stale-row design-row', onclick: r.open },
+      h('div', { class: 'card-box rc-list' }, rows.length ? folded(rows, r => h('button', { class: 'rc-row stale-row design-row', onclick: r.open },
         r.app ? appIcon(r.app, 'xs') : h('span', { class: 'design-noapp' }, icon('rejected', 13)),
-        h('span', { class: 'rc-main' }, h('b', null, r.app ? r.app.name : '—'), rowSub(r.sub)), h('span')), 8, 'blk-more', 5)
+        h('span', { class: 'rc-main' }, h('b', null, r.app ? r.app.name : '—'), rowSub(r.sub)), h('span')), 5)
         : emptyBlock('Реджектов нет', { ok: true })));
   }).catch(e => fill(box, emptyBlock('Не загрузилось: ' + e.message)));
   return box;
@@ -436,10 +419,10 @@ function accountsBlock() {
   call('getAccounts', {}).then(list => {
     const rows = list.filter(x => !x.done && !x.blocked).sort((a, b) => (a.state === 'todo') - (b.state === 'todo') || String(a.dueDate || '9').localeCompare(String(b.dueDate || '9')));
     fill(box, tagHead('release', 'Аккаунты', rows.length, { view: 'accounts' }),
-      h('div', { class: 'card-box rc-list' }, rows.length ? paged(rows, x => h('button', { class: 'rc-row stale-row design-row', onclick: () => peekTask(x.unitId, x.id) },
+      h('div', { class: 'card-box rc-list' }, rows.length ? folded(rows, x => h('button', { class: 'rc-row stale-row design-row', onclick: () => peekTask(x.unitId, x.id) },
         x.app ? appIcon(x.app, 'xs') : h('span', { class: 'design-noapp' }, icon('lock', 13)),
         h('span', { class: 'rc-main' }, h('b', null, x.app ? x.app.name : x.title), rowSub(x.state === 'todo' ? 'заявка — завести аккаунт' : x.url ? 'в работе · док прикреплён' : 'в работе')),
-        x.dueDate ? h('span', { class: 'rc-at muted' }, fmtDate(x.dueDate)) : h('span')), 8, 'blk-more', 5)
+        x.dueDate ? h('span', { class: 'rc-at muted' }, fmtDate(x.dueDate)) : h('span')), 5)
         : emptyBlock('Заявок на аккаунты нет', { ok: true })));
   }).catch(e => fill(box, emptyBlock('Не загрузилось: ' + e.message)));
   return box;
@@ -467,7 +450,7 @@ export function trackBlock(track, kind) {
           h('small', { class: 'muted', style: { display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, sub)),
         x.dueDate ? h('span', { class: 'rc-at ' + (x.overdue ? 'danger-text' : 'muted') }, (x.overdue ? 'просрочено · ' : '') + fmtDate(x.dueDate)) : h('span'));
     };
-    fill(body, mine.length ? paged(mine, row, 8, 'blk-more', 5)
+    fill(body, mine.length ? folded(mine, row, 5)
       : emptyBlock(kind === 'review' ? 'На ревью ничего' : `${TRACK_TAG[track]}: сейчас без задач`, { ok: true }));
   }).catch(e => fill(body, emptyBlock('Не загрузилось: ' + e.message)));
   return h('section', null, head, body);

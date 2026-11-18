@@ -90,9 +90,10 @@ export async function renderRmHome() {
 }
 
 /** Секция релизов: строки — приложение, релиз, состояние, исполнитель и действия. */
-/** limit — сколько строк показать сразу; остальные — «Показать ещё». */
+/** Длинный список — сразу 5 строк и синяя «Показать все · N» (правило владельца для всех дашбордов). */
 const fmtShort = iso => (iso ? new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : '');
-function section(title, hint, sub, rows, line, actions, limit = 0, below = false) {
+function section(title, hint, sub, rows, line, actions, _limit = 0, below = false) {
+  const limit = 5;
   const box = h('section');
   let all = false;
   const draw = () => fill(box,
@@ -104,7 +105,7 @@ function section(title, hint, sub, rows, line, actions, limit = 0, below = false
           h('span', { class: 'rm-title' }, h('b', null, x.app ? x.app.name : x.title, x.version ? ' · ' + x.version : ''), x.app && x.app.isTest && h('span', { class: 'test-tag' }, 'тест')),
           line(x)),
         h('div', { class: 'rm-actions' }, actions(x)))),
-        limit > 0 && rows.length > limit && h('button', { class: 'rc-more link-btn', onclick: () => { all = !all; draw(); } }, all ? 'Свернуть' : `Показать ещё ${rows.length - limit}`))
+        rows.length > limit && h('button', { class: 'rc-more link-btn', onclick: () => { all = !all; draw(); } }, all ? 'Свернуть' : `Показать все · ${rows.length}`))
       : emptyBlock(hint, { ok: true, sub }));
   draw();
   return box;

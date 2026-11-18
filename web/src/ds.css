@@ -3479,3 +3479,7 @@ a.bug-title:hover { text-decoration: underline; }
 .card.prio:hover { box-shadow: inset 4px 0 0 var(--prio), var(--shadow-soft); }
 .card.prio::before { display: none; }
 .card-foot .card-key { font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; letter-spacing: .01em; }
+
+/* «Показать все · N» под длинными списками — синяя (правило владельца: 5 строк + синяя кнопка) */
+.rc-more.link-btn, button.rc-more, .rm-more .link-btn { color: var(--info-fill, #0087EA); font-weight: 600; }
+.rc-more.link-btn:hover, button.rc-more:hover, .rm-more .link-btn:hover { color: color-mix(in srgb, var(--info-fill, #0087EA) 80%, #000); text-decoration: none; }

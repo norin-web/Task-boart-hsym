@@ -99,8 +99,8 @@ const shortTitle = r => (r.app ? r.title.replace(new RegExp('\\s*[:·—-]\\s*' 
 
 // Раскрытые карточки (этапы списком) — запоминаются только на сессию, по id запроса
 const pipelineOpen = new Set();
-// Сколько приложений видно сразу; остальные — под «Показать ещё»
-const PIPELINE_LIMIT = 4;
+// Сколько приложений видно сразу; остальные — под синей «Показать все · N» (правило для всех дашбордов)
+const PIPELINE_LIMIT = 5;
 let pipelineAll = false;
 
 function pipeline(d, reload, redraw) {
@@ -140,8 +140,8 @@ function pipeline(d, reload, redraw) {
         r.releaseReady && h('div', { class: 'pl-release' }, icon('done', 16), h('span', { class: 'grow' }, 'Все этапы закрыты'),
           h('button', { class: 'btn sm', onclick: () => sendRelease(r.stages.find(s => s.step === 'release').id).then(reload) }, icon('rocket', 13), 'Передать в релиз')));
     })),
-      rows.length > PIPELINE_LIMIT && h('button', { class: 'pm-more', onclick: () => { pipelineAll = !pipelineAll; redraw(); } },
-        pipelineAll ? 'Свернуть' : `Показать ещё ${rows.length - PIPELINE_LIMIT}`)]
+      rows.length > PIPELINE_LIMIT && h('button', { class: 'pm-more rc-more link-btn', onclick: () => { pipelineAll = !pipelineAll; redraw(); } },
+        pipelineAll ? 'Свернуть' : `Показать все · ${rows.length}`)]
       : emptyBlock('Нет работ', { ic: 'clock', sub: 'Появятся, когда вы разложите запрос от CEO' }));
 }
 
