@@ -3314,3 +3314,79 @@ end $$;
 create index if not exists tasks_step on tasks(step) where step <> '';
 create index if not exists tasks_dept on tasks(department_id) where department_id <> '';
 create index if not exists tasks_parent_step on tasks(parent_id, step) where kind = 'stage';
+
+-- ---------- Ссылки задачи ↔ «Быстрый доступ» приложения (2026-11-18) ----------
+-- Одно и то же название (Figma, GitHub, Google Drive, Meta / Мета, Тексты, Локализации, Аккаунт): ссылку поставили
+-- в задаче приложения — она и в «Быстром доступе» приложения; поставили в приложении — и в открытых запросах и их этапах.
+-- Везде — только если поле пустое или там стояла прежняя ссылка (свою другую не перетираем).
+create or replace function link_name_key(p text) returns text language sql immutable as $$
+  select regexp_replace(replace(replace(lower(coalesce(p, '')), 'мета', 'meta'), 'ё', 'е'), '[^a-zа-я0-9]', '', 'g');
+$$;
+-- поле «Быстрого доступа» (app_settings.appFields, ссылка) с тем же названием, что поле ссылок задачи
+create or replace function app_field_for_link(p_link_field text) returns text
+language sql stable security definer set search_path = public as $$
+  select x ->> 'id' from app_settings s, jsonb_array_elements(s.value) x, link_fields f
+   where s.key = 'appFields' and f.id = p_link_field and coalesce(x ->> 'kind', 'link') = 'link'
+     and link_name_key(x ->> 'name') = link_name_key(f.name) limit 1;
+$$;
+create or replace function link_field_for_app(p_app_field text) returns text
+language sql stable security definer set search_path = public as $$
+  select f.id from app_settings s, jsonb_array_elements(s.value) x, link_fields f
+   where s.key = 'appFields' and x ->> 'id' = p_app_field and not f.archived
+     and link_name_key(x ->> 'name') = link_name_key(f.name) limit 1;
+$$;
+
+-- задача → приложение (после setTaskLink; права на ссылку задачи уже проверены)
+create or replace function share_link_to_app(p_task text, p_field text, p_url text, p_old text) returns boolean
+language plpgsql security definer set search_path = public as $$
+declare v_app text; v_fid text; v_cur text;
+begin
+  if not can_edit_task_links(p_task) then return false; end if;
+  select app_id into v_app from tasks where id = p_task;
+  v_fid := app_field_for_link(p_field);
+  if coalesce(v_app, '') = '' or v_fid is null then return false; end if;
+  select coalesce(info ->> v_fid, '') into v_cur from apps where id = v_app;
+  if v_cur not in ('', coalesce(p_old, '')) then return false; end if;
+  perform set_config('app.system', 'on', true);
+  if coalesce(p_url, '') <> '' then
+    update apps set info = coalesce(info, '{}'::jsonb) || jsonb_build_object(v_fid, p_url) where id = v_app;
+  elsif v_cur <> '' then
+    update apps set info = info - v_fid where id = v_app;
+  end if;
+  perform set_config('app.system', 'off', true);
+  return true;
+end $$;
+revoke execute on function share_link_to_app(text, text, text, text) from public, anon;
+grant execute on function share_link_to_app(text, text, text, text) to authenticated;
+
+-- приложение → открытые запросы и их этапы / подзадачи (после updateApp; менять приложение может CEO / PM / RM — права проверил updateApp)
+create or replace function share_app_link_to_tasks(p_app text, p_app_field text, p_url text, p_old text) returns integer
+language plpgsql security definer set search_path = public as $$
+declare v_lf text := link_field_for_app(p_app_field); n integer := 0;
+  at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+begin
+  if v_lf is null then return 0; end if;
+  if not (is_superadmin() or my_access() in ('moderator', 'rm') or app_system()) then return 0; end if;
+  perform set_config('app.system', 'on', true);
+  if coalesce(p_url, '') <> '' then
+    with recursive fam as (
+      select t.id, t.unit_id from tasks t where t.app_id = p_app and t.kind = 'request' and not t.archived and t.done_at = ''
+      union all select t.id, t.unit_id from tasks t join fam f on t.parent_id = f.id where not t.archived
+    )
+    insert into task_links (task_id, field_id, unit_id, url, updated_at)
+      select f.id, v_lf, f.unit_id, p_url, at_ from fam f
+       where coalesce((select l.url from task_links l where l.task_id = f.id and l.field_id = v_lf), '') in ('', coalesce(p_old, ''))
+    on conflict (task_id, field_id) do update set url = excluded.url, updated_at = excluded.updated_at;
+  elsif coalesce(p_old, '') <> '' then
+    with recursive fam as (
+      select t.id from tasks t where t.app_id = p_app and t.kind = 'request' and not t.archived and t.done_at = ''
+      union all select t.id from tasks t join fam f on t.parent_id = f.id where not t.archived
+    )
+    delete from task_links l using fam f where l.task_id = f.id and l.field_id = v_lf and l.url = p_old;
+  end if;
+  get diagnostics n = row_count;
+  perform set_config('app.system', 'off', true);
+  return n;
+end $$;
+revoke execute on function share_app_link_to_tasks(text, text, text, text) from public, anon;
+grant execute on function share_app_link_to_tasks(text, text, text, text) to authenticated;

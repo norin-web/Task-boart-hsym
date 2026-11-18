@@ -2363,14 +2363,17 @@ export function createBackend(db, opts = {}) {
       if ('ownFields' in p) upd.own_fields = cleanOwnFields(p.ownFields);
       if ('order' in p && Number.isFinite(Number(p.order))) upd.ord = Number(p.order);
       if ('unitId' in p && p.unitId !== a.unit_id) upd.unit_id = (await findUnit(p.unitId)).id;
+      let linkChanges = [];
       if ('info' in p) {
         const known = new Set((await appFields()).map(f => f.id));
         const info = { ...(json(a.info, {}) || {}) };
+        const before = { ...info };
         for (const [k, v] of Object.entries(p.info || {})) {
           if (!known.has(k)) continue;
           const f = (await appFields()).find(x => x.id === k);
           const val = f.kind === 'link' ? linkUrl(v) : str(v, 500);
           if (val) info[k] = val; else delete info[k];
+          if (f.kind === 'link' && (info[k] || '') !== (before[k] || '')) linkChanges.push({ k, url: info[k] || '', old: before[k] || '' });
         }
         upd.info = info;
       }
@@ -2379,6 +2382,8 @@ export function createBackend(db, opts = {}) {
       upd.updated_at = now();
       await updateOne('apps', a.id, upd);
       if (upd.unit_id) await moveAppTasks(a, upd.unit_id, ctx);
+      // ссылка в «Быстром доступе» → открытые запросы приложения и их этапы (поле с тем же названием, где пусто или прежняя)
+      for (const c of linkChanges) await rpc('share_app_link_to_tasks', { p_app: a.id, p_app_field: c.k, p_url: c.url, p_old: c.old }).catch(() => null);
       return appOut({ ...a, ...upd });
     },
 
@@ -3900,6 +3905,8 @@ export function createBackend(db, opts = {}) {
         await log([{ unitId: t.unit_id, taskId: t.id, action: 'update', field: 'link:' + fieldId, from: had ? had.url : null, to: url || null }], ctx);
         // ссылка наследуется вниз: этапам запроса и подзадачам этапа (где пусто или стояла прежняя)
         await rpc('share_task_link', { p_task: t.id, p_field: fieldId, p_url: url, p_old: had ? had.url : '' });
+        // и в «Быстрый доступ» приложения — поле с тем же названием (Figma ↔ Figma), если там пусто или стояла прежняя
+        if (t.app_id) await rpc('share_link_to_app', { p_task: t.id, p_field: fieldId, p_url: url, p_old: had ? had.url : '' }).catch(() => null);
       }
       return url;
     },

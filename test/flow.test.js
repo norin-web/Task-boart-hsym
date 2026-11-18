@@ -1168,3 +1168,26 @@ test('позиция этапа — по флоу: назначили дизай
   assert.equal(await dept(), 'd_aso');
   await api.as(ceo, () => api('updateTask', { id: by.store.id, patch: { assigneeId: aso.id } }));
 });
+
+test('ссылки задачи ↔ «Быстрый доступ» приложения: Figma из апдейта — в приложении; Drive из приложения — в открытом запросе и этапах', async () => {
+  const api = await setup();
+  const { ceo, pm, lead, gold } = await studio(api);
+  const { app, request } = await api.as(ceo, () => api('createApp', { name: 'Private Browser', unitId: gold.id }));
+  const by = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: request.id }))).map(t => [t.step, t]));
+  const info = async () => (await api.pg.query('select info from apps where id = $1', [app.id])).rows[0].info;
+  // задача → приложение
+  await api.as(lead, () => api('setTaskLink', { taskId: by.design.id, fieldId: 'lf_figma', url: 'https://figma.com/pb' }));
+  assert.equal((await info()).figma, 'https://figma.com/pb');
+  // приложение поменяли — задачи с прежней ссылкой следуют за ним
+  await api.as(ceo, () => api('updateApp', { id: app.id, info: { figma: 'https://figma.com/own' } }));
+  assert.equal((await api.pg.query("select url from task_links where task_id = $1 and field_id = 'lf_figma'", [by.design.id])).rows[0].url, 'https://figma.com/own');
+  // своя другая ссылка в приложении (не та, что была в задаче) не перетирается
+  await api.pg.query(`update apps set info = info || '{"figma": "https://figma.com/mine"}'::jsonb where id = $1`, [app.id]);
+  await api.as(lead, () => api('setTaskLink', { taskId: by.design.id, fieldId: 'lf_figma', url: 'https://figma.com/pb2' }));
+  assert.equal((await info()).figma, 'https://figma.com/mine');
+  // приложение → открытый запрос и все его этапы
+  await api.as(ceo, () => api('updateApp', { id: app.id, info: { drive: 'https://drive.google.com/pb' } }));
+  const links = async id => Object.fromEntries((await api.pg.query('select field_id, url from task_links where task_id = $1', [id])).rows.map(r => [r.field_id, r.url]));
+  assert.equal((await links(request.id)).lf_drive, 'https://drive.google.com/pb');
+  assert.equal((await links(by.ios.id)).lf_drive, 'https://drive.google.com/pb');
+});
