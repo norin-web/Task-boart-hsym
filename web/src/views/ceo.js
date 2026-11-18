@@ -186,7 +186,7 @@ export function inProgress(d, reload, { brief = false } = {}) {
         h('span', { class: 'wip-brief-due' + (r.dueDate && r.dueDate < today ? ' danger-text' : '') }, r.dueDate ? fmtDate(r.dueDate) : '—'))))
       : emptyBlock('Нет работ', { ic: 'progress' }));
   return h('section', null,
-    h('div', { class: 'section-head' }, h('h2', null, 'Работы в процессе')),
+    h('div', { class: 'section-head' }, h('h2', null, 'Работы в процессе', rows.length > 3 && h('span', { class: 'muted sec-n' }, rows.length))),
     rows.length
       ? h('div', { class: 'card-box wip-list' },
         h('div', { class: 'wip-row wip-head', 'aria-hidden': 'true' },
@@ -202,7 +202,7 @@ export function inProgress(d, reload, { brief = false } = {}) {
             h('span', { class: 'wip-stages', title: r.stages.length ? r.progress + '%' : '' }, r.stages.length ? stageDots(r.stages) : h('span', { class: 'muted' }, '—')),
             h('span', { class: 'wip-due' + (late ? ' late' : '') }, r.dueDate ? fmtDate(r.dueDate) : h('span', { class: 'muted' }, '—')),
             pm ? avatar(pm, 'sm') : h('span', { class: 'muted' }, '—'));
-        }))
+        }, 12, 'blk-more', 3)) // сразу 3 — «Показать ещё» / «Свернуть»: блок не растягивает дашборд
       : emptyBlock('Нет работ', { ic: 'progress' }));
 }
 
