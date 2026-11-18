@@ -67,12 +67,27 @@ export function renderBoardView() {
       }, h('span', { class: 'btn-label' }, 'Задача'), isSuper() && icon('chevron', 14)),
     ], team),
     // вид (доска / список), у ASO — «Мета / Тексты», и фильтры — одной строкой
-    filterBar([!team && viewSwitch(mode === 'list' ? 'list' : 'board'), asoBoard(team) && asoSwitch(() => { renderBoardView(); })]),
+    filterBar([!team && viewSwitch(mode === 'list' ? 'list' : 'board'), asoBoard(team) && asoSwitch(() => { renderBoardView(); }),
+      isProductTeam(team) && productSwitch(() => { renderBoardView(); })]),
     h('div', { id: 'tasks', class: mode === 'list' ? 'view-body' : 'board' }));
   renderTasks();
 }
 
 /** Команда ASO: её позиции — ASO Specialist. */
+/** Product Team: позиция Product owner (или стандартная команда t_product). */
+export const isProductTeam = team => !!team && (team.id === 't_product' || (team.departmentIds || []).includes('d_po'));
+/** Что за продуктовая карточка: апдейт (запрос «Апдейт») или реджект (задача «Реджект №N»); иначе — не сюда. */
+const productKind = t => (t.kind !== 'request' ? '' : t.requestType === 'update' ? 'update' : /^Реджект №/.test(t.title || '') ? 'reject' : '');
+const productView = () => { const v = LS.get('productView', 'all'); return ['all', 'update', 'reject'].includes(v) ? v : 'all'; };
+function productSwitch(onChange) {
+  const pool = S.board.tasks.filter(t => !t.archived && productKind(t));
+  const n = k => pool.filter(t => !taskDone(t) && (k === 'all' || productKind(t) === k)).length;
+  return h('div', { class: 'seg aso-seg', role: 'radiogroup', 'aria-label': 'Апдейты или реджекты' },
+    [['all', 'Все', 'layers'], ['update', 'Апдейты', 'refresh'], ['reject', 'Реджекты', 'rejected']].map(([v, label, ic]) =>
+      h('button', { class: productView() === v ? 'on' : '', role: 'radio', 'aria-checked': String(productView() === v),
+        onclick: () => { if (productView() === v) return; LS.set('productView', v); onChange(); } }, icon(ic, 14), label, h('span', { class: 'my-type-n' }, n(v)))));
+}
+
 export const isAsoTeam = team => !!team && ((team.departmentIds || []).includes('d_aso') || team.id === 't_aso');
 
 /** «Мета / Тексты» на доске: доска команды ASO, а на доске юнита — у того, кто ведёт меты (ASO-специалист, CEO «Меты»). */
@@ -359,7 +374,19 @@ export function filterTasks(opts = {}) {
   const teamDepts = team && (team.departmentIds || []).length ? new Set(team.departmentIds) : null;
   const qaTeam = !!(teamDepts && teamDepts.has('d_qa'));
   const asoTeam = asoBoard(team);
+  const product = isProductTeam(team);
   return S.board.tasks.filter(t => {
+    // Product Team — продуктовая работа: запросы-апдейты и реджекты юнита (не этапы); переключатель «Все / Апдейты / Реджекты»
+    if (product) {
+      const k = productKind(t);
+      if (!k || (productView() !== 'all' && productView() !== k)) return false;
+      if (t.archived && !f.archived) return false;
+      if (!opts.withOld && hidingOld() && staleDone(t)) return false;
+      if (f.assignees.length && !f.assignees.includes(t.assigneeId || NO_DEPT)) return false;
+      if (f.app && t.appId !== f.app) return false;
+      if (f.overdue && !isOverdue(t, today)) return false;
+      return true;
+    }
     // ASO: вкладка «Мета» или «Тексты»
     if (asoTeam && !inAsoView(t)) return false;
     if (byId && (t.kind === 'stage' || t.step === 'part') && foldedChild(t, byId)) return false;
