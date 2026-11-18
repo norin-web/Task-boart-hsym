@@ -3494,3 +3494,5 @@ a.bug-title:hover { text-decoration: underline; }
 .fc-list .fc-row, .fc-list .fc-row:hover { background: none; cursor: pointer; }
 /* карточки досок: при наведении без тени (правило владельца) */
 .card.card:hover { box-shadow: none; }
+/* запрос на карточке: на каком этапе сейчас */
+.card-sub .card-now { color: var(--text); font-weight: 500; }

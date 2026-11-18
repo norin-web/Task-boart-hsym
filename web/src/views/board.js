@@ -76,14 +76,14 @@ export function renderBoardView() {
 /** Команда ASO: её позиции — ASO Specialist. */
 /** Product Team: позиция Product owner (или стандартная команда t_product). */
 export const isProductTeam = team => !!team && (team.id === 't_product' || (team.departmentIds || []).includes('d_po'));
-/** Что за продуктовая карточка: апдейт (запрос «Апдейт») или реджект (задача «Реджект №N»); иначе — не сюда. */
-const productKind = t => (t.kind !== 'request' ? '' : t.requestType === 'update' ? 'update' : /^Реджект №/.test(t.title || '') ? 'reject' : '');
-const productView = () => { const v = LS.get('productView', 'all'); return ['all', 'update', 'reject'].includes(v) ? v : 'all'; };
+/** Что за продуктовая карточка: новое приложение (New App), апдейт или реджект (задача «Реджект №N»); иначе — не сюда. */
+const productKind = t => (t.kind !== 'request' ? '' : t.requestType === 'new_app' ? 'new' : t.requestType === 'update' ? 'update' : /^Реджект №/.test(t.title || '') ? 'reject' : '');
+const productView = () => { const v = LS.get('productView', 'all'); return ['all', 'new', 'update', 'reject'].includes(v) ? v : 'all'; };
 function productSwitch(onChange) {
   const pool = S.board.tasks.filter(t => !t.archived && productKind(t));
   const n = k => pool.filter(t => !taskDone(t) && (k === 'all' || productKind(t) === k)).length;
-  return h('div', { class: 'seg aso-seg', role: 'radiogroup', 'aria-label': 'Апдейты или реджекты' },
-    [['all', 'Все', 'layers'], ['update', 'Апдейты', 'refresh'], ['reject', 'Реджекты', 'rejected']].map(([v, label, ic]) =>
+  return h('div', { class: 'seg aso-seg', role: 'radiogroup', 'aria-label': 'Новые приложения, апдейты или реджекты' },
+    [['all', 'Все', 'layers'], ['new', 'Новые', 'app'], ['update', 'Апдейты', 'refresh'], ['reject', 'Реджекты', 'rejected']].map(([v, label, ic]) =>
       h('button', { class: productView() === v ? 'on' : '', role: 'radio', 'aria-checked': String(productView() === v),
         onclick: () => { if (productView() === v) return; LS.set('productView', v); onChange(); } }, icon(ic, 14), label, h('span', { class: 'my-type-n' }, n(v)))));
 }
@@ -376,7 +376,7 @@ export function filterTasks(opts = {}) {
   const asoTeam = asoBoard(team);
   const product = isProductTeam(team);
   return S.board.tasks.filter(t => {
-    // Product Team — продуктовая работа: запросы-апдейты и реджекты юнита (не этапы); переключатель «Все / Апдейты / Реджекты»
+    // Product Team — продуктовая работа: запросы New App, апдейты и реджекты юнита (не этапы); переключатель «Все / Новые / Апдейты / Реджекты»
     if (product) {
       const k = productKind(t);
       if (!k || (productView() !== 'all' && productView() !== k)) return false;
@@ -669,6 +669,10 @@ function taskCard(t, inLane) {
   const due = show.due && !B.dueDate.hidden && dueInfo(t.dueDate, taskDone(t));
   // этап, который ждёт незакрытые предыдущие (зависимости — задачи этого же юнита)
   const waits = taskDone(t) ? [] : (t.dependsOn || []).map(taskById).filter(d => d && !taskDone(d)).map(d => d.title.split(' · ')[0]);
+  // у запроса — на каком он этапе сейчас: открытые этапы, которые уже не ждут предыдущих
+  const nowSteps = t.kind === 'request' && !taskDone(t) ? S.board.tasks.filter(x => x.parentId === t.id && !x.archived && !taskDone(x)
+    && !(x.dependsOn || []).map(taskById).some(d => d && !taskDone(d))).map(x => x.title.split(' · ')[0]) : [];
+  const nowText = nowSteps.length ? 'Сейчас: ' + nowSteps.slice(0, 2).join(', ') + (nowSteps.length > 2 ? ` +${nowSteps.length - 2}` : '') : '';
 
   return h('article', {
     class: 'card' + (t.archived ? ' archived' : '') + (taskDone(t) ? ' done' : '') + (t._temp ? ' temp' : '') + (canEditTask(t) ? '' : ' locked')
@@ -694,6 +698,7 @@ function taskCard(t, inLane) {
   // вторая строка, как в макете: «откуда · состояние» — запрос CEO у этапа, «Запрос · 0 из 7» у самого запроса
   show.sub && (t.parent || TASK_KINDS[t.kind] || waits.length > 0) && h('div', { class: 'card-sub', title: t.parent ? t.parent.unit.name + ' · ' + t.parent.key : '' },
     [t.parent && t.parent.title, !t.parent && TASK_KINDS[t.kind] && TASK_KINDS[t.kind].short + (t.tree ? ` · ${t.tree.done} из ${t.tree.total}` : ''),
+      nowText && h('span', { class: 'card-now', title: 'Этапы в работе: ' + nowSteps.join(', ') }, nowText),
       waits.length > 0 && h('span', { title: 'Этап ждёт: ' + waits.join(', ') }, 'ждёт')].filter(Boolean)
       .flatMap((x, i) => (i ? [' · ', x] : [x]))),
   // низ: позиция, чеклист, остальное — тихим текстом; срок только когда горит; справа приоритет и исполнитель

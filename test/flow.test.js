@@ -444,6 +444,14 @@ test('RM: релиз — поля, свой чеклист, отправка в 
   const { app, request } = await api.as(ceo, () => api('createApp', { name: 'Sleep', unitId: gold.id, priority: 'o_high' }));
   const st = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: request.id }))).map(t => [t.step, t]));
   await api.as(lead, () => api('setTaskLink', { taskId: st.design.id, fieldId: 'lf_figma', url: 'https://figma.com/x' }));
+  // статус запроса следует за этапами: разложен — «В работе», отправлен в Apple — «В ревью», реджект — снова «В работе»
+  // смотрим из базы без прав (внутри блока RM — и возвращаемся к нему)
+  const reqStatus = async (back = null) => {
+    if (back) await actAs(api.pg, null);
+    try { return (await api.pg.query('select status from tasks where id = $1', [request.id])).rows[0].status; }
+    finally { if (back) await actAs(api.pg, back.uid, back.email); }
+  };
+  assert.equal(await reqStatus(), 'in_progress');
   for (const [who, k] of [[lead, 'design'], [lead, 'art'], [ios, 'ios'], [qa, 'qa'], [ios, 'integr'], [aso, 'meta'], [aso, 'store'], [lead, 'retext'], [aso, 'l10n']]) await finish(api, who, pm, st[k].id);
   await closeAccount(api, rm, (st.account || {}).id);
   const rel = await api.as(pm, () => api('sendToRelease', { taskId: st.release.id }));
@@ -467,6 +475,7 @@ test('RM: релиз — поля, свой чеклист, отправка в 
     await api('updateTask', { id: st.release.id, patch: { checklist: cl } });
     const s1 = await api('releaseStep', { taskId: st.release.id, action: 'submit' });
     assert.equal(s1.task.release.phase, 'submitted');
+    assert.equal(await reqStatus(rm), 'review');
     assert.equal(s1.task.status, 'review'); // на доске — колонка ревью, а не «в работе»
     assert.equal(s1.task.assigneeId, rm.id); // ревьюеру не переназначили
     d = await api('getRmDashboard', {});
@@ -475,6 +484,7 @@ test('RM: релиз — поля, свой чеклист, отправка в 
     await assert.rejects(() => api('releaseStep', { taskId: st.release.id, action: 'reject', reason: ' ' }), /Опишите/);
     const rj = await api('releaseStep', { taskId: st.release.id, action: 'reject', reason: 'Guideline 3.1.2', shot: 'drive.google.com/shot1' });
     assert.ok(rj.rejectRequestId);
+    assert.equal(await reqStatus(rm), 'in_progress');
     const r0 = (await api('getRmDashboard', {})).rejected[0];
     assert.deepEqual([r0.reason, r0.rejectNo, r0.shot], ['Guideline 3.1.2', 1, 'https://drive.google.com/shot1']);
   });

@@ -3400,3 +3400,65 @@ language sql stable security definer set search_path = public as $$
 $$;
 revoke execute on function account_request_allowed(text) from public, anon;
 grant execute on function account_request_allowed(text) to authenticated;
+
+-- Статус запроса следует за этапами (актуальность на досках, в т.ч. Product Team):
+-- этап взят в работу — запрос «В работе»; релиз отправлен в Apple — «В ревью»; реджект — снова «В работе».
+-- Только вперёд из «К выполнению» и между «В работе» / «В ревью»; свои колонки PM и закрытый запрос не трогаем.
+create or replace function sync_request_status(p_request text) returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  r tasks;
+  cols jsonb;
+  cur_kind text;
+  v_prog text;
+  v_rev text;
+  started boolean;
+  sent boolean;
+  target text;
+  v_sys text := coalesce(current_setting('app.system', true), '');
+  at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+begin
+  select * into r from tasks where id = p_request and kind = 'request' and not archived;
+  if r.id is null or coalesce(r.done_at, '') <> '' then return; end if;
+  select settings -> 'columns' into cols from units where id = r.unit_id;
+  select c ->> 'kind' into cur_kind from jsonb_array_elements(cols) c where c ->> 'id' = r.status;
+  if cur_kind = 'done' then return; end if;
+  select c ->> 'id' into v_prog from jsonb_array_elements(cols) c where c ->> 'kind' = 'progress' and c ->> 'id' <> 'review' and c ->> 'id' <> 'rework' limit 1;
+  select c ->> 'id' into v_rev from jsonb_array_elements(cols) c where c ->> 'id' = 'review' limit 1;
+  select exists (select 1 from tasks s join units su on su.id = s.unit_id, jsonb_array_elements(su.settings -> 'columns') c
+                  where s.parent_id = r.id and not s.archived and c ->> 'id' = s.status and c ->> 'kind' <> 'todo') into started;
+  select exists (select 1 from tasks s where s.parent_id = r.id and not s.archived and s.step = 'release' and s.release ->> 'phase' = 'submitted') into sent;
+  target := case when sent and v_rev is not null then v_rev when started then v_prog end;
+  if target is null or target = r.status then return; end if;
+  -- из «К выполнению» — куда угодно вперёд; «В работе» → «В ревью» после отправки; «В ревью» → «В работе» только после реджекта
+  if not (cur_kind = 'todo'
+          or (r.status = v_prog and target = v_rev)
+          or (r.status = v_rev and target = v_prog and exists (select 1 from tasks s where s.parent_id = r.id and not s.archived and s.step = 'release' and s.release ->> 'phase' = 'rejected'))) then
+    return;
+  end if;
+  perform set_config('app.system', 'on', true);
+  update tasks set status = target, updated_at = at_ where id = r.id;
+  perform set_config('app.system', case when v_sys = 'on' then 'on' else 'off' end, true); -- вызвавшая функция могла быть в системном режиме
+end $$;
+revoke execute on function sync_request_status(text) from public, anon, authenticated;
+
+create or replace function request_follow_stages() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if coalesce(new.parent_id, '') = '' or new.kind = 'request' then return new; end if;
+  if tg_op = 'UPDATE' and new.status is not distinct from old.status and new.release is not distinct from old.release then return new; end if;
+  perform sync_request_status(new.parent_id);
+  return new;
+end $$;
+drop trigger if exists request_follow_stages on tasks;
+create trigger request_follow_stages after insert or update on tasks for each row execute function request_follow_stages();
+
+-- разово: открытые запросы — в колонку по их этапам
+do $$
+declare x record;
+begin
+  if exists (select 1 from app_settings where key = 'once_request_status') then return; end if;
+  for x in select id from tasks where kind = 'request' and not archived and coalesce(done_at, '') = '' loop
+    perform sync_request_status(x.id);
+  end loop;
+  insert into app_settings (key, value, updated_at) values ('once_request_status', 'true'::jsonb, '') on conflict (key) do nothing;
+end $$;
