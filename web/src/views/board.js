@@ -635,7 +635,7 @@ function cardViewMenu(anchor, t) {
   const box = h('div');
   const paint = () => {
     const show = cardShow();
-    fill(box, CARD_PARTS.map(([k, label]) => h('button', { class: 'menu-item aud-item' + (show[k] ? ' on' : ''), role: 'menuitemcheckbox', 'aria-checked': String(!!show[k]),
+    fill(box, CARD_PARTS.map(([k, label]) => h('button', { class: 'menu-item aud-item card-show-item' + (show[k] ? ' on' : ''), role: 'menuitemcheckbox', 'aria-checked': String(!!show[k]),
       onclick: e => { e.stopPropagation(); setCardShow({ [k]: !show[k] }); paint(); } },
     h('span', { class: 'aud-check' }, show[k] && icon('check', 13)), label)),
     h('div', { class: 'menu-sep' }),

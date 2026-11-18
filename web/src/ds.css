@@ -3483,3 +3483,8 @@ a.bug-title:hover { text-decoration: underline; }
 /* «Показать все · N» под длинными списками — синяя (правило владельца: 5 строк + синяя кнопка) */
 .rc-more.link-btn, button.rc-more, .rm-more .link-btn { color: var(--info-fill, #0087EA); font-weight: 600; }
 .rc-more.link-btn:hover, button.rc-more:hover, .rm-more .link-btn:hover { color: color-mix(in srgb, var(--info-fill, #0087EA) 80%, #000); text-decoration: none; }
+/* «Что показывать на карточках»: спокойный список — выбранное отмечено только галочкой, плашка — при наведении */
+.menu-item.card-show-item.on { background: transparent; }
+.menu-item.card-show-item:hover, .menu-item.card-show-item.on:hover { background: var(--surface-2); }
+.card-show-item .aud-check { width: 18px; height: 18px; border-radius: 5px; }
+.card-show-item.on .aud-check { background: var(--text); border-color: var(--text); }
