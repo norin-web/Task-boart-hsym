@@ -2,7 +2,7 @@
  * Режим разработчика (people.is_dev): обратная связь от людей, ошибки у пользователей
  * и «смотреть как» — интерфейс любого человека без перелогина.
  */
-import { S, LS, ACCESS_LABELS, ACCESS_HINTS, personById, isDev, deptById, relTime } from '../state.js';
+import { S, LS, ACCESS_LABELS, personById, isDev, deptById, relTime } from '../state.js';
 import { $, h, icon, avatar, showErr, confirmDlg, fill, topbar } from '../ui.js';
 import { feedbackInboxCard } from './feedback.js';
 import { call } from '../api.js';
@@ -37,18 +37,57 @@ export function renderDev() {
         viewAsList()))));
 }
 
-/** Люди по ролям: клик — интерфейс этого человека. */
+/**
+ * «Смотреть как» — список: поиск и фильтр по роли сверху; группы по основной позиции (CEO — отдельно первой),
+ * внутри — лиды, потом остальные. В строке: имя, роль, все позиции, у CEO — направление. Клик — интерфейс человека.
+ */
 function viewAsList() {
-  const people = S.people.filter(p => p.active).sort((a, b) => ROLE_ORDER.indexOf(a.access) - ROLE_ORDER.indexOf(b.access) || a.name.localeCompare(b.name, 'ru'));
-  return h('div', { class: 'dev-roles' }, ROLE_ORDER.map(role => {
-    const list = people.filter(p => p.access === role);
-    return list.length > 0 && h('div', { class: 'dev-role' },
-      h('div', { class: 'dev-role-name', title: ACCESS_HINTS[role] }, ACCESS_LABELS[role], h('span', { class: 'muted' }, list.length)),
-      h('div', { class: 'dev-people' }, list.map(p => h('button', {
-        class: 'dev-person' + (p.id === S.meId ? ' on' : ''), 'aria-pressed': String(p.id === S.meId), onclick: () => viewAs(p.id),
-      }, avatar(p, 'sm'), h('span', { class: 'dev-pname' }, p.name),
-      h('span', { class: 'muted dev-ppos' }, (deptById(p.positionId) || {}).name || '')))));
-  }));
+  const box = h('div', { class: 'va-list' });
+  let q = '', role = '';
+  const ROLE_RANK = { superadmin: 0, moderator: 1, rm: 2, lead: 3, member: 4 };
+  const DIR = { design: 'Дизайн', meta: 'Меты', release: 'Релизы' };
+  const people = () => S.people.filter(p => p.active);
+  const posName = id => (deptById(id) || {}).name || '';
+  const row = p => h('button', { class: 'va-row' + (p.id === S.meId ? ' on' : ''), 'aria-pressed': String(p.id === S.meId), onclick: () => viewAs(p.id) },
+    avatar(p, 'sm'),
+    h('span', { class: 'va-name' }, p.name, p.id === S.realMeId && h('span', { class: 'badge' }, 'вы')),
+    h('span', { class: 'va-role r-' + p.access }, ACCESS_LABELS[p.access]),
+    h('span', { class: 'muted va-pos' }, (p.positionIds || [p.positionId]).map(posName).filter(Boolean).join(', ')),
+    h('span', { class: 'muted va-dir' }, p.access === 'superadmin' && p.direction ? 'направление: ' + DIR[p.direction] : ''),
+    p.id === S.meId ? h('span', { class: 'va-cur' }, 'сейчас') : icon('chevron', 14));
+  // поиск строится один раз (фокус не теряется), роли и список — перерисовываются
+  const roles = h('div', { class: 'va-roles' });
+  const listBox = h('div', { class: 'va-groups' });
+  const drawRoles = () => fill(roles, [['', 'Все'], ...ROLE_ORDER.map(r => [r, ACCESS_LABELS[r]])].map(([r, label]) =>
+    h('button', { class: 'fchip' + (role === r ? ' on' : ''), onclick: () => { role = r; drawRoles(); drawList(); } },
+      label, h('span', { class: 'my-type-n' }, r ? people().filter(p => p.access === r).length : people().length))));
+  const sorted = g => [...g].sort((a, b) => ROLE_RANK[a.access] - ROLE_RANK[b.access] || a.name.localeCompare(b.name, 'ru'));
+  const drawList = () => {
+    const list = people().filter(p => (!role || p.access === role) && (!q || (p.name + ' ' + (p.positionIds || []).map(posName).join(' ')).toLowerCase().includes(q)));
+    // группы: CEO; дальше — по основной позиции в порядке справочника
+    const groups = [];
+    const ceo = list.filter(p => p.access === 'superadmin');
+    if (ceo.length) groups.push(['CEO', ceo]);
+    const order = [...new Set([...(S.departments || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0)).map(d => d.id), ...list.map(p => p.positionId || '')])];
+    for (const id of order) {
+      const g = list.filter(p => p.access !== 'superadmin' && (p.positionId || '') === id);
+      if (g.length) groups.push([posName(id) || 'Без позиции', g]);
+    }
+    fill(listBox, groups.length
+      ? groups.map(([title, g]) => h('section', { class: 'va-group' },
+        h('div', { class: 'va-gtitle' }, title, h('span', { class: 'muted' }, g.length)),
+        h('div', { class: 'va-rows' }, sorted(g).map(row))))
+      : h('p', { class: 'muted' }, 'Никого не нашлось'));
+  };
+  fill(box,
+    h('div', { class: 'va-tools' },
+      h('label', { class: 'my-search va-search' }, icon('search', 15),
+        h('input', { type: 'search', placeholder: 'Имя или позиция', oninput: e => { q = e.target.value.trim().toLowerCase(); drawList(); } })),
+      roles),
+    listBox);
+  drawRoles();
+  drawList();
+  return box;
 }
 
 /**
