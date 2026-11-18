@@ -3308,3 +3308,9 @@ begin
     insert into app_settings (key, value, updated_at) values ('once_stage_positions', 'true'::jsonb, '') on conflict (key) do nothing;
   end if;
 end $$;
+
+-- Индексы под выборки по этапу и позиции (2026-11-18): релизы, аккаунты, меты / тексты, дизайн, цифры меню,
+-- «на тесте» — раньше это был просмотр всей таблицы задач. Частичные: только этапы / задачи с позицией.
+create index if not exists tasks_step on tasks(step) where step <> '';
+create index if not exists tasks_dept on tasks(department_id) where department_id <> '';
+create index if not exists tasks_parent_step on tasks(parent_id, step) where kind = 'stage';
