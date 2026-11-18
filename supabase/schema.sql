@@ -3462,3 +3462,31 @@ begin
   end loop;
   insert into app_settings (key, value, updated_at) values ('once_request_status', 'true'::jsonb, '') on conflict (key) do nothing;
 end $$;
+
+-- Удалили запрос или этап — уходит и всё его дерево (этапы, части, задачи под запросом), иначе на досках остаются этапы без запроса.
+-- Удалять запросы и этапы может только супер-админ (tasks_delete), поэтому каскад — без отдельных проверок.
+create or replace function delete_task_tree() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if coalesce(old.kind, '') not in ('request', 'stage') then return old; end if;
+  delete from tasks where id in (
+    with recursive d as (
+      select t.id from tasks t where t.parent_id = old.id
+      union
+      select t.id from tasks t join d on t.parent_id = d.id
+    ) select id from d);
+  return old;
+end $$;
+drop trigger if exists delete_task_tree on tasks;
+-- after, а не before: иначе при удалении многих задач разом (приложение целиком) Postgres ругается на уже изменённую строку
+create trigger delete_task_tree after delete on tasks for each row execute function delete_task_tree();
+
+-- разово: этапы и задачи, чей запрос уже удалён, — в архив (не удаляем: можно вернуть)
+do $$
+begin
+  if exists (select 1 from app_settings where key = 'once_orphan_stages') then return; end if;
+  perform set_config('app.system', 'on', true);
+  update tasks t set archived = true, updated_at = to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+   where t.parent_id <> '' and not t.archived and not exists (select 1 from tasks p where p.id = t.parent_id);
+  perform set_config('app.system', 'off', true);
+  insert into app_settings (key, value, updated_at) values ('once_orphan_stages', 'true'::jsonb, '') on conflict (key) do nothing;
+end $$;

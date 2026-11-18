@@ -652,6 +652,25 @@ test('удаление приложений: только CEO, вместе с �
   assert.ok(keep.app.id);
 });
 
+test('удаление запроса: уходят и его этапы (на досках не остаётся этапов без запроса); приложение с разложенным запросом удаляется целиком', async () => {
+  const api = await setup();
+  const { ceo, pm, gold } = await studio(api);
+  const { app, request } = await api.as(ceo, () => api('createApp', { name: 'Tree', unitId: gold.id }));
+  await api.as(pm, () => api('decomposeRequest', { taskId: request.id }));
+  const upd = await api.as(ceo, () => api('createRequest', { appId: app.id, type: 'update', title: 'Апдейт' }));
+  const stages = await api.as(pm, () => api('decomposeRequest', { taskId: upd.id }));
+  assert.ok(stages.length > 1);
+  const left = async () => Number((await api.pg.query('select count(*) as n from tasks where parent_id = $1', [upd.id])).rows[0].n);
+  await api.as(pm, () => assert.rejects(() => api('deleteTask', { id: upd.id })));
+  assert.equal(await left(), stages.length);
+  await api.as(ceo, () => api('deleteTask', { id: upd.id }));
+  assert.equal(await left(), 0);
+  assert.ok(!(await api.as(ceo, () => api('getBoard', { unitId: gold.id }))).tasks.some(t => t.title.includes('· Апдейт')));
+  // много задач разом (запрос и его этапы в одном удалении) — без ошибки
+  await api.as(ceo, () => api('deleteApps', { ids: [app.id] }));
+  assert.equal(Number((await api.pg.query('select count(*) as n from tasks where app_id = $1', [app.id])).rows[0].n), 0);
+});
+
 test('массовая правка приложений: статус и юнит', async () => {
   const api = await setup();
   const { ceo, pm, gold, rf } = await studio(api);
