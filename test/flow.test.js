@@ -1150,3 +1150,21 @@ test('статус приложения «Реджект», а релиз в о�
   assert.ok(d.rejectedApps.some(x => x.app.id === app.id), 'приложение в «Реджектах»');
   assert.equal((await api.as(rm, () => api('navCounts', { personId: rm.id }))).rejects, 1);
 });
+
+test('позиция этапа — по флоу: назначили дизайнера на «Метаданные» — потом ASO-специалиста назначить можно; сбитые этапы чинятся разово', async () => {
+  const api = await setup();
+  const { ceo, pm, lead, aso, gold } = await studio(api);
+  const { request } = await api.as(ceo, () => api('createApp', { name: 'Switch', unitId: gold.id }));
+  const by = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: request.id }))).map(t => [t.step, t]));
+  // CEO назначил на «Метаданные» лида дизайна (как бывает), позиция этапа остаётся ASO
+  await api.as(ceo, () => api('updateTask', { id: by.store.id, patch: { assigneeId: lead.id } })).catch(() => null);
+  const dept = async () => (await api.pg.query('select department_id from tasks where id = $1', [by.store.id])).rows[0].department_id;
+  assert.equal(await dept(), 'd_aso');
+  await api.as(ceo, () => api('updateTask', { id: by.store.id, patch: { assigneeId: aso.id } }));
+  // старые данные: позиция сбита под дизайнера — разовая правка возвращает ASO
+  await api.pg.query("update tasks set department_id = 'd_design' where id = $1", [by.store.id]);
+  await api.pg.query("delete from app_settings where key = 'once_stage_positions'");
+  await api.pg.exec(SCHEMA);
+  assert.equal(await dept(), 'd_aso');
+  await api.as(ceo, () => api('updateTask', { id: by.store.id, patch: { assigneeId: aso.id } }));
+});

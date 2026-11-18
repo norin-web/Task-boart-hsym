@@ -119,8 +119,9 @@ function unitItem(u, r) {
     h('span', { class: 'nav-label' }, u.name),
     h('span', { class: 'nav-abbr', 'aria-hidden': 'true' }, String(u.key || u.name || '').replace(/[^\p{L}\p{N}]/gu, '').slice(0, 2).toUpperCase()),  // в свёрнутом сайдбаре (макет 05б): точка + две буквы
 
-    // стрелка есть у каждого юнита (макет 12): у текущего — разворачивает команды, у остальных — только указывает на вложенность
-    h('span', { class: 'nav-chev', 'aria-hidden': 'true' }, icon('chevron', 14))),
+    // стрелка (макет 12): у текущего — разворачивает команды, у остальных — указывает на вложенность;
+    // у кого под юнитом команд нет (сотрудник, RM) — без стрелки, раскрывать нечего
+    (teams.length > 0 || isSuper()) && h('span', { class: 'nav-chev', 'aria-hidden': 'true' }, icon('chevron', 14))),
     open && h('div', { class: 'nav-subs' },
       teams.map(t => sub({ unit: u.id, mode: 'board', team: t.id }, t.name, r.unit === u.id && r.team === t.id)),
       isSuper() && h('button', { class: 'nav-sub add', onclick: () => openTeamDialog(u) }, icon('plus', 14), h('span', { class: 'nav-label' }, 'Новая команда'))));

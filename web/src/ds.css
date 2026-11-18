@@ -3427,3 +3427,14 @@ a.bug-title:hover { text-decoration: underline; }
 @container (max-width: 760px) { .trow-app { width: 140px; } }
 @media (max-width: 760px) { .trow-app { width: auto; max-width: 40%; } }
 .acc-comment { font-size: 12px; line-height: 16px; color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; padding: 8px 10px; border-radius: 12px; background: var(--surface); }
+/* вкладка «Команда» юнита: колонка «Команды»; узкий блок — без колонки «Позиция» (она видна в «Людях») */
+.card-box.team-table { container-type: inline-size; }
+.team-head, .team-table .team-row { grid-template-columns: 32px minmax(120px, 1fr) 150px minmax(140px, 200px) 110px 150px; }
+.team-head { grid-template-columns: minmax(120px, 1fr) 150px minmax(140px, 200px) 110px 150px; }
+.team-table .team-row > *, .team-table .team-teams { min-width: 0; }
+.team-table .team-pos { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@container (max-width: 820px) {
+  .team-head, .team-table .team-row { grid-template-columns: 32px minmax(110px, 1fr) minmax(130px, 180px) 90px 120px; }
+  .team-head { grid-template-columns: minmax(110px, 1fr) minmax(130px, 180px) 90px 120px; }
+  .team-table .team-pos, .team-head > :nth-child(2) { display: none; }
+}

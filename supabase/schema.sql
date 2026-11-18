@@ -3292,3 +3292,19 @@ begin
     insert into app_settings (key, value, updated_at) values ('once_account_manual', 'true'::jsonb, '') on conflict (key) do nothing;
   end if;
 end $$;
+
+-- Один раз (2026-11-18): позиция этапа запроса сбивалась под исполнителя (назначили дизайнера на «Метаданные» —
+-- этап стал «UX/UI Designer», и ASO-специалиста на него уже не назначить). Возвращаем этапам позицию по флоу.
+do $$
+begin
+  if not exists (select 1 from app_settings where key = 'once_stage_positions') then
+    perform set_config('app.system', 'on', true);
+    update tasks t set department_id = m.pos
+      from (values ('design', 'd_design'), ('art', 'd_design'), ('retext', 'd_design'), ('ios', 'd_ios'), ('integr', 'd_ios'),
+                   ('qa', 'd_qa'), ('meta', 'd_aso'), ('store', 'd_aso'), ('l10n', 'd_aso'), ('release', 'd_release'), ('account', 'd_release')) m(step, pos)
+     where t.kind = 'stage' and t.step = m.step and t.department_id is distinct from m.pos
+       and exists (select 1 from departments d where d.id = m.pos);
+    perform set_config('app.system', 'off', true);
+    insert into app_settings (key, value, updated_at) values ('once_stage_positions', 'true'::jsonb, '') on conflict (key) do nothing;
+  end if;
+end $$;

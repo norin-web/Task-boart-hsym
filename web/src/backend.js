@@ -737,10 +737,20 @@ export function createBackend(db, opts = {}) {
       if (person.access !== 'rm') fail(`Релиз ведёт релиз-менеджер: ${person.name} им не является`, 'RULE');
       return;
     }
+    // позиция этапа — по флоу (шаг → позиция), а не текущая позиция задачи (её могли сбить прежние назначения)
+    if (kind === 'stage') departmentId = (await stagePosition(unitId, step)) || departmentId;
     if (kind === 'stage' && departmentId && !person.positionIds.includes(departmentId)) {
       const d = await one('departments', departmentId);
       fail(`${person.name} — не ${d ? '«' + d.name + '»' : 'нужной позиции'}: выберите человека этой позиции`, 'RULE');
     }
+  }
+  /** Позиция этапа по флоу юнита (любой тип запроса), иначе — по флоу по умолчанию; «Аккаунт» — Release Manager. */
+  async function stagePosition(unitId, step) {
+    if (!step || step === 'part') return '';
+    if (step === 'account') return 'd_release';
+    const all_ = unitId ? Object.values(await flows(unitId)).flat() : [];
+    const def = [...all_, ...Object.values(DEFAULT_FLOWS).flat()].find(x => x && x.key === step);
+    return (def && def.positionId) || '';
   }
   /** RM — это и роль, и позиция Release Manager: одно без другого не бывает. */
   function checkRmPosition(access, positionIds) {
@@ -1535,8 +1545,9 @@ export function createBackend(db, opts = {}) {
           await fitsAssignee(t.unit_id, { kind: t.kind, step: t.step, departmentId: 'departmentId' in patch ? await validDept(patch.departmentId) : t.department_id }, v);
           change('assigneeId', t.assignee_id, v);
           t.assignee_id = v;
-          // Позиция задачи следует за исполнителем (если её не задали явно в этом же изменении)
-          const d = !('departmentId' in patch) && (await memberDept(t.unit_id, v));
+          // Позиция задачи следует за исполнителем (если её не задали явно в этом же изменении);
+          // у этапа запроса позиция — своя, по флоу («Метаданные» — ASO), исполнитель её не меняет
+          const d = t.kind !== 'stage' && !('departmentId' in patch) && (await memberDept(t.unit_id, v));
           if (d && d !== t.department_id) { change('departmentId', t.department_id, d); t.department_id = d; }
         }
       }

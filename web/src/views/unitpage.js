@@ -3,7 +3,7 @@
  * Обзор: описание, цифры, что в работе и что требует внимания, ответственный и команда коротко.
  * Команда: люди юнита — роль, позиция, открытые задачи в юните; добавить участника — руководителям.
  */
-import { S, me, isSuper, isStaff, todayStr, ACCESS_LABELS, personById, deptById, taskDone, plural, columns, colColor, appStatusById } from '../state.js';
+import { S, me, isSuper, isStaff, todayStr, ACCESS_LABELS, personById, deptById, teamById, taskDone, plural, columns, colColor, appStatusById } from '../state.js';
 import { $, h, icon, avatar, showErr, fill, menu, toast, emptyBlock, skeleton, modal, confirmDlg } from '../ui.js';
 import { call, send, swr } from '../api.js';
 import { currentView, link } from '../router.js';
@@ -11,7 +11,7 @@ import { openCreateApp, openNewAppTask, pmsOf, openAppCard, appStatusCell, appIc
 import { peekTask } from './task.js';
 import { attention, inProgress, recent } from './ceo.js';
 
-import { addMemberDialog, applyMembers } from './people.js';
+import { addMemberDialog, applyMembers, teamsPicker } from './people.js';
 import { guestSection } from './settings.js';
 import { sparkline, openSeries } from './charts.js';
 import { unitHeader } from './unitnav.js';
@@ -250,6 +250,10 @@ export function renderUnitTeam() {
         avatar(p, 'sm'),
         h('b', { class: 'team-who', 'data-pcard': p.id }, p.name),
         h('span', { class: 'muted team-pos' }, (deptById(m.departmentId) || deptById(p.positionId) || {}).name || '—'),
+        // команды человека (доски команд юнита): меняет CEO; остальным — названия
+        isSuper()
+          ? teamsPicker(() => p.teamIds || [], ids => { p.teamIds = ids; send('updatePerson', { id: p.id, teamIds: ids }).then(saved => { Object.assign(p, saved); toast('Команды сохранены'); }).catch(showErr); }, { chips: true })
+          : h('span', { class: 'muted team-teams' }, (p.teamIds || []).map(id => (teamById(id) || {}).name).filter(Boolean).join(', ') || '—'),
         h('span', { class: 'muted team-role' }, ACCESS_LABELS[p.access] || '',
           p.access === 'lead' && isStaff() && h('button', { class: 'link-btn', style: { marginLeft: '8px' }, title: 'Позиции лида и выданные ему люди', onclick: () => zoneDialog(p) },
             'зона' + ((zones[p.id] || []).length ? ' · +' + zones[p.id].length : ''))),
@@ -257,7 +261,7 @@ export function renderUnitTeam() {
           late > 0 && h('span', { class: 'warn-text' }, ` · просрочено ${late}`),
           canEdit && (p.access === 'moderator' ? isSuper() : p.access !== 'superadmin') && h('button', { class: 'icon-btn sm', type: 'button', title: p.access === 'moderator' ? 'Убрать PM из юнита' : 'Убрать из команды', 'aria-label': 'Убрать ' + p.name + ' из команды', onclick: () => removeMember(p) }, icon('x', 14))));
     };
-    const head = () => h('div', { class: 'team-head' }, h('span', null, 'Человек'), h('span', null, 'Позиция'), h('span', null, 'Роль'), h('span', null, 'Задачи в юните'));
+    const head = () => h('div', { class: 'team-head' }, h('span', null, 'Человек'), h('span', null, 'Позиция'), h('span', null, 'Команды'), h('span', null, 'Роль'), h('span', null, 'Задачи в юните'));
     const isPm = x => ['moderator', 'superadmin'].includes(x.p.access);
     const pms = rows.filter(isPm), crew = rows.filter(x => !isPm(x));
     const block = (title, list) => list.length > 0 && h('section', null,
