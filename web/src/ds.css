@@ -3473,3 +3473,9 @@ a.bug-title:hover { text-decoration: underline; }
 .card-app { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 2px 0 2px; font-size: 13px; font-weight: 600; color: var(--text); }
 .card-app > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card-app .uc-icon { width: 20px; height: 20px; border-radius: 6px; flex: none; font-size: 10px; }
+
+/* Карточка доски, как в Jira: приоритет — полоса цвета приоритета по левому краю на всю высоту; ключ — внизу слева */
+.card.prio { box-shadow: inset 4px 0 0 var(--prio); }
+.card.prio:hover { box-shadow: inset 4px 0 0 var(--prio), var(--shadow-soft); }
+.card.prio::before { display: none; }
+.card-foot .card-key { font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; letter-spacing: .01em; }
