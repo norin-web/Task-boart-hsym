@@ -298,13 +298,24 @@ export function taskGroups(tasks) {
   return box;
 }
 
+/** Иконка приложения (как appIcon в apps.js — свой вариант, чтобы не тянуть apps.js в «Мои задачи»). */
+const appMark = a => (a.iconUrl
+  ? h('img', { class: 'uc-icon app-img xs', src: a.iconUrl, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' })
+  : h('span', { class: 'uc-icon xs', style: { background: a.color || 'var(--muted)' }, 'aria-hidden': 'true' }, a.name.slice(0, 1).toUpperCase()));
+
 function row(t, { unit = true, done = false, progress = null, slot = false } = {}) {
   const due = dueInfo(t.dueDate, t.statusKind === 'done');
   const late = due && due.cls.includes('overdue');
+  // к какому приложению задача: иконка и название отдельной колонкой; в названии этапа «Дизайн · Vizio v1» имя не повторяем
+  const app = t.appId && appById(t.appId);
+  const tail = app && [' · ', ': '].map(sep => sep + app.name).find(x => t.title.endsWith(x) && t.title.length > x.length);
+  const title = tail ? t.title.slice(0, -tail.length) : t.title;
   return taskLink(t.unit.id, t.id, { class: 'trow' + (done ? ' done' : '') },
     whose !== 'set' && statusIcon(t.statusKind === 'progress' && /ревью/i.test(t.statusName) ? 'review' : t.statusKind, 16),
     h('span', { class: 'trow-key' }, t.key),
-    h('span', { class: 't-title' }, t.title),
+    // колонка — тем, кто видит приложения (CEO, PM, RM); остальным название приложения остаётся в заголовке
+    (S.apps || []).length > 0 && h('span', { class: 'trow-app', title: app ? app.name : '' }, app && appMark(app), app && h('span', null, app.name)),
+    h('span', { class: 't-title', title: t.title }, title),
     progress ? h('span', { class: 'trow-prog', title: `Готово ${progress.done} из ${progress.total}` },
       h('span', { class: 'trow-bar' }, h('i', { style: { width: Math.round(progress.done / progress.total * 100) + '%' } })),
       h('span', { class: 'muted' }, `${progress.done}/${progress.total}`))

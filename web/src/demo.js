@@ -169,6 +169,11 @@ export async function runProcess(api, P, U, test) {
     for (const k of keys.filter(x => s[x])) await close(s[k], s[k].assigneeId ? worker(P, s[k].assigneeId) : pm, pm);
     if (until === 'ready') return { app: a.app, request: a.request, s };  // дизайн закрыт, iOS ждёт разработчика
     if (until === 'dev') { await move(s.ios.id, 'in_progress', worker(P, s.ios.assigneeId || P[pm].id)); return { app: a.app, request: a.request, s }; }
+    // аккаунт в сторе: RM прикладывает Google Doc с данными и закрывает этап (без него релиз не передать)
+    if (s.account) {
+      await act('sergey', 'setTaskLink', { taskId: s.account.id, fieldId: 'lf_account', url: `https://docs.google.com/document/d/${slug(name)}-account` });
+      await move(s.account.id, 'done', 'sergey');
+    }
     await act(who, 'sendToRelease', { taskId: s.release.id });
     if (until === 'queue') return { app: a.app, request: a.request, s };
     await act('sergey', 'saveReleaseValues', { taskId: s.release.id, values: { version: '1.0', build: String(100 + apps), whatsnew: 'Первый выпуск' } });

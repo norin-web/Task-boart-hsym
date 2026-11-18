@@ -3418,3 +3418,11 @@ a.bug-title:hover { text-decoration: underline; }
   .wip-req, .wip-now { display: none; }
   .wip-stages { grid-column: 1 / -1; grid-row: 2; }
 }
+
+/* «Мои задачи»: ключ — в одну строку; приложение — своей колонкой с иконкой */
+.trow-key { width: 84px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trow-app { display: inline-flex; align-items: center; gap: 8px; width: 190px; flex: none; min-width: 0; font-size: 13px; font-weight: 600; color: var(--text); }
+.trow-app > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trow-app .uc-icon { width: 22px; height: 22px; border-radius: 6px; flex: none; font-size: 11px; }
+@container (max-width: 760px) { .trow-app { width: 140px; } }
+@media (max-width: 760px) { .trow-app { width: auto; max-width: 40%; } }

@@ -3017,7 +3017,8 @@ create policy task_links_read on task_links for select to authenticated
 -- Запись — отдельными правилами (вставка / правка / удаление), чтобы чтение не считало эту проверку на каждой строке.
 create or replace function can_edit_task_links(p_task text) returns boolean
 language sql stable security definer set search_path = public as $$
-  select exists (select 1 from tasks t where t.id = p_task and (
+  -- app_system(): служебные операции без входа (заполнение демо, SQL) — как и раньше
+  select app_system() or exists (select 1 from tasks t where t.id = p_task and (
     can_manage(t.unit_id) or t.assignee_id = my_person_id() or t.review_from = my_person_id() or t.reviewer_id = my_person_id()
     or in_lead_zone(t.unit_id, t.department_id, t.assignee_id)));
 $$;
