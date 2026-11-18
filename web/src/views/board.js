@@ -387,6 +387,9 @@ export function filterTasks(opts = {}) {
       if (f.overdue && !isOverdue(t, today)) return false;
       return true;
     }
+    // запрос (New App, апдейт, реджект) — работа PM: на досках команд его нет, только в Product Team и на доске юнита;
+    // позицию запрос получает от исполнителя (PM-дизайнер → «UX/UI Designer»), из-за этого он попадал к дизайнерам
+    if (team && t.kind === 'request') return false;
     // ASO: вкладка «Мета» или «Тексты»
     if (asoTeam && !inAsoView(t)) return false;
     if (byId && (t.kind === 'stage' || t.step === 'part') && foldedChild(t, byId)) return false;
