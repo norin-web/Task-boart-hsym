@@ -125,10 +125,17 @@ export function navigate(r, { replace = false, back = false } = {}) {
 
 /** Раздел сайдбара, к которому относится экран: внутренний экран остаётся в разделе, откуда в него зашли. */
 export function sectionRoute(r = S.route) {
-  if (r.unit) return r;
-  if (r.view === 'app') return curFrom ? sectionRoute(curFrom) : { view: 'apps' };
-  if (r.view === 'analytics' && r.tile) return { view: 'analytics' };
-  return r;
+  // приложение открыли из приложения (и так далее) — идём по цепочке «откуда» (from вложен), а не по одному и тому же curFrom:
+  // раньше sectionRoute(curFrom) с curFrom = приложение звал сам себя бесконечно (Maximum call stack, #/app/… из #/app/…)
+  let x = r, up = curFrom;
+  for (let i = 0; x && !x.unit && x.view === 'app'; i++) {
+    if (!up || i > 20) return { view: 'apps' };
+    x = up;
+    up = up.from || null;
+  }
+  if (x.unit) return x;
+  if (x.view === 'analytics' && x.tile) return { view: 'analytics' };
+  return x;
 }
 
 const routeLabel = f => {
