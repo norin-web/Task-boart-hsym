@@ -7,7 +7,7 @@
 /** Тип колонки: не начато / в работе / готово. Свои колонки встают между ними. */
 import { DEV_QUESTIONS } from './devform.js';
 import { cleanChart, METRIC_KIND } from './chartdefs.js';
-import { stickerOf, STICKERS } from './stickers.js';
+import { stickerOf, STICKERS, canSendSticker } from './stickers.js';
 
 export const KINDS = ['todo', 'progress', 'done'];
 const KIND_COUNT_KEY = { todo: 'todo', progress: 'in_progress', done: 'done' };
@@ -286,7 +286,7 @@ const SHELF_NAMES = { spam: 'Design Spam [4.3]', sale: 'Removed from sale', dele
 const SETTING_NAMES = {
   appStatuses: 'статусы приложений', appFields: 'поля приложений', appInfoItems: 'пункты Info', releaseFields: 'релизные поля',
   releaseChecklist: 'чеклист релиза', devQuestions: 'опросник разработчика', staleDays: 'срок «без движения»',
-  unitRetentionDays: 'срок хранения корзины', priorityOptions: 'приоритеты', storeAutoCheck: 'автопроверка App Store', storeManualCheck: 'кнопка ручной проверки App Store',
+  unitRetentionDays: 'срок хранения корзины', priorityOptions: 'приоритеты', storeAutoCheck: 'автопроверка App Store', storeManualCheck: 'кнопка ручной проверки App Store', stickers: 'стикеры в комментариях',
 };
 /** Фото data:image (webp/jpeg/png, до ~90 КБ; браузер сжимает до 160 px). Иначе — пусто. */
 const photoValue = v => {
@@ -817,7 +817,7 @@ export function createBackend(db, opts = {}) {
     if (!key) return;
     const id = (await rpc('my_person_id', {}).catch(() => '')) || by; // автора ставит база — сверяем с ней
     const p = id && (await one('people', String(id)));
-    if (!p || !STICKERS[key].owner.test(String(p.name || '').trim())) fail('Этот стикер может отправлять только его владелец', 'FORBIDDEN');
+    if (!canSendSticker(key, p, await setting('stickers'))) fail('Этот стикер вам недоступен', 'FORBIDDEN');
   }
 
   async function notifyMentions(taskId, text, before, where) {
@@ -1035,10 +1035,10 @@ export function createBackend(db, opts = {}) {
     /* ---------- общие данные, главная, поиск ---------- */
 
     async bootstrap(p) {
-      const [units, ppl, depts, lf, tpl, tm, apps, statuses, afields, gfields, info, manual, infoLists] = await Promise.all([unitsWithCounts(today(p.today)), people(true), departments(), linkFields(), templates(), teams(),
+      const [units, ppl, depts, lf, tpl, tm, apps, statuses, afields, gfields, info, manual, infoLists, stickers] = await Promise.all([unitsWithCounts(today(p.today)), people(true), departments(), linkFields(), templates(), teams(),
         // без снимка задач убранных приложений (shelf_tasks) — он нужен только при восстановлении
         all(() => T('apps').select('id,unit_id,name,color,status,info,priority,status_at,icon_url,store_name,store_ok,store_checked_at,checks,own_fields,ord,archived,shelf,shelved_at,is_test,created_by,created_at,updated_at').order('ord').order('id')), appStatuses(), appFields(), globalFields(), appInfoItems(), setting('storeManualCheck'),
-        run(T('info_lists').select('person_id'))]);
+        run(T('info_lists').select('person_id')), setting('stickers')]);
       const prio = gfields.find(f => f.role === 'priority');
       return {
         units: units.map(({ doneWeek, ...u }) => u), people: ppl, departments: depts, linkFields: lf, templates: tpl, teams: tm,
@@ -1047,6 +1047,8 @@ export function createBackend(db, opts = {}) {
         storeManualCheck: !!(manual && manual.show),
         // у кого включён инфо-лист (человеку база отдаёт только его строку, CEO — все)
         infoListIds: infoLists.map(r => r.person_id),
+        // кому можно отправлять стикеры в комментариях (выбирает CEO); null — по умолчанию (stickers.js)
+        stickers: stickers || null,
       };
     },
 
@@ -2317,6 +2319,17 @@ export function createBackend(db, opts = {}) {
         id: r.id, name: r.name, iconUrl: r.icon_url || '', color: r.color || '', unitId: r.unit_id, values: json(r.vals, {}) || {},
       }));
       return { on: true, fields, apps };
+    },
+
+    /** Кто может отправлять стикер в комментариях. Меняет CEO (RLS app_settings). */
+    async setStickerPeople(p) {
+      const key = String(p.key || '');
+      if (!STICKERS[key]) fail('Нет такого стикера', 'NOT_FOUND');
+      const ids = new Set((await people()).map(x => x.id));
+      const list = [...new Set((Array.isArray(p.personIds) ? p.personIds : []).map(String))].filter(id => ids.has(id));
+      const all = { ...((await setting('stickers')) || {}), [key]: list };
+      await run(T('app_settings').upsert({ key: 'stickers', value: all, updated_at: now() }, { onConflict: 'key' }));
+      return all;
     },
 
     /** Показывать ли кнопку «Обновить» в проверке App Store (проверка идёт из браузера, с адреса человека). Меняет CEO. */

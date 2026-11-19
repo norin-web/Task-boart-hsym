@@ -147,6 +147,7 @@ async function applyBootstrap(d, live) {
   S.priorityOptions = d.priorityOptions || [];
   S.storeManualCheck = !!d.storeManualCheck;
   S.infoListIds = d.infoListIds || [];
+  S.stickers = d.stickers || null;
   // часовой пояс для карточки сотрудника — из браузера, пока человек не указал свой
   const self = S.people.find(p => p.id === S.meId);
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;

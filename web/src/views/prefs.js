@@ -5,7 +5,7 @@
  * Раздел студии рисует admin.js (renderStudio), редакторы приложений и релизов открываются своими окнами.
  */
 import { S, LS, me, isStaff, isSuper, isDev, myAccess, ACCESS_LABELS, deptById, plural } from '../state.js';
-import { $, h, icon, avatar, topbar, fill, showErr, toast } from '../ui.js';
+import { $, h, icon, avatar, topbar, fill, showErr, toast, modal } from '../ui.js';
 import { send, call } from '../api.js';
 import { link, currentView, rerender, navigate } from '../router.js';
 import { mode, supabase } from '../data.js';
@@ -16,6 +16,7 @@ import { openCreateUnit } from './units.js';
 import { chartsSection, editChart } from './chartsettings.js';
 import { hasInfoList, infoListSection, openInfoListsEditor, infoListCount } from './infolist.js';
 import { feedbackSection } from './feedback.js';
+import { STICKERS, canSendSticker } from '../stickers.js';
 
 const PERSONAL_ALL = [
   ['profile', 'Профиль', 'user'],
@@ -211,7 +212,51 @@ function appsSection() {
         act('Настроить', () => openInfoListsEditor(rerender)), 'link'),
       storeAutoRow(),
       storeManualRow()),
+    head('Комментарии', 'Стикеры: кнопка у поля комментария только у выбранных людей, видят все'),
+    card(Object.keys(STICKERS).map(stickerRow)),
   ];
+}
+
+/** Кто может отправлять стикер: строка со стикером и именами. */
+function stickerRow(key) {
+  const who = S.people.filter(p => p.active && canSendSticker(key, p, S.stickers));
+  const sub = who.length ? `${who.length} ${plural(who.length, ['человек', 'человека', 'человек'])}: ${who.map(p => p.name).join(', ')}` : 'Никто — выберите людей';
+  return h('button', { class: 'prefs-row click', type: 'button', 'aria-label': `Стикер «${STICKERS[key].name}»: выбрать людей`, onclick: () => openStickerPeople(key) },
+    h('img', { class: 'prefs-sticker', src: STICKERS[key].src, alt: '', width: 32, height: 32 }),
+    h('span', { class: 'prefs-row-text' }, h('b', null, `Стикер «${STICKERS[key].name}»`), h('small', { class: 'muted' }, sub)),
+    h('span', { class: 'prefs-go' }, icon('chevron', 15)));
+}
+
+/** Окно: все активные люди с переключателями; сохраняется сразу. */
+function openStickerPeople(key) {
+  const people = S.people.filter(p => p.active);
+  let ids = people.filter(p => canSendSticker(key, p, S.stickers)).map(p => p.id);
+  people.sort((a, b) => Number(ids.includes(b.id)) - Number(ids.includes(a.id)) || a.name.localeCompare(b.name, 'ru'));
+  const box = h('div', { class: 'il-people' });
+  const draw = () => fill(box, people.map(p => {
+    const on = ids.includes(p.id);
+    const sw = h('input', { type: 'checkbox', class: 'switch', checked: on, 'aria-label': 'Может отправлять стикер: ' + p.name });
+    sw.onchange = () => {
+      const next = sw.checked ? [...ids, p.id] : ids.filter(x => x !== p.id);
+      sw.disabled = true;
+      send('setStickerPeople', { key, personIds: next })
+        .then(r => { S.stickers = r; ids = next; sw.disabled = false; draw(); })
+        .catch(e => { sw.checked = !sw.checked; sw.disabled = false; showErr(e); });
+    };
+    const pos = (deptById(p.positionId) || {}).name || '';
+    return h('div', { class: 'il-person' + (on ? ' on' : '') },
+      h('label', { class: 'il-person-head' }, avatar(p, 'sm'),
+        h('span', { class: 'il-person-name' }, h('b', null, p.name), pos && h('small', { class: 'muted' }, pos)), sw));
+  }));
+  draw();
+  modal({
+    title: `Стикер «${STICKERS[key].name}»`,
+    cls: 'dlg il-dlg',
+    body: [h('div', { class: 'sticker-dlg-head' }, h('img', { src: STICKERS[key].src, alt: '', width: 64, height: 64 }),
+      h('p', { class: 'hint' }, 'Кому включено — у того рядом с «Отправить» в комментариях появится кнопка со стикером. Остальные видят стикер, но отправить не могут.')), box],
+    actions: [{ label: 'Готово', primary: true }],
+    onClose: () => rerender(),
+  });
 }
 
 /**

@@ -800,6 +800,10 @@ button.fb-title:hover { color: var(--text); text-decoration: none; opacity: .8; 
 .composer.pill .sticker-btn { flex: none; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px; overflow: hidden; background: none; cursor: pointer; opacity: .85; transition: opacity .15s, transform .15s; }
 .composer.pill .sticker-btn:hover { opacity: 1; transform: scale(1.08); }
 .composer.pill .sticker-btn img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.prefs-sticker { flex: none; width: 32px; height: 32px; border-radius: 8px; object-fit: cover; }
+.sticker-dlg-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.sticker-dlg-head img { flex: none; border-radius: 12px; object-fit: cover; }
+.sticker-dlg-head .hint { margin: 0; }
 .comment-sticker { display: block; width: 128px; height: 128px; margin-top: 4px; border-radius: 16px; object-fit: cover; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .composer.pill { background: var(--surface-2); }

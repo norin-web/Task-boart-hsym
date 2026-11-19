@@ -832,7 +832,7 @@ function discussionBlock(t, editable) {
     };
     ta.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(); } });
     // личные стикеры — кнопка только у владельца
-    const mine = stickersFor(me());
+    const mine = stickersFor(me(), S.stickers);
     const stickerBtn = mine.length > 0 && h('button', {
       class: 'sticker-btn', title: 'Отправить стикер', 'aria-label': 'Отправить стикер',
       onclick: () => post(stickerText(mine[0])),

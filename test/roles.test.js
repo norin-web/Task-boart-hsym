@@ -1539,18 +1539,29 @@ test('направление CEO: меняет только CEO; разово �
   assert.equal((await api('updatePerson', { id: admin.id, direction: 'чепуха' })).direction, '');
 });
 
-test('стикер Златы: отправляет только Злата, остальным — отказ', async () => {
+test('стикер: по умолчанию у Златы, дальше — кому выбрал CEO', async () => {
   const api = await setup();
-  const { admin, A, t1 } = await team(api);
+  const { admin, mod, designer, A, t1 } = await team(api);
   const z = await api('createPerson', { name: 'Злата Иванова', email: 'u9@x.ru', access: 'member', positionId: 'd_design' });
   await api.pg.query('update people set user_id = $1 where id = $2', [UID(9), z.id]);
   const zlata = { ...z, uid: UID(9) };
   await api('setMember', { unitId: A.id, personId: z.id });
   await api('updateTask', { id: t1.id, patch: { assigneeId: z.id } });
-  const c = await api.as(zlata, () => api('addComment', { taskId: t1.id, text: '[sticker:zlata]' }));
-  assert.equal(c.text, '[sticker:zlata]');
-  await assert.rejects(api.as(admin, () => api('addComment', { taskId: t1.id, text: '[sticker:zlata]' })), forbidden);
+  const send = who => api.as(who, () => api('addComment', { taskId: t1.id, text: '[sticker:zlata]' }));
+  assert.equal((await send(zlata)).text, '[sticker:zlata]');
+  await assert.rejects(send(admin), forbidden);
   const own = await api.as(admin, () => api('addComment', { taskId: t1.id, text: 'обычный' }));
   await assert.rejects(api.as(admin, () => api('updateComment', { id: own.id, text: ' [sticker:zlata] ' })), forbidden);
   assert.equal((await api.as(admin, () => api('addComment', { taskId: t1.id, text: 'смотри [sticker:zlata]' }))).text, 'смотри [sticker:zlata]'); // внутри текста — просто текст
+
+  // CEO выбирает: дизайнер и сам CEO, Злата — нет
+  await assert.rejects(api.as(mod, () => api('setStickerPeople', { key: 'zlata', personIds: [mod.id] })));
+  const set = await api.as(admin, () => api('setStickerPeople', { key: 'zlata', personIds: [designer.id, admin.id, 'p_нет'] }));
+  assert.deepEqual(set.zlata, [designer.id, admin.id]);
+  assert.deepEqual((await api.as(zlata, () => api('bootstrap', {}))).stickers.zlata, [designer.id, admin.id]); // приходит всем
+  await assert.rejects(send(zlata), forbidden);
+  assert.equal((await send(admin)).text, '[sticker:zlata]');
+  // пустой список — никому
+  await api.as(admin, () => api('setStickerPeople', { key: 'zlata', personIds: [] }));
+  await assert.rejects(send(admin), forbidden);
 });
