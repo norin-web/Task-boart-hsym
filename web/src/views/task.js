@@ -15,6 +15,7 @@ import { reviewButtons } from './review.js';
 import { clTemplates, templateSelect, openTemplatesEditor } from './cltemplates.js';
 import { attachMentions } from './mention.js';
 import { shotsStrip } from './shots.js';
+import { STICKERS, stickerOf, stickerText, stickersFor } from '../stickers.js';
 
 /* ================= Панель задачи ================= */
 
@@ -776,7 +777,8 @@ function discussionBlock(t, editable) {
 
   const comment = c => {
     const p = personById(c.authorId);
-    const isEditing = editing === c.id;
+    const sticker = stickerOf(c.text);
+    const isEditing = !sticker && editing === c.id;
     let ta;
     return h('div', { class: 'comment' },
       avatar(p),
@@ -785,7 +787,7 @@ function discussionBlock(t, editable) {
           h('b', null, whoName(c.authorId)),
           h('span', { class: 'when', title: fmtDateTime(c.at) }, relTime(c.at) + (c.editedAt ? ' · изменено' : '')),
           !isEditing && (isStaff() || c.authorId === S.meId) && h('span', { class: 'actions' },
-            h('button', { class: 'link-btn', onclick: () => { editing = c.id; draw(); } }, 'Изменить'),
+            !sticker && h('button', { class: 'link-btn', onclick: () => { editing = c.id; draw(); } }, 'Изменить'),
             h('button', { class: 'link-btn danger', onclick: () => removeComment(c) }, 'Удалить'))),
         isEditing
           ? [
@@ -800,7 +802,9 @@ function discussionBlock(t, editable) {
               }, 'Сохранить'),
               h('button', { class: 'btn ghost sm', onclick: () => { editing = null; draw(); } }, 'Отмена')),
           ]
-          : h('div', { class: 'comment-text' }, linkify(c.text))));
+          : sticker
+            ? h('img', { class: 'comment-sticker', src: STICKERS[sticker].src, alt: 'Стикер', width: 128, height: 128 })
+            : h('div', { class: 'comment-text' }, linkify(c.text))));
   };
 
   const removeComment = async c => {
@@ -814,20 +818,27 @@ function discussionBlock(t, editable) {
 
   const composer = () => {
     const ta = attachMentions(autosize(h('textarea', { class: 'inp', rows: 1, placeholder: 'Написать комментарий', title: '@ — отметить человека · ⌘/Ctrl + Enter — отправить', maxlength: 5000 })), t.unitId);
+    const post = (text, onFail) => send('addComment', () => ({ taskId: t.id, text })).then(c => {
+      data.comments.push(c);
+      t.commentCount = data.comments.length;
+      renderTasks();
+      load(); // подтянуть запись в историю
+    }).catch(e => { onFail?.(); showErr(e); });
     const submit = () => {
       const text = ta.value.trim();
       if (!text) return;
       ta.value = '';
-      send('addComment', () => ({ taskId: t.id, text })).then(c => {
-        data.comments.push(c);
-        t.commentCount = data.comments.length;
-        renderTasks();
-        load(); // подтянуть запись в историю
-      }).catch(e => { ta.value = text; showErr(e); });
+      post(text, () => { ta.value = text; });
     };
     ta.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(); } });
+    // личные стикеры — кнопка только у владельца
+    const mine = stickersFor(me());
+    const stickerBtn = mine.length > 0 && h('button', {
+      class: 'sticker-btn', title: 'Отправить стикер', 'aria-label': 'Отправить стикер',
+      onclick: () => post(stickerText(mine[0])),
+    }, h('img', { src: STICKERS[mine[0]].src, alt: '', width: 28, height: 28 }));
     // макет 15: поле-пилюля 44, «Отправить» внутри справа
-    return h('div', { class: 'composer pill' }, h('div', { class: 'grow' }, ta), h('button', { class: 'btn primary sm', onclick: submit }, 'Отправить'));
+    return h('div', { class: 'composer pill' }, h('div', { class: 'grow' }, ta), stickerBtn, h('button', { class: 'btn primary sm', onclick: submit }, 'Отправить'));
   };
 
   const history = () => (data.activity.length

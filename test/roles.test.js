@@ -1538,3 +1538,19 @@ test('направление CEO: меняет только CEO; разово �
   await assert.rejects(api.as(mod, () => api.pg.query('update people set direction = $1 where id = $2', ['meta', mod.id])), /только CEO/);
   assert.equal((await api('updatePerson', { id: admin.id, direction: 'чепуха' })).direction, '');
 });
+
+test('стикер Златы: отправляет только Злата, остальным — отказ', async () => {
+  const api = await setup();
+  const { admin, A, t1 } = await team(api);
+  const z = await api('createPerson', { name: 'Злата Иванова', email: 'u9@x.ru', access: 'member', positionId: 'd_design' });
+  await api.pg.query('update people set user_id = $1 where id = $2', [UID(9), z.id]);
+  const zlata = { ...z, uid: UID(9) };
+  await api('setMember', { unitId: A.id, personId: z.id });
+  await api('updateTask', { id: t1.id, patch: { assigneeId: z.id } });
+  const c = await api.as(zlata, () => api('addComment', { taskId: t1.id, text: '[sticker:zlata]' }));
+  assert.equal(c.text, '[sticker:zlata]');
+  await assert.rejects(api.as(admin, () => api('addComment', { taskId: t1.id, text: '[sticker:zlata]' })), forbidden);
+  const own = await api.as(admin, () => api('addComment', { taskId: t1.id, text: 'обычный' }));
+  await assert.rejects(api.as(admin, () => api('updateComment', { id: own.id, text: ' [sticker:zlata] ' })), forbidden);
+  assert.equal((await api.as(admin, () => api('addComment', { taskId: t1.id, text: 'смотри [sticker:zlata]' }))).text, 'смотри [sticker:zlata]'); // внутри текста — просто текст
+});

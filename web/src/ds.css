@@ -797,6 +797,10 @@ button.fb-title:hover { color: var(--text); text-decoration: none; opacity: .8; 
 .composer.pill textarea.inp { border: 0; background: transparent; box-shadow: none; padding: 2px 0; min-height: 20px; resize: none; font-size: 14px; line-height: 20px; }
 .composer.pill textarea.inp::placeholder { opacity: .3; }
 .composer.pill .btn { height: 28px; padding: 0 12px; flex: none; align-self: center; }
+.composer.pill .sticker-btn { flex: none; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px; overflow: hidden; background: none; cursor: pointer; opacity: .85; transition: opacity .15s, transform .15s; }
+.composer.pill .sticker-btn:hover { opacity: 1; transform: scale(1.08); }
+.composer.pill .sticker-btn img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.comment-sticker { display: block; width: 128px; height: 128px; margin-top: 4px; border-radius: 16px; object-fit: cover; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .composer.pill { background: var(--surface-2); }
 }

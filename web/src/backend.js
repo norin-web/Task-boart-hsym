@@ -7,6 +7,7 @@
 /** Тип колонки: не начато / в работе / готово. Свои колонки встают между ними. */
 import { DEV_QUESTIONS } from './devform.js';
 import { cleanChart, METRIC_KIND } from './chartdefs.js';
+import { stickerOf, STICKERS } from './stickers.js';
 
 export const KINDS = ['todo', 'progress', 'done'];
 const KIND_COUNT_KEY = { todo: 'todo', progress: 'in_progress', done: 'done' };
@@ -810,6 +811,15 @@ export function createBackend(db, opts = {}) {
   }
 
   /** Кого отметили «@Имя Фамилия» в тексте (новые относительно before). Уведомляет база — notify_mention. */
+  /** Стикер в комментарии — только его владелец (личные стикеры, stickers.js). */
+  async function checkSticker(text, by) {
+    const key = stickerOf(text);
+    if (!key) return;
+    const id = (await rpc('my_person_id', {}).catch(() => '')) || by; // автора ставит база — сверяем с ней
+    const p = id && (await one('people', String(id)));
+    if (!p || !STICKERS[key].owner.test(String(p.name || '').trim())) fail('Этот стикер может отправлять только его владелец', 'FORBIDDEN');
+  }
+
   async function notifyMentions(taskId, text, before, where) {
     if (!String(text || '').includes('@')) return 0;
     const ppl = await people();
@@ -1747,6 +1757,7 @@ export function createBackend(db, opts = {}) {
     async addComment(p, ctx) {
       const t = await findTask(p.taskId);
       const c = { id: uid('c'), task_id: t.id, text: req(str(p.text, 5000), 'Комментарий'), author_id: actor(ctx), at: now(), edited_at: '' };
+      await checkSticker(c.text, c.author_id);
       await run(T('comments').insert(c));
       await log([{ unitId: t.unit_id, taskId: t.id, action: 'comment', to: c.text.slice(0, 200) }], ctx);
       await notifyMentions(t.id, c.text, '', 'comment');
@@ -1756,6 +1767,7 @@ export function createBackend(db, opts = {}) {
     async updateComment(p, ctx) {
       const c = (await one('comments', p.id)) || fail('Комментарий не найден', 'NOT_FOUND');
       const upd = { text: req(str(p.text, 5000), 'Комментарий'), edited_at: now() };
+      if (upd.text !== c.text) await checkSticker(upd.text, actor(ctx));
       await updateOne('comments', c.id, upd);
       const t = await one('tasks', c.task_id);
       if (t && upd.text !== c.text) {

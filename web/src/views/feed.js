@@ -3,6 +3,7 @@ import { S, LS, personById, relTime, fmtDateTime, activeDepts, byOrder, whoName 
 import { h, icon, avatar, fill, showErr, toast, menu, modal, field } from '../ui.js';
 import { call } from '../api.js';
 import { taskLink } from '../router.js';
+import { stickerOf } from '../stickers.js';
 
 const KINDS = [
   { title: 'Задачи' },
@@ -87,9 +88,9 @@ export function activityText(a) {
   if (rp) return [rp.text, a.ref && a.ref.kind !== 'settings' && a.ref.name, rp.badge && '→ ' + rp.badge].filter(Boolean).join(' ');
   switch (a.action) {
     case 'create': return 'создание задачи';
-    case 'comment': return 'комментарий: «' + (a.toText.length > 90 ? a.toText.slice(0, 90) + '…' : a.toText) + '»';
+    case 'comment': return stickerOf(a.toText) ? 'стикер' : 'комментарий: «' + (a.toText.length > 90 ? a.toText.slice(0, 90) + '…' : a.toText) + '»';
     case 'comment_edit': return 'комментарий изменён: «' + cut(a.toText) + '»';
-    case 'comment_delete': return 'комментарий удалён: «' + cut(a.fromText) + '»';
+    case 'comment_delete': return stickerOf(a.fromText) ? 'стикер удалён' : 'комментарий удалён: «' + cut(a.fromText) + '»';
     case 'archive': return 'задача в архиве';
     case 'unarchive': return 'задача возвращена из архива';
     case 'move': return 'перенос ' + a.fromText + ' → ' + a.toText;
