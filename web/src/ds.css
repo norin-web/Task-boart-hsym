@@ -425,10 +425,6 @@ section:has(> .section-head + .pl-list) > .section-head { margin-bottom: 12px; }
 .mb-controls .my-search { height: 32px; width: 200px; padding: 0 12px; font-size: 12px; }
 .mb-controls .fchip .dot { width: 6px; height: 6px; }
 .mb-controls .btn.lg { height: 32px; padding: 0 14px; font-size: 12px; background: var(--surface); border-color: transparent; }
-.my-key { display: flex; align-items: center; gap: 6px; }
-.my-key .dot { width: 6px; height: 6px; }
-.my-card .card-foot { margin-top: 0; }
-.my-card .due { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: var(--muted); }
 /* ---------- Графики аналитики ---------- */
 .chart { position: relative; width: 100%; }
 .chart svg { display: block; overflow: visible; }
@@ -912,11 +908,7 @@ button.fb-title:hover { color: var(--text); text-decoration: none; opacity: .8; 
 .rv-row .avatar.md { width: 28px; height: 28px; flex: none; }
 .rv-actions .btn { height: 32px; padding: 0 14px; font-size: 12px; font-weight: 600; }
 .rv-actions .btn.success { order: 1; color: #fff; }
-/* ---------- Моя доска (19): срок — тихий текст с иконкой, просрочка красным ---------- */
-.my-card .due, .my-card .due.soon, .my-card .due.done { background: transparent; padding: 0; border-radius: 0; color: var(--muted); font-weight: 500; gap: 6px; }
-.my-card .due .i { color: currentColor; }
-.my-card .due.overdue { background: transparent; padding: 0; color: var(--danger); font-weight: 600; }
-.my-nodue { font-size: 12px; line-height: 16px; font-weight: 500; }
+/* ---------- Моя доска: карточка — общая (taskCard), здесь только пометки «На тесте» ---------- */
 /* сдано на тестирование: пометка «На тесте у …» вместо срока; карточку не перетащить — её ведёт QA */
 .my-ontest { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; line-height: 16px; font-weight: 600; background: color-mix(in srgb, var(--review) 14%, transparent); color: var(--text); }
 .my-card.on-test { cursor: pointer; }

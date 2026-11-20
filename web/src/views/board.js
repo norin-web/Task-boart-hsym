@@ -1,5 +1,5 @@
 import Sortable from 'sortablejs';
-import { S, ASO_TRACKS, asoView, setAsoView, inAsoView, myDirection, taskById, appById, personById, activeFields, missingFor, missingNext, priorityOf, priorityField, byPriority, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder, between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, unitById, emptyCounts, freshFilters, saveBoardView, activeDepts, deptById, teamById, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS, me, ownTeamsOnly, visibleLinkFields, KINDS, LS, isSuper, isReworkColumn, setPeople } from '../state.js';
+import { S, ASO_TRACKS, asoView, setAsoView, inAsoView, myDirection, taskById, appById, personById, activeFields, missingFor, missingNext, priorityOf, byPriority, safeUrl, colName, colById, colColor, columns, taskKey, isEmpty, optById, maxOrder, between, todayStr, isOverdue, taskDone, dueInfo, fmtValue, unitById, emptyCounts, freshFilters, saveBoardView, activeDepts, deptById, teamById, KIND_LABELS, KIND_COLORS, KIND_ICONS, PALETTE, isStaff, canEditTask, TASK_KINDS, me, ownTeamsOnly, visibleLinkFields, KINDS, LS, isSuper, isReworkColumn, setPeople } from '../state.js';
 import { $, h, icon, avatar, menu, closeMenu, modal, field, confirmDlg, promptDlg, toast, showErr, statusDot, statusIcon, fill, prioMark, isModalOpen, isMenuOpen } from '../ui.js';
 import { call, send } from '../api.js';
 import { navigate, link } from '../router.js';
@@ -625,66 +625,78 @@ const CARD_PARTS = [
   ['pos', 'Позиция (UX/UI Designer…)'], ['fields', 'Поля карточки (теги)'], ['links', 'Иконки ссылок'],
   ['checklist', 'Чеклист и подзадачи'], ['comments', 'Комментарии'], ['due', 'Срок'], ['assignee', 'Исполнитель'],
 ];
-const cardShow = () => ({ ...Object.fromEntries(CARD_PARTS.map(([k]) => [k, true])), ...(((me() || {}).prefs || {}).cardShow || {}) });
-function setCardShow(patch) {
+export const cardShow = () => ({ ...Object.fromEntries(CARD_PARTS.map(([k]) => [k, true])), ...(((me() || {}).prefs || {}).cardShow || {}) });
+function setCardShow(patch, redraw = renderTasks) {
   const p = me();
   const next = { ...cardShow(), ...patch };
   if (p) p.prefs = { ...(p.prefs || {}), cardShow: next };
   send('setMyPrefs', { personId: S.meId, prefs: { cardShow: next } }).catch(showErr);
-  renderTasks();
+  redraw();
 }
 /** «⋯» на карточке: галочки — что видно на всех карточках досок; меню не закрывается, пока отмечаешь. Действия — пункт внизу и правый клик. */
-function cardViewMenu(anchor, t) {
+function cardViewMenu(anchor, t, env) {
   const box = h('div');
   const paint = () => {
     const show = cardShow();
     fill(box, CARD_PARTS.map(([k, label]) => h('button', { class: 'menu-item aud-item card-show-item' + (show[k] ? ' on' : ''), role: 'menuitemcheckbox', 'aria-checked': String(!!show[k]),
-      onclick: e => { e.stopPropagation(); setCardShow({ [k]: !show[k] }); paint(); } },
+      onclick: e => { e.stopPropagation(); setCardShow({ [k]: !show[k] }, env.redraw); paint(); } },
     h('span', { class: 'aud-check' }, show[k] && icon('check', 13)), label)),
-    h('div', { class: 'menu-sep' }),
-    h('button', { class: 'menu-item', onclick: e => { e.stopPropagation(); closeMenu(); cardMenu(anchor, t); } }, icon('more', 14), 'Действия с задачей…'));
+    env.actions && [h('div', { class: 'menu-sep' }),
+      h('button', { class: 'menu-item', onclick: e => { e.stopPropagation(); closeMenu(); env.actions(anchor, t); } }, icon('more', 14), 'Действия с задачей…')]);
   };
   paint();
   menu(anchor, [{ title: 'Что показывать на карточках' }, box]);
 }
 
-function taskCard(t, inLane) {
+/**
+ * Окружение карточки. Карточка одна для всех досок: на доске юнита — из S.board,
+ * на «Моих задачах» (задачи разных юнитов) — своё, см. myboard.js.
+ */
+const boardEnv = () => ({
+  key: taskKey, builtins: S.board.unit.settings.builtins, fields: activeFields(), missing: missingNext, done: taskDone, byId: taskById,
+  kids: id => S.board.tasks.filter(x => x.parentId === id && !x.archived),
+  open: t => navigate({ unit: S.board.unit.id, mode: S.route.mode, task: t.id }),
+  actions: (anchor, t) => cardMenu(anchor, t), pick: true, redraw: renderTasks,
+});
+
+export function taskCard(t, inLane, env = boardEnv()) {
   const show = cardShow();
+  const done = env.done(t);
   // приложение карточки — у любой задачи: этапа, запроса, обычной; иконка и название; если имя уже в заголовке — не дублируем
   const reqApp = appById(t.appId || (t.parent && (t.parent.appId || t.parent.app_id)));
   const reqAppLine = show.app && reqApp && !(t.title || '').includes(reqApp.name) && h('div', { class: 'card-app', title: 'Приложение' },
     reqApp.iconUrl ? h('img', { class: 'uc-icon app-img xs', src: reqApp.iconUrl, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' })
       : h('span', { class: 'uc-icon xs', style: { background: reqApp.color || 'var(--muted)' }, 'aria-hidden': 'true' }, reqApp.name.slice(0, 1).toUpperCase()),
     h('span', null, reqApp.name));
-  const B = S.board.unit.settings.builtins;
-  const fields = activeFields();
+  const B = env.builtins;
+  const fields = env.fields;
   const chips = [
     show.pos && !B.department.hidden && !inLane && deptChip(t.departmentId),
     ...(show.fields ? fields.filter(f => f.showOnCard && f.role !== 'priority').flatMap(f => fieldChip(f, t)) : []),  // приоритет — шевроном
   ].filter(Boolean);
   const person = show.assignee && !B.assignee.hidden && personById(t.assigneeId);
-  const missing = missingNext(t);
-  const prio = priorityOf(t);
-  const pf = priorityField();
+  const missing = env.missing(t);
+  const pf = fields.find(f => f.role === 'priority' && f.type === 'select');
+  const prio = pf && priorityOf(t, pf);
   const prioEl = show.prio && prio && prioMark(prio.opt, (pf.options || []).indexOf(prio.opt), (pf.options || []).length, 15);
   const cl = t.checklist || [];
   const clDone = cl.filter(i => i.done).length;
-  const due = show.due && !B.dueDate.hidden && dueInfo(t.dueDate, taskDone(t));
+  const due = show.due && !B.dueDate.hidden && dueInfo(t.dueDate, done);
   // этап, который ждёт незакрытые предыдущие (зависимости — задачи этого же юнита)
-  const waits = taskDone(t) ? [] : (t.dependsOn || []).map(taskById).filter(d => d && !taskDone(d)).map(d => d.title.split(' · ')[0]);
-  // у запроса — на каком он этапе сейчас: открытые этапы, которые уже не ждут предыдущих
-  const nowSteps = t.kind === 'request' && !taskDone(t) ? S.board.tasks.filter(x => x.parentId === t.id && !x.archived && !taskDone(x)
-    && !(x.dependsOn || []).map(taskById).some(d => d && !taskDone(d))).map(x => x.title.split(' · ')[0]) : [];
+  const waits = done ? [] : (t.dependsOn || []).map(env.byId).filter(d => d && !env.done(d)).map(d => d.title.split(' · ')[0]);
+  // у запроса — на каком он этапе сейчас: открытые этапы, которые уже не ждут предыдущих (вне юнита — готовый список с сервера)
+  const nowSteps = t.kind !== 'request' || done ? [] : t.now ? t.now : env.kids(t.id).filter(x => !env.done(x)
+    && !(x.dependsOn || []).map(env.byId).some(d => d && !env.done(d))).map(x => x.title.split(' · ')[0]);
   const nowText = nowSteps.length ? 'Сейчас: ' + nowSteps.slice(0, 2).join(', ') + (nowSteps.length > 2 ? ` +${nowSteps.length - 2}` : '') : '';
 
   return h('article', {
-    class: 'card' + (t.archived ? ' archived' : '') + (taskDone(t) ? ' done' : '') + (t._temp ? ' temp' : '') + (canEditTask(t) ? '' : ' locked')
-      + (show.prio && prio ? ' prio' : '') + (picked.has(t.id) ? ' picked' : ''),
-    style: show.prio && prio ? { '--prio': prio.opt.color } : null, dataset: { id: t.id }, tabindex: '0',
+    class: 'card' + (t.archived ? ' archived' : '') + (done ? ' done' : '') + (t._temp ? ' temp' : '') + (canEditTask(t) ? '' : ' locked')
+      + (show.prio && prio ? ' prio' : '') + (env.pick && picked.has(t.id) ? ' picked' : '') + (env.cls ? env.cls(t) : ''),
+    style: show.prio && prio ? { '--prio': prio.opt.color } : null, dataset: { id: t.id }, tabindex: '0', title: env.hint ? env.hint(t) : null,
     // Ctrl / ⌘ + клик — выделить для массового редактирования; обычный клик — открыть
-    onclick: e => { if (t._temp) return; if (e.metaKey || e.ctrlKey) { e.preventDefault(); togglePick(t, e.currentTarget); return; } if (picked.size) { clearPicked(); } navigate({ unit: S.board.unit.id, mode: S.route.mode, task: t.id }); },
-    onkeydown: e => { if (e.key === 'Enter' && !t._temp) navigate({ unit: S.board.unit.id, mode: S.route.mode, task: t.id }); },
-    oncontextmenu: e => { if (t._temp) return; e.preventDefault(); cardMenu({ x: e.clientX, y: e.clientY }, t); },
+    onclick: e => { if (t._temp) return; if (env.pick && (e.metaKey || e.ctrlKey)) { e.preventDefault(); togglePick(t, e.currentTarget); return; } if (env.pick && picked.size) { clearPicked(); } env.open(t); },
+    onkeydown: e => { if (e.key === 'Enter' && !t._temp) env.open(t); },
+    oncontextmenu: e => { if (t._temp || !env.actions) return; e.preventDefault(); env.actions({ x: e.clientX, y: e.clientY }, t); },
   },
   // Ключ задачи на доске не показываем — он в открытой карточке
   h('div', { class: 'card-top' },
@@ -693,10 +705,10 @@ function taskCard(t, inLane) {
     t.archived && h('span', { class: 'badge' }, 'архив'),
     !t._temp && h('button', {
       class: 'icon-btn sm card-more', title: 'Что показывать на карточках · действия — правый клик',
-      onclick: e => { e.stopPropagation(); cardViewMenu(e.currentTarget, t); },
+      onclick: e => { e.stopPropagation(); cardViewMenu(e.currentTarget, t, env); },
     }, icon('more'))),
   // доработка по багам QA: на карточке видно, что это возврат с баг-репортом, а не новая задача
-  (() => { const b = (t.bugs || []).filter(x => !x.closedAt && !x.fixedAt).pop(); return b && !taskDone(t) && h('div', { class: 'card-bug' }, icon('alert', 12), `Баг-репорт №${b.n}`); })(),
+  (() => { const b = (t.bugs || []).filter(x => !x.closedAt && !x.fixedAt).pop(); return b && !done && h('div', { class: 'card-bug' }, icon('alert', 12), `Баг-репорт №${b.n}`); })(),
   reqAppLine,
   // вторая строка, как в макете: «откуда · состояние» — запрос CEO у этапа, «Запрос · 0 из 7» у самого запроса
   show.sub && (t.parent || TASK_KINDS[t.kind] || waits.length > 0) && h('div', { class: 'card-sub', title: t.parent ? t.parent.unit.name + ' · ' + t.parent.key : '' },
@@ -707,7 +719,7 @@ function taskCard(t, inLane) {
   // низ: позиция, чеклист, остальное — тихим текстом; срок только когда горит; справа приоритет и исполнитель
   h('div', { class: 'card-foot' },
     // ключ — внизу слева, как в Jira
-    show.key && !t._temp && h('span', { class: 'card-key', title: 'Ключ задачи' }, taskKey(t)),
+    show.key && !t._temp && h('span', { class: 'card-key', title: 'Ключ задачи' }, env.key(t)),
     chips,
     show.checklist && cl.length > 0 && h('span', { class: 'meta-ic' + (clDone === cl.length ? ' done' : ''), title: 'Чеклист' }, clDone + '/' + cl.length),
     show.checklist && t.tree && !TASK_KINDS[t.kind] && h('span', { class: 'meta-ic tree-ic' + (t.tree.done === t.tree.total ? ' done' : t.tree.overdue ? ' late' : ''),
@@ -718,7 +730,8 @@ function taskCard(t, inLane) {
       class: 'meta-ic card-link', href: safeUrl(t.links[f.id]), target: '_blank', rel: 'noopener noreferrer', title: f.name,
       onclick: e => e.stopPropagation(), onpointerdown: e => e.stopPropagation(),
     }, icon(f.kind === 'link' ? 'link' : f.kind, 13))),
-    h('span', { class: 'spacer' }), prioEl, person && avatar(person, 'sm')));
+    h('span', { class: 'spacer' }), prioEl, person && avatar(person, 'sm')),
+  env.extra && env.extra(t));
 }
 
 export function fieldChip(f, t) {

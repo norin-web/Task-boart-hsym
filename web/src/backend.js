@@ -1869,10 +1869,34 @@ export function createBackend(db, opts = {}) {
         all(() => T('my_board').select('task_id,stage,ord').eq('person_id', me).order('task_id')),
       ]);
       const live = new Set(units.filter(u => !u.archived).map(u => u.id));
+      const shown = rows.filter(t => live.has(t.unit_id));
+      // для общей карточки доски (как в юните): комментарии, ссылки, прогресс и родитель, «Сейчас: …» у запросов, поле приоритета
+      const ids = shown.map(t => t.id);
+      const reqIds = shown.filter(t => t.kind === 'request' && !t.done_at).map(t => t.id);
+      const [tree, cms, lks, kids, gfields] = await Promise.all([
+        treeInfo(shown, today(p.today)),
+        inChunks(ids, ch => T('comments').select('task_id').in('task_id', ch)),
+        inChunks(ids, ch => T('task_links').select('task_id,field_id,url').in('task_id', ch)),
+        inChunks(reqIds, ch => T('tasks').select('id,parent_id,title,depends_on,done_at').in('parent_id', ch).eq('archived', false)),
+        globalFields(),
+      ]);
+      const cc = {}, lk = {}, now = {};
+      cms.forEach(c => { cc[c.task_id] = (cc[c.task_id] || 0) + 1; });
+      lks.forEach(l => { (lk[l.task_id] || (lk[l.task_id] = {}))[l.field_id] = l.url; });
+      const kidDone = Object.fromEntries(kids.map(k => [k.id, !!k.done_at]));
+      kids.filter(k => !k.done_at && !(json(k.depends_on, []) || []).some(d => kidDone[d] === false))
+        .forEach(k => (now[k.parent_id] || (now[k.parent_id] = [])).push(String(k.title || '').split(' · ')[0]));
+      const U = Object.fromEntries(units.map(u => [u.id, unitSettings(u.settings)]));
       return {
         // сколько готовых скрыто (для «Показывать готовые · N»)
         doneHidden: withDone ? 0 : doneIds.filter(r => !(r.id in onTest)).length,
-        tasks: rows.filter(t => live.has(t.unit_id)).map(t => (t.id in onTest ? { ...taskOut(t), onTest: { qaId: onTest[t.id] } } : taskOut(t))),
+        tasks: shown.map(t => ({
+          ...taskOut(t), statusKind: U[t.unit_id] ? kindOf(U[t.unit_id], t.status) : '',
+          commentCount: cc[t.id] || 0, links: lk[t.id] || {}, tree: tree.stats[t.id] || null, parent: tree.parents[t.id] || null,
+          ...(t.kind === 'request' ? { now: now[t.id] || [] } : {}),
+          ...(t.id in onTest ? { onTest: { qaId: onTest[t.id] } } : {}),
+        })),
+        fields: gfields.filter(f => !f.archived),
         units: units.filter(u => !u.archived).map(u => ({ id: u.id, name: u.name, key: u.key, color: u.color, columns: unitSettings(u.settings).columns })),
         placement: Object.fromEntries(places.map(r => [r.task_id, { stage: r.stage, order: Number(r.ord) }])),
       };

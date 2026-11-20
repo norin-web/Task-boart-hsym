@@ -1565,3 +1565,15 @@ test('стикер: по умолчанию у Златы, дальше — ко
   await api.as(admin, () => api('setStickerPeople', { key: 'zlata', personIds: [] }));
   await assert.rejects(send(admin), forbidden);
 });
+
+test('«Мои задачи»: данные для общей карточки доски (комментарии, статус, поле приоритета)', async () => {
+  const api = await setup();
+  const { designer, t1 } = await team(api);
+  await api.as(designer, () => api('addComment', { taskId: t1.id, text: 'привет' }));
+  const b = await api.as(designer, () => api('getMyBoard', { personId: designer.id, today: '2026-11-20' }));
+  const c = b.tasks.find(t => t.id === t1.id);
+  assert.equal(c.commentCount, 1);
+  assert.equal(c.statusKind, 'todo');
+  assert.deepEqual(c.links, {});
+  assert.ok(b.fields.some(f => f.role === 'priority'));
+});

@@ -6,13 +6,13 @@
  * Свои колонки — people.prefs.myBoard.custom [{ id, name, group, color }]; по умолчанию их нет («Как у команды» — по кнопке).
  */
 import Sortable from 'sortablejs';
-import { S, me, personById, nameFrom, inAsoView, myDirection, activeTeams, between, dueInfo, todayStr, PALETTE, isStaff, LS, plural } from '../state.js';
+import { S, me, personById, nameFrom, inAsoView, myDirection, activeTeams, between, todayStr, PALETTE, isStaff, LS, plural } from '../state.js';
 import { $, h, icon, topbar, fill, modal, showErr, statusDot, statusIcon, confirmDlg, menu, closeMenu, toast, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
 import { peekTask } from './task.js';
 import { reviewButtons } from './review.js';
-import { asoSwitch } from './board.js';
+import { asoSwitch, taskCard } from './board.js';
 import { typeOf, typeName, typeRank, myViewSeg } from './my.js';
 
 /** Обязательные колонки: одинаковы у всех, их не убрать и не переставить. */
@@ -167,27 +167,32 @@ function draw(page, data) {
   const aso = isAso();
   const items = data.tasks.filter(t => (!aso || inAsoView(t)) && (!mbUnit || t.unitId === mbUnit) && (!mbType || typeOf(t) === mbType) && (!q || t.title.toLowerCase().includes(q))).map(t => ({ t, ...placeOf(data, cols, t) }));
 
-  const card = ({ t }) => {
-    const u = unitById(t.unitId);
-    const isDone = groupOf(data, t) === 'done';
-    const due = dueInfo(t.dueDate, isDone);
-    // готовые — приглушены и зачёркнуты, как на доске юнита
-    const qa = t.onTest && personById(t.onTest.qaId);
-    return h('article', { class: 'card my-card' + (isDone && !t.onTest ? ' done' : '') + (t.onTest ? ' on-test' : ''), title: t.onTest ? 'Отдано на тестирование — QA ещё не принял. Вернёт с багом — задача снова у вас в работе' : '', dataset: { id: t.id }, tabindex: '0', onclick: () => peekTask(t.unitId, t.id) },
-      u && h('div', { class: 'card-sub my-key', title: u.name }, h('span', { class: 'dot', style: { background: u.color } }), u.key + '-' + t.num),
-      h('div', { class: 'card-title' }, t.title),
-      h('div', { class: 'card-foot' },
-        t.onTest ? h('span', { class: 'my-ontest' }, icon('eye', 13), qa ? 'На тесте у ' + nameFrom(qa.name) : 'На тесте')
-          : due ? h('span', { class: 'due ' + due.cls, title: due.hint }, icon('calendar', 14), due.text) : h('span', { class: 'muted my-nodue' }, 'Без срока'),
-        h('span', { class: 'spacer' }),
+  // карточка — та же, что на досках юнитов (taskCard), со своим окружением: задачи здесь из разных юнитов
+  const env = {
+    key: t => { const u = unitById(t.unitId); return u ? u.key + '-' + t.num : ''; },
+    builtins: { department: {}, assignee: { hidden: true }, dueDate: {} }, // исполнитель тут — я сам
+    fields: data.fields || [], missing: () => [], byId: () => null, kids: () => [],
+    done: t => groupOf(data, t) === 'done' && !t.onTest,
+    open: t => peekTask(t.unitId, t.id), redraw: () => draw(page, data),
+    cls: t => ' my-card' + (t.onTest ? ' on-test' : ''),
+    hint: t => (t.onTest ? 'Отдано на тестирование — QA ещё не принял. Вернёт с багом — задача снова у вас в работе' : null),
+    extra: t => {
+      const qa = t.onTest && personById(t.onTest.qaId);
+      // отправил на ревью сам — можно забрать обратно (что-то забыл)
+      const recall = t.reviewFrom === S.meId && groupOf(data, t) === 'review' && h('button', {
+        class: 'btn ghost sm my-recall', title: 'Забрать из ревью — вернуть себе в работу',
+        onclick: e => { e.stopPropagation(); send('recallReview', { id: t.id }).then(() => { toast('Задача снова у вас'); renderMyBoard(); }).catch(showErr); },
+      }, icon('back', 13), 'Забрать');
+      return [
+        (t.onTest || recall) && h('div', { class: 'card-foot my-extra' },
+          t.onTest && h('span', { class: 'my-ontest' }, icon('eye', 13), qa ? 'На тесте у ' + nameFrom(qa.name) : 'На тесте'),
+          h('span', { class: 'spacer' }), recall),
         // я ревьюер — решение прямо на карточке
-        // отправил на ревью сам — можно забрать обратно (что-то забыл)
-        t.reviewFrom === S.meId && groupOf(data, t) === 'review' && h('button', {
-          class: 'btn ghost sm my-recall', title: 'Забрать из ревью — вернуть себе в работу',
-          onclick: e => { e.stopPropagation(); send('recallReview', { id: t.id }).then(() => { toast('Задача снова у вас'); renderMyBoard(); }).catch(showErr); },
-        }, icon('back', 13), 'Забрать')),
-      t.assigneeId === S.meId && t.reviewFrom && t.reviewFrom !== S.meId && groupOf(data, t) === 'review' && h('div', { class: 'my-review' }, reviewButtons(t, () => renderMyBoard())));
+        t.assigneeId === S.meId && t.reviewFrom && t.reviewFrom !== S.meId && groupOf(data, t) === 'review' && h('div', { class: 'my-review' }, reviewButtons(t, () => renderMyBoard())),
+      ];
+    },
   };
+  const card = ({ t }) => taskCard(t, false, env);
 
   const columnEls = cols.map(c => {
     const mine = items.filter(i => i.col.id === c.id).sort((a, b) => a.order - b.order);
