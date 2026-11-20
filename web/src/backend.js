@@ -1655,7 +1655,7 @@ export function createBackend(db, opts = {}) {
         const u = U[r.unit_id];
         const col = u ? columnOf(u.st, r.status) : { name: r.status, kind: 'todo', color: '' };
         return {
-          id: r.id, key: u ? `${u.key}-${r.num}` : '', title: r.title, kind: r.kind || '', parentId: r.parent_id || '',
+          id: r.id, key: u ? `${u.key}-${r.num}` : '', title: r.title, kind: r.kind || '', parentId: r.parent_id || '', requestType: r.request_type || '',
           unit: u ? { id: u.id, name: u.name, color: u.color } : null, status: r.status,
           statusName: col.name, statusKind: col.kind, statusColor: col.color || '',
           assigneeId: r.assignee_id, dueDate: r.due_date, archived: !!r.archived, step: r.step || '', dependsOn: json(r.depends_on, []) || [],
@@ -3028,7 +3028,10 @@ export function createBackend(db, opts = {}) {
       return t;
     },
 
-    /** PM/CEO: убрать незакрытый этап запроса (в архив). Кто его ждал — теперь ждёт то, что ждал он. Релиз не убирается. */
+    /**
+     * PM/CEO: убрать незакрытый этап запроса (в архив) — вместе с его подзадачами, так он уходит со всех досок исполнителей.
+     * Кто его ждал — теперь ждёт то, что ждал он. Релиз не убирается.
+     */
     async removeStage(p, ctx) {
       const t = await findTask(p.taskId);
       if (t.kind !== 'stage' || !t.parent_id) fail('Убрать можно только этап запроса');
@@ -3044,6 +3047,9 @@ export function createBackend(db, opts = {}) {
         }
       }
       await updateOne('tasks', t.id, { archived: true, updated_at: now() });
+      // подзадачи этапа — тоже в архив (иначе остались бы на досках без этапа)
+      const sub = (await descendants([t.id])).filter(x => x.id !== t.id && !x.archived).map(x => x.id);
+      for (let i = 0; i < sub.length; i += 150) await run(T('tasks').update({ archived: true, updated_at: now() }).in('id', sub.slice(i, i + 150)));
       await log([{ unitId: t.unit_id, taskId: t.parent_id, action: 'stage_remove', from: t.title.split(' · ')[0] }], ctx);
       return true;
     },

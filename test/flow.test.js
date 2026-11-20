@@ -260,9 +260,17 @@ test('интеграция: этап после QA у iOS-лида; PM доба�
   const rel = async () => (await api.as(pm, () => api('getBoard', { unitId: gold.id }))).tasks.find(t => t.id === st.release.id);
   assert.ok((await rel()).dependsOn.includes(integr.id));
   await api.as(pm, () => assert.rejects(() => api('addStage', { requestId: request.id, key: 'integr' }), /уже есть/));
-  // передумали — убрали: релиз её больше не ждёт, этап в архиве
+  // у этапа есть подзадача
+  const sub = await api.as(pm, () => api('createTask', { unitId: gold.id, title: 'Подзадача интеграции', parentId: integr.id }));
+  // передумали — убрали: релиз её больше не ждёт, этап и его подзадачи в архиве — ни на одной доске их нет
   await api.as(pm, () => api('removeStage', { taskId: integr.id }));
   assert.ok(!(await rel()).dependsOn.includes(integr.id));
+  const left = (await api.as(pm, () => api('getBoard', { unitId: gold.id }))).tasks.map(t => t.id);
+  assert.ok(!left.includes(integr.id) && !left.includes(sub.id));
+  const arch = (await api.pg.query('select id, archived from tasks where id = any($1)', [[integr.id, sub.id]])).rows;
+  assert.ok(arch.length === 2 && arch.every(r => r.archived));
+  // и из «Моих задач» исполнителя
+  if (integr.assigneeId) assert.ok(!(await api('getMyBoard', { personId: integr.assigneeId, today: '2026-11-20' })).tasks.some(t => t.id === integr.id || t.id === sub.id));
   await api.as(pm, () => assert.rejects(() => api('removeStage', { taskId: st.release.id }), /Релиз убрать нельзя/));
   // в апдейт — этап из флоу New App: «Метаданные» (рефактор меты) у ASO, релиз ждёт и его
   const { app } = (await api.pg.query("select id from apps where name = 'Пульт 2'")).rows.map(r => ({ app: r }))[0];

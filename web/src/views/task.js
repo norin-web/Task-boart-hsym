@@ -282,8 +282,9 @@ function flowBlock(t) {
             h('span', { class: 'rq-stitle muted' }, expanded ? 'Свернуть' : `Ещё ${hidden} ${plural(hidden, ['этап', 'этапа', 'этапов'])}`),
             h('span', { class: 'muted rq-state' }, expanded ? '' : 'Показать'))];
       })()),
-      t.kind === 'request' && stages.length > 0 && manage && h('div', { class: 'rq-edit' },
-        h('button', { class: 'btn ghost sm', 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); editStages(e.currentTarget, stages); } }, icon('tree', 13), 'Изменить этапы')),
+      // и из запроса, и из любого его этапа
+      (t.kind === 'request' || t.kind === 'stage') && stages.length > 0 && manage && h('div', { class: 'rq-edit' },
+        h('button', { class: 'btn ghost sm', 'aria-haspopup': 'menu', onclick: e => { e.stopPropagation(); editStages(e.currentTarget, stages, req); } }, icon('tree', 13), 'Изменить этапы')),
       t.kind === 'request' && !stages.length && h('div', { class: 'rq-empty' },
         h('span', { class: 'muted' }, manage ? 'Разложите задачу по этапам: дизайн → тексты → iOS и тестирование → релиз.' : 'PM ещё не разложил задачу по этапам.'),
         manage && h('button', { class: 'btn primary sm', onclick: () => import('./apps.js')
@@ -291,12 +292,13 @@ function flowBlock(t) {
         icon('tree', 13), 'Разложить по флоу')));
   }
   // PM/CEO: добавить этап из флоу (например, «Интеграция», если решили по ходу) или убрать незакрытый
-  async function editStages(anchor, stages) {
+  async function editStages(anchor, stages, req) {
+    const reqId = req.id, unitId = req.unit ? req.unit.id : t.unitId, type = req.requestType || t.requestType;
     let flows;
-    try { flows = await call('getFlows', { unitId: t.unitId }); } catch (e) { return showErr(e); }
+    try { flows = await call('getFlows', { unitId }); } catch (e) { return showErr(e); }
     // этапы своего флоу и New App (например, «Метаданные» в апдейт), плюс интеграция
     const flow = [];
-    for (const x of [...(flows[t.requestType] || []), ...(flows.new_app || []), { key: 'integr', title: 'Интеграция' }]) if (!flow.some(y => y.key === x.key)) flow.push(x);
+    for (const x of [...(flows[type] || []), ...(flows.new_app || []), { key: 'integr', title: 'Интеграция' }]) if (!flow.some(y => y.key === x.key)) flow.push(x);
     const has = new Set(stages.map(n => n.step));
     const add = flow.filter(x => !x.release && !has.has(x.key));
     const del = stages.filter(n => n.step !== 'release' && n.statusKind !== 'done');
@@ -304,18 +306,22 @@ function flowBlock(t) {
     // кто заполняет опросник перед релизом: разработчик или лид на интеграции
     const integ = stages.find(n => n.step === 'integr');
     const formOnInteg = !!integ && (integ.devForm || {}).need === true;
-    const setForm = step => send('setFormStep', { requestId: t.id, step }).then(() => { toast(step === 'integr' ? 'Опросник заполнит лид на интеграции' : 'Опросник заполнит разработчик'); reload(); }).catch(showErr);
+    const setForm = step => send('setFormStep', { requestId: reqId, step }).then(() => { toast(step === 'integr' ? 'Опросник заполнит лид на интеграции' : 'Опросник заполнит разработчик'); reload(); }).catch(showErr);
     menu(anchor, [
       integ && { title: 'Опросник заполняет' },
       integ && { label: 'Разработчик (этап iOS)', icon: formOnInteg ? null : 'check', action: () => formOnInteg && setForm('ios') },
       integ && { label: 'Лид на интеграции', icon: formOnInteg ? 'check' : null, action: () => !formOnInteg && setForm('integr') },
       add.length > 0 && { title: 'Добавить этап' },
-      ...add.map(x => ({ label: x.title, icon: 'plus', action: () => send('addStage', { requestId: t.id, key: x.key })
+      ...add.map(x => ({ label: x.title, icon: 'plus', action: () => send('addStage', { requestId: reqId, key: x.key })
         .then(() => { toast(`Этап «${x.title}» добавлен`); reload(); }).catch(showErr) })),
       del.length > 0 && { title: 'Убрать этап' },
       ...del.map(n => ({ label: name(n), icon: 'x', action: async () => {
-        if (!(await confirmDlg('Этап уйдёт в архив, следующие этапы перестанут его ждать.', { title: `Убрать этап «${name(n)}»?`, ok: 'Убрать', danger: true }))) return;
-        send('removeStage', { taskId: n.id }).then(() => { toast(`Этап «${name(n)}» убран`); reload(); }).catch(showErr);
+        if (!(await confirmDlg('Этап и его подзадачи уйдут в архив и пропадут с досок исполнителей. Следующие этапы перестанут его ждать.', { title: `Убрать этап «${name(n)}»?`, ok: 'Убрать', danger: true }))) return;
+        send('removeStage', { taskId: n.id }).then(() => {
+          toast(`Этап «${name(n)}» убран`);
+          // убрали открытый этап — его карточку закрываем, показываем запрос
+          if (n.id === t.id) { reloadBoard().catch(() => {}); peekTask(unitId, reqId); } else reload();
+        }).catch(showErr);
       } })),
       !add.length && !del.length && h('p', { class: 'muted', style: { padding: '4px 10px', margin: 0 } }, 'Менять нечего'),
     ], { align: 'left' });
