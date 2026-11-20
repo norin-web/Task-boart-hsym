@@ -6,6 +6,8 @@
  */
 import { createBackend, ApiError } from './backend.js';
 import { batchClient } from './batch.js';
+// клиент Supabase — в основном файле: нужен сразу при входе, отдельным файлом он качался бы вторым запросом, после основного
+import { createClient } from '@supabase/supabase-js';
 
 const URL_ = import.meta.env.VITE_SUPABASE_URL;
 const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -47,7 +49,6 @@ function holdLocalLock(takeOver) {
 
 export async function initBackend(opts = {}) {
   if (mode === 'supabase') {
-    const { createClient } = await import('@supabase/supabase-js');
     supabase = createClient(URL_, KEY, { auth: { flowType: 'pkce', persistSession: true, detectSessionInUrl: true } });
     // чтения одного такта — одним запросом к базе (read_batch): каждый сетевой запрос стоит дорого
     backend = createBackend(batchClient(supabase), { invoke });

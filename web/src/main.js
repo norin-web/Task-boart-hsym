@@ -8,7 +8,7 @@ import { $, h, icon, fill, closeMenu, closeNav, isMenuOpen, isModalOpen, refresh
 import { call } from './api.js';
 import { initBackend, mode, supabase, localLogin } from './data.js';
 import { LS, isStaff } from './state.js';
-import { parseLocation, render } from './router.js';
+import { parseLocation, render, preloadHome } from './router.js';
 import { openPalette, isPaletteOpen } from './views/palette.js';
 import { renderUnread, renderSidebar } from './views/sidebar.js';
 import { refreshNews } from './views/home.js';
@@ -122,6 +122,8 @@ async function boot() {
     return fatal('Не удалось загрузить данные', e.message);
   }
   S.route = parseLocation();
+  // главный экран своей роли — отдельный файл: дожидаемся его, чтобы первый экран не мигнул серыми блоками
+  if (!S.route.unit && ['home', ''].includes(S.route.view || '')) await preloadHome();
   S.started = true;
   render();
   startPulse();

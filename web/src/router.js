@@ -15,18 +15,10 @@ import { $, h, fill, icon, closeMenu, closeNav, showErr, setBack, skeleton } fro
 import { renderSidebar } from './views/sidebar.js';
 import { renderHome } from './views/home.js';
 import { renderMy } from './views/my.js';
-import { renderMyBoard } from './views/myboard.js';
 import { renderApps, renderAppPage } from './views/apps.js';
-import { renderCeoHome } from './views/ceo.js';
-import { renderPmHome } from './views/pm.js';
-import { renderRmHome } from './views/rm.js';
-import { renderReady } from './views/ready.js';
-import { renderRejects } from './views/rejects.js';
-import { renderAccounts } from './views/accounts.js';
 import { renderBoardView, loadBoard, foldStages } from './views/board.js';
 import { renderTimeline } from './views/timeline.js';
 import { renderSettings } from './views/settings.js';
-import { renderUnitPage, renderUnitTeam } from './views/unitpage.js';
 import { openTask, closePanel, peekTask } from './views/task.js';
 import { perfScreen } from './perf.js';
 
@@ -36,7 +28,7 @@ import { perfScreen } from './perf.js';
  */
 const lazy = (load, name) => {
   let mod = null;
-  return (...args) => {
+  const fn = (...args) => {
     if (mod) return mod[name](...args);
     const key = rendered;
     fill($('#main'), h('div', { class: 'page' }, skeleton()));
@@ -48,12 +40,31 @@ const lazy = (load, name) => {
         h('button', { class: 'btn primary', onclick: () => location.reload() }, 'Обновить'))));
     });
   };
+  /** Загрузить файл экрана заранее (без отрисовки): тогда первый показ — сразу, без серых блоков. */
+  fn.preload = () => (mod ? Promise.resolve(mod) : load().then(m => { if (m) mod = m; return m; }));
+  return fn;
 };
 const renderDev = lazy(() => import('./views/dev.js'), 'renderDev');
 const renderPrefs = lazy(() => import('./views/prefs.js'), 'renderPrefs');
 const renderAnalytics = lazy(() => import('./views/analytics.js'), 'renderAnalytics');
 const renderBacklog = lazy(() => import('./views/backlog.js'), 'renderBacklog');
 const renderInfoList = lazy(() => import('./views/infolist.js'), 'renderInfoList');
+// главные экраны ролей и разделы, которые нужны не всем, — тоже отдельными файлами (главный экран своей роли грузится заранее, preloadHome)
+const renderCeoHome = lazy(() => import('./views/ceo.js'), 'renderCeoHome');
+const renderPmHome = lazy(() => import('./views/pm.js'), 'renderPmHome');
+const renderRmHome = lazy(() => import('./views/rm.js'), 'renderRmHome');
+const renderReady = lazy(() => import('./views/ready.js'), 'renderReady');
+const renderRejects = lazy(() => import('./views/rejects.js'), 'renderRejects');
+const renderAccounts = lazy(() => import('./views/accounts.js'), 'renderAccounts');
+const renderMyBoard = lazy(() => import('./views/myboard.js'), 'renderMyBoard');
+const renderUnitPage = lazy(() => import('./views/unitpage.js'), 'renderUnitPage');
+const renderUnitTeam = lazy(() => import('./views/unitpage.js'), 'renderUnitTeam');
+
+/** Файл главного экрана своей роли — заранее, пока идёт вход: первый экран рисуется сразу, без серых блоков. */
+export function preloadHome() {
+  const f = isSuper() ? renderCeoHome : myAccess() === 'moderator' ? renderPmHome : myAccess() === 'rm' ? renderRmHome : null;
+  return f ? f.preload().catch(() => null) : Promise.resolve();
+}
 
 let rendered = null;
 export const currentView = () => rendered;
