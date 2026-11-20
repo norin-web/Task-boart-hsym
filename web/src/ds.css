@@ -3496,3 +3496,19 @@ a.bug-title:hover { text-decoration: underline; }
 .card.card:hover { box-shadow: none; }
 /* запрос на карточке: на каком этапе сейчас */
 .card-sub .card-now { color: var(--text); font-weight: 500; }
+
+/* Запрос на бэкенд в карточке разработчика: плашка, поле прямо под ней, список отправленных */
+.be-block { margin-bottom: 14px; }
+.be-block .be-bar { margin-bottom: 0; }
+.be-bar > .i { color: var(--muted); }
+.be-form { margin-top: 8px; }
+.be-form textarea.inp { width: 100%; min-height: 56px; resize: vertical; }
+.be-form .edit-actions { display: flex; gap: 8px; margin-top: 8px; }
+.be-list { display: grid; gap: 2px; margin-top: 6px; }
+.be-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px 12px; border-radius: 10px; font-size: 13px; }
+.be-row:hover { background: var(--surface-2); }
+.be-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; color: var(--text); }
+.be-row.done .be-text { color: var(--muted); }
+.be-state { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; line-height: 16px; font-weight: 600; background: var(--surface-2); color: var(--muted); }
+.be-state.progress { background: var(--info-fill); color: var(--text); }
+.be-state.done { background: var(--ok-soft); color: var(--text); }

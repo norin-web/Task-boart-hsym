@@ -1233,3 +1233,35 @@ test('ссылки задачи ↔ «Быстрый доступ» прилож
   assert.equal((await links(request.id)).lf_drive, 'https://drive.google.com/pb');
   assert.equal((await links(by.ios.id)).lf_drive, 'https://drive.google.com/pb');
 });
+
+test('запрос на бэкенд из этапа iOS: задача тому, кто ведёт запрос; разработчик видит состояние; закрыли — ему уведомление', async () => {
+  const api = await setup();
+  const { ceo, pm, lead, ios, qa, gold } = await studio(api);
+  const { request } = await api.as(ceo, () => api('createApp', { name: 'Bose', unitId: gold.id }));
+  const by = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: request.id }))).map(t => [t.step, t]));
+  await finish(api, lead, pm, by.design.id);
+  const lead_ = (await api.pg.query('select assignee_id from tasks where id = $1', [request.id])).rows[0].assignee_id;
+  assert.deepEqual(await api.as(ios, () => api('getBackendRequests', { taskId: by.ios.id })), []);
+  // пусто — нельзя; чужой этап — нельзя; не этап разработки — нельзя
+  await assert.rejects(api.as(ios, () => api('requestBackend', { taskId: by.ios.id, text: '  ' })));
+  await assert.rejects(api.as(qa, () => api('requestBackend', { taskId: by.ios.id, text: 'x' })));
+  await assert.rejects(api.as(ceo, () => api('requestBackend', { taskId: by.design.id, text: 'x' })), /этапа разработки/);
+  const { id } = await api.as(ios, () => api('requestBackend', { taskId: by.ios.id, text: 'Эндпоинт для подписок\nи вебхук App Store' }));
+  const row = (await api.pg.query('select * from tasks where id = $1', [id])).rows[0];
+  assert.equal(row.assignee_id, lead_ || pm.id);
+  assert.equal(row.parent_id, by.ios.id);
+  assert.equal(row.created_by, ios.id);
+  assert.match(row.title, /^Бэкенд · Bose: Эндпоинт для подписок/);
+  assert.match(row.description, /вебхук App Store/);
+  // у того, кто ведёт, — уведомление и задача на доске
+  const to = row.assignee_id === pm.id ? pm : ceo;
+  assert.ok((await api.as(to, () => api('getNotifications', {}))).some(n => n.taskId === id && n.kind === 'assigned'));
+  // разработчик видит запрос и его состояние
+  let list = await api.as(ios, () => api('getBackendRequests', { taskId: by.ios.id }));
+  assert.deepEqual(list.map(x => [x.id, x.state, x.text]), [[id, 'todo', 'Эндпоинт для подписок\nи вебхук App Store']]);
+  assert.deepEqual(await api.as(qa, () => api('getBackendRequests', { taskId: by.ios.id })), []); // чужой этап — не видно
+  // закрыли — у разработчика «готово»
+  await api('updateTask', { id, patch: { status: 'done' } });
+  list = await api.as(ios, () => api('getBackendRequests', { taskId: by.ios.id }));
+  assert.equal(list[0].state, 'done');
+});

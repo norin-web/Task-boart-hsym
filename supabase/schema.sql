@@ -3490,3 +3490,60 @@ begin
   perform set_config('app.system', 'off', true);
   insert into app_settings (key, value, updated_at) values ('once_orphan_stages', 'true'::jsonb, '') on conflict (key) do nothing;
 end $$;
+
+-- Запрос на бэкенд из этапа разработки (iOS / интеграция): разработчик пишет, что нужно, — задача падает тому,
+-- кто ведёт запрос (исполнитель запроса, обычно PM), иначе ответственному PM юнита. Подзадача этапа, автор — разработчик:
+-- когда её закроют, ему придёт «Закрыли задачу, которую вы поставили». Этап разработки её не ждёт.
+create or replace function request_backend(p_task text, p_text text) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  t tasks; r tasks; u units; v_id text; v_to text; v_me text := coalesce(my_person_id(), '');
+  v_sys text := current_setting('app.system', true);
+  v_text text := left(trim(coalesce(p_text, '')), 5000);
+  at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+  who text; app_ text; line text;
+begin
+  select * into t from tasks where id = p_task;
+  if t.id is null or coalesce(t.parent_id, '') = '' or t.kind <> 'stage' or coalesce(t.step, '') not in ('ios', 'integr') then
+    raise exception 'Запрос на бэкенд оставляют из этапа разработки' using errcode = 'P0001';
+  end if;
+  if not can_edit_task_links(t.id) then raise exception 'Недостаточно прав для этого действия' using errcode = '42501'; end if;
+  if v_text = '' then raise exception 'Напишите, что нужно по бэкенду' using errcode = 'P0001'; end if;
+  select * into r from tasks where id = t.parent_id;
+  select * into u from units where id = t.unit_id;
+  -- кто ведёт запрос; нет его или выключен — PM юнита
+  select p.id into v_to from people p where p.id = coalesce(r.assignee_id, '') and p.active;
+  if coalesce(v_to, '') = '' then v_to := coalesce(unit_pm(t.unit_id), ''); end if;
+  select name into who from people where id = v_me;
+  app_ := regexp_replace(coalesce(r.title, ''), '^(New App|Апдейт[^:]*|Реджект[^:]*):\s*', '');
+  line := regexp_replace(split_part(v_text, chr(10), 1), '\s+', ' ', 'g');
+  v_id := 't_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12);
+  perform set_config('app.system', 'on', true);
+  insert into tasks (id, unit_id, num, title, description, status, assignee_id, department_id, due_date, ord, fields, checklist,
+                     archived, done_at, created_by, created_at, updated_at, parent_id, kind, step, app_id, is_test, depends_on)
+  values (v_id, t.unit_id, next_task_num(t.unit_id),
+          left('Бэкенд · ' || app_ || ': ' || left(line, 120) || case when length(line) > 120 then '…' else '' end, 500),
+          'Запрос на бэкенд' || case when coalesce(who, '') <> '' then ' от ' || who else '' end
+            || ' (этап «' || split_part(t.title, ' · ', 1) || '»).' || chr(10) || chr(10) || v_text,
+          u.settings -> 'columns' -> 0 ->> 'id', v_to, '', '', 0,
+          case when coalesce(r.fields, '{}'::jsonb) ? 'f_priority' then jsonb_build_object('f_priority', r.fields -> 'f_priority') else '{}'::jsonb end,
+          '[]'::jsonb, false, '', v_me, at_, at_, t.id, '', 'backend', coalesce(t.app_id, r.app_id, ''), t.is_test, '[]'::jsonb);
+  perform set_config('app.system', coalesce(v_sys, 'off'), true);
+  return v_id;
+end $$;
+revoke execute on function request_backend(text, text) from public, anon;
+grant execute on function request_backend(text, text) to authenticated;
+
+-- Запросы на бэкенд этого этапа для его карточки (разработчику сами задачи PM не видны по правилам): текст, у кого, состояние.
+create or replace function backend_requests_of(p_task text) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object('id', b.id, 'assigneeId', b.assignee_id, 'createdBy', b.created_by, 'createdAt', b.created_at,
+           'text', substr(b.description, strpos(b.description, chr(10) || chr(10)) + 2),
+           'state', case when task_done(b.id) then 'done'
+                         when coalesce((select c ->> 'kind' from units u, jsonb_array_elements(u.settings -> 'columns') c where u.id = b.unit_id and c ->> 'id' = b.status), 'todo') = 'todo' then 'todo'
+                         else 'progress' end) order by b.created_at), '[]'::jsonb)
+    from tasks b
+   where b.parent_id = p_task and b.step = 'backend' and not b.archived and can_edit_task_links(p_task);
+$$;
+revoke execute on function backend_requests_of(text) from public, anon;
+grant execute on function backend_requests_of(text) to authenticated;

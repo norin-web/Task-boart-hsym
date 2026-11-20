@@ -135,6 +135,8 @@ function buildPanel(t) {
       } }, 'Отдать на тестирование')),
     // аккаунт в сторе: разработчик оставляет заявку RM (с комментарием); дальше видно, где она и ссылка на док
     ['ios', 'integr'].includes(t.step) && t.parentId && (t.assigneeId === S.meId || editable) && accountRequestBlock(t),
+    // бэкенд: разработчик пишет, что нужно, — задача тому, кто ведёт запрос (PM); ниже — его запросы и их состояние
+    ['ios', 'integr'].includes(t.step) && t.parentId && (t.assigneeId === S.meId || editable) && backendRequestBlock(t),
     // опросник — у этапа iOS (по умолчанию) или у интеграции, если PM так решил (dev_form.need)
     ((t.step === 'ios' && (t.devForm || {}).need !== false) || (t.step === 'integr' && (t.devForm || {}).need === true)) && devFormBlock(t, t.assigneeId === S.meId || isStaff()),
     t.step === 'release' && t.assigneeId && releaseBlock(t, () => reloadBoard().catch(() => {})),
@@ -423,6 +425,58 @@ function accountRequestBlock(t) {
       a.url && h('a', { class: 'btn sm', href: safeUrl(a.url), target: '_blank', rel: 'noopener noreferrer', title: a.url }, icon('link', 13), 'Google Doc'));
   };
   call('getAccountRequest', { taskId: t.id }).then(paint).catch(() => box.remove());
+  return box;
+}
+
+/**
+ * «Бэкенд» в карточке разработчика: «Запросить бэкенд» раскрывает поле прямо здесь (что нужно) → «Отправить» —
+ * задача падает тому, кто ведёт запрос (PM). Ниже — отправленные запросы: текст, у кого, состояние.
+ */
+function backendRequestBlock(t) {
+  const box = h('div', { class: 'be-block' });
+  let list = [];
+  let open = false;
+  const STATE = { todo: 'ждёт', progress: 'в работе', done: 'готово' };
+  const paint = () => {
+    const ta = open && autosize(h('textarea', { class: 'inp', rows: 2, maxlength: 5000, 'data-esc-local': '',
+      placeholder: 'Что нужно по бэкенду: эндпоинт, данные, интеграция, к какому сроку…' }));
+    const submit = async btn => {
+      const text = ta.value.trim();
+      if (!text) { ta.focus(); return; }
+      btn.disabled = true;
+      try {
+        await send('requestBackend', { taskId: t.id, text });
+        open = false;
+        list = await call('getBackendRequests', { taskId: t.id }).catch(() => list);
+        const to = personById((list[list.length - 1] || {}).assigneeId);
+        toast(to ? `Запрос на бэкенд ушёл: ${to.name}` : 'Запрос на бэкенд отправлен');
+        paint();
+      } catch (e) { btn.disabled = false; showErr(e); }
+    };
+    if (ta) ta.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); open = false; paint(); }
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(box.querySelector('.be-send')); }
+    });
+    fill(box,
+      h('div', { class: 'qa-bar be-bar' }, icon('code', 15),
+        h('span', null, list.length ? 'Бэкенд' : 'Нужен бэкенд?'), h('span', { class: 'spacer' }),
+        !open && h('button', { class: 'btn ' + (list.length ? 'ghost' : 'primary') + ' sm', onclick: () => { open = true; paint(); } }, list.length ? 'Ещё запрос' : 'Запросить бэкенд')),
+      open && h('div', { class: 'be-form' }, ta,
+        h('div', { class: 'edit-actions' },
+          h('button', { class: 'btn primary sm be-send', onclick: e => submit(e.currentTarget) }, icon('send', 13), 'Отправить'),
+          h('button', { class: 'btn ghost sm', onclick: () => { open = false; paint(); } }, 'Отмена'))),
+      list.length > 0 && h('div', { class: 'be-list' }, list.map(b => {
+        const who = personById(b.assigneeId);
+        return h('div', { class: 'be-row' + (b.state === 'done' ? ' done' : '') },
+          h('span', { class: 'be-state ' + b.state }, b.state === 'done' && icon('check', 12), STATE[b.state] || b.state),
+          isStaff() ? h('button', { class: 'link-btn be-text', title: b.text, onclick: () => peekTask(t.unitId, b.id) }, b.text) : h('span', { class: 'be-text', title: b.text }, b.text),
+          who ? avatar(who, 'sm') : h('span', { class: 'muted' }, '—'));
+      })));
+    if (ta) setTimeout(() => ta.focus(), 0);
+  };
+  paint();
+  // функции в базе ещё нет (схему не обновили) — блок просто не показываем
+  call('getBackendRequests', { taskId: t.id }).then(r => { list = r; paint(); }).catch(() => box.remove());
   return box;
 }
 

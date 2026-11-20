@@ -3626,6 +3626,20 @@ export function createBackend(db, opts = {}) {
       return req;
     },
 
+    /** Запрос на бэкенд из этапа разработки: задача тому, кто ведёт запрос (иначе PM юнита). Функция базы — разработчик сам задач не создаёт. */
+    async requestBackend(p) {
+      const t = await findTask(p.taskId);
+      const text = req(str(p.text, 5000), 'Что нужно по бэкенду');
+      const id = await rpc('request_backend', { p_task: t.id, p_text: text });
+      return { id: typeof id === 'object' && id ? Object.values(id)[0] : id };
+    },
+    /** Запросы на бэкенд этапа для его карточки: [{ id, text, state todo|progress|done, assigneeId, createdAt }]. */
+    async getBackendRequests(p) {
+      const r = await rpc('backend_requests_of', { p_task: str(p.taskId, 40) });
+      const v = Array.isArray(r) && r.length === 1 && r[0] && typeof r[0] === 'object' && 'backend_requests_of' in r[0] ? r[0].backend_requests_of : r;
+      return Array.isArray(v) ? v : [];
+    },
+
     async getAccounts() {
       const [rows, units, links] = await Promise.all([
         all(() => T('tasks').select('id,unit_id,num,title,status,assignee_id,due_date,app_id,parent_id,depends_on,done_at,created_at,created_by,description').eq('kind', 'stage').eq('step', 'account').eq('archived', false).order('created_at').order('id')),
