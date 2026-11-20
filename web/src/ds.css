@@ -757,6 +757,13 @@ button.fb-title:hover { color: var(--text); text-decoration: none; opacity: .8; 
 /* свойства задачи (макет 15): значения текстом, подсказки и быстрые кнопки — по наведению */
 .panel-side .assignee-wrap { display: flex; align-items: center; gap: 8px; }
 .panel-side .assignee-wrap .avatar.md { width: 34px; height: 34px; flex: none; }
+/* выпадающий список шириной по самой длинной подписи («… (не из этой команды)») выталкивал колонку за край — не шире колонки, хвост многоточием */
+.panel-side { min-width: 0; }
+.panel-side .props { grid-template-columns: minmax(0, 1fr); }
+.panel-side .prop { min-width: 0; }
+.panel-side .assignee-wrap select.inp { flex: 1 1 0; min-width: 0; width: auto; max-width: calc(100% - 26px); text-overflow: ellipsis; }
+.panel-side .status-wrap { max-width: 60%; }
+.panel-side .status-wrap select.inp { max-width: 100%; min-width: 0; text-overflow: ellipsis; }
 .panel-side .assignee-wrap select.inp { flex: 1; min-width: 0; margin-left: 0; width: auto; }
 .due-wrap { position: relative; display: flex; align-items: center; height: 28px; padding: 0 8px; margin-left: -8px; border-radius: var(--r); font-size: 13px; line-height: 20px; font-weight: 600; color: var(--text); cursor: pointer; }
 .due-wrap:hover { background: var(--surface-3); }
@@ -3512,3 +3519,8 @@ a.bug-title:hover { text-decoration: underline; }
 .be-state { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; line-height: 16px; font-weight: 600; background: var(--surface-2); color: var(--muted); }
 .be-state.progress { background: var(--info-fill); color: var(--text); }
 .be-state.done { background: var(--ok-soft); color: var(--text); }
+
+/* плашки в карточке (готово? / аккаунт / бэкенд / опросник): на узкой панели кнопка не вылезает за край — переносится вниз */
+.panel .qa-bar { flex-wrap: wrap; row-gap: 8px; }
+.panel .qa-bar > span:not(.spacer) { min-width: 0; }
+.panel .qa-bar > .btn { flex: none; margin-left: auto; max-width: 100%; }
