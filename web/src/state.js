@@ -314,14 +314,17 @@ const ASO_STEP = { store: 'meta', meta: 'texts', l10n: 'texts' };
  * Вкладка ASO для задачи — ровно одна: встроенные этапы по ключу; свои этапы студии («Текста в апдейте») и обычные задачи —
  * по названию (отдел этапа или название задачи); не понять — '' (на доске ASO такие идут в «Мету», inAsoView).
  */
-const ASO_TEXTS = /текст|text|локал|locali|перев|translat|l10n/i;
-const ASO_META = /мета|meta|стор|store|скрин|screen|ключев|keyword|aso/i;
+// начало слова (без lookbehind на кириллице \b не работает): «стор» не ловит «историю», «text» — «context», «мета» — «параметр»
+const ASO_TEXTS = /(?<![a-zа-яё])(текст|text|локал|locali|перев|translat|l10n)/i;
+const ASO_META = /(?<![a-zа-яё])(мета|meta|стор|store|скрин|screen|ключев|keyword|aso(?![a-zа-яё]))/i;
 /** Встроенные этапы других отделов — не мета и не тексты. */
 const NOT_ASO = new Set(['design', 'art', 'retext', 'ios', 'qa', 'integr', 'release', 'account', 'backend']);
 export const asoTrack = t => {
   if (!t) return '';
   if (ASO_STEP[t.step]) return ASO_STEP[t.step];
   if (NOT_ASO.has(t.step)) return '';
+  // задача другого отдела (дизайн, разработка…) — не ASO, по названию не определяем
+  if (t.departmentId && t.departmentId !== 'd_aso') return '';
   const name = stageName(t.title || '');
   if (ASO_TEXTS.test(name)) return 'texts';
   if (ASO_META.test(name)) return 'meta';
@@ -329,8 +332,14 @@ export const asoTrack = t => {
 };
 export const asoView = () => (LS.get('asoTrack', 'meta') === 'texts' ? 'texts' : 'meta');
 export const setAsoView = v => LS.set('asoTrack', v === 'texts' ? 'texts' : 'meta');
-/** Задача видна только в своей вкладке ASO; по названию не понять — во вкладке «Мета» (основная работа ASO). */
-export const inAsoView = t => (asoTrack(t) || 'meta') === asoView();
+/**
+ * Вкладка ASO показывает только свои задачи: мета или тексты; задача ASO, которую по названию не понять, — в «Мете».
+ * Не-ASO задачи (запросы, дизайн, релиз на доске юнита у CEO «Меты») — в обеих вкладках, как раньше.
+ */
+export const inAsoView = t => {
+  const k = asoTrack(t) || (t && t.departmentId === 'd_aso' && t.kind !== 'request' ? 'meta' : '');
+  return !k || k === asoView();
+};
 
 /** Направления CEO: дизайн / меты / релизы. */
 export const DIRECTIONS = [['', 'Без направления'], ['design', 'Дизайн'], ['meta', 'Меты'], ['release', 'Релизы']];

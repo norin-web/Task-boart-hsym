@@ -400,7 +400,8 @@ export function filterTasks(opts = {}) {
     // у QA на доске — и задачи разработчиков, которые тестировщики вернули в «Доработку»
     const qaBack = qaTeam && isReworkColumn(colById(t.status));
     if (!qaBack && inTeam && !inTeam.has(t.assigneeId) && !((ceo || !t.assigneeId) && teamDepts && teamDepts.has(t.departmentId))) return false;
-    if (!qaBack && teamDepts && t.departmentId && !teamDepts.has(t.departmentId)) return false;
+    // доска команды — по отделу задачи: задача без отдела сюда не попадает (только через исполнителя было бы не по отделу)
+    if (!qaBack && teamDepts && !teamDepts.has(t.departmentId)) return false;
     if (t.archived && !f.archived) return false;
     if (!opts.withOld && hidingOld() && staleDone(t)) return false;
     if (f.assignees.length && !f.assignees.includes(t.assigneeId || NO_DEPT)) return false;

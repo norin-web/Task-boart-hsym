@@ -3,7 +3,7 @@
  * и загрузка людей позиции лида. Данные — getMyDashboard.
  */
 import { S, personById, deptById, fmtDate, plural, dueInfo } from '../state.js';
-import { h, icon, avatar, statusIcon, toast, showErr, emptyBlock } from '../ui.js';
+import { h, icon, avatar, statusIcon, toast, showErr, emptyBlock, fill } from '../ui.js';
 import { send } from '../api.js';
 import { peekTask } from './task.js';
 import { appIcon } from './apps.js';
@@ -95,6 +95,7 @@ export function sentBlock(d, reload) {
     try { await send('recallReview', { id: t.id }); toast('Задача снова у вас'); if (reload) reload(); } catch (e) { showErr(e); }
   };
   const total = wait.length + decided.length;
+  const waitRow = t => sentWaitRow(t, recall);
   const decidedRow = n => {
     const rv = personById(n.actorId);
     const back = (n.kinds || [n.kind]).includes('returned');
@@ -108,16 +109,31 @@ export function sentBlock(d, reload) {
   };
   return h('section', null,
     h('div', { class: 'section-head' }, h('h2', null, 'Отправлено на ревью'), total > 0 && h('span', { class: 'muted fc-hint' }, total)),
-    total ? h('div', { class: 'card-box sent-list' }, decided.map(decidedRow), wait.map(t => {
-      const rv = personById(t.reviewerId);
-      return h('div', { class: 'sent-row', role: 'button', tabindex: 0, onclick: () => peekTask(t.unitId, t.id) },
-        rv ? avatar(rv, 'md') : h('span'),
-        h('div', { class: 'sent-main' },
-          h('div', { class: 'sent-title' }, taskLine(t.title, t.app && t.app.name)),
-          h('div', { class: 'muted sent-sub' }, [rv ? 'у ' + rv.name : 'ревьюер не назначен', waited(t.updatedAt)].filter(Boolean).join(' · '))),
-        h('div', { class: 'sent-actions' },
-          h('button', { class: 'btn sm', title: 'Вернуть задачу себе, если что-то забыли', onclick: e => { e.stopPropagation(); recall(t); } }, icon('back', 13), 'Забрать')));
-    })) : emptyBlock('Ничего не ждёт ревью', { ic: 'eye' }));
+    // сначала то, что ещё ждёт ревью, потом решённые; сразу 5 строк и «Показать все · N» — блок не растягивает главную
+    total ? h('div', { class: 'card-box sent-list' }, foldRows([...wait.map(t => waitRow(t)), ...decided.map(decidedRow)])) : emptyBlock('Ничего не ждёт ревью', { ic: 'eye' }));
+}
+
+/** Первые 5 строк, остальное — «Показать все · N» на месте, «Свернуть» — обратно. */
+function foldRows(rows, limit = 5) {
+  const box = h('div', { style: { display: 'contents' } });
+  let open = false;
+  const draw = () => fill(box, open ? rows : rows.slice(0, limit),
+    rows.length > limit && h('button', { class: 'rc-more link-btn', type: 'button', 'aria-expanded': String(open), onclick: e => { e.stopPropagation(); open = !open; draw(); } },
+      open ? 'Свернуть' : `Показать все · ${rows.length}`));
+  draw();
+  return box;
+}
+
+/** Строка «ждёт ревью»: у кого, сколько ждёт, «Забрать» — вернуть себе. */
+function sentWaitRow(t, recall) {
+  const rv = personById(t.reviewerId);
+  return h('div', { class: 'sent-row', role: 'button', tabindex: 0, onclick: () => peekTask(t.unitId, t.id) },
+    rv ? avatar(rv, 'md') : h('span'),
+    h('div', { class: 'sent-main' },
+      h('div', { class: 'sent-title' }, taskLine(t.title, t.app && t.app.name)),
+      h('div', { class: 'muted sent-sub' }, [rv ? 'у ' + rv.name : 'ревьюер не назначен', waited(t.updatedAt)].filter(Boolean).join(' · '))),
+    h('div', { class: 'sent-actions' },
+      h('button', { class: 'btn sm', title: 'Вернуть задачу себе, если что-то забыли', onclick: e => { e.stopPropagation(); recall(t); } }, icon('back', 13), 'Забрать')));
 }
 
 /** Загрузка людей позиции лида в его юнитах: задач на человеке и полоса; перегруз (много открытых или есть просрочка) — оранжевым и красным числом. */
