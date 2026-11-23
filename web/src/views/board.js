@@ -395,7 +395,8 @@ export function filterTasks(opts = {}) {
     // запрос на бэкенд (подзадача этапа iOS, исполнитель — кто ведёт запрос) — тоже работа PM, не доски команды
     if (team && t.step === 'backend') return false;
     // ASO: вкладка «Мета» или «Тексты»
-    if (asoTeam && !inAsoView(t)) return false;
+    // на доске команды ASO — строго одна вкладка (неопознанное — «Мета»); на доске юнита у CEO «Меты» — чужие отделы в обеих
+    if (asoTeam && !inAsoView(t, !!team)) return false;
     if (byId && (t.kind === 'stage' || t.step === 'part') && foldedChild(t, byId)) return false;
     // у QA на доске — и задачи разработчиков, которые тестировщики вернули в «Доработку»
     const qaBack = qaTeam && isReworkColumn(colById(t.status));
@@ -906,15 +907,22 @@ function submitQuick(status, dept) {
   const team = teamById(S.route.team);
   const crew = team ? teamPeople(team) : [];
   const assignee = team ? (crew.find(p => p.id === S.meId) || crew[0] || {}).id || '' : '';
-  const departmentId = dept || (S.filters.depts.length === 1 ? S.filters.depts[0] : '') || (team && !assignee && (team.departmentIds || [])[0]) || '';
+  // на доске команды с позициями задача — всегда в отделе команды (иначе по правилу «только по отделу» пропадёт с этой же доски):
+  // позиция исполнителя, если она из команды, иначе первая позиция команды
+  const tDepts = team ? team.departmentIds || [] : [];
+  // доска ASO: задача остаётся во вкладке, где её создали («Мета» / «Тексты»), что бы ни было в названии
+  const asoStep = asoBoard(team) ? (asoView() === 'texts' ? 'aso_texts' : 'aso_meta') : '';
+  const who = assignee && personById(assignee);
+  const departmentId = dept || (S.filters.depts.length === 1 ? S.filters.depts[0] : '')
+    || (tDepts.length ? ((who && (who.positionIds || []).find(id => tDepts.includes(id))) || tDepts[0]) : '') || '';
   const t = {
     id: 'tmp_' + Math.random().toString(36).slice(2), _temp: true, unitId, num: 0, title, description: '',
-    status, assigneeId: assignee, departmentId, dueDate: '', fields: {}, checklist: [], archived: false, updatedAt: '', commentCount: 0,
+    status, assigneeId: assignee, departmentId, step: asoStep, dueDate: '', fields: {}, checklist: [], archived: false, updatedAt: '', commentCount: 0,
     order: maxOrder(S.board.tasks.filter(x => x.status === status)) + 1,
   };
   S.board.tasks.push(t);
   renderTasks();
-  send('createTask', { unitId, title, status, departmentId, ...(assignee ? { assigneeId: assignee } : {}) }, real => {
+  send('createTask', { unitId, title, status, departmentId, ...(asoStep ? { step: asoStep } : {}), ...(assignee ? { assigneeId: assignee } : {}) }, real => {
     Object.assign(t, real);
     delete t._temp;
     if (S.board && S.board.unit.id === unitId) renderTasks();

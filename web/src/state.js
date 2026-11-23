@@ -309,7 +309,8 @@ export const STEP_NAMES = { design: 'Дизайн', art: 'Онбординг и 
  * Доска команды ASO и личная доска ASO-специалиста переключаются между ними; обычные задачи (не этапы) — в обеих.
  */
 export const ASO_TRACKS = [['meta', 'Мета'], ['texts', 'Тексты']];
-const ASO_STEP = { store: 'meta', meta: 'texts', l10n: 'texts' };
+// aso_meta / aso_texts — обычная задача, созданная во вкладке доски ASO: остаётся в этой вкладке
+const ASO_STEP = { store: 'meta', meta: 'texts', l10n: 'texts', aso_meta: 'meta', aso_texts: 'texts' };
 /**
  * Вкладка ASO для задачи — ровно одна: встроенные этапы по ключу; свои этапы студии («Текста в апдейте») и обычные задачи —
  * по названию (отдел этапа или название задачи); не понять — '' (на доске ASO такие идут в «Мету», inAsoView).
@@ -336,8 +337,9 @@ export const setAsoView = v => LS.set('asoTrack', v === 'texts' ? 'texts' : 'met
  * Вкладка ASO показывает только свои задачи: мета или тексты; задача ASO, которую по названию не понять, — в «Мете».
  * Не-ASO задачи (запросы, дизайн, релиз на доске юнита у CEO «Меты») — в обеих вкладках, как раньше.
  */
-export const inAsoView = t => {
-  const k = asoTrack(t) || (t && t.departmentId === 'd_aso' && t.kind !== 'request' ? 'meta' : '');
+export const inAsoView = (t, strict = false) => {
+  // strict — доска команды ASO и «Мои задачи» ASO: каждая задача ровно в одной вкладке, неопознанное — в «Мете»
+  const k = asoTrack(t) || (strict || (t && t.departmentId === 'd_aso' && t.kind !== 'request') ? 'meta' : '');
   return !k || k === asoView();
 };
 
