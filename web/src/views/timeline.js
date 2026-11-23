@@ -2,14 +2,14 @@
  * Таймлайн юнита (макет 27): задачи полосами по дням — от создания до срока. Четыре недели, шаг — неделя.
  * Вид доски юнита: переключатель «Доска / Список / Таймлайн» (#/u/:id/timeline).
  */
-import { S, personById, colById, deptById, colColor, todayStr, taskKey, taskDone, fmtDate } from '../state.js';
+import { S, appById, personById, colById, deptById, colColor, todayStr, taskKey, taskDone, fmtDate } from '../state.js';
 import { $, h, icon, avatar, statusIcon, fill } from '../ui.js';
 import { link } from '../router.js';
 
 import { openCreateTask, peekTask } from './task.js';
 import { isStaff } from '../state.js';
 import { unitHeader } from './unitnav.js';
-import { stageName } from '../naming.js';
+import { taskLine } from '../naming.js';
 
 const DAY = 864e5;
 const WEEKS = 4;
@@ -55,7 +55,7 @@ export function renderTimeline() {
     const bar = ({ t, a, b }) => {
       // задача позже видимых недель: подпись с датой и стрелка к ней
       if (a > e0) return h('div', { class: 'tl-row tl-later' },
-        h('button', { class: 'tl-later-text', title: taskKey(t), onclick: () => open(t) }, stageName(t.title) + ' · ' + fmtDate(t.dueDate || t.createdAt.slice(0, 10))),
+        h('button', { class: 'tl-later-text', title: taskKey(t), onclick: () => open(t) }, taskLine(t.title, (appById(t.appId) || {}).name) + ' · ' + fmtDate(t.dueDate || t.createdAt.slice(0, 10))),
         h('button', { class: 'tl-go', title: 'Показать', style: { background: colorOf(t) }, onclick: e => move(e, Math.ceil((a - e0) / 7)) }, icon('chevron', 13)));
       const ca = Math.max(a, s0), cb = Math.min(b, e0);
       const kind = colById(t.status).kind;

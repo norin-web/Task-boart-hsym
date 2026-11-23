@@ -49,3 +49,9 @@ export function stageName(title) {
 export const isRejectTitle = title => /\[Reject #\d+\]/.test(String(title || '')) || /^Реджект №/.test(String(title || ''));
 /** Номер реджекта из названия. */
 export const rejectNo = title => Number((/\[Reject #(\d+)\]/.exec(title || '') || /^Реджект №(\d+)/.exec(title || '') || [])[1]) || 0;
+
+/**
+ * Название для списков вне контекста приложения (главная сотрудника, таймлайн, «Отправлено на ревью»): всегда с приложением.
+ * В формате — как есть («App - [Update #1] - Metadata»); старое — имя этапа и приложение.
+ */
+export const taskLine = (title, appName) => (parseTitle(title) ? String(title) : stageName(title) + (appName ? ' · ' + appName : ''));

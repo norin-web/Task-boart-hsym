@@ -12,7 +12,7 @@ import { peekTask, openCreateTask } from './task.js';
 import { appIcon, prioTag, openDecomposeDialog, sendRelease, openAppById } from './apps.js';
 import { newsBlock, loadNotes } from './home.js';
 import { renderLayout, editLayout } from './layout.js';
-import { stageName, parseTitle } from '../naming.js';
+import { stageName, parseTitle, taskLine } from '../naming.js';
 
 export const PERIODS = [['week', 'Неделя'], ['month', 'Месяц'], ['quarter', 'Квартал']];
 const STATE = {
@@ -169,7 +169,7 @@ function problems(d) {
       const a = PROB[x.type], t = x.task;
       const p = personById(t.assigneeId);
       return h('button', { class: 'pb-row', onclick: () => peekTask(t.unitId, t.id) },
-        h('span', { class: 'pb-main' }, h('span', { class: 'pb-title' }, t.app ? h('b', null, t.app.name + ' · ') : '', stageName(t.title)),
+        h('span', { class: 'pb-main' }, h('span', { class: 'pb-title' }, taskLine(t.title, t.app && t.app.name)),
           h('span', { class: 'att-what ' + a.cls }, a.text(t))),
         p ? avatar(p, 'sm') : h('span', { class: 'avatar-gap' }));
     }), rows.length > 14 && h('p', { class: 'muted att-more' }, `и ещё ${rows.length - 14}`))
