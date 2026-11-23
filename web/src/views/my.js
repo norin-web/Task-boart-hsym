@@ -128,7 +128,7 @@ export async function renderMy() {
 /** Свои этапы студии (ключ сгенерирован, например «xmwt0y6sy») — название берём из самой задачи, ключ не показываем. */
 const STEP_SEEN = new Map();
 /** Обычные задачи, созданные во вкладке доски ASO. */
-const ASO_TAB_NAMES = { aso_meta: 'Мета', aso_texts: 'Тексты' };
+const ASO_TAB_NAMES = { aso_meta: 'Мета · задачи', aso_texts: 'Тексты · задачи' };
 export const typeOf = t => {
   if (t.step && !STEP_NAMES[t.step] && !(t.step in ASO_TAB_NAMES) && t.title && !STEP_SEEN.has(t.step)) STEP_SEEN.set(t.step, stageName(t.title));
   return t.kind === 'request' ? 'req' : t.step === 'part' ? 'part' : t.step ? 'st:' + t.step : 'other';

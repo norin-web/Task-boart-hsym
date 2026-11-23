@@ -913,8 +913,10 @@ function submitQuick(status, dept) {
   // доска ASO: задача остаётся во вкладке, где её создали («Мета» / «Тексты»), что бы ни было в названии
   const asoStep = asoBoard(team) ? (asoView() === 'texts' ? 'aso_texts' : 'aso_meta') : '';
   const who = assignee && personById(assignee);
-  const departmentId = dept || (S.filters.depts.length === 1 ? S.filters.depts[0] : '')
-    || (tDepts.length ? ((who && (who.positionIds || []).find(id => tDepts.includes(id))) || tDepts[0]) : '') || '';
+  // отдел дорожки / фильтра — только если он из отделов команды
+  const ok = id => !!id && (!tDepts.length || tDepts.includes(id));
+  const fromUi = [dept, S.filters.depts.length === 1 ? S.filters.depts[0] : ''].find(ok) || '';
+  const departmentId = fromUi || (tDepts.length ? ((who && (who.positionIds || []).find(id => tDepts.includes(id))) || tDepts[0]) : '') || '';
   const t = {
     id: 'tmp_' + Math.random().toString(36).slice(2), _temp: true, unitId, num: 0, title, description: '',
     status, assigneeId: assignee, departmentId, step: asoStep, dueDate: '', fields: {}, checklist: [], archived: false, updatedAt: '', commentCount: 0,

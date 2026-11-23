@@ -120,7 +120,7 @@ export async function renderMyBoard() {
   const types = h('div', { class: 'my-types mb-types', role: 'radiogroup', 'aria-label': 'Тип задач' });
   controls.after(types);
   const drawTypes = () => {
-    const pool = data.tasks.filter(t => (!mbUnit || t.unitId === mbUnit) && (!isAso() || inAsoView(t, true)));
+    const pool = data.tasks.filter(t => (!mbUnit || t.unitId === mbUnit) && (!isAso() || inAsoView(t)));
     const counts = new Map();
     for (const t of pool) { const k = typeOf(t); counts.set(k, (counts.get(k) || 0) + 1); }
     const keys = [...counts.keys()].sort((a, b) => typeRank(a) - typeRank(b) || typeName(a).localeCompare(typeName(b), 'ru'));
@@ -165,7 +165,7 @@ function draw(page, data) {
   const unitById = id => data.units.find(u => u.id === id);
   const q = mbQuery.trim().toLowerCase();
   const aso = isAso();
-  const items = data.tasks.filter(t => (!aso || inAsoView(t, true)) && (!mbUnit || t.unitId === mbUnit) && (!mbType || typeOf(t) === mbType) && (!q || t.title.toLowerCase().includes(q))).map(t => ({ t, ...placeOf(data, cols, t) }));
+  const items = data.tasks.filter(t => (!aso || inAsoView(t)) && (!mbUnit || t.unitId === mbUnit) && (!mbType || typeOf(t) === mbType) && (!q || t.title.toLowerCase().includes(q))).map(t => ({ t, ...placeOf(data, cols, t) }));
 
   // карточка — та же, что на досках юнитов (taskCard), со своим окружением: задачи здесь из разных юнитов
   const env = {

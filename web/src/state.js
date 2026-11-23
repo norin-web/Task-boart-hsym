@@ -338,7 +338,7 @@ export const setAsoView = v => LS.set('asoTrack', v === 'texts' ? 'texts' : 'met
  * Не-ASO задачи (запросы, дизайн, релиз на доске юнита у CEO «Меты») — в обеих вкладках, как раньше.
  */
 export const inAsoView = (t, strict = false) => {
-  // strict — доска команды ASO и «Мои задачи» ASO: каждая задача ровно в одной вкладке, неопознанное — в «Мете»
+  // strict — доска команды ASO: каждая задача ровно в одной вкладке, неопознанное — в «Мете»
   const k = asoTrack(t) || (strict || (t && t.departmentId === 'd_aso' && t.kind !== 'request') ? 'meta' : '');
   return !k || k === asoView();
 };
