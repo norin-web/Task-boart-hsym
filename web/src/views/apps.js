@@ -16,6 +16,7 @@ import { fillDemo } from './home.js';
 import { mode } from '../data.js';
 import appStoreSvg from '../assets/app-store.svg';  // thesvg.org/icons/app-store
 import { onRemote } from '../live.js';
+import { stageName } from '../naming.js';
 
 const units = () => S.units.filter(u => !u.archived).sort((a, b) => (a.order || 0) - (b.order || 0));
 /** Ответственный за юнит (PM или CEO) первым, затем остальные PM из состава. */
@@ -88,7 +89,7 @@ export const isHighPrio = id => { const i = S.priorityOptions.findIndex(o => o.i
 export const prioTag = id => { const i = S.priorityOptions.findIndex(o => o.id === id); return i < 0 ? null : prioMark(S.priorityOptions[i], i, S.priorityOptions.length, 15); };
 /** Этапы точками: готово — залито, в работе — кольцо, ждёт — штрих, не начато — серое; подпись — в title. */
 export const stageDots = stages => h('span', { class: 'stage-dots', 'aria-label': `Этапы: ${stages.filter(s => s.done).length} из ${stages.length} готово` },
-  stages.map(s => h('span', { class: 'sd sd-' + stageState(s), title: `${s.title.split(' · ')[0]} — ${STAGE_STATE[stageState(s)].label}` })));
+  stages.map(s => h('span', { class: 'sd sd-' + stageState(s), title: `${stageName(s.title)} — ${STAGE_STATE[stageState(s)].label}` })));
 
 /** Иконка поля приложения по названию: Figma, Drive, GitHub, стор — свои, остальное — ссылка. */
 const fieldIcon = f => { const n = (f.id + ' ' + f.name).toLowerCase(); return /figma/.test(n) ? 'figma' : /drive|диск/.test(n) ? 'drive' : /git/.test(n) ? 'github' : /store|asc|apple/.test(n) ? 'app' : f.kind === 'text' ? 'edit' : 'link'; };
@@ -100,7 +101,7 @@ function workSummary(r) {
   return [
     h('span', { class: 'ap-req muted' }, REQUEST_TYPES[r.type] || 'Задача'),
     r.stages.length
-      ? [h('b', { class: 'ap-stage' }, cur ? cur.title.split(' · ')[0] : 'Релиз'), h('span', { title: r.progress + '%' }, stageDots(r.stages))]
+      ? [h('b', { class: 'ap-stage' }, cur ? stageName(cur.title) : 'Релиз'), h('span', { title: r.progress + '%' }, stageDots(r.stages))]
       : h('span', { class: 'muted' }, 'ждёт PM'),
   ];
 }
@@ -549,7 +550,7 @@ export function openAppPanel(a, onChange, page = null) {
     return h('button', { class: 'ap-task-row', onclick: () => peekTask(r.unitId, r.id) },
       h('span', { class: 'ap-task-ic', 'aria-hidden': 'true' }),
       h('span', { class: 'ap-task-main' }, h('b', null, r.title),
-        h('small', { class: 'muted' }, [cur && cur.title.split(' · ')[0], who && who.name, r.dueDate && 'до ' + fmtDate(r.dueDate)].filter(Boolean).join(' · '))),
+        h('small', { class: 'muted' }, [cur && stageName(cur.title), who && who.name, r.dueDate && 'до ' + fmtDate(r.dueDate)].filter(Boolean).join(' · '))),
       who && avatar(who, 'sm'));
   };
 
@@ -559,7 +560,7 @@ export function openAppPanel(a, onChange, page = null) {
     return h('button', { class: 'ap-num-row' + (r.done ? ' done' : ''), onclick: () => peekTask(r.unitId, r.id) },
       h('span', { class: 'ap-num' }, label + ' ' + ((/№\s*(\d+)/.exec(r.title) || [])[1] || i + 1)),
       h('span', { class: 'ap-num-title' }, r.title.replace(/^(Реджект|Апдейт)\s*(№\s*\d+)?\s*[:·]?\s*/i, '') || r.title),
-      h('span', { class: 'ap-num-state muted' }, r.done ? [icon('check', 13), ' готово'] : cur ? cur.title.split(' · ')[0] : r.stages.length ? 'релиз' : 'ждёт PM'),
+      h('span', { class: 'ap-num-state muted' }, r.done ? [icon('check', 13), ' готово'] : cur ? stageName(cur.title) : r.stages.length ? 'релиз' : 'ждёт PM'),
       h('span', { class: 'muted ap-num-at' }, fmtDate((r.doneAt || r.createdAt || '').slice(0, 10))));
   });
 
@@ -615,7 +616,7 @@ export function openAppPanel(a, onChange, page = null) {
               const cur = r.stages.find(s => !s.done && !s.blocked) || null;
               const who = personById(cur ? cur.assigneeId : r.assigneeId);
               return h('button', { class: 'ap-now-row', onclick: () => peekTask(r.unitId, cur ? cur.id : r.id) },
-                h('span', { class: 'ap-now-what' }, h('b', null, cur ? cur.title.split(' · ')[0] : r.stages.length ? 'Релиз' : 'Ждёт PM'),
+                h('span', { class: 'ap-now-what' }, h('b', null, cur ? stageName(cur.title) : r.stages.length ? 'Релиз' : 'Ждёт PM'),
                   h('span', { class: 'muted' }, ' · ' + r.title)),
                 r.stages.length > 0 && h('span', { class: 'ap-now-bar' },
                   h('span', { class: 'progress' }, h('div', { style: { width: Math.round(r.stages.filter(s => s.done).length / r.stages.length * 100) + '%' } })),

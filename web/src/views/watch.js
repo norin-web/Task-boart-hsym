@@ -6,6 +6,7 @@
 import { S, me, personById, appStatusById, relTime, fmtDate, todayStr } from '../state.js';
 import { h, icon, avatar, fill, modal, toast, showErr, statusIcon } from '../ui.js';
 import { call, send } from '../api.js';
+import { stageName } from '../naming.js';
 
 const REFRESH = 20e3;
 
@@ -98,7 +99,7 @@ export function watchBlock(apps, { openApp, openTask, appIcon, appStatusCell, st
       appIcon(a, 'sm'),
       h('span', { class: 'w-main' }, h('b', null, a.name), h('small', { class: 'muted' }, r ? r.title : 'Открытых работ нет')),
       h('span', null, appStatusCell(appStatusById(a.status), a)),
-      h('span', { class: 'w-now' }, r ? [h('b', null, cur ? cur.title.split(' · ')[0] : r.stages.length ? 'Релиз' : 'ждёт PM'), r.stages.length > 0 && stageDots(r.stages)] : h('span', { class: 'muted' }, '—')),
+      h('span', { class: 'w-now' }, r ? [h('b', null, cur ? stageName(cur.title) : r.stages.length ? 'Релиз' : 'ждёт PM'), r.stages.length > 0 && stageDots(r.stages)] : h('span', { class: 'muted' }, '—')),
       h('span', { class: 'muted w-at' }, a.lastActivity ? relTime(a.lastActivity) : '—'),
     ];
   }

@@ -15,6 +15,7 @@ import { openCreateUnit } from './units.js';
 import { watchBlock } from './watch.js';
 import { mode } from '../data.js';
 import { onRemote } from '../live.js';
+import { stageName, isRejectTitle } from '../naming.js';
 
 const units = () => S.units.filter(u => !u.archived).sort((a, b) => (a.order || 0) - (b.order || 0));
 const prioRank = id => S.priorityOptions.findIndex(o => o.id === id);
@@ -114,7 +115,7 @@ const ATT = {
 /** two — вариант обзора юнита (макет 14б): две строки, справа «Открыть» у реджекта, у остальных — статус приложения. */
 export function attention(d, reload, { two = false } = {}) {
   const rows = d.attention;
-  const what = x => (x.task && x.task.id !== x.request.id ? x.task.title.split(' · ')[0] : x.request ? x.request.title : '');
+  const what = x => (x.task && x.task.id !== x.request.id ? stageName(x.task.title) : x.request ? x.request.title : '');
   const who = x => personById(x.task ? x.task.assigneeId : x.request ? x.request.assigneeId : '');
   // этапы лежат в юните запроса; реджект — карточка приложения
   const open = x => (x.request ? peekTask(x.request.unitId, x.task ? x.task.id : x.request.id) : openAppById(x.app.id, reload));
@@ -164,7 +165,7 @@ export function inProgress(d, reload, { brief = false } = {}) {
     rows.length
       ? h('div', { class: 'card-box' }, folded(rows, ({ app, request: r, current }) => h('button', { class: 'wip-brief', onclick: () => openAppById(app.id, reload) },
         appIcon(app, 'sm'),
-        h('span', { class: 'wip-brief-main' }, app.name, h('small', null, [REQUEST_TYPES[r.type], current && current.title.split(' · ')[0]].filter(Boolean).join(' · '))),
+        h('span', { class: 'wip-brief-main' }, app.name, h('small', null, [REQUEST_TYPES[r.type], current && stageName(current.title)].filter(Boolean).join(' · '))),
         h('span', { class: 'wip-brief-bar', 'aria-hidden': 'true' }, h('i', { style: { width: (r.progress || 0) + '%' } })),
         h('span', { class: 'wip-brief-due' + (r.dueDate && r.dueDate < today ? ' danger-text' : '') }, r.dueDate ? fmtDate(r.dueDate) : '—'))))
       : emptyBlock('Нет работ', { ic: 'progress' }));
@@ -181,7 +182,7 @@ export function inProgress(d, reload, { brief = false } = {}) {
             // приоритет показываем только высокий — остальное не повод для плашки
             h('span', { class: 'wip-app' }, appIcon(app, 'xs'), h('b', null, app.name), prioTag(r.priority)),
             h('span', { class: 'wip-req' }, h('span', { class: 'wip-title', title: REQUEST_TYPES[r.type] || '' }, r.title)),
-            h('span', { class: 'wip-now' }, current ? current.title.split(' · ')[0] : r.stages.length ? 'релиз' : h('span', { class: 'muted' }, 'ждёт PM')),
+            h('span', { class: 'wip-now' }, current ? stageName(current.title) : r.stages.length ? 'релиз' : h('span', { class: 'muted' }, 'ждёт PM')),
             h('span', { class: 'wip-stages', title: r.stages.length ? r.progress + '%' : '' }, r.stages.length ? stageDots(r.stages) : h('span', { class: 'muted' }, '—')),
             h('span', { class: 'wip-due' + (late ? ' late' : '') }, r.dueDate ? fmtDate(r.dueDate) : h('span', { class: 'muted' }, '—')),
             pm ? avatar(pm, 'sm') : h('span', { class: 'muted' }, '—'));
@@ -234,7 +235,7 @@ function figures(d, apps) {
     open: apps.flatMap(a => a.requests.filter(r => !r.done).map(r => ({ a, r }))),
     overdue: d.attention.filter(x => x.type === 'overdue' && (!x.app || apps.some(a => a.id === x.app.id))),
     live30,
-    done30: apps.flatMap(a => a.requests.filter(r => r.done && ago(r.doneAt) <= 30 && !/^Реджект №/.test(r.title)).map(r => ({ a, r }))),
+    done30: apps.flatMap(a => a.requests.filter(r => r.done && ago(r.doneAt) <= 30 && !isRejectTitle(r.title)).map(r => ({ a, r }))),
     stale: apps.filter(a => ago(a.lastActivity) > d.staleDays).sort((x, y) => String(x.lastActivity).localeCompare(String(y.lastActivity))),
   };
 }
@@ -442,8 +443,8 @@ export function trackBlock(track, kind) {
     const row = x => {
       const p = personById(x.assigneeId), from = personById(x.reviewFrom);
       const sub = kind === 'review'
-        ? [x.title.split(' · ')[0], from && 'от ' + from.name.split(' ')[0], p && 'у ' + p.name.split(' ')[0]].filter(Boolean).join(' · ')
-        : [x.title.split(' · ')[0], x.state === 'todo' ? 'не начато' : 'в работе', p && p.name.split(' ')[0]].filter(Boolean).join(' · ');
+        ? [stageName(x.title), from && 'от ' + from.name.split(' ')[0], p && 'у ' + p.name.split(' ')[0]].filter(Boolean).join(' · ')
+        : [stageName(x.title), x.state === 'todo' ? 'не начато' : 'в работе', p && p.name.split(' ')[0]].filter(Boolean).join(' · ');
       return h('button', { class: 'rc-row stale-row design-row', onclick: () => peekTask(x.unitId, x.id), title: x.key },
         x.app ? appIcon(x.app, 'xs') : h('span', { class: 'design-noapp' }, icon('layers', 13)),
         h('span', { class: 'rc-main' }, h('b', null, x.app ? x.app.name : x.title),

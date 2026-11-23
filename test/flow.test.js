@@ -126,10 +126,10 @@ test('New App: CEO → PM юнита → этапы по флоу → блоки
   assert.equal(req2.status, 'in_progress'); // запрос — в работе
 
   // iOS заблокирован, пока не закрыт дизайн (никому, даже CEO)
-  await api.as(ios, () => assert.rejects(() => api('updateTask', { id: by.ios.id, patch: { status: 'in_progress' } }), /заблокирован.*Дизайн/));
+  await api.as(ios, () => assert.rejects(() => api('updateTask', { id: by.ios.id, patch: { status: 'in_progress' } }), /заблокирован.*«Design»/));
   await api.as(ceo, () => assert.rejects(() => api('updateTask', { id: by.ios.id, patch: { status: 'in_progress' } }), /заблокирован/));
   // тексты ждут графики (онбординг и ASO), а исполнители ждущих этапов не видят
-  await api.as(aso, () => assert.rejects(() => api('updateTask', { id: by.meta.id, patch: { status: 'in_progress' } }), /заблокирован.*Онбординг/));
+  await api.as(aso, () => assert.rejects(() => api('updateTask', { id: by.meta.id, patch: { status: 'in_progress' } }), /заблокирован.*Onboarding & ASO/));
   await api.as(ios, async () => assert.ok(!(await api('getBoard', { unitId: gold.id })).tasks.some(t => t.id === by.ios.id)));
   assert.ok((await api.as(pm, () => api('getBoard', { unitId: gold.id }))).tasks.some(t => t.id === by.ios.id)); // PM видит всю цепочку
   await api.as(ios, async () => assert.ok(!(await api('getNotifications', {})).some(n => n.taskId === by.ios.id))); // и уведомления нет
@@ -160,10 +160,10 @@ test('New App: CEO → PM юнита → этапы по флоу → блоки
   assert.equal((await api.pg.query("select count(*)::int as n from notifications where task_id = $1 and person_id = $2 and kind = 'unblocked' and read_at = ''", [by.qa.id, qa.id])).rows[0].n, 1);
 
   // в релиз — только когда всё закрыто
-  await api.as(pm, () => assert.rejects(() => api('sendToRelease', { taskId: by.release.id }), /Сначала закройте.*Тестирование/));
+  await api.as(pm, () => assert.rejects(() => api('sendToRelease', { taskId: by.release.id }), /Сначала закройте.*QA/));
   // QA принимает сам: «готово» без отдельного ревью
   assert.equal((await api.as(qa, () => api('updateTask', { id: by.qa.id, patch: { status: 'done' } }))).status, 'done');
-  await api.as(pm, () => assert.rejects(() => api('sendToRelease', { taskId: by.release.id }), /Сначала закройте.*Интеграция/));
+  await api.as(pm, () => assert.rejects(() => api('sendToRelease', { taskId: by.release.id }), /Сначала закройте.*Integration/));
   await finish(api, ios, pm, by.integr.id); // интеграция — после приёмки QA
   // QA принял — баг-репорты закрыты и у QA, и у разработчика
   for (const id of [by.qa.id, by.ios.id]) {
@@ -176,7 +176,7 @@ test('New App: CEO → PM юнита → этапы по флоу → блоки
   await finish(api, aso, pm, by.l10n.id);
   // разработчик оставил заявку на аккаунт — релиз ждёт её; RM без ссылки не закроет
   const { id: accId } = await api.as(ios, () => api('requestAccount', { taskId: by.ios.id, comment: 'Аккаунт клиента' }));
-  await api.as(pm, () => assert.rejects(() => api('sendToRelease', { taskId: by.release.id }), /Сначала закройте.*Аккаунт/));
+  await api.as(pm, () => assert.rejects(() => api('sendToRelease', { taskId: by.release.id }), /Сначала закройте.*Account/));
   await api.as(rm, () => assert.rejects(() => api('updateTask', { id: accId, patch: { status: 'done' } }), /ссылку «Аккаунт»/));
   await closeAccount(api, rm, accId);
   // ссылка на док — общая на запрос: её видит iOS в своём этапе
@@ -471,7 +471,7 @@ test('RM: релиз — поля, свой чеклист, отправка в 
     assert.deepEqual(d.queue[0].missing, ['Версия', 'Номер сборки', 'Что нового']);
     const card = await api('getRelease', { taskId: st.release.id });
     assert.equal(card.app.name, 'Sleep');
-    assert.deepEqual(card.links.map(l => [l.stage, l.name]), [['Дизайн', 'Figma']]);
+    assert.deepEqual(card.links.map(l => [l.stage, l.name]), [['Design', 'Figma']]);
     assert.ok(card.fields.some(f => f.id === 'testflight') && card.fields.some(f => f.id === 'comment')); // база полей
     await assert.rejects(() => api.pg.query(`update tasks set release = '{"phase":"live"}' where id = $1`, [st.release.id]), /Недостаточно прав/);
     await assert.rejects(() => api('releaseStep', { taskId: st.release.id, action: 'submit' }), /Версия/);
@@ -499,7 +499,7 @@ test('RM: релиз — поля, свой чеклист, отправка в 
   const appNow = id => api.as(ceo, async () => (await api('listApps', {})).find(a => a.id === id));
   assert.equal((await appNow(app.id)).status, 'reject');
   // PM перевёл свою задачу по реджекту в Done — у RM релиз не пропал, а вернулся в очередь «исправлено»
-  const fix = (await api.as(pm, () => api('getBoard', { unitId: gold.id }))).tasks.find(t => t.title === 'Реджект №1: Guideline 3.1.2');
+  const fix = (await api.as(pm, () => api('getBoard', { unitId: gold.id }))).tasks.find(t => /\[Reject #1\]$/.test(t.title) && t.topic === 'Guideline 3.1.2');
   assert.ok(fix && fix.kind === 'request' && fix.assigneeId === pm.id && fix.specUrl === 'https://drive.google.com/shot1');
   await api.as(pm, () => api('updateTask', { id: fix.id, patch: { status: 'done' } }));
   await api.as(rm, async () => {
@@ -842,7 +842,8 @@ test('шаблон апдейта: пункты и нужные этапы; за
   assert.equal(tpl.kind, 'update');
   const { app } = await api.as(ceo, () => api('createApp', { name: 'Tpl', unitId: gold.id, noRequest: true }));
   const r = await api.as(ceo, () => api('createRequest', { appId: app.id, type: 'update', templateId: tpl.id }));
-  assert.equal(r.title, 'Апдейт №1: новый пейвол'); // номер ставится сам
+  assert.equal(r.title, 'Tpl - [Update #1]'); // номер ставится сам
+  assert.equal(r.topic, 'новый пейвол'); // что написали — тема
   assert.deepEqual(r.checklist.map(i => i.text), ['Макет', 'Тексты']);
   const stages = await api.as(pm, () => api('decomposeRequest', { taskId: r.id }));
   assert.deepEqual(stages.map(t => t.step), ['design', 'ios', 'release']);
@@ -882,7 +883,7 @@ test('опросник разработчика: без него этап iOS н
     assert.ok(closed.task.release.fixedAt);
     await assert.rejects(() => api('releaseStep', { taskId: by.release.id, action: 'close_reject' }), /только реджект/);
   });
-  const rej = (await api.as(pm, () => api('getBoard', { unitId: gold.id }))).tasks.find(t => /^Реджект №/.test(t.title));
+  const rej = (await api.as(pm, () => api('getBoard', { unitId: gold.id }))).tasks.find(t => /\[Reject #1\]$/.test(t.title));
   assert.ok(rej.doneAt);
 });
 
@@ -902,16 +903,16 @@ test('тексты и переводы: ASO пишет тексты → диза
   await finish(api, lead, pm, st.art.id);
   await finish(api, aso, pm, st.store.id);
   // ASO ещё не вернул тексты — дизайнер не может начать подстановку; переводы ждут подстановки
-  await api.as(lead, () => assert.rejects(() => api('updateTask', { id: st.retext.id, patch: { status: 'in_progress' } }), /заблокирован.*Тексты/));
+  await api.as(lead, () => assert.rejects(() => api('updateTask', { id: st.retext.id, patch: { status: 'in_progress' } }), /заблокирован.*Texts OB\/PW\/ASO/));
   await finish(api, aso, pm, st.meta.id);
   await api.as(lead, () => api('updateTask', { id: st.retext.id, patch: { status: 'in_progress' } }));
-  await api.as(aso, () => assert.rejects(() => api('updateTask', { id: st.l10n.id, patch: { status: 'in_progress' } }), /заблокирован.*Тексты в дизайне/));
+  await api.as(aso, () => assert.rejects(() => api('updateTask', { id: st.l10n.id, patch: { status: 'in_progress' } }), /заблокирован.*Design Texts/));
   // подстановка уходит на ревью только с закрытым чеклистом (в нём — выгрузка исходников на Google Drive)
   await api.as(lead, () => assert.rejects(() => api('updateTask', { id: st.retext.id, patch: { status: 'review' } }), /чеклист этапа/));
   await finish(api, lead, pm, st.retext.id);
   await api.as(aso, () => api('updateTask', { id: st.l10n.id, patch: { status: 'in_progress' } }));
   for (const [who, k] of [[ios, 'ios'], [qa, 'qa'], [ios, 'integr']]) await finish(api, who, pm, st[k].id);
-  await api.as(pm, () => assert.rejects(() => api('sendToRelease', { taskId: st.release.id }), /Сначала закройте.*Локализации/));
+  await api.as(pm, () => assert.rejects(() => api('sendToRelease', { taskId: st.release.id }), /Сначала закройте.*Localization/));
   await finish(api, aso, pm, st.l10n.id);
   await closeAccount(api, rm, (st.account || {}).id);
   assert.equal((await api.as(pm, () => api('sendToRelease', { taskId: st.release.id }))).assigneeId, rm.id);
@@ -956,7 +957,8 @@ test('бэклог: идеи и ТЗ ведёт CEO; запуск — новое
   const app = (await api.pg.query("select id from apps where name = 'Photo AI'")).rows[0];
   const upd = await api.as(ceo, () => api('saveIdea', { kind: 'update', appId: app.id, title: 'Виджеты' }));
   const r2 = await api.as(ceo, () => api('startIdea', { id: upd.id }));
-  assert.equal(r2.request.title, 'Апдейт №1: Виджеты');
+  assert.equal(r2.request.title, 'Photo AI - [Update #1]');
+  assert.equal(r2.request.topic, 'Виджеты');
   assert.equal((await api.as(ceo, () => api('listIdeas', {}))).filter(x => x.status === 'started').length, 2);
 });
 
@@ -1251,7 +1253,8 @@ test('запрос на бэкенд из этапа iOS: задача тому,
   assert.equal(row.assignee_id, lead_ || pm.id);
   assert.equal(row.parent_id, by.ios.id);
   assert.equal(row.created_by, ios.id);
-  assert.match(row.title, /^Бэкенд · Bose: Эндпоинт для подписок/);
+  assert.equal(row.title, 'Bose - [New App] - Backend');
+  assert.equal(row.topic, 'Эндпоинт для подписок');
   assert.match(row.description, /вебхук App Store/);
   // у того, кто ведёт, — уведомление и задача на доске
   const to = row.assignee_id === pm.id ? pm : ceo;
@@ -1264,4 +1267,34 @@ test('запрос на бэкенд из этапа iOS: задача тому,
   await api('updateTask', { id, patch: { status: 'done' } });
   list = await api.as(ios, () => api('getBackendRequests', { taskId: by.ios.id }));
   assert.equal(list[0].state, 'done');
+});
+
+test('названия «App - [Тип] - Отдел»: новые сразу так, старые переименовываются разово, тема — отдельно; переименовали приложение — и названия', async () => {
+  const api = await setup();
+  const { ceo, pm, gold } = await studio(api);
+  const { app, request } = await api.as(ceo, () => api('createApp', { name: 'Video Player v1', unitId: gold.id }));
+  assert.equal(request.title, 'Video Player v1 - [New App]');
+  const upd = await api.as(ceo, () => api('createRequest', { appId: app.id, type: 'update', title: 'Фикс анимации (на пейволле)' }));
+  assert.deepEqual([upd.title, upd.topic], ['Video Player v1 - [Update #1]', 'Фикс анимации (на пейволле)']);
+  const st = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: upd.id }))).map(t => [t.step, t]));
+  assert.deepEqual([st.design.title, st.design.topic], ['Video Player v1 - [Update #1] - Design', 'Фикс анимации (на пейволле)']);
+  // старые названия (до перехода) — переименовываются при обновлении схемы
+  const q = (sql, args) => api.pg.query(sql, args);
+  await q("update tasks set title = 'Апдейт №1: Фикс анимации (на пейволле)', topic = '' where id = $1", [upd.id]);
+  await q("update tasks set title = 'Дизайн · Апдейт №1: Фикс анимации (на пейволле)', topic = '' where id = $1", [st.design.id]);
+  await q("update tasks set title = 'Моушн дизайн · Апдейт №1: Фикс', topic = '', step = 'motion' where id = $1", [st.ios.id]);
+  await q("update tasks set title = 'New App: Video Player v1' where id = $1", [request.id]);
+  await q("delete from app_settings where key = 'once_naming_en'");
+  await api.pg.exec(fs.readFileSync(new URL('../supabase/schema.sql', import.meta.url), 'utf8'));
+  const row = async id => (await q('select title, topic from tasks where id = $1', [id])).rows[0];
+  assert.deepEqual(await row(upd.id), { title: 'Video Player v1 - [Update #1]', topic: 'Фикс анимации (на пейволле)' });
+  assert.deepEqual(await row(st.design.id), { title: 'Video Player v1 - [Update #1] - Design', topic: 'Фикс анимации (на пейволле)' });
+  assert.equal((await row(st.ios.id)).title, 'Video Player v1 - [Update #1] - Motion Design');
+  assert.deepEqual(await row(request.id), { title: 'Video Player v1 - [New App]', topic: '' });
+  // переименовали приложение — названия задач следом
+  await api.as(ceo, () => api('updateApp', { id: app.id, name: 'Video Player v2' }));
+  assert.equal((await row(st.design.id)).title, 'Video Player v2 - [Update #1] - Design');
+  // тема запроса — и у этапов
+  await api.as(pm, () => api('updateTask', { id: upd.id, patch: { topic: 'Новая тема' } }));
+  assert.equal((await row(st.design.id)).topic, 'Новая тема');
 });

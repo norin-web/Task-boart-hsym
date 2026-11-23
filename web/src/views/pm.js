@@ -12,6 +12,7 @@ import { peekTask, openCreateTask } from './task.js';
 import { appIcon, prioTag, openDecomposeDialog, sendRelease, openAppById } from './apps.js';
 import { newsBlock, loadNotes } from './home.js';
 import { renderLayout, editLayout } from './layout.js';
+import { stageName, parseTitle } from '../naming.js';
 
 export const PERIODS = [['week', 'Неделя'], ['month', 'Месяц'], ['quarter', 'Квартал']];
 const STATE = {
@@ -94,8 +95,12 @@ function inbox(d, reload, redraw) {
 
 /* ---------- приложения по этапам ---------- */
 
-// «New App: Streaks» → «New App»: название приложения уже стоит рядом
-const shortTitle = r => (r.app ? r.title.replace(new RegExp('\\s*[:·—-]\\s*' + r.app.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$'), '') : r.title) || r.title;
+// «Streaks - [Update #2]» → «Update #2» (+ тема): название приложения уже стоит рядом; старое «New App: Streaks» → «New App»
+const shortTitle = r => {
+  const pt = parseTitle(r.title);
+  if (pt) return [pt.type, r.topic].filter(Boolean).join(' · ');
+  return (r.app ? r.title.replace(new RegExp('\\s*[:·—-]\\s*' + r.app.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$'), '') : r.title) || r.title;
+};
 
 // Раскрытые карточки (этапы списком) — запоминаются только на сессию, по id запроса
 const pipelineOpen = new Set();
@@ -130,7 +135,7 @@ function pipeline(d, reload, redraw) {
           const late = !s.done && s.dueDate && s.dueDate < today;
           return h('div', { class: 'rq-stage st-' + st },
             statusIcon(st === 'blocked' ? 'todo' : st, 16),
-            h('button', { class: 'link-btn rq-stitle', onclick: () => peekTask(s.unitId, s.id) }, s.title.split(' · ')[0]),
+            h('button', { class: 'link-btn rq-stitle', onclick: () => peekTask(s.unitId, s.id) }, stageName(s.title)),
             h('span', { class: 'muted rq-state' }, STATE[st].label),
             late && h('span', { class: 'pl-late', title: 'Просрочено' }, fmtDate(s.dueDate)),
             s.step === 'release' && !s.assigneeId
@@ -164,7 +169,7 @@ function problems(d) {
       const a = PROB[x.type], t = x.task;
       const p = personById(t.assigneeId);
       return h('button', { class: 'pb-row', onclick: () => peekTask(t.unitId, t.id) },
-        h('span', { class: 'pb-main' }, h('span', { class: 'pb-title' }, t.app ? h('b', null, t.app.name + ' · ') : '', t.title.split(' · ')[0]),
+        h('span', { class: 'pb-main' }, h('span', { class: 'pb-title' }, t.app ? h('b', null, t.app.name + ' · ') : '', stageName(t.title)),
           h('span', { class: 'att-what ' + a.cls }, a.text(t))),
         p ? avatar(p, 'sm') : h('span', { class: 'avatar-gap' }));
     }), rows.length > 14 && h('p', { class: 'muted att-more' }, `и ещё ${rows.length - 14}`))

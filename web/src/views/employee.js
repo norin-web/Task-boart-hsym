@@ -9,6 +9,7 @@ import { peekTask } from './task.js';
 import { appIcon } from './apps.js';
 import { reviewButtons } from './review.js';
 import { readNote } from './home.js';
+import { stageName } from '../naming.js';
 
 // Красным — только просрочка; остальное — серым
 const REASON = {
@@ -47,7 +48,7 @@ export function focusBlock(d, reload) {
       h('div', { class: 'fc-hero' },
         first.app ? appIcon(first.app, 'lg') : statusIcon(first.kind || 'progress', 24),
         h('div', { class: 'fc-hero-main' },
-          h('div', { class: 'fc-hero-key' }, h('span', { class: 'dot', style: { background: (first.unit || {}).color || 'var(--info-fill)' } }), first.key, first.app ? ' · ' + first.title.split(' · ').slice(-1)[0] : ''),
+          h('div', { class: 'fc-hero-key' }, h('span', { class: 'dot', style: { background: (first.unit || {}).color || 'var(--info-fill)' } }), first.key, first.app ? ' · ' + (first.app.name || '') : ''),
           h('div', { class: 'fc-hero-title' }, first.title),
           h('div', { class: 'fc-hero-meta' }, heroMeta(first))),
         h('div', { class: 'fc-hero-actions' },
@@ -78,7 +79,7 @@ export function reviewsBlock(d, reload) {
       return h('div', { class: 'rv-row' },
         author ? avatar(author, 'md') : h('span'),
         h('button', { class: 'link-btn fc-main', onclick: () => peekTask(t.unitId, t.id) },
-          h('span', { class: 'fc-title' }, t.title.split(' · ')[0] + (t.app ? ' · ' + t.app.name : '')),
+          h('span', { class: 'fc-title' }, stageName(t.title) + (t.app ? ' · ' + t.app.name : '')),
           h('span', { class: 'muted fc-sub' }, [author && author.name, waited(t.updatedAt)].filter(Boolean).join(' · '))),
         h('div', { class: 'rv-actions' }, reviewButtons({ ...t, reviewFrom: t.authorId }, () => reload())));
     })) : emptyBlock('Ревью никто не ждёт', { ic: 'eye' }));
@@ -100,7 +101,7 @@ export function sentBlock(d, reload) {
     return h('div', { class: 'sent-row decided ' + (back ? 'back' : 'ok'), dataset: { noteTask: n.taskId }, role: 'button', tabindex: 0, onclick: () => peekTask(n.unit.id, n.taskId) },
       rv ? avatar(rv, 'md') : h('span'),
       h('div', { class: 'sent-main' },
-        h('div', { class: 'sent-title' }, n.title.split(' · ')[0] + (n.app ? ' · ' + n.app.name : '')),
+        h('div', { class: 'sent-title' }, stageName(n.title) + (n.app ? ' · ' + n.app.name : '')),
         h('div', { class: 'sent-sub' }, (back ? 'Вернули на доработку' : 'Принято') + (rv ? ' · ' + rv.name : ''))),
       h('div', { class: 'sent-actions' },
         h('button', { class: 'btn sm', title: 'Убрать из списка', onclick: e => { e.stopPropagation(); readNote(n.taskId); } }, 'Ок')));
@@ -112,7 +113,7 @@ export function sentBlock(d, reload) {
       return h('div', { class: 'sent-row', role: 'button', tabindex: 0, onclick: () => peekTask(t.unitId, t.id) },
         rv ? avatar(rv, 'md') : h('span'),
         h('div', { class: 'sent-main' },
-          h('div', { class: 'sent-title' }, t.title.split(' · ')[0] + (t.app ? ' · ' + t.app.name : '')),
+          h('div', { class: 'sent-title' }, stageName(t.title) + (t.app ? ' · ' + t.app.name : '')),
           h('div', { class: 'muted sent-sub' }, [rv ? 'у ' + rv.name : 'ревьюер не назначен', waited(t.updatedAt)].filter(Boolean).join(' · '))),
         h('div', { class: 'sent-actions' },
           h('button', { class: 'btn sm', title: 'Вернуть задачу себе, если что-то забыли', onclick: e => { e.stopPropagation(); recall(t); } }, icon('back', 13), 'Забрать')));

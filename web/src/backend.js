@@ -8,6 +8,7 @@
 import { DEV_QUESTIONS } from './devform.js';
 import { cleanChart, METRIC_KIND } from './chartdefs.js';
 import { stickerOf, STICKERS, canSendSticker } from './stickers.js';
+import { typeLabel, requestTitle, stageTitle, deptName, parseTitle, stageName } from './naming.js';
 
 export const KINDS = ['todo', 'progress', 'done'];
 const KIND_COUNT_KEY = { todo: 'todo', progress: 'in_progress', done: 'done' };
@@ -259,7 +260,7 @@ const unitOut = r => ({
 });
 
 const taskOut = r => ({
-  id: r.id, unitId: r.unit_id, num: r.num, title: r.title, description: r.description, status: r.status,
+  id: r.id, unitId: r.unit_id, num: r.num, title: r.title, topic: r.topic || '', description: r.description, status: r.status,
   assigneeId: r.assignee_id, departmentId: r.department_id || '', dueDate: r.due_date, order: r.ord,
   fields: json(r.fields, {}), checklist: json(r.checklist, []), archived: !!r.archived, doneAt: r.done_at,
   reviewFrom: r.review_from || '', reviewerId: r.reviewer_id || '', teamId: r.team_id || '', specUrl: r.spec_url || '',
@@ -268,6 +269,17 @@ const taskOut = r => ({
   appId: r.app_id || '', requestType: r.request_type || '', step: r.step || '', devForm: json(r.dev_form, {}) || {}, dependsOn: json(r.depends_on, []) || [], isTest: !!r.is_test, bugs: json(r.bugs, []) || [],
   createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at,
 });
+
+/**
+ * Тема запроса из того, что написали в окне: без «Апдейт №N:», «New App:», «Задача:» и имени приложения в начале;
+ * если там было только имя приложения — темы нет.
+ */
+const escRx = x => String(x).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const topicOf = (text, appName) => {
+  let v = String(text || '').trim().replace(/^(апдейт|update|new app|задача|task|реджект|reject)(?=$|[\s№#:·—-])\s*(?:(№|#)\s*\d+)?\s*[:·—-]?\s*/i, '').trim();
+  if (appName) v = v.replace(new RegExp('^' + escRx(appName) + '\\s*([:·—-]\\s*)?', 'i'), '').trim();
+  return v.slice(0, 500);
+};
 
 const ideaOut = r => ({ id: r.id, title: r.title, description: r.description || '', specUrl: r.spec_url || '', kind: r.kind, appId: r.app_id || '', unitId: r.unit_id || '', status: r.status, requestId: r.request_id || '', createdBy: r.created_by || '', createdAt: r.created_at, updatedAt: r.updated_at });
 const fileOut = r => ({ id: r.id, taskId: r.task_id, tag: r.tag || '', name: r.name || '', data: r.data, by: r.created_by || '', at: r.created_at });
@@ -811,6 +823,14 @@ export function createBackend(db, opts = {}) {
   }
 
   /** Кого отметили «@Имя Фамилия» в тексте (новые относительно before). Уведомляет база — notify_mention. */
+  /** Начало названия этапов запроса: «App - [Update #3]» (из названия запроса, если оно в формате; иначе собираем). */
+  async function requestBase(r) {
+    const pt = parseTitle(r.title);
+    if (pt) return `${pt.app} - [${pt.type}]`;
+    const a = r.app_id ? await one('apps', r.app_id) : null;
+    return requestTitle(a ? a.name : r.title, typeLabel(r.request_type, 1));
+  }
+
   /** Стикер в комментарии — только его владелец (личные стикеры, stickers.js). */
   async function checkSticker(text, by) {
     const key = stickerOf(text);
@@ -1471,7 +1491,7 @@ export function createBackend(db, opts = {}) {
       await fitsAssignee(unit.id, { kind: p.kind, step: str(p.step, 30), departmentId: await validDept(p.departmentId) || await memberDept(unit.id, assignee) }, assignee);
       const task = {
         id: uid('t'), unit_id: unit.id, num: (await rpc('next_task_num', { p_unit: unit.id })) ?? fail('Создавать задачи могут CEO и PM юнита', 'FORBIDDEN'),
-        title: req(str(p.title, 500), 'Название задачи'), description: str(p.description, 20000), status,
+        title: req(str(p.title, 500), 'Название задачи'), topic: str(p.topic, 500), description: str(p.description, 20000), status,
         assignee_id: assignee, department_id: (await validDept(p.departmentId)) || (await memberDept(unit.id, assignee)),
         team_id: await validTeam(p.teamId), reviewer_id: '',
         due_date: date(p.dueDate), ord: (await maxOrd('tasks', { unit_id: unit.id, status })) + 1,
@@ -1516,6 +1536,10 @@ export function createBackend(db, opts = {}) {
       if ('title' in patch) {
         const v = req(str(patch.title, 500), 'Название задачи');
         if (v !== t.title) { change('title', t.title, v); t.title = v; }
+      }
+      if ('topic' in patch) {
+        const v = str(patch.topic, 500);
+        if (v !== (t.topic || '')) { change('topic', t.topic || '', v); t.topic = v; }
       }
       if ('description' in patch) {
         const v = str(patch.description, 20000);
@@ -1627,7 +1651,7 @@ export function createBackend(db, opts = {}) {
         t.updated_at = now();
         // Условие по updated_at: если между чтением и записью задачу успели изменить — конфликт
         const saved = await run(T('tasks').update({
-          title: t.title, description: t.description, status: t.status, assignee_id: t.assignee_id, department_id: t.department_id, team_id: t.team_id || '',
+          title: t.title, topic: t.topic || '', description: t.description, status: t.status, assignee_id: t.assignee_id, department_id: t.department_id, team_id: t.team_id || '',
           due_date: t.due_date, ord: t.ord, fields: t.fields, checklist: t.checklist, archived: t.archived, spec_url: t.spec_url || '',
           done_at: t.done_at, updated_at: t.updated_at, started_at: t.started_at || '', reviewer_id: t.reviewer_id || '', app_id: t.app_id || '',
         }).eq('id', t.id).eq('updated_at', r.updated_at).select('*'));
@@ -1637,6 +1661,10 @@ export function createBackend(db, opts = {}) {
           fail('Недостаточно прав: менять можно только свои задачи', 'FORBIDDEN');
         }
         await log(logs, ctx);
+        // тема запроса — и у его этапов (она у них второй строкой)
+        if (t.kind === 'request' && (saved[0].topic || '') !== (r.topic || '')) {
+          await run(T('tasks').update({ topic: saved[0].topic || '' }).eq('parent_id', t.id).eq('kind', 'stage'));
+        }
         if ('description' in patch && saved[0].description !== r.description) await notifyMentions(t.id, saved[0].description, r.description, 'description');
         return taskOut(saved[0]); // из базы: исполнителя мог сменить триггер ревью
       }
@@ -1885,7 +1913,7 @@ export function createBackend(db, opts = {}) {
       lks.forEach(l => { (lk[l.task_id] || (lk[l.task_id] = {}))[l.field_id] = l.url; });
       const kidDone = Object.fromEntries(kids.map(k => [k.id, !!k.done_at]));
       kids.filter(k => !k.done_at && !(json(k.depends_on, []) || []).some(d => kidDone[d] === false))
-        .forEach(k => (now[k.parent_id] || (now[k.parent_id] = [])).push(String(k.title || '').split(' · ')[0]));
+        .forEach(k => (now[k.parent_id] || (now[k.parent_id] = [])).push(stageName(k.title)));
       const U = Object.fromEntries(units.map(u => [u.id, unitSettings(u.settings)]));
       return {
         // сколько готовых скрыто (для «Показывать готовые · N»)
@@ -2931,15 +2959,12 @@ export function createBackend(db, opts = {}) {
       }
       // шаблон апдейта: пункты — чеклистом запроса, нужные этапы — запоминаем для разбивки
       const tpl = p.templateId ? await one('task_templates', String(p.templateId)) : null;
-      let title = str(p.title, 500) || (tpl && tpl.title) || `${REQUEST_TYPES[type]}: ${a.name}`;
-      // апдейты нумеруются сами по приложению: «Апдейт №3: …» (руками номер не пишут)
-      if (type === 'update') {
-        const n = (await run(T('tasks').select('id').eq('app_id', a.id).eq('kind', 'request').eq('request_type', 'update'))).length + 1;
-        const rest = title.replace(/^апдейт\s*(№\s*\d+)?\s*[:·—-]?\s*/i, '').trim();
-        title = str(`Апдейт №${n}: ${rest || a.name}`, 500);
-      }
+      // название — «App - [Update #3]» (апдейты нумеруются сами по приложению), что написали — тема второй строкой
+      const n = type === 'update' ? (await run(T('tasks').select('id').eq('app_id', a.id).eq('kind', 'request').eq('request_type', 'update'))).length + 1 : 0;
+      const title = str(requestTitle(a.name, typeLabel(type, n)), 500);
+      const topic = topicOf(str(p.title, 500) || (tpl && tpl.title) || '', a.name);
       return methods.createTask({
-        unitId: a.unit_id, title,
+        unitId: a.unit_id, title, topic,
         description: p.description || (tpl ? tpl.description : ''),
         assigneeId: pmId, dueDate: p.dueDate, kind: 'request', requestType: type, appId: a.id, test: !!a.is_test,
         fields: prio ? { [PRIORITY_FIELD]: prio } : {}, specUrl: p.specUrl,
@@ -2975,10 +3000,11 @@ export function createBackend(db, opts = {}) {
       // проверяем всех до первого создания: иначе запрос останется разложен наполовину
       for (const st of steps) await fitsAssignee(r.unit_id, { kind: 'stage', step: st.key, departmentId: st.positionId }, who(st));
       const ids = {}, created = [];
+      const base = await requestBase(r);
       const prio = (json(r.fields, {}) || {})[PRIORITY_FIELD]; // приоритет запроса — этапам
       for (const st of steps) {
         const t = await methods.createTask({
-          unitId: r.unit_id, title: `${st.title} · ${r.title.replace(/^New App:\s*/, '')}`, parentId: r.id, kind: 'stage', step: st.key,
+          unitId: r.unit_id, title: stageTitle(base, deptName(st.key, st.title)), topic: r.topic || '', parentId: r.id, kind: 'stage', step: st.key,
           appId: r.app_id, departmentId: st.positionId, assigneeId: who(st), dueDate: due(st),
           dependsOn: st.dependsOn.map(k => ids[k]).filter(Boolean), test: !!r.is_test, fields: prio ? { [PRIORITY_FIELD]: prio } : {},
           checklist: (st.checklist || []).map(text => ({ text })),
@@ -3014,7 +3040,7 @@ export function createBackend(db, opts = {}) {
       await fitsAssignee(r.unit_id, { kind: 'stage', step: def.key, departmentId: def.positionId }, assigneeId);
       const prio = (json(r.fields, {}) || {})[PRIORITY_FIELD];
       const t = await methods.createTask({
-        unitId: r.unit_id, title: `${def.title} · ${r.title.replace(/^New App:\s*/, '')}`, parentId: r.id, kind: 'stage', step: def.key,
+        unitId: r.unit_id, title: stageTitle(await requestBase(r), deptName(def.key, def.title)), topic: r.topic || '', parentId: r.id, kind: 'stage', step: def.key,
         appId: r.app_id, departmentId: def.positionId, assigneeId, dueDate: r.due_date,
         dependsOn: (def.dependsOn || []).map(k => byStep[k] && byStep[k].id).filter(Boolean), test: !!r.is_test,
         fields: prio ? { [PRIORITY_FIELD]: prio } : {}, checklist: (def.checklist || []).map(text => ({ text })),
@@ -3050,7 +3076,7 @@ export function createBackend(db, opts = {}) {
       // подзадачи этапа — тоже в архив (иначе остались бы на досках без этапа)
       const sub = (await descendants([t.id])).filter(x => x.id !== t.id && !x.archived).map(x => x.id);
       for (let i = 0; i < sub.length; i += 150) await run(T('tasks').update({ archived: true, updated_at: now() }).in('id', sub.slice(i, i + 150)));
-      await log([{ unitId: t.unit_id, taskId: t.parent_id, action: 'stage_remove', from: t.title.split(' · ')[0] }], ctx);
+      await log([{ unitId: t.unit_id, taskId: t.parent_id, action: 'stage_remove', from: stageName(t.title) }], ctx);
       return true;
     },
 
@@ -3219,7 +3245,7 @@ export function createBackend(db, opts = {}) {
       const rejects = sib.reduce((n, r) => n + ((json(r.release, {}) || {}).history || []).filter(x => x.result === 'reject').length, 0);
       return {
         task: taskOut(t), app: app ? appOut(app) : null, fields: settings.fields, nextRejectNo: rejects + 1, devForm: json(devForm, {}) || {},
-        links: (links || []).map(l => ({ taskId: l.task_id, step: l.step, stage: String(l.title).split(' · ')[0], fieldId: l.field_id, name: (LF[l.field_id] || {}).name || 'Ссылка', kind: (LF[l.field_id] || {}).kind || 'link', url: l.url })),
+        links: (links || []).map(l => ({ taskId: l.task_id, step: l.step, stage: stageName(l.title), fieldId: l.field_id, name: (LF[l.field_id] || {}).name || 'Ссылка', kind: (LF[l.field_id] || {}).kind || 'link', url: l.url })),
       };
     },
 

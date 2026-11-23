@@ -323,6 +323,8 @@ do $$ begin
   end if;
 end $$;
 alter table tasks add column if not exists team_id text not null default '';
+-- тема запроса («Фикс анимации на пейволле»): второй строкой под названием «App - [Update #3] - Design» (web/src/naming.js)
+alter table tasks add column if not exists topic text not null default '';
 
 -- Позиция по умолчанию — первый «отдел в команде» человека (однократно, если позиции ещё нет)
 update people p set position_id = m.department_id
@@ -1659,9 +1661,9 @@ begin
      where r.app_id = t.app_id and r.step = 'release' and h ->> 'result' = 'reject';
     pm := unit_pm(t.unit_id);
     v_id := 't_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12);
-    insert into tasks (id, unit_id, num, title, description, status, assignee_id, department_id, due_date, ord, fields, checklist,
+    insert into tasks (id, unit_id, num, title, topic, description, status, assignee_id, department_id, due_date, ord, fields, checklist,
                        archived, done_at, created_by, created_at, updated_at, parent_id, kind, request_type, app_id, is_test, spec_url)
-    values (v_id, t.unit_id, next_task_num(t.unit_id), left('Реджект №' || v_no || ': ' || trim(p_reason), 500),
+    values (v_id, t.unit_id, next_task_num(t.unit_id), left(coalesce(a.name, '') || ' - [Reject #' || v_no || ']', 500), left(trim(p_reason), 500),
             'Apple отклонил релиз «' || coalesce(a.name, '') || '» (реджект №' || v_no || ').' || chr(10) || trim(p_reason)
               || case when coalesce(trim(p_shot), '') <> '' then chr(10) || 'Скрин: ' || trim(p_shot) else '' end,
             u.settings -> 'columns' -> 0 ->> 'id', case when p_self then v_actor else coalesce(pm, '') end, '', '', 0,
@@ -3230,9 +3232,9 @@ begin
   v_id := 't_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12);
   -- права проверены выше; защита задач (сотрудник не создаёт задач и не трогает релиз) здесь не нужна
   perform set_config('app.system', 'on', true);
-  insert into tasks (id, unit_id, num, title, description, status, assignee_id, department_id, due_date, ord, fields, checklist,
+  insert into tasks (id, unit_id, num, title, topic, description, status, assignee_id, department_id, due_date, ord, fields, checklist,
                      archived, done_at, created_by, created_at, updated_at, parent_id, kind, step, app_id, is_test, depends_on)
-  values (v_id, t.unit_id, next_task_num(t.unit_id), left('Аккаунт · ' || regexp_replace(r.title, '^New App:\s*', ''), 500),
+  values (v_id, t.unit_id, next_task_num(t.unit_id), left(naming_base(r.id) || ' - Account', 500), coalesce(r.topic, ''),
           'Заявка на аккаунт' || case when coalesce(who, '') <> '' then ' от ' || who else '' end || '.'
             || case when coalesce(trim(p_comment), '') <> '' then chr(10) || chr(10) || left(trim(p_comment), 5000) else '' end,
           u.settings -> 'columns' -> 0 ->> 'id', coalesce(v_rm, ''), 'd_release', r.due_date, 0,
@@ -3501,7 +3503,7 @@ declare
   v_sys text := current_setting('app.system', true);
   v_text text := left(trim(coalesce(p_text, '')), 5000);
   at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
-  who text; app_ text; line text;
+  who text; line text;
 begin
   select * into t from tasks where id = p_task;
   if t.id is null or coalesce(t.parent_id, '') = '' or t.kind <> 'stage' or coalesce(t.step, '') not in ('ios', 'integr') then
@@ -3515,16 +3517,15 @@ begin
   select p.id into v_to from people p where p.id = coalesce(r.assignee_id, '') and p.active;
   if coalesce(v_to, '') = '' then v_to := coalesce(unit_pm(t.unit_id), ''); end if;
   select name into who from people where id = v_me;
-  app_ := regexp_replace(coalesce(r.title, ''), '^(New App|Апдейт[^:]*|Реджект[^:]*):\s*', '');
   line := regexp_replace(split_part(v_text, chr(10), 1), '\s+', ' ', 'g');
   v_id := 't_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12);
   perform set_config('app.system', 'on', true);
-  insert into tasks (id, unit_id, num, title, description, status, assignee_id, department_id, due_date, ord, fields, checklist,
+  insert into tasks (id, unit_id, num, title, topic, description, status, assignee_id, department_id, due_date, ord, fields, checklist,
                      archived, done_at, created_by, created_at, updated_at, parent_id, kind, step, app_id, is_test, depends_on)
   values (v_id, t.unit_id, next_task_num(t.unit_id),
-          left('Бэкенд · ' || app_ || ': ' || left(line, 120) || case when length(line) > 120 then '…' else '' end, 500),
+          left(naming_base(r.id) || ' - Backend', 500), left(line, 120) || case when length(line) > 120 then '…' else '' end,
           'Запрос на бэкенд' || case when coalesce(who, '') <> '' then ' от ' || who else '' end
-            || ' (этап «' || split_part(t.title, ' · ', 1) || '»).' || chr(10) || chr(10) || v_text,
+            || ' (этап «' || naming_stage(t.title) || '»).' || chr(10) || chr(10) || v_text,
           u.settings -> 'columns' -> 0 ->> 'id', v_to, '', '', 0,
           case when coalesce(r.fields, '{}'::jsonb) ? 'f_priority' then jsonb_build_object('f_priority', r.fields -> 'f_priority') else '{}'::jsonb end,
           '[]'::jsonb, false, '', v_me, at_, at_, t.id, '', 'backend', coalesce(t.app_id, r.app_id, ''), t.is_test, '[]'::jsonb);
@@ -3547,3 +3548,116 @@ language sql stable security definer set search_path = public as $$
 $$;
 revoke execute on function backend_requests_of(text) from public, anon;
 grant execute on function backend_requests_of(text) to authenticated;
+
+-- ---------- Названия задач приложений: «App - [Тип] - Отдел» (то же собирает web/src/naming.js — правьте вместе) ----------
+-- запрос «Video Player v1 - [Update #1]», этап «Video Player v1 - [Update #1] - Design»; тема запроса — в topic (второй строкой)
+create or replace function naming_dept(p_step text, p_title text) returns text language sql immutable set search_path = public as $$
+  select case coalesce(p_step, '')
+    when 'design' then 'Design' when 'art' then 'Onboarding & ASO' when 'retext' then 'Design Texts' when 'ios' then 'iOS'
+    when 'qa' then 'QA' when 'integr' then 'Integration' when 'meta' then 'Texts OB/PW/ASO' when 'store' then 'Metadata'
+    when 'l10n' then 'Localization' when 'release' then 'Release' when 'account' then 'Account' when 'backend' then 'Backend'
+    else case lower(trim(coalesce(p_title, '')))
+      when 'дизайн' then 'Design' when 'моушн дизайн' then 'Motion Design' when 'моушн-дизайн' then 'Motion Design'
+      when 'анимация' then 'Animation' when 'анимации' then 'Animation' when 'онбординг и aso-графика' then 'Onboarding & ASO'
+      when 'тексты в дизайне' then 'Design Texts' when 'разработка ios' then 'iOS' when 'разработка' then 'Development'
+      when 'тестирование' then 'QA' when 'интеграция' then 'Integration' when 'тексты ob / pw / aso' then 'Texts OB/PW/ASO'
+      when 'тексты' then 'Texts' when 'метаданные' then 'Metadata' when 'локализации' then 'Localization' when 'локализация' then 'Localization'
+      when 'релиз' then 'Release' when 'аккаунт' then 'Account' when 'бэкенд' then 'Backend' when 'бекенд' then 'Backend'
+      when 'иконка' then 'Icon' when 'aso' then 'ASO' when 'aso-графика' then 'ASO' when 'скриншоты' then 'Screenshots'
+      when 'пейволл' then 'Paywall' when 'онбординг' then 'Onboarding'
+      else trim(coalesce(p_title, '')) end end;
+$$;
+
+-- короткое имя этапа: отдел из «App - [Тип] - Отдел», старое «Дизайн · App» — до « · »
+create or replace function naming_stage(p_title text) returns text language sql immutable set search_path = public as $$
+  select case when p_title ~ ' - \[[^]]+\] - ' then regexp_replace(p_title, '^.*? - \[[^]]+\] - ', '') else split_part(p_title, ' · ', 1) end;
+$$;
+
+-- тип запроса: New App · Update #N · Reject #N · Task (номер апдейта — из старого «Апдейт №N», иначе по порядку у приложения)
+create or replace function naming_type(p_request text) returns text language plpgsql stable set search_path = public as $$
+declare r tasks; n text;
+begin
+  select * into r from tasks where id = p_request;
+  if r.id is null then return 'Task'; end if;
+  if r.title ~ '\[[^]]+\]' then return substring(r.title from '\[([^]]+)\]'); end if;
+  if r.title ~ '^Реджект №\d+' then return 'Reject #' || substring(r.title from '^Реджект №(\d+)'); end if;
+  if r.request_type = 'new_app' then return 'New App'; end if;
+  if r.request_type = 'update' then
+    n := substring(r.title from '^Апдейт №\s*(\d+)');
+    if n is null then
+      select count(*)::text into n from tasks x where x.app_id = r.app_id and x.kind = 'request' and x.request_type = 'update'
+         and (x.created_at, x.id) <= (r.created_at, r.id);
+    end if;
+    return 'Update #' || n;
+  end if;
+  return 'Task';
+end $$;
+
+-- начало названий этапов запроса: «App - [Update #3]»
+create or replace function naming_base(p_request text) returns text language plpgsql stable set search_path = public as $$
+declare r tasks; v_app text;
+begin
+  select * into r from tasks where id = p_request;
+  if r.id is null then return ''; end if;
+  if r.title ~ ' - \[[^]]+\]' then return substring(r.title from '^(.*? - \[[^]]+\])'); end if;
+  select name into v_app from apps where id = r.app_id;
+  return coalesce(v_app, r.title) || ' - [' || naming_type(r.id) || ']';
+end $$;
+
+-- тема из старого названия: без «Апдейт №N:», «New App:», «Реджект №N:», «Задача:» и имени приложения в начале
+create or replace function naming_topic(p_title text, p_app text) returns text language plpgsql immutable set search_path = public as $$
+declare v text := trim(coalesce(p_title, ''));
+begin
+  v := trim(regexp_replace(v, '^(Реджект №\s*\d+|Апдейт №\s*\d+|Апдейт|New App|Задача)\s*[:·—-]?\s*', '', 'i'));
+  if coalesce(p_app, '') <> '' and lower(left(v, length(p_app))) = lower(p_app) then
+    v := trim(regexp_replace(substr(v, length(p_app) + 1), '^\s*[:·—-]?\s*', ''));
+  end if;
+  return left(v, 500);
+end $$;
+
+-- Один раз: все запросы, их этапы (и аккаунт), запросы на бэкенд — в новый формат; время изменения не трогаем
+do $$
+declare r record; v_app text; v_type text; v_sys text := current_setting('app.system', true);
+begin
+  if exists (select 1 from app_settings where key = 'once_naming_en') then return; end if;
+  perform set_config('app.system', 'on', true);
+  for r in select t.id, t.title, t.app_id, t.topic from tasks t where t.kind = 'request' and coalesce(t.app_id, '') <> '' and t.title !~ ' - \[[^]]+\]' loop
+    select name into v_app from apps where id = r.app_id;
+    if v_app is null then continue; end if;
+    v_type := naming_type(r.id);
+    update tasks set title = left(v_app || ' - [' || v_type || ']', 500),
+                     topic = case when coalesce(r.topic, '') <> '' then r.topic else naming_topic(r.title, v_app) end
+     where id = r.id;
+  end loop;
+  update tasks s set title = left(naming_base(s.parent_id) || ' - ' || naming_dept(s.step, split_part(s.title, ' · ', 1)), 500),
+                     topic = coalesce((select p.topic from tasks p where p.id = s.parent_id), '')
+   where s.kind = 'stage' and coalesce(s.parent_id, '') <> '' and s.title !~ ' - \[[^]]+\]'
+     and exists (select 1 from tasks p where p.id = s.parent_id and p.kind = 'request' and p.title ~ ' - \[[^]]+\]');
+  update tasks b set title = left(naming_base(st.parent_id) || ' - Backend', 500),
+                     topic = left(regexp_replace(b.title, '^Бэкенд · [^:]*:\s*', ''), 500)
+    from tasks st
+   where st.id = b.parent_id and b.step = 'backend' and b.title like 'Бэкенд · %';
+  perform set_config('app.system', coalesce(v_sys, 'off'), true);
+  insert into app_settings (key, value, updated_at) values ('once_naming_en', 'true'::jsonb, '') on conflict (key) do nothing;
+end $$;
+
+-- Переименовали приложение — его имя меняется и в названиях задач «App - […]»
+create or replace function rename_app_tasks() returns trigger language plpgsql security definer set search_path = public as $$
+declare v_sys text := current_setting('app.system', true);
+begin
+  if new.name is not distinct from old.name or coalesce(old.name, '') = '' then return new; end if;
+  perform set_config('app.system', 'on', true);
+  update tasks set title = left(new.name || substr(title, length(old.name) + 1), 500)
+   where app_id = new.id and left(title, length(old.name) + 4) = old.name || ' - [';
+  perform set_config('app.system', coalesce(v_sys, 'off'), true);
+  return new;
+end $$;
+drop trigger if exists rename_app_tasks on apps;
+create trigger rename_app_tasks after update of name on apps for each row execute function rename_app_tasks();
+
+-- «Сначала закройте …»: короткие имена этапов (Design, iOS), а не полные названия «App - [Update #1] - Design»
+create or replace function open_deps(p_deps jsonb) returns text
+language sql stable security definer set search_path = public as $$
+  select string_agg(naming_stage(t.title), ', ' order by naming_stage(t.title)) from tasks t
+   where t.id in (select jsonb_array_elements_text(coalesce(p_deps, '[]'::jsonb))) and not task_done(t.id);
+$$;

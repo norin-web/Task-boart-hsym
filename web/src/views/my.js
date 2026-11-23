@@ -4,6 +4,7 @@ import { call, keep, peek } from '../api.js';
 import { currentView, taskLink, link } from '../router.js';
 import { renderLayout, editLayout } from './layout.js';
 import { onRemote } from '../live.js';
+import { isRejectTitle } from '../naming.js';
 
 let showDone = false;
 let query = '';
@@ -213,7 +214,7 @@ export function workBlocks(tasks) {
   // релизы: этап «Релиз» на мне и запросы, где остался только релиз; реджекты — приложение в «Реджекте» или задача «Реджект №»
   const appRejected = t => { const a = t.appId && appById(t.appId); return !!a && (appStatusById(a.status) || {}).kind === 'reject'; };
   // этапы дизайна/мет по приложению в реджекте остаются в своих блоках — сюда только запросы и «Реджект №»
-  const isRejectTask = t => /^Реджект №/.test(t.title || '') || (isReq(t) && appRejected(t));
+  const isRejectTask = t => isRejectTitle(t.title) || (isReq(t) && appRejected(t));
   const onlyRelease = t => isReq(t) && t.stages && t.stages.total > 0 && (t.stages.left || []).length === 1 && t.stages.left[0] === 'release';
   const isRelease = t => t.step === 'release' || onlyRelease(t);
   const relOn = dir === 'release' || myAccess() === 'rm';

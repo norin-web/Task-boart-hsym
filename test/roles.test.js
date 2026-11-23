@@ -1093,7 +1093,7 @@ test('«Поставить в работу»: приложениям без за
   assert.equal((await api.as(admin, () => api('startAppsWork', { ids: [idle.id, busy.id] }))).made, 1);
   const apps = await api.as(admin, () => api('listApps', {}));
   const req = apps.find(a => a.id === idle.id).requests;
-  assert.deepEqual(req.map(r => [r.type, r.title, r.assigneeId]), [['new_app', 'New App: Без задач', mod.id]]);
+  assert.deepEqual(req.map(r => [r.type, r.title, r.assigneeId]), [['new_app', 'Без задач - [New App]', mod.id]]);
   assert.equal(apps.find(a => a.id === busy.id).requests.length, 1);
 });
 

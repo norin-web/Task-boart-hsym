@@ -8,6 +8,7 @@ import { updateSidebarCounts, renderUnread } from './sidebar.js';
 import { viewSwitch } from './timeline.js';
 import { openTask, closePanel, openCreateTask, duplicateTask, deleteTaskUndoable, refreshPanel } from './task.js';
 import { unitHeader } from './unitnav.js';
+import { stageName, isRejectTitle } from '../naming.js';
 
 let sortables = [];
 let quickInput = null;
@@ -77,7 +78,7 @@ export function renderBoardView() {
 /** Product Team: позиция Product owner (или стандартная команда t_product). */
 export const isProductTeam = team => !!team && (team.id === 't_product' || (team.departmentIds || []).includes('d_po'));
 /** Что за продуктовая карточка: новое приложение (New App), апдейт или реджект (задача «Реджект №N»); иначе — не сюда. */
-const productKind = t => (t.kind !== 'request' ? '' : t.requestType === 'new_app' ? 'new' : t.requestType === 'update' ? 'update' : /^Реджект №/.test(t.title || '') ? 'reject' : '');
+const productKind = t => (t.kind !== 'request' ? '' : t.requestType === 'new_app' ? 'new' : t.requestType === 'update' ? 'update' : isRejectTitle(t.title) ? 'reject' : '');
 const productView = () => { const v = LS.get('productView', 'all'); return ['all', 'new', 'update', 'reject'].includes(v) ? v : 'all'; };
 function productSwitch(onChange) {
   const pool = S.board.tasks.filter(t => !t.archived && productKind(t));
@@ -683,10 +684,10 @@ export function taskCard(t, inLane, env = boardEnv()) {
   const clDone = cl.filter(i => i.done).length;
   const due = show.due && !B.dueDate.hidden && dueInfo(t.dueDate, done);
   // этап, который ждёт незакрытые предыдущие (зависимости — задачи этого же юнита)
-  const waits = done ? [] : (t.dependsOn || []).map(env.byId).filter(d => d && !env.done(d)).map(d => d.title.split(' · ')[0]);
+  const waits = done ? [] : (t.dependsOn || []).map(env.byId).filter(d => d && !env.done(d)).map(d => stageName(d.title));
   // у запроса — на каком он этапе сейчас: открытые этапы, которые уже не ждут предыдущих (вне юнита — готовый список с сервера)
   const nowSteps = t.kind !== 'request' || done ? [] : t.now ? t.now : env.kids(t.id).filter(x => !env.done(x)
-    && !(x.dependsOn || []).map(env.byId).some(d => d && !env.done(d))).map(x => x.title.split(' · ')[0]);
+    && !(x.dependsOn || []).map(env.byId).some(d => d && !env.done(d))).map(x => stageName(x.title));
   const nowText = nowSteps.length ? 'Сейчас: ' + nowSteps.slice(0, 2).join(', ') + (nowSteps.length > 2 ? ` +${nowSteps.length - 2}` : '') : '';
 
   return h('article', {
@@ -707,12 +708,15 @@ export function taskCard(t, inLane, env = boardEnv()) {
       class: 'icon-btn sm card-more', title: 'Что показывать на карточках · действия — правый клик',
       onclick: e => { e.stopPropagation(); cardViewMenu(e.currentTarget, t, env); },
     }, icon('more'))),
+  // тема запроса («Фикс анимации на пейволле») — второй строкой под «App - [Update #3] - Design»
+  t.topic && h('div', { class: 'card-topic', title: t.topic }, t.topic),
   // доработка по багам QA: на карточке видно, что это возврат с баг-репортом, а не новая задача
   (() => { const b = (t.bugs || []).filter(x => !x.closedAt && !x.fixedAt).pop(); return b && !done && h('div', { class: 'card-bug' }, icon('alert', 12), `Баг-репорт №${b.n}`); })(),
   reqAppLine,
   // вторая строка, как в макете: «откуда · состояние» — запрос CEO у этапа, «Запрос · 0 из 7» у самого запроса
-  show.sub && (t.parent || TASK_KINDS[t.kind] || waits.length > 0) && h('div', { class: 'card-sub', title: t.parent ? t.parent.unit.name + ' · ' + t.parent.key : '' },
-    [t.parent && t.parent.title, !t.parent && TASK_KINDS[t.kind] && TASK_KINDS[t.kind].short + (t.tree ? ` · ${t.tree.done} из ${t.tree.total}` : ''),
+  show.sub && ((t.parent && !(t.title || '').startsWith(t.parent.title)) || TASK_KINDS[t.kind] || waits.length > 0) && h('div', { class: 'card-sub', title: t.parent ? t.parent.unit.name + ' · ' + t.parent.key : '' },
+    // родитель — если его ещё не видно в названии (этап «App - [Update #3] - Design» уже начинается с запроса)
+    [t.parent && !(t.title || '').startsWith(t.parent.title) && t.parent.title, !t.parent && TASK_KINDS[t.kind] && TASK_KINDS[t.kind].short + (t.tree ? ` · ${t.tree.done} из ${t.tree.total}` : ''),
       nowText && h('span', { class: 'card-now', title: 'Этапы в работе: ' + nowSteps.join(', ') }, nowText),
       waits.length > 0 && h('span', { title: 'Этап ждёт: ' + waits.join(', ') }, 'ждёт')].filter(Boolean)
       .flatMap((x, i) => (i ? [' · ', x] : [x]))),

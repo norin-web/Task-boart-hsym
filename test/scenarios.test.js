@@ -156,7 +156,7 @@ test('сценарии: роли × позиции × жизненный цик�
   await finish(api, qa, pm, st.qa.id);
   await finish(api, ios, pm, st.integr.id);
   await check('локализации ждут текстов в дизайне — теперь открыты', async () => assert.ok((await api.as(aso, () => api('getBoard', { unitId: gold.id }))).tasks.some(t => t.id === st.l10n.id)));
-  await check('релиз нельзя передать, пока не закрыты локализации', () => mustFail(api.as(pm, () => api('sendToRelease', { taskId: st.release.id })), /Локализации/));
+  await check('релиз нельзя передать, пока не закрыты локализации', () => mustFail(api.as(pm, () => api('sendToRelease', { taskId: st.release.id })), /Localization/));
   await finish(api, aso, pm, st.l10n.id);
   await closeAccount(api, rm, (st.account || {}).id);
 
@@ -191,9 +191,11 @@ test('сценарии: роли × позиции × жизненный цик�
   // ---------- апдейт ----------
   const upd = await api.as(ceo, () => api('createRequest', { appId: app.id, type: 'update', title: 'Апдейт 1.1' }));
   await check('апдейты нумеруются сами по приложению', async () => {
-    assert.equal(upd.title, 'Апдейт №1: 1.1');
+    assert.match(upd.title, / - \[Update #1\]$/);
+    assert.equal(upd.topic, '1.1');
     const u2 = await api.as(ceo, () => api('createRequest', { appId: app.id, type: 'update', title: 'Виджеты' }));
-    assert.equal(u2.title, 'Апдейт №2: Виджеты');
+    assert.match(u2.title, / - \[Update #2\]$/);
+    assert.equal(u2.topic, 'Виджеты');
   });
   const us = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: upd.id }))).map(t => [t.step, t]));
   await check('в апдейте нет текстов и локализаций', async () => assert.deepEqual(Object.keys(us), ['design', 'ios', 'qa', 'integr', 'release']));

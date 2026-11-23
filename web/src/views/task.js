@@ -16,6 +16,7 @@ import { clTemplates, templateSelect, openTemplatesEditor } from './cltemplates.
 import { attachMentions } from './mention.js';
 import { shotsStrip } from './shots.js';
 import { STICKERS, stickerOf, stickerText, stickersFor } from '../stickers.js';
+import { stageName, isRejectTitle, parseTitle } from '../naming.js';
 
 /* ================= Панель задачи ================= */
 
@@ -105,10 +106,18 @@ function buildPanel(t) {
     },
   }));
 
+  // тема запроса второй строкой под «App - [Update #3] - Design»; у запроса её правят CEO/PM (этапы подхватят)
+  const topicEl = (t.kind === 'request' && staff)
+    ? h('input', { class: 'topic-inp', value: t.topic || '', maxlength: 500, placeholder: 'Тема: что делаем в этом запросе', 'aria-label': 'Тема',
+      onkeydown: e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } },
+      onchange: e => { const v = e.target.value.trim(); if (v !== (t.topic || '')) patchTask(t, { topic: v }); } })
+    : t.topic && h('div', { class: 'topic-line' }, t.topic);
+
   // карточка релиза: блоки по настройке RM («Настроить карточку релиза»)
   const relHide = id => t.step === 'release' && releaseHidden().includes(id);
   const main = h('div', { class: 'panel-main' },
     title,
+    topicEl,
     // задача закрыта (D03, состояние 6): когда и кто принял
     taskDone(t) && t.doneAt && h('div', { class: 'done-bar' }, icon('check', 14),
       ['Готово ' + fmtDate(String(t.doneAt).slice(0, 10)), personById(t.reviewerId) && 'аппрув: ' + personById(t.reviewerId).name].filter(Boolean).join(' · ')),
@@ -125,7 +134,7 @@ function buildPanel(t) {
       : !editable && h('div', { class: 'readonly-note' }, icon('alert', 14), 'Только просмотр: менять можно свои задачи'),
     // тестирование: рабочее место QA и разработчика — баг-репорты (написать здесь же и вернуть в разработку) и их список
     (t.step === 'qa' || (t.bugs || []).length > 0) && bugsWork(t, u),
-    t.kind === 'request' && /^Реджект №/.test(t.title) && shotsStrip(t.id, '', 'Скриншоты реджекта'),
+    t.kind === 'request' && isRejectTitle(t.title) && shotsStrip(t.id, '', 'Скриншоты реджекта'),
     // разработка без код-ревью: исполнитель сразу отдаёт на тестирование (этап «готово» → QA получает «можно начинать»)
     t.step === 'ios' && !taskDone(t) && t.assigneeId === S.meId && h('div', { class: 'qa-bar dev-bar' }, icon('send', 15),
       h('span', null, (t.bugs || []).some(b => !b.closedAt && !b.fixedAt) ? 'Исправили баги?' : 'Готово?'), h('span', { class: 'spacer' }),
@@ -201,6 +210,13 @@ const flowSkeleton = () => h('div', { class: 'fb-skel', role: 'status', 'aria-la
   [72, 58, 64, 34].map(w => h('div', { class: 'fb-skel-row' }, h('i', { class: 'fb-skel-dot' }), h('i', { style: { width: w + '%' } }))),
   h('div', { class: 'fb-skel-edit' }, h('i')));
 
+/** Иконка приложения: из App Store, иначе буква на его цвете. */
+const appMark = (a, cls) => (a.iconUrl
+  ? h('img', { class: cls + ' app-img', src: a.iconUrl, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' })
+  : h('span', { class: cls, style: { background: a.color || 'var(--muted)' }, 'aria-hidden': 'true' }, a.name.slice(0, 1).toUpperCase()));
+/** Заголовок запроса с приложением: «Screen Mirroring v2 · Фикс анимации»; если имя уже в заголовке (New App: …) — как есть. */
+const withApp = (title, a) => (a && !String(title || '').toLowerCase().includes(a.name.toLowerCase()) ? `${a.name} · ${title}` : title);
+
 /**
  * Tasks 2.0: запрос CEO — приложение, этапы флоу (состояние, блокировки), «Разложить по флоу»;
  * этап — к какому запросу относится, чего ждёт, у релиза — «Передать в релиз» (когда всё закрыто).
@@ -224,7 +240,7 @@ function flowBlock(t) {
     const releaseReady = n.step === 'release' && !n.assigneeId && st !== 'blocked' && st !== 'done';
     return h('div', { class: 'rq-stage st-' + st + (n.id === t.id ? ' current' : '') },
       h('span', { class: 'rq-ic', title: LABEL[st] }, statusIcon(st === 'blocked' ? 'todo' : st, 16)),
-      h('button', { class: 'link-btn rq-stitle', onclick: () => peekTask(n.unit.id, n.id) }, n.title.split(' · ')[0]),
+      h('button', { class: 'link-btn rq-stitle', onclick: () => peekTask(n.unit.id, n.id) }, stageName(n.title)),
       h('span', { class: 'muted rq-state' }, LABEL[st]),
       releaseReady && manage
         ? h('button', { class: 'btn primary sm', onclick: () => import('./apps.js').then(m => m.sendRelease(n.id)).then(reload) }, icon('rocket', 13), 'Передать в релиз')
@@ -244,19 +260,19 @@ function flowBlock(t) {
     const done = stages.filter(n => stateOf(n, stages) === 'done').length;
     const me = stages.find(n => n.id === t.id);
     const waits = me && stateOf(me, stages) === 'blocked'
-      ? stages.filter(n => (me.dependsOn || []).includes(n.id) && stateOf(n, stages) !== 'done').map(n => n.title.split(' · ')[0]) : [];
+      ? stages.filter(n => (me.dependsOn || []).includes(n.id) && stateOf(n, stages) !== 'done').map(n => stageName(n.title)) : [];
     if (t.step === 'release' && app) {
       // карточка релиза: запрос — одной строкой (приложение, запрос, прогресс), как в макете
       return fill(box, h('div', { class: 'flow-compact' },
-        h('span', { class: 'uc-icon', style: { background: app.color } }, app.name.slice(0, 1).toUpperCase()),
-        h('span', { class: 'fc-names' }, h('b', null, app.name), h('small', { class: 'muted' }, req.title.replace(/^New App:\s*/, ''))),
+        appMark(app, 'uc-icon'),
+        h('span', { class: 'fc-names' }, h('b', null, app.name), h('small', { class: 'muted' }, (parseTitle(req.title) || {}).type || req.title.replace(/^New App:\s*/, ''))),
         h('span', { class: 'progress' }, h('div', { style: { width: Math.round(done / Math.max(1, stages.length) * 100) + '%' } })),
         h('span', { class: 'fc-count' }, `${done} из ${stages.length}`)),
         // что держит релиз: незакрытые этапы (кроме самого релиза)
         (() => {
           const wait = stages.filter(n => n.step !== 'release' && stateOf(n, stages) !== 'done');
           return wait.length > 0 && h('div', { class: 'fb-wait rl-waits' }, icon('lock', 14), h('span', null, 'Ждём: ',
-            wait.map((n, i) => [i > 0 && ', ', h('button', { class: 'link-btn', onclick: () => peekTask(n.unit.id, n.id) }, n.title.split(' · ')[0])])));
+            wait.map((n, i) => [i > 0 && ', ', h('button', { class: 'link-btn', onclick: () => peekTask(n.unit.id, n.id) }, stageName(n.title))])));
         })());
     }
     // макет 15: шапка — значок приложения, запрос (клик — открыть), полоска прогресса и «N из M»;
@@ -264,10 +280,11 @@ function flowBlock(t) {
     const pct = stages.length ? Math.round(done / stages.length * 100) : 0;
     fill(box,
       h('div', { class: 'fb-head' },
-        app ? h('span', { class: 'fb-ic', style: { background: app.color } }, app.name.slice(0, 1).toUpperCase()) : h('span', { class: 'fb-ic' }, icon('tree', 16)),
+        // приложение видно сразу: его иконка и имя в заголовке (у апдейтов и реджектов имени в названии запроса нет)
+        app ? appMark(app, 'fb-ic') : h('span', { class: 'fb-ic' }, icon('tree', 16)),
         t.kind === 'stage'
-          ? h('button', { class: 'fb-title link-btn', title: 'Открыть запрос', onclick: () => peekTask(req.unit.id, req.id) }, req.title)
-          : h('span', { class: 'fb-title' }, req.title),
+          ? h('button', { class: 'fb-title link-btn', title: 'Открыть запрос', onclick: () => peekTask(req.unit.id, req.id) }, withApp(req.title, app))
+          : h('span', { class: 'fb-title' }, withApp(req.title, app)),
         stages.length > 0 && h('span', { class: 'fb-bar' }, h('span', { style: { width: pct + '%' } })),
         stages.length > 0 && h('span', { class: 'fb-count' }, `${done} из ${stages.length}`)),
       waits.length > 0 && h('div', { class: 'fb-wait' }, icon('lock', 14),
@@ -304,7 +321,7 @@ function flowBlock(t) {
     const has = new Set(stages.map(n => n.step));
     const add = flow.filter(x => !x.release && !has.has(x.key));
     const del = stages.filter(n => n.step !== 'release' && n.statusKind !== 'done');
-    const name = n => n.title.split(' · ')[0];
+    const name = n => stageName(n.title);
     // кто заполняет опросник перед релизом: разработчик или лид на интеграции
     const integ = stages.find(n => n.step === 'integr');
     const formOnInteg = !!integ && (integ.devForm || {}).need === true;
