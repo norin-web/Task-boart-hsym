@@ -149,7 +149,8 @@ function buildPanel(t) {
     // опросник — у этапа iOS (по умолчанию) или у интеграции, если PM так решил (dev_form.need)
     ((t.step === 'ios' && (t.devForm || {}).need !== false) || (t.step === 'integr' && (t.devForm || {}).need === true)) && devFormBlock(t, t.assigneeId === S.meId || isStaff()),
     t.step === 'release' && t.assigneeId && releaseBlock(t, () => reloadBoard().catch(() => {})),
-    t.kind === 'request' || t.kind === 'stage' ? [flowBlock(t), t.kind === 'stage' && treeBlock(t, { noParents: true })] : treeBlock(t),
+    // цепочка родителей — в крошках шапки, здесь только подзадачи
+    t.kind === 'request' || t.kind === 'stage' ? [flowBlock(t), t.kind === 'stage' && treeBlock(t, { noParents: true })] : treeBlock(t, { noParents: true }),
     !B.description.hidden && !relHide('description') && descriptionBlock(t, B.description.label, editable),
     !relHide('spec') && specBlock(t, editable),
     !relHide('tasklinks') && linksBlock(t, editable),
@@ -160,6 +161,7 @@ function buildPanel(t) {
     h('div', { class: 'crumbs' },
       h('button', { class: 'unit-link', title: 'Открыть доску юнита', onclick: openUnitBoard }, h('span', { class: 'unit-dot', style: { background: u.color, margin: 0 } }), u.name),
       h('span', null, '/'),
+      t.parentId && crumbChain(t),
       h('span', { class: 'key-badge' }, taskKey(t)),
       t.archived && h('span', { class: 'badge' }, 'в архиве')),
     h('span', { class: 'spacer' }),
@@ -172,6 +174,53 @@ function buildPanel(t) {
 }
 
 /** Связи задачи: откуда она (цепочка родителей) и подзадачи с прогрессом. Пусто — блока нет. */
+/** Дерево задачи (родители и потомки) — один запрос на открытие карточки: им пользуются крошки, блок родителя и подзадачи. */
+const treeReq = new Map();
+function taskTree(id) {
+  if (!treeReq.has(id)) {
+    const p = call('getTaskTree', { id });
+    treeReq.set(id, p);
+    p.catch(() => {}).finally(() => setTimeout(() => treeReq.delete(id), 3000));
+  }
+  return treeReq.get(id);
+}
+/** Короткая подпись задачи в цепочке: запрос — «App - [Update #3]», этап — отдел («Design»), остальное — название. */
+const chainLabel = a => (a.kind === 'stage' ? stageName(a.title) : a.title);
+
+/**
+ * Хлебные крошки шапки: «Юнит / запрос / этап / KEY» — каждое звено открывает свою карточку поверх страницы,
+ * так из подзадачи можно вернуться к этапу и к запросу. Сначала — родитель с доски, следом — вся цепочка.
+ */
+function crumbChain(t) {
+  const box = h('span', { class: 'crumb-chain' });
+  const paint = list => fill(box, list.map(a => [
+    h('button', { class: 'unit-link crumb-task', title: a.title, onclick: () => peekTask((a.unit || {}).id || t.unitId, a.id) },
+      h('span', { class: 'crumb-label' }, chainLabel(a))),
+    h('span', null, '/')]));
+  if (t.parent) paint([t.parent]);
+  taskTree(t.id).then(tree => { if (S.panelTaskId === t.id) paint(tree.ancestors || []); }).catch(() => {});
+  return box;
+}
+
+/** Правая колонка: родительская задача — статус, название, исполнитель; клик открывает её. */
+function parentBlock(t) {
+  if (!t.parentId) return null;
+  const box = h('div', { class: 'parent-block' });
+  const paint = a => {
+    if (!a) return box.remove();
+    const p = personById(a.assigneeId);
+    fill(box, h('div', { class: 'parent-label' }, 'Родительская задача'),
+      h('button', { class: 'parent-card', title: 'Открыть', onclick: () => peekTask((a.unit || {}).id || t.unitId, a.id) },
+        h('span', { class: 'dot', style: { background: a.statusColor || KIND_COLORS[a.statusKind] || 'var(--muted)' } }),
+        h('span', { class: 'parent-main' }, h('b', { class: 'parent-title' }, a.title),
+          h('small', { class: 'muted' }, [a.key, a.statusName].filter(Boolean).join(' · '))),
+        p && avatar(p, 'sm')));
+  };
+  if (t.parent) paint(t.parent);
+  taskTree(t.id).then(tree => { if (S.panelTaskId === t.id) paint((tree.ancestors || []).slice(-1)[0]); }).catch(() => {});
+  return box;
+}
+
 function treeBlock(t, { noParents = false } = {}) {
   const box = h('div', { class: 'tree-block' });
   const u = S.board.unit;
@@ -184,7 +233,7 @@ function treeBlock(t, { noParents = false } = {}) {
     n.assigneeId && avatar(personById(n.assigneeId), 'sm'));
   async function load() {
     let tree;
-    try { tree = await call('getTaskTree', { id: t.id }); } catch { return; }
+    try { tree = await taskTree(t.id); } catch { return; }
     if (S.panelTaskId !== t.id) return;
     const tasks = tree.descendants.filter(n => !n.archived);
     const done = tasks.filter(n => n.statusKind === 'done').length;
@@ -1049,7 +1098,7 @@ function sideBlock(t, { staff, editable }) {
     { required: f.required, empty: editable && blocking.includes(f) });
   });
 
-  return h('div', { class: 'panel-side' }, props, t.step === 'release' && releaseTeamBlock(t), h('div', { class: 'side-meta', id: 'task-meta' }, metaLines(t)));
+  return h('div', { class: 'panel-side' }, parentBlock(t), props, t.step === 'release' && releaseTeamBlock(t), h('div', { class: 'side-meta', id: 'task-meta' }, metaLines(t)));
 }
 
 function metaLines(t) {

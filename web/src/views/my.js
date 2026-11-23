@@ -4,7 +4,7 @@ import { call, keep, peek } from '../api.js';
 import { currentView, taskLink, link } from '../router.js';
 import { renderLayout, editLayout } from './layout.js';
 import { onRemote } from '../live.js';
-import { isRejectTitle } from '../naming.js';
+import { isRejectTitle, stageName } from '../naming.js';
 
 let showDone = false;
 let query = '';
@@ -125,8 +125,13 @@ export async function renderMy() {
 
 
 /** Тип задачи для фильтра: этап по ключу (design, art, ios…), запрос, подзадача, обычная. */
-export const typeOf = t => (t.kind === 'request' ? 'req' : t.step === 'part' ? 'part' : t.step ? 'st:' + t.step : 'other');
-export const typeName = k => (k === 'req' ? 'Запросы' : k === 'part' ? 'Подзадачи' : k === 'other' ? 'Прочее' : STEP_NAMES[k.slice(3)] || k.slice(3));
+/** Свои этапы студии (ключ сгенерирован, например «xmwt0y6sy») — название берём из самой задачи, ключ не показываем. */
+const STEP_SEEN = new Map();
+export const typeOf = t => {
+  if (t.step && !STEP_NAMES[t.step] && t.title && !STEP_SEEN.has(t.step)) STEP_SEEN.set(t.step, stageName(t.title));
+  return t.kind === 'request' ? 'req' : t.step === 'part' ? 'part' : t.step ? 'st:' + t.step : 'other';
+};
+export const typeName = k => (k === 'req' ? 'Запросы' : k === 'part' ? 'Подзадачи' : k === 'other' ? 'Прочее' : STEP_NAMES[k.slice(3)] || STEP_SEEN.get(k.slice(3)) || 'Этап');
 const STEP_ORDER = Object.keys(STEP_NAMES);
 export const typeRank = k => (k === 'req' ? -1 : k.startsWith('st:') ? (STEP_ORDER.indexOf(k.slice(3)) + 1 || 50) : k === 'part' ? 90 : 99);
 

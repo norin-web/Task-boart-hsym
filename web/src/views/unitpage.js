@@ -252,7 +252,7 @@ export function renderUnitTeam() {
         h('span', { class: 'muted team-pos' }, (deptById(m.departmentId) || deptById(p.positionId) || {}).name || '—'),
         // команды человека (доски команд юнита): меняет CEO; остальным — названия
         isSuper()
-          ? teamsPicker(() => p.teamIds || [], ids => { p.teamIds = ids; send('updatePerson', { id: p.id, teamIds: ids }).then(saved => { Object.assign(p, saved); toast('Команды сохранены'); }).catch(showErr); }, { chips: true })
+          ? teamsPicker(() => p.teamIds || [], ids => { p.teamIds = ids; send('updatePerson', { id: p.id, teamIds: ids }).then(saved => { Object.assign(p, saved); toast('Команды сохранены'); }).catch(showErr); })
           : h('span', { class: 'muted team-teams' }, (p.teamIds || []).map(id => (teamById(id) || {}).name).filter(Boolean).join(', ') || '—'),
         h('span', { class: 'muted team-role' }, ACCESS_LABELS[p.access] || '',
           p.access === 'lead' && isStaff() && h('button', { class: 'link-btn', style: { marginLeft: '8px' }, title: 'Позиции лида и выданные ему люди', onclick: () => zoneDialog(p) },
