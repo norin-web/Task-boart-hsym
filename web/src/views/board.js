@@ -379,7 +379,8 @@ export function filterTasks(opts = {}) {
   return S.board.tasks.filter(t => {
     // Product Team — продуктовая работа: запросы New App, апдейты и реджекты юнита (не этапы); переключатель «Все / Новые / Апдейты / Реджекты»
     if (product) {
-      const k = productKind(t);
+      // запрос на бэкенд от разработчика — тоже работа PM: в Product Team (во «Все»)
+      const k = productKind(t) || (t.step === 'backend' ? 'backend' : '');
       if (!k || (productView() !== 'all' && productView() !== k)) return false;
       if (t.archived && !f.archived) return false;
       if (!opts.withOld && hidingOld() && staleDone(t)) return false;
@@ -391,6 +392,8 @@ export function filterTasks(opts = {}) {
     // запрос (New App, апдейт, реджект) — работа PM: на досках команд его нет, только в Product Team и на доске юнита;
     // позицию запрос получает от исполнителя (PM-дизайнер → «UX/UI Designer»), из-за этого он попадал к дизайнерам
     if (team && t.kind === 'request') return false;
+    // запрос на бэкенд (подзадача этапа iOS, исполнитель — кто ведёт запрос) — тоже работа PM, не доски команды
+    if (team && t.step === 'backend') return false;
     // ASO: вкладка «Мета» или «Тексты»
     if (asoTeam && !inAsoView(t)) return false;
     if (byId && (t.kind === 'stage' || t.step === 'part') && foldedChild(t, byId)) return false;
