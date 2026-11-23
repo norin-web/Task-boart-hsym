@@ -1,4 +1,4 @@
-import { S, LS, todayStr, me, priorityOf, taskById, personById, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDate, fmtDateTime, relTime, addDays, unitById, safeUrl, visibleLinkFields, plural, appById, isSuper, ceoDefault, KIND_COLORS, whoName, colById, colColor, taskDone, isStaff, canEditTask, inMyZone, fmtValue, activeFields, deptById } from '../state.js';
+import { S, LS, todayStr, appStatusById, me, priorityOf, taskById, personById, missingNext, taskKey, isEmpty, optById, dueInfo, fmtDate, fmtDateTime, relTime, addDays, unitById, safeUrl, visibleLinkFields, plural, appById, isSuper, ceoDefault, KIND_COLORS, whoName, colById, colColor, taskDone, isStaff, canEditTask, inMyZone, fmtValue, activeFields, deptById } from '../state.js';
 import { $, h, icon, avatar, autosize, field, linkify, menu, modal, confirmDlg, toast, showErr, statusDot, statusIcon, fill, prioMark, prioSelect } from '../ui.js';
 import { call, send } from '../api.js';
 import { navigate, rerender } from '../router.js';
@@ -161,6 +161,9 @@ function buildPanel(t) {
     h('div', { class: 'crumbs' },
       h('button', { class: 'unit-link', title: 'Открыть доску юнита', onclick: openUnitBoard }, h('span', { class: 'unit-dot', style: { background: u.color, margin: 0 } }), u.name),
       h('span', null, '/'),
+      // приложение — первое звено (родитель запроса); клик — страница приложения
+      appOfTask(t) && [h('button', { class: 'unit-link crumb-task', title: 'Открыть приложение', onclick: () => navigate({ view: 'app', id: appOfTask(t).id }) },
+        appMark(appOfTask(t), 'crumb-app-ic'), h('span', { class: 'crumb-label' }, appOfTask(t).name)), h('span', null, '/')],
       t.parentId && crumbChain(t),
       h('span', { class: 'key-badge' }, taskKey(t)),
       t.archived && h('span', { class: 'badge' }, 'в архиве')),
@@ -184,8 +187,8 @@ function taskTree(id) {
   }
   return treeReq.get(id);
 }
-/** Короткая подпись задачи в цепочке: запрос — «App - [Update #3]», этап — отдел («Design»), остальное — название. */
-const chainLabel = a => (a.kind === 'stage' ? stageName(a.title) : a.title);
+/** Короткая подпись задачи в цепочке (приложение — отдельным звеном перед ней): запрос — «Update #3», этап — отдел («Design»), остальное — название. */
+const chainLabel = a => (a.kind === 'stage' ? stageName(a.title) : a.kind === 'request' && parseTitle(a.title) ? parseTitle(a.title).type : a.title);
 
 /**
  * Хлебные крошки шапки: «Юнит / запрос / этап / KEY» — каждое звено открывает свою карточку поверх страницы,
@@ -203,8 +206,23 @@ function crumbChain(t) {
 }
 
 /** Правая колонка: родительская задача — статус, название, исполнитель; клик открывает её. */
+/** Приложение задачи: своё или родителя (этап, подзадача). */
+const appOfTask = t => appById(t.appId || (t.parent && (t.parent.appId || t.parent.app_id)));
+
+/** Правая колонка у запроса (у него родителя нет): приложение — иконка, название, статус; клик — страница приложения. */
+function appParentBlock(t) {
+  const a = appOfTask(t);
+  if (!a) return null;
+  const st = appStatusById(a.status);
+  return h('div', { class: 'parent-block' }, h('div', { class: 'parent-label' }, 'Приложение'),
+    h('button', { class: 'parent-card', title: 'Открыть приложение', onclick: () => navigate({ view: 'app', id: a.id }) },
+      appMark(a, 'parent-app-ic'),
+      h('span', { class: 'parent-main' }, h('b', { class: 'parent-title' }, a.name), st && h('small', { class: 'muted' }, st.name)),
+      h('span', { class: 'parent-go' }, icon('chevron', 14))));
+}
+
 function parentBlock(t) {
-  if (!t.parentId) return null;
+  if (!t.parentId) return appParentBlock(t);
   const box = h('div', { class: 'parent-block' });
   const paint = a => {
     if (!a) return box.remove();

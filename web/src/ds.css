@@ -3549,3 +3549,8 @@ img.fb-ic { object-fit: cover; padding: 0; }
 .parent-title { font-size: 13px; line-height: 18px; font-weight: 600; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .parent-main small { font-size: 12px; line-height: 16px; }
 @media (max-width: 640px) { .crumbs .crumb-task { max-width: 110px; } }
+
+/* приложение — первое звено крошек и родитель запроса в правой колонке */
+.crumbs .crumb-app-ic { width: 16px; height: 16px; border-radius: 4px; flex: none; display: inline-grid; place-items: center; color: #fff; font-size: 9px; font-weight: 700; object-fit: cover; }
+.parent-app-ic { width: 28px; height: 28px; border-radius: 7px; flex: none; display: grid; place-items: center; color: #fff; font-size: 12px; font-weight: 700; object-fit: cover; }
+.parent-card .parent-go { color: var(--muted); transform: rotate(-90deg); display: grid; place-items: center; }
