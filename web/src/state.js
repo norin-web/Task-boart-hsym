@@ -1,3 +1,4 @@
+import { stageName } from './naming.js';
 /** Общее состояние приложения и чистые хелперы над данными. */
 
 export const PALETTE = ['#EC9900', '#BA3045', '#764BF2', '#0087EA', '#5FCD74', '#0F6E1F', '#787C87', '#111318'];
@@ -309,11 +310,27 @@ export const STEP_NAMES = { design: 'Дизайн', art: 'Онбординг и 
  */
 export const ASO_TRACKS = [['meta', 'Мета'], ['texts', 'Тексты']];
 const ASO_STEP = { store: 'meta', meta: 'texts', l10n: 'texts' };
-export const asoTrack = t => ASO_STEP[t && t.step] || '';
+/**
+ * Вкладка ASO для задачи — ровно одна: встроенные этапы по ключу; свои этапы студии («Текста в апдейте») и обычные задачи —
+ * по названию (отдел этапа или название задачи); не понять — '' (на доске ASO такие идут в «Мету», inAsoView).
+ */
+const ASO_TEXTS = /текст|text|локал|locali|перев|translat|l10n/i;
+const ASO_META = /мета|meta|стор|store|скрин|screen|ключев|keyword|aso/i;
+/** Встроенные этапы других отделов — не мета и не тексты. */
+const NOT_ASO = new Set(['design', 'art', 'retext', 'ios', 'qa', 'integr', 'release', 'account', 'backend']);
+export const asoTrack = t => {
+  if (!t) return '';
+  if (ASO_STEP[t.step]) return ASO_STEP[t.step];
+  if (NOT_ASO.has(t.step)) return '';
+  const name = stageName(t.title || '');
+  if (ASO_TEXTS.test(name)) return 'texts';
+  if (ASO_META.test(name)) return 'meta';
+  return '';
+};
 export const asoView = () => (LS.get('asoTrack', 'meta') === 'texts' ? 'texts' : 'meta');
 export const setAsoView = v => LS.set('asoTrack', v === 'texts' ? 'texts' : 'meta');
-/** Задача видна во вкладке ASO: этап своей сущности или обычная задача. */
-export const inAsoView = t => !asoTrack(t) || asoTrack(t) === asoView();
+/** Задача видна только в своей вкладке ASO; по названию не понять — во вкладке «Мета» (основная работа ASO). */
+export const inAsoView = t => (asoTrack(t) || 'meta') === asoView();
 
 /** Направления CEO: дизайн / меты / релизы. */
 export const DIRECTIONS = [['', 'Без направления'], ['design', 'Дизайн'], ['meta', 'Меты'], ['release', 'Релизы']];
