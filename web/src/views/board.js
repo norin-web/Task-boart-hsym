@@ -8,7 +8,7 @@ import { updateSidebarCounts, renderUnread } from './sidebar.js';
 import { viewSwitch } from './timeline.js';
 import { openTask, closePanel, openCreateTask, duplicateTask, deleteTaskUndoable, refreshPanel } from './task.js';
 import { unitHeader } from './unitnav.js';
-import { stageName, isRejectTitle } from '../naming.js';
+import { stageName, isRejectTitle, parseTitle } from '../naming.js';
 
 let sortables = [];
 let quickInput = null;
@@ -675,6 +675,17 @@ function techChips(f) {
   return h('div', { class: 'card-tech' }, chip(ACCOUNT_CHIP[f.account], 'lock'), chip(TEXTS_CHIP[f.texts], 'edit'), chip(BACKEND_CHIP[f.backend || ''], 'code'));
 }
 
+/**
+ * Название на карточке: длинную тему сокращаем посередине названия, чтобы приложение, тип и хвост-отдел («- iOS») были видны всегда
+ * («CARROT Weather - [Update #1: Новые виджеты для экрана…] - iOS»); полное — в подсказке и в карточке задачи.
+ */
+function cardTitle(title) {
+  const p = parseTitle(title);
+  if (!p || p.type.length <= 48) return title;
+  const type = p.type.slice(0, 46).trimEnd() + '…';
+  return `${p.app} - [${type}]` + (p.dept ? ` - ${p.dept}` : '');
+}
+
 export function taskCard(t, inLane, env = boardEnv()) {
   const show = cardShow();
   const done = env.done(t);
@@ -716,7 +727,7 @@ export function taskCard(t, inLane, env = boardEnv()) {
   },
   // Ключ задачи на доске не показываем — он в открытой карточке
   h('div', { class: 'card-top' },
-    h('div', { class: 'card-title', title: t.title }, t.title),
+    h('div', { class: 'card-title', title: t.title }, cardTitle(t.title)),
     missing.length > 0 && h('span', { class: 'warn-ic', title: 'Для следующей колонки заполните: ' + missing.map(f => f.name).join(', ') }, icon('alert', 13)),
     t.archived && h('span', { class: 'badge' }, 'архив'),
     !t._temp && h('button', {

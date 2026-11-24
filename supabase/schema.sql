@@ -3828,7 +3828,7 @@ begin
   if not (can_manage(r.unit_id) and can_read_task(r.id)) then raise exception 'Тему запроса меняют PM и CEO' using errcode = '42501'; end if;
   perform set_config('app.system', 'on', true);
   update tasks set topic = v_topic, updated_at = at_ where id = r.id;
-  update tasks set topic = v_topic where parent_id = r.id and kind = 'stage';
+  update tasks set topic = v_topic, updated_at = at_ where parent_id = r.id and kind = 'stage';
   if r.title ~ '^.*? - \[[^]]+\]' then
     v_old := substring(r.title from '^(.*? - \[[^]]+\])');
     v_app := substring(r.title from '^(.*?) - \[');
@@ -3836,8 +3836,9 @@ begin
     v_new := v_app || ' - [' || v_kind || case when naming_clip(v_topic) <> '' then ': ' || naming_clip(v_topic) else '' end || ']';
     if v_new <> v_old then
       with recursive tree as (select id from tasks where id = r.id
-                              union all select c.id from tasks c join tree on c.parent_id = tree.id)
-      update tasks set title = left(v_new || substr(title, length(v_old) + 1), 500)
+                              union all select c.id from tasks c join tree on c.parent_id = tree.id
+                               where c.unit_id = r.unit_id and coalesce(c.app_id, '') = coalesce(r.app_id, ''))
+      update tasks set title = left(v_new || substr(title, length(v_old) + 1), 500), updated_at = at_
        where id in (select id from tree) and left(title, length(v_old)) = v_old;
     end if;
   end if;
