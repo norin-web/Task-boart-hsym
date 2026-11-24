@@ -1301,7 +1301,7 @@ test('названия «App - [Тип] - Отдел»: новые сразу т
 
 test('метки этапа разработки: аккаунт (New App), тексты, бэкенд — на доске и в «Моих задачах»', async () => {
   const api = await setup();
-  const { ceo, pm, lead, ios, gold } = await studio(api);
+  const { ceo, pm, lead, ios, qa, gold } = await studio(api);
   const { request } = await api.as(ceo, () => api('createApp', { name: 'Flags', unitId: gold.id }));
   const by = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: request.id }))).map(t => [t.step, t]));
   await finish(api, lead, pm, by.design.id);
@@ -1312,6 +1312,10 @@ test('метки этапа разработки: аккаунт (New App), те
   await api.as(ios, () => api('requestAccount', { taskId: by.ios.id, comment: '' }));
   await api.as(ios, () => api('requestBackend', { taskId: by.ios.id, text: 'Подписки' }));
   assert.deepEqual(await flagsOf(ios), { account: 'pending', texts: 'none', backend: 'open' });
+  // напрямую функцию меток вызывает и тот, кто этап не видит (QA) — получает пусто: проверка видимости в базе
+  const raw = who => api.as(who, async () => (await api.pg.query('select stage_flags_raw($1) f', [by.ios.id])).rows[0].f);
+  assert.equal(await raw(qa), null);
+  assert.equal((await raw(ios)).account, 'pending');
   // закрыли бэкенд и тексты — «есть»
   const be = (await api.pg.query("select id from tasks where parent_id = $1 and step = 'backend'", [by.ios.id])).rows[0].id;
   await api('updateTask', { id: be, patch: { status: 'done' } });

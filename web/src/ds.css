@@ -3557,8 +3557,9 @@ img.fb-ic { object-fit: cover; padding: 0; }
 
 /* технические метки этапа разработки (аккаунт, бэкенд) — чипы как «На тесте у …»: цветная заливка по состоянию */
 .card-tech { display: flex; flex-wrap: wrap; gap: 4px; }
-.tech-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--text); white-space: nowrap; }
+.tech-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; min-width: 0; padding: 2px 8px; border-radius: 999px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--text); white-space: nowrap; }
+.tech-chip > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .tech-chip .i { flex: none; }
 .tech-chip.no { background: color-mix(in srgb, var(--warn-fill) 18%, transparent); }
-.tech-chip.wait { background: color-mix(in srgb, var(--review) 14%, transparent); }
+.tech-chip.wait { background: var(--info-soft); } /* голубой — не путать с фиолетовым «На тесте у …» */
 .tech-chip.ok { background: color-mix(in srgb, var(--ok) 16%, transparent); }

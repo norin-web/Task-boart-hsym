@@ -822,9 +822,8 @@ export function createBackend(db, opts = {}) {
     return rows.filter(r => !(json(r.depends_on, []) || []).some(id => (all_[id] ? !done(all_[id]) : openHidden.has(id))));
   }
 
-  /** Кого отметили «@Имя Фамилия» в тексте (новые относительно before). Уведомляет база — notify_mention. */
   /**
-   * Метки этапов разработки (iOS / интеграция) для карточек: аккаунт в сторе и запрос на бэкенд — { id → { account, backend } }.
+   * Метки этапов разработки (iOS / интеграция) для карточек: аккаунт в сторе, тексты, бэкенд — { id → { account, texts, backend } }.
    * Функция базы (этапы «Аккаунт» и задачи «Backend» разработчику не видны); её ещё нет в базе — меток просто нет.
    */
   async function stageFlags(rows) {
@@ -832,7 +831,8 @@ export function createBackend(db, opts = {}) {
     if (!ids.length) return {};
     const out = {};
     for (let i = 0; i < ids.length; i += 150) {
-      const res = await rpc('dev_stage_flags', { p_tasks: ids.slice(i, i + 150) }).catch(() => []);
+      // нет функции в базе (схему не обновили) или сбой — меток нет, доска работает; причину видно в консоли
+      const res = await rpc('dev_stage_flags', { p_tasks: ids.slice(i, i + 150) }).catch(e => { console.warn('dev_stage_flags:', e && e.message); return []; });
       (Array.isArray(res) ? res : res ? [res] : []).forEach(r => { if (r && r.task_id) out[r.task_id] = json(r.flags, {}) || {}; });
     }
     return out;
@@ -855,6 +855,7 @@ export function createBackend(db, opts = {}) {
     if (!canSendSticker(key, p, await setting('stickers'))) fail('Этот стикер вам недоступен', 'FORBIDDEN');
   }
 
+  /** Кого отметили «@Имя Фамилия» в тексте (новые относительно before). Уведомляет база — notify_mention. */
   async function notifyMentions(taskId, text, before, where) {
     if (!String(text || '').includes('@')) return 0;
     const ppl = await people();

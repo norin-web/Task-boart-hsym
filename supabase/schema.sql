@@ -3662,6 +3662,26 @@ language sql stable security definer set search_path = public as $$
    where t.id in (select jsonb_array_elements_text(coalesce(p_deps, '[]'::jsonb))) and not task_done(t.id);
 $$;
 
+-- Может ли вошедший прочитать задачу — то же выражение, что правило tasks_read (держать вместе с ним!):
+-- для security definer функций, которые по id отдают что-то про задачу (метки этапа), — без этой проверки RLS обходится.
+create or replace function can_read_task(p_task text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select app_system() or exists (select 1 from tasks t where t.id = p_task
+    and (not t.is_test or is_dev())
+    and (t.app_id = '' or my_access() <> 'moderator' or t.app_id = any(coalesce(my_pm_app_ids(), '{}')))
+    and (is_superadmin()
+      or (my_access() = 'moderator' and t.unit_id = any(coalesce(my_unit_ids(), '{}')))
+      or t.assignee_id = my_person_id() or t.review_from = my_person_id() or t.reviewer_id = my_person_id()
+      or (my_access() = 'lead' and t.unit_id = any(coalesce(my_unit_ids(), '{}'))
+          and ((t.department_id <> '' and t.department_id = any(coalesce(my_positions(), '{}')))
+               or (t.assignee_id <> '' and t.assignee_id = any(coalesce(my_lead_people(), '{}')))))
+      or (my_access() = 'rm' and t.unit_id = any(coalesce(my_unit_ids(), '{}'))
+          and ((t.department_id <> '' and t.department_id = any(coalesce(my_positions(), '{}')))
+               or (t.team_id <> '' and t.team_id = any(coalesce(my_teams(), '{}')))))));
+$$;
+revoke execute on function can_read_task(text) from public, anon;
+grant execute on function can_read_task(text) to authenticated;
+
 -- Метки на карточках этапов разработки (iOS / интеграция): аккаунт в сторе (только New App), тексты OB/PW/ASO и запрос на бэкенд.
 -- Сами этапы «Аккаунт» (у RM) и задачи «Backend» (у PM) разработчику не видны по правилам — состояние отдаёт функция.
 -- account: '' (не New App) | none | pending | done; texts: '' (нет этапа текстов) | none | done; backend: '' (не запрашивали) | open | done
@@ -3679,7 +3699,7 @@ language sql stable security definer set search_path = public as $$
       when exists (select 1 from tasks b where b.parent_id = t.id and b.step = 'backend' and not b.archived and not task_done(b.id)) then 'open'
       else 'done' end)
     from tasks t left join tasks r on r.id = t.parent_id
-   where t.id = p_task and t.kind = 'stage' and t.step in ('ios', 'integr');
+   where t.id = p_task and t.kind = 'stage' and t.step in ('ios', 'integr') and can_read_task(p_task);
 $$;
 revoke execute on function stage_flags_raw(text) from public, anon;
 grant execute on function stage_flags_raw(text) to authenticated;

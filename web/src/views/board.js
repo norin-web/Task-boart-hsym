@@ -670,7 +670,7 @@ const ACCOUNT_CHIP = { none: ['Аккаунта нет', 'no'], pending: ['Ак�
 const TEXTS_CHIP = { none: ['Текстов нет', 'no'], done: ['Тексты есть', 'ok'] };
 const BACKEND_CHIP = { '': ['Бэкенд не запрошен', 'no'], open: ['Бэкенд запрошен', 'wait'], done: ['Бэкенд есть', 'ok'] };
 function techChips(f) {
-  const chip = (def, ic) => def && h('span', { class: 'tech-chip ' + def[1] }, icon(ic, 13), def[0]);
+  const chip = (def, ic) => def && h('span', { class: 'tech-chip ' + def[1], title: def[0] }, icon(ic, 13), h('span', null, def[0]));
   return h('div', { class: 'card-tech' }, chip(ACCOUNT_CHIP[f.account], 'lock'), chip(TEXTS_CHIP[f.texts], 'edit'), chip(BACKEND_CHIP[f.backend || ''], 'code'));
 }
 
