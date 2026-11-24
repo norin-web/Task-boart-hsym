@@ -547,11 +547,19 @@ test('сотрудник и лид: «Можно начинать», фокус,
   await api.pg.query('update people set user_id = $1 where id = $2', [UID(99), des.id]);
   const designer = { ...des, uid: UID(99) };
   await api('setMember', { unitId: gold.id, personId: designer.id });
+  await api('setLeadPeople', { leadId: lead.id, personIds: [designer.id] }); // дизайнер — человек лида
   const day = new Date().toISOString().slice(0, 10);
   const { request } = await api.as(ceo, () => api('createApp', { name: 'Sleep', unitId: gold.id }));
   const st = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: request.id }))).map(t => [t.step, t]));
   assert.equal(st.design.assigneeId, lead.id);
 
+  // коллегу по позиции, которого лиду не выдали, лид не видит — и передать/раздать ему не может; PM — может
+  const des2 = await api('createPerson', { name: 'Дизайнер 2', email: 'des2@x.ru', access: 'member', positionId: 'd_design' });
+  await api('setMember', { unitId: gold.id, personId: des2.id });
+  await api.as(lead, () => assert.rejects(() => api('handOverTask', { taskId: st.design.id, personId: des2.id }), /зоны/));
+  await api.as(lead, () => assert.rejects(() => api('splitTask', { taskId: st.design.id, items: [{ title: 'x', assigneeId: des2.id }] }), /позиции/));
+  const mine = await api.as(pm, () => api('createTask', { unitId: gold.id, title: 'Чужая', assigneeId: des2.id, departmentId: 'd_design' }));
+  assert.ok(!(await api.as(lead, () => api('getBoard', { unitId: gold.id }))).tasks.some(x => x.id === mine.id), 'задача коллеги по позиции лиду не видна');
   // лид передаёт дизайн дизайнеру; не своей позиции и не лиду — нельзя
   await api.as(lead, () => assert.rejects(() => api('handOverTask', { taskId: st.design.id, personId: ios.id }), /этой позиции/));
   await api.as(ios, () => assert.rejects(() => api('handOverTask', { taskId: st.ios.id, personId: designer.id }), /лид/));
@@ -793,6 +801,7 @@ test('«Раздать»: лид раскладывает свой этап на
   await api.pg.query('update people set user_id = $1 where id = $2', [UID(99), des.id]);
   const designer = { ...des, uid: UID(99) };
   await api('setMember', { unitId: gold.id, personId: designer.id });
+  await api('setLeadPeople', { leadId: lead.id, personIds: [designer.id] }); // дизайнер — человек лида
   const { request } = await api.as(ceo, () => api('createApp', { name: 'Split', unitId: gold.id }));
   await api.as(ceo, () => api('updateTask', { id: request.id, patch: { specUrl: 'https://spec.example/1' } }));
   const st = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: request.id }))).map(t => [t.step, t]));

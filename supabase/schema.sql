@@ -560,7 +560,9 @@ create policy lead_people_write on lead_people for all to authenticated using (i
 create or replace function in_lead_zone(p_unit text, p_dept text, p_assignee text) returns boolean
 language sql stable security definer set search_path = public as $$
   select my_access() = 'lead' and is_unit_member(p_unit)
-     and ((p_dept <> '' and p_dept = any(my_positions()))
+     -- без исполнителя — по позиции лида; с исполнителем — только выданные ему люди (чужих коллег по позиции не видит)
+     and ((p_assignee = '' and p_dept <> '' and p_dept = any(my_positions()))
+          or (p_assignee <> '' and p_assignee = my_person_id())
           or (p_assignee <> '' and exists (select 1 from lead_people where lead_id = my_person_id() and person_id = p_assignee)));
 $$;
 -- Выдать лиду людей (замена списка): CEO — любому лиду, PM — лиду своего юнита и людям из этого юнита
@@ -756,8 +758,8 @@ begin
   if not can_manage(new.unit_id) and my_access() = 'lead' and in_lead_zone(old.unit_id, old.department_id, old.assignee_id) then
     if new.assignee_id is distinct from old.assignee_id and new.assignee_id <> ''
        and not exists (select 1 from people p where p.id = new.assignee_id and p.active and exists (select 1 from unit_members um where um.unit_id = new.unit_id and um.person_id = p.id)
-                         and (new.department_id = '' or new.department_id = p.position_id or p.extra_positions ? new.department_id
-                              or exists (select 1 from lead_people lp where lp.lead_id = my_person_id() and lp.person_id = p.id))) then
+                         -- себе или своим людям (выданным CEO/PM): коллег по позиции лид не видит — и отдать им не может
+                         and (p.id = my_person_id() or exists (select 1 from lead_people lp where lp.lead_id = my_person_id() and lp.person_id = p.id))) then
       raise exception 'Недостаточно прав: передать можно только человеку из вашей зоны' using errcode = '42501';
     end if;
   end if;
@@ -1090,9 +1092,10 @@ begin
     raise exception 'Недостаточно прав: передать может лид — свою задачу (или PM юнита)' using errcode = '42501';
   end if;
   if task_done(t.id) then raise exception 'Задача уже готова' using errcode = 'P0001'; end if;
+  -- CEO/PM — человеку этой позиции или из людей лида; сам лид — только своим людям (коллег по позиции он не видит)
   if not exists (select 1 from people p join unit_members m on m.person_id = p.id and m.unit_id = t.unit_id
                   where p.id = p_person and p.active and p.id <> t.assignee_id
-                    and (t.department_id = '' or t.department_id = p.position_id or p.extra_positions ? t.department_id
+                    and ((can_manage(t.unit_id) and (t.department_id = '' or t.department_id = p.position_id or p.extra_positions ? t.department_id))
                          or exists (select 1 from lead_people lp where lp.lead_id = t.assignee_id and lp.person_id = p.id))) then
     raise exception 'Передать можно сотруднику этой позиции или из вашей зоны' using errcode = 'P0001';
   end if;
@@ -1132,7 +1135,10 @@ begin
     v_who := coalesce(it ->> 'assigneeId', '');
     if btrim(coalesce(it ->> 'title', '')) = '' then continue; end if;
     if v_who <> '' and not exists (select 1 from people p join unit_members m on m.person_id = p.id and m.unit_id = t.unit_id
-                    where p.id = v_who and p.active and (t.department_id = '' or t.department_id = p.position_id or p.extra_positions ? t.department_id)) then
+                    where p.id = v_who and p.active
+                      -- лид — себе и своим людям (выданным CEO/PM); CEO/PM — людям этой позиции
+                      and (p.id = t.assignee_id or exists (select 1 from lead_people lp where lp.lead_id = t.assignee_id and lp.person_id = p.id)
+                           or (can_manage(t.unit_id) and (t.department_id = '' or t.department_id = p.position_id or p.extra_positions ? t.department_id)))) then
       perform set_config('app.system', 'off', true);
       raise exception 'Раздать можно людям этой позиции в юните' using errcode = 'P0001';
     end if;
@@ -2721,7 +2727,7 @@ begin
          -- пустой id (нет карточки человека) не должен совпасть с пустым исполнителем/ревьюером
          or (v_pid <> '' and (v.assignee_id = v_pid or v.review_from = v_pid or v.reviewer_id = v_pid))
          or (v_acc = 'lead' and v.unit_id = any(v_units)
-             and ((v.department_id <> '' and v.department_id = any(v_pos)) or (v.assignee_id <> '' and v.assignee_id = any(v_lp))))
+             and ((v.assignee_id = '' and v.department_id <> '' and v.department_id = any(v_pos)) or (v.assignee_id <> '' and v.assignee_id = any(v_lp))))
          or (v_acc = 'rm' and v.unit_id = any(v_units)
              and ((v.department_id <> '' and v.department_id = any(v_pos)) or (v.team_id <> '' and v.team_id = any(v_teams))))))),
   allowed as (  -- можно спрашивать: видимые задачи и те, от которых зависят видимые
@@ -2814,9 +2820,9 @@ create policy tasks_read on tasks for select to authenticated using (
     (select is_superadmin())
     or ((select my_access()) = 'moderator' and unit_id = any(coalesce((select my_unit_ids()), '{}')))
     or assignee_id = (select my_person_id()) or review_from = (select my_person_id()) or reviewer_id = (select my_person_id())
-    -- зона лида (как in_lead_zone): юнит, где он в составе, и позиция задачи из его позиций или исполнитель из выданных ему людей
+    -- зона лида (как in_lead_zone): юнит, где он в составе; задача без исполнителя по его позиции или исполнитель из выданных ему людей
     or ((select my_access()) = 'lead' and unit_id = any(coalesce((select my_unit_ids()), '{}'))
-        and ((department_id <> '' and department_id = any(coalesce((select my_positions()), '{}')))
+        and ((assignee_id = '' and department_id <> '' and department_id = any(coalesce((select my_positions()), '{}')))
              or (assignee_id <> '' and assignee_id = any(coalesce((select my_lead_people()), '{}')))))
     or ((select my_access()) = 'rm' and unit_id = any(coalesce((select my_unit_ids()), '{}'))
         and ((department_id <> '' and department_id = any(coalesce((select my_positions()), '{}')))
@@ -3721,7 +3727,7 @@ language sql stable security definer set search_path = public as $$
       or (my_access() = 'moderator' and t.unit_id = any(coalesce(my_unit_ids(), '{}')))
       or t.assignee_id = my_person_id() or t.review_from = my_person_id() or t.reviewer_id = my_person_id()
       or (my_access() = 'lead' and t.unit_id = any(coalesce(my_unit_ids(), '{}'))
-          and ((t.department_id <> '' and t.department_id = any(coalesce(my_positions(), '{}')))
+          and ((t.assignee_id = '' and t.department_id <> '' and t.department_id = any(coalesce(my_positions(), '{}')))
                or (t.assignee_id <> '' and t.assignee_id = any(coalesce(my_lead_people(), '{}')))))
       or (my_access() = 'rm' and t.unit_id = any(coalesce(my_unit_ids(), '{}'))
           and ((t.department_id <> '' and t.department_id = any(coalesce(my_positions(), '{}')))
@@ -3775,7 +3781,7 @@ begin
            -- пустой id (нет карточки человека) не должен совпасть с пустым исполнителем/ревьюером
          or (v_pid <> '' and (t.assignee_id = v_pid or t.review_from = v_pid or t.reviewer_id = v_pid))
            or (v_acc = 'lead' and t.unit_id = any(v_units)
-               and ((t.department_id <> '' and t.department_id = any(v_pos)) or (t.assignee_id <> '' and t.assignee_id = any(v_lp))))
+               and ((t.assignee_id = '' and t.department_id <> '' and t.department_id = any(v_pos)) or (t.assignee_id <> '' and t.assignee_id = any(v_lp))))
            or (v_acc = 'rm' and t.unit_id = any(v_units)
                and ((t.department_id <> '' and t.department_id = any(v_pos)) or (t.team_id <> '' and t.team_id = any(v_teams))))))))
   select st.id, jsonb_build_object(

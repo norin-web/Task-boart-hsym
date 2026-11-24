@@ -3130,7 +3130,7 @@ export function createBackend(db, opts = {}) {
     /**
      * Дашборд сотрудника: фокус (мои открытые задачи — просрочено, срок сегодня/завтра, в работе; заблокированные этапы не здесь).
      * Лиду ещё: очередь ревью (задачи сотрудников на его ревью: «Принять» — колонка готово, «Вернуть» — колонка перед ревью)
-     * и загрузка людей его позиций в его юнитах. personId — кто смотрит (в «смотреть как» — за кого).
+     * и загрузка его людей (выданных ему CEO/PM) в его юнитах. personId — кто смотрит (в «смотреть как» — за кого).
      */
     async getMyDashboard(p) {
       const day = today(p.today);
@@ -3150,7 +3150,9 @@ export function createBackend(db, opts = {}) {
       if (meP && meP.access === 'lead') {
         const myUnits = new Set(members.filter(m => m.person_id === meId).map(m => m.unit_id));
         const inMine = new Set(members.filter(m => myUnits.has(m.unit_id)).map(m => m.person_id));
-        teamPeople = ppl.filter(x => x.active && inMine.has(x.id) && x.positionIds.some(id => meP.positionIds.includes(id)));
+        // люди лида — он сам и выданные ему CEO/PM (коллег по позиции не показываем: их задачи ему не видны)
+        const given = new Set((await all(() => T('lead_people').select('person_id').eq('lead_id', meId).order('person_id'))).map(r => r.person_id));
+        teamPeople = ppl.filter(x => x.active && inMine.has(x.id) && (x.id === meId || given.has(x.id)));
         const [teamRows, parts] = await Promise.all([
           inChunks(teamPeople.map(x => x.id), ids => T('tasks').select(COLS).eq('archived', false).eq('done_at', '').in('assignee_id', ids).order('id')),
           mineRows.length ? inChunks(mineRows.map(t => t.id), ids => T('tasks').select(COLS).eq('archived', false).eq('step', 'part').in('parent_id', ids).order('id')) : [],

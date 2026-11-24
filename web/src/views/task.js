@@ -417,17 +417,17 @@ function flowBlock(t) {
   return box;
 }
 
-/** Кому лид может передать задачу: люди юнита с позицией задачи (кроме него). */
-/** Кому лид может отдать задачу зоны: люди той же позиции и выданные ему лично. */
-function zonePeople(t) {
+/** Кому лид может отдать задачу зоны: себе и своим людям (выданным CEO/PM); коллег по позиции он не видит. */
+function zonePeople() {
   return (S.board.members || []).map(m => personById(m.personId))
-    .filter(p => p && p.active && (!t.departmentId || (p.positionIds || []).includes(t.departmentId) || (S.leadPeople || []).includes(p.id)))
+    .filter(p => p && p.active && (p.id === S.meId || (S.leadPeople || []).includes(p.id)))
     .map(p => p.id);
 }
 
-function handoverPeople(t) {
+/** «Передать целиком» и «Раздать» у лида — только его люди. */
+function handoverPeople() {
   return (S.board.members || []).map(m => personById(m.personId))
-    .filter(p => p && p.active && p.id !== S.meId && (!t.departmentId || (p.positionIds || []).includes(t.departmentId) || (S.leadPeople || []).includes(p.id)))
+    .filter(p => p && p.active && p.id !== S.meId && (S.leadPeople || []).includes(p.id))
     .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 }
 
@@ -1063,13 +1063,13 @@ function sideBlock(t, { staff, editable }) {
 
   if (!B.assignee.hidden && !staff && !zone) {
     const p = personById(t.assigneeId);
-    // лид может отдать свою задачу сотруднику своей позиции в этом юните
+    // лид может отдать свою задачу своим людям в этом юните (выданным CEO/PM)
     // на ревью у лида — только «Правки / Аппрув»: раздавать и передавать можно, пока задача у него в работе
     const onReview = !!t.reviewFrom && t.status === ((u.settings.review || {}).column || '');
     const handover = me() && me().access === 'lead' && t.assigneeId === S.meId && !taskDone(t) && !onReview && handoverPeople(t);
     prop(B.assignee.label, ro(p && h('span', { class: 'row', style: { gap: '6px', flexWrap: 'nowrap' } }, avatar(p, 'sm'), p.name)), {
       after: handover && handover.length > 0 && h('div', { class: 'quick-chips' },
-        h('button', { class: 'quick-chip primary', title: 'Разложить на подзадачи сотрудникам позиции', onclick: () => openSplit(t, handover) }, icon('layers', 12), 'Раздать'),
+        h('button', { class: 'quick-chip primary', title: 'Разложить на подзадачи своим людям', onclick: () => openSplit(t, handover) }, icon('layers', 12), 'Раздать'),
         h('button', {
           class: 'quick-chip', onclick: e => { e.stopPropagation(); menu(e.currentTarget, [{ title: 'Передать целиком' },
             ...handover.map(x => ({ label: x.name, icon: 'user', action: () => handOver(t, x) }))]); },

@@ -49,6 +49,8 @@ async function studio(api) {
   const gold = await api('createUnit', { name: 'Gold', key: 'GLD' });
   const rf = await api('createUnit', { name: 'RF', key: 'RF' });
   for (const k of ['pm', 'rm', 'lead', 'des', 'ios', 'qa', 'aso']) await api('setMember', { unitId: gold.id, personId: P[k].id });
+  // дизайнер — человек лида дизайна (выдал CEO): лид видит его задачи и раздаёт ему работу
+  await api('setLeadPeople', { leadId: P.lead.id, personIds: [P.des.id] });
   // ревью: дизайн проверяет лид дизайна, остальное — PM юнита
   const set0 = (await api('getBoard', { unitId: gold.id })).unit.settings;
   await api('updateUnit', { id: gold.id, settings: { ...set0, review: { column: 'review', byPosition: { d_design: P.lead.id }, default: P.pm.id } } });

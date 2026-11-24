@@ -645,6 +645,7 @@ test('раздача: подзадача уходит на ревью к рев�
   const lead = await api('createPerson', { name: 'Лид', email: 'u6@x.ru', access: 'lead', positionId: 'd_design' });
   await api.pg.query('update people set user_id = $1 where id = $2', [UID(6), lead.id]);
   await api('setMember', { unitId: A.id, personId: lead.id });
+  await api('setLeadPeople', { leadId: lead.id, personIds: [designer.id] }); // дизайнер — человек лида
   const L = { ...lead, uid: UID(6) };
   const st = (await api('getBoard', { unitId: A.id })).unit.settings;
   await api('updateUnit', { id: A.id, settings: { ...st, review: { ...st.review, byPosition: { d_design: lead.id }, default: '' } } });
@@ -692,7 +693,7 @@ test('PM видит только приложения из своего спис
   assert.ok(a3.id);
 });
 
-test('Lead: видит и ведёт только свою зону — позиции + выданные люди', async () => {
+test('Lead: видит и ведёт только свою зону — задачи позиции без исполнителя + выданные люди', async () => {
   const api = await setup();
   const { admin, mod, designer, dev, A, t2, t3 } = await team(api);
   const lead = await api('createPerson', { name: 'Лид дизайна', email: 'lead@x.ru', access: 'lead', positionId: 'd_design' });
@@ -700,17 +701,23 @@ test('Lead: видит и ведёт только свою зону — пози
   const L = { ...lead, uid: UID(7) };
   await api('setMember', { unitId: A.id, personId: L.id });
   const titles = async () => (await api('getBoard', { unitId: A.id })).tasks.map(t => t.title).sort();
-  // позиция: дизайн (t1 у дизайнера, t3 без исполнителя в отделе дизайна); задача разработчика — вне зоны
-  assert.deepEqual(await api.as(L, titles), ['Иконка', 'Макет экрана']);
+  // позиция: только t3 (без исполнителя, отдел дизайна); t1 у дизайнера, которого лиду не выдали, — не видна; задача разработчика — вне зоны
+  assert.deepEqual(await api.as(L, titles), ['Иконка']);
   // CEO выдаёт лиду конкретного человека — его задачи входят в зону
   await api.as(admin, () => api('setLeadPeople', { leadId: L.id, personIds: [dev.id] }));
-  assert.deepEqual(await api.as(L, titles), ['Вёрстка', 'Иконка', 'Макет экрана']);
+  assert.deepEqual(await api.as(L, titles), ['Вёрстка', 'Иконка']);
   assert.deepEqual((await api.as(L, () => api('getLeadPeople', {})))[L.id], [dev.id]);
   // лид ведёт задачи зоны: срок и исполнитель, но не название и не чужой юнит
-  await api.as(L, () => api('updateTask', { id: t3.id, patch: { dueDate: '2099-01-01', assigneeId: designer.id } }));
   await assert.rejects(api.as(L, () => api('updateTask', { id: t3.id, patch: { title: 'Новое' } })), forbidden);
   // передать нельзя тому, кто вне зоны (PM, не выданный лиду)
   await assert.rejects(api.as(L, () => api('updateTask', { id: t3.id, patch: { assigneeId: mod.id } })), forbidden);
+  // коллеге по позиции, которого лиду не выдали, отдать нельзя (его задач лид не видит)
+  await assert.rejects(api.as(L, () => api('updateTask', { id: t3.id, patch: { assigneeId: designer.id } })), forbidden);
+  // выдали дизайнера — видит его задачи и может отдать ему задачу зоны
+  await api.as(admin, () => api('setLeadPeople', { leadId: L.id, personIds: [dev.id, designer.id] }));
+  assert.deepEqual(await api.as(L, titles), ['Вёрстка', 'Иконка', 'Макет экрана']);
+  await api.as(L, () => api('updateTask', { id: t3.id, patch: { dueDate: '2099-01-01', assigneeId: designer.id } }));
+  assert.deepEqual(await api.as(L, titles), ['Вёрстка', 'Иконка', 'Макет экрана']);
   // задача вне зоны лиду не видна и не меняется
   await api.as(admin, () => api('setLeadPeople', { leadId: L.id, personIds: [] }));
   assert.ok(!(await api.as(L, titles)).includes('Вёрстка'));
@@ -742,6 +749,7 @@ test('раздача: ревьюер позиции из настроек юни
   const lead = await api('createPerson', { name: 'Лид', email: 'u6@x.ru', access: 'lead', positionId: 'd_design' });
   await api.pg.query('update people set user_id = $1 where id = $2', [UID(6), lead.id]);
   await api('setMember', { unitId: A.id, personId: lead.id });
+  await api('setLeadPeople', { leadId: lead.id, personIds: [designer.id] }); // дизайнер — человек лида
   const L = { ...lead, uid: UID(6) };
   const st = (await api('getBoard', { unitId: A.id })).unit.settings;
   await api('updateUnit', { id: A.id, settings: { ...st, review: { ...st.review, byPosition: { d_design: dev.id }, default: '' } } });
@@ -759,6 +767,7 @@ test('лид после «Раздать» видит розданное на с
   const lead = await api('createPerson', { name: 'Лид', email: 'u6@x.ru', access: 'lead', positionId: 'd_design' });
   await api.pg.query('update people set user_id = $1 where id = $2', [UID(6), lead.id]);
   await api('setMember', { unitId: A.id, personId: lead.id });
+  await api('setLeadPeople', { leadId: lead.id, personIds: [designer.id] }); // дизайнер — человек лида
   const L = { ...lead, uid: UID(6) };
   const st = (await api('getBoard', { unitId: A.id })).unit.settings;
   await api('updateUnit', { id: A.id, settings: { ...st, review: { ...st.review, byPosition: { d_design: lead.id }, default: '' } } });
