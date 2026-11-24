@@ -3711,3 +3711,8 @@ language sql stable set search_path = public as $$
 $$;
 revoke execute on function dev_stage_flags(text[]) from public, anon;
 grant execute on function dev_stage_flags(text[]) to authenticated;
+
+-- task_done — служебная (security definer: по id любой задачи, без правил доступа). Вызывают только definer-функции базы
+-- (open_deps, notify_*, stage_flags_raw…), клиенту она не нужна — прямой вызов закрыт: иначе по id видно, закрыта ли чужая задача.
+-- Стоит после «grant execute on all functions … to authenticated» выше, чтобы повторный прогон схемы не открыл её снова.
+revoke execute on function task_done(text) from public, anon, authenticated;

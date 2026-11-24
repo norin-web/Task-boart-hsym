@@ -1577,3 +1577,13 @@ test('«Мои задачи»: данные для общей карточки �
   assert.deepEqual(c.links, {});
   assert.ok(b.fields.some(f => f.role === 'priority'));
 });
+
+test('task_done: прямой вызов закрыт (по id не узнать, закрыта ли чужая задача); функции базы им пользуются как раньше', async () => {
+  const api = await setup();
+  const { designer, dev, t1, t2 } = await team(api);
+  // дизайнер свою задачу t1 видит, задачу разработчика t2 — нет; напрямую не вызвать ни ту, ни другую
+  await assert.rejects(api.as(designer, () => api.pg.query('select task_done($1)', [t2.id])), /permission denied/);
+  await assert.rejects(api.as(designer, () => api.pg.query('select task_done($1)', [t1.id])), /permission denied/);
+  // функции базы, которые его вызывают, работают: открытые зависимости считает open_deps
+  assert.equal(await api.as(dev, async () => (await api.pg.query('select open_deps($1::jsonb) d', [JSON.stringify([t2.id])])).rows[0].d) !== undefined, true);
+});
