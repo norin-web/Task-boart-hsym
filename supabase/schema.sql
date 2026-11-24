@@ -3716,3 +3716,21 @@ grant execute on function dev_stage_flags(text[]) to authenticated;
 -- (open_deps, notify_*, stage_flags_raw…), клиенту она не нужна — прямой вызов закрыт: иначе по id видно, закрыта ли чужая задача.
 -- Стоит после «grant execute on all functions … to authenticated» выше, чтобы повторный прогон схемы не открыл её снова.
 revoke execute on function task_done(text) from public, anon, authenticated;
+
+-- open_task_ids — «какие из этих задач не закрыты» (для этапов, которые ждут чужих, невидимых задач). Раньше отвечала
+-- по любым id. Теперь — только про задачи, которые вошедший видит сам или от которых зависит видимая ему задача.
+-- (Переопределена здесь, после can_read_task; первая версия выше — для unit_task_counts при первом прогоне схемы.)
+create index if not exists tasks_depends_on on tasks using gin (depends_on);
+create or replace function open_task_ids(p_ids text[]) returns setof text
+language sql stable security definer set search_path = public as $$
+  select t.id from tasks t join units u on u.id = t.unit_id
+   where t.id = any(coalesce(p_ids, '{}'))
+     and not exists (select 1 from jsonb_array_elements(u.settings -> 'columns') c where c ->> 'id' = t.status and c ->> 'kind' = 'done')
+     and (can_read_task(t.id) or exists (select 1 from tasks v where v.depends_on ? t.id and can_read_task(v.id)));
+$$;
+revoke execute on function open_task_ids(text[]) from public, anon;
+grant execute on function open_task_ids(text[]) to authenticated;
+
+-- notify_release — рассылка «вышло в стор / реджект»; зовёт только release_step (security definer, сам проверяет права).
+-- Проверки роли внутри нет — прямой вызов закрыт, иначе любой мог разослать уведомление по любой задаче.
+revoke execute on function notify_release(text, text) from public, anon, authenticated;

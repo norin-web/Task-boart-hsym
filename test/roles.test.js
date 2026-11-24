@@ -1587,3 +1587,15 @@ test('task_done: прямой вызов закрыт (по id не узнать
   // функции базы, которые его вызывают, работают: открытые зависимости считает open_deps
   assert.equal(await api.as(dev, async () => (await api.pg.query('select open_deps($1::jsonb) d', [JSON.stringify([t2.id])])).rows[0].d) !== undefined, true);
 });
+
+test('open_task_ids — только про видимые задачи и их зависимости; notify_release — прямой вызов закрыт', async () => {
+  const api = await setup();
+  const { designer, dev, t1, t2, t3 } = await team(api);
+  const open = (who, ids) => api.as(who, async () => (await api.pg.query('select * from open_task_ids($1::text[]) id', [ids])).rows.map(r => r.id).sort());
+  // дизайнер видит t1; t2 (разработчика) и t3 — нет, и его задача от них не зависит → про них ничего
+  assert.deepEqual(await open(designer, [t1.id, t2.id, t3.id]), [t1.id]);
+  // задача дизайнера ждёт t2 — теперь про t2 ответ есть (не закрыта), про t3 — по-прежнему нет
+  await api.pg.query('update tasks set depends_on = $1 where id = $2', [JSON.stringify([t2.id]), t1.id]);
+  assert.deepEqual(await open(designer, [t2.id, t3.id]), [t2.id]);
+  await assert.rejects(api.as(dev, () => api.pg.query("select notify_release($1, 'store_live')", [t2.id])), /permission denied/);
+});
