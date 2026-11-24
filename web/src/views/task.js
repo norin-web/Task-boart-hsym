@@ -89,6 +89,12 @@ export function refreshPanel(t, { soft = false } = {}) {
   openTask(t.id);
 }
 
+/** Перерисовать открытую карточку, если она есть (пришли люди лида после старта из копии). */
+export function refreshOpenPanel() {
+  const t = S.panelTaskId && S.board && (S.board.tasks || []).find(x => x.id === S.panelTaskId);
+  if (t && t.assigneeId === S.meId) refreshPanel(t);
+}
+
 function buildPanel(t) {
   const u = S.board.unit;
   const B = u.settings.builtins;
@@ -539,16 +545,17 @@ function backendRequestBlock(t) {
       reloadBoard().catch(() => {});
     } catch (e) { btn.disabled = false; showErr(e); }
   };
+  let draft = ''; // текст открытой формы — перерисовка блока (отмена запроса, ответ сервера) его не стирает
   const paint = () => {
     const ta = open && autosize(h('textarea', { class: 'inp', rows: 2, maxlength: 5000, 'data-esc-local': '',
-      placeholder: 'Что нужно по бэкенду: эндпоинт, данные, интеграция, к какому сроку…' }));
+      placeholder: 'Что нужно по бэкенду: эндпоинт, данные, интеграция, к какому сроку…', value: draft, oninput: e => { draft = e.target.value; } }));
     const submit = async btn => {
       const text = ta.value.trim();
       if (!text) { ta.focus(); return; }
       btn.disabled = true;
       try {
         await send('requestBackend', { taskId: t.id, text });
-        open = false;
+        open = false; draft = '';
         list = await call('getBackendRequests', { taskId: t.id }).catch(() => list);
         const to = personById((list[list.length - 1] || {}).assigneeId);
         toast(to ? `Запрос на бэкенд ушёл: ${to.name}` : 'Запрос на бэкенд отправлен');
@@ -1084,7 +1091,7 @@ function sideBlock(t, { staff, editable }) {
     const onReview = !!t.reviewFrom && t.status === ((u.settings.review || {}).column || '');
     const handover = me() && me().access === 'lead' && t.assigneeId === S.meId && !taskDone(t) && !onReview && handoverPeople(t);
     // людей лиду ещё не выдали — кнопки видны, но неактивны, с подсказкой
-    const noPeople = handover && !handover.length ? 'Вам пока не выдали людей — попросите CEO или PM юнита' : '';
+    const noPeople = handover && !handover.length ? (S.leadPeopleLoaded ? 'Вам пока не выдали людей — попросите CEO или PM юнита' : 'Загружаем ваших людей…') : '';
     prop(B.assignee.label, ro(p && h('span', { class: 'row', style: { gap: '6px', flexWrap: 'nowrap' } }, avatar(p, 'sm'), p.name)), {
       after: handover && h('div', { class: 'quick-chips' },
         h('button', { class: 'quick-chip primary', disabled: !!noPeople, title: noPeople || 'Разложить на подзадачи своим людям', onclick: () => openSplit(t, handover) }, icon('layers', 12), 'Раздать'),

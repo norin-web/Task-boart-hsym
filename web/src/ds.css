@@ -3515,11 +3515,11 @@ a.bug-title:hover { text-decoration: underline; }
 .be-form .edit-actions { display: flex; gap: 8px; margin-top: 8px; }
 .be-list { display: grid; gap: 2px; margin-top: 6px; }
 .be-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 6px 12px; border-radius: 10px; font-size: 13px; }
-.be-row:hover { background: var(--surface-2); }
 .be-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; color: var(--text); }
 .be-row.done .be-text { color: var(--muted); }
 .be-cancel { height: 26px; padding: 0 10px; font-size: 12px; }
-.be-cancel-gap { width: 0; }
+.be-cancel-gap { width: 78px; }
+.be-cancel { width: 78px; justify-content: center; }
 .be-state { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; line-height: 16px; font-weight: 600; background: var(--surface-2); color: var(--muted); }
 .be-state.progress { background: var(--info-fill); color: var(--text); }
 .be-state.done { background: var(--ok-soft); color: var(--text); }

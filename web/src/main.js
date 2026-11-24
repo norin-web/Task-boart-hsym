@@ -142,7 +142,12 @@ async function applyBootstrap(d, live) {
   if ((S.people.find(p => p.id === S.meId) || {}).access !== 'lead') S.leadPeople = [];
   else {
     if (!Array.isArray(S.leadPeople)) S.leadPeople = [];
-    const lp = call('getLeadPeople', {}).then(m => { S.leadPeople = (m || {})[S.meId] || []; }).catch(() => {});
+    // пришли — перерисовать открытую карточку (кнопки «Раздать» / «Передать целиком» зависят от списка)
+    const lp = call('getLeadPeople', {}).then(m => {
+      S.leadPeople = (m || {})[S.meId] || [];
+      S.leadPeopleLoaded = true;
+      if (S.started) import('./views/task.js').then(x => x.refreshOpenPanel && x.refreshOpenPanel()).catch(() => {});
+    }).catch(() => {});
     if (live) await lp;
   }
   if (d.teams) S.teams = d.teams;

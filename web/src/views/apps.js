@@ -52,9 +52,12 @@ export const appIcon = (a, size = 'sm') => (a.iconUrl
  */
 const FLOW_STATE = { progress: 'в работе', todo: 'не начато', blocked: 'ждёт предыдущих', done: 'готово' };
 const FLOW_LIMIT = 5;
+const FLOW_OPEN = new Map(); // раскрыто ли (по id запроса) — перерисовка страницы приложения не сворачивает
 function stageFlow(r) {
   const box = h('div', { class: 'ap-flow' });
-  let openDone = false, openAll = false;
+  const o = FLOW_OPEN.get(r.id) || { done: false, all: false };
+  FLOW_OPEN.set(r.id, o);
+  let openDone = o.done, openAll = o.all;
   const state = s => (s.done ? 'done' : s.blocked ? 'blocked' : s.kind === 'todo' ? 'todo' : 'progress');
   const row = s => {
     const st = state(s);
@@ -68,14 +71,14 @@ function stageFlow(r) {
   const draw = () => {
     const done = r.stages.filter(s => s.done), rest = r.stages.filter(s => !s.done);
     fill(box,
-      done.length > 0 && h('button', { class: 'ap-flow-row done ap-flow-fold', 'aria-expanded': String(openDone), onclick: () => { openDone = !openDone; draw(); } },
+      done.length > 0 && h('button', { class: 'ap-flow-row done ap-flow-fold', 'aria-expanded': String(openDone), onclick: () => { o.done = openDone = !openDone; draw(); } },
         h('span', { class: 'ap-flow-ic ap-flow-chev' }, icon('chevron', 14)),
         h('span', { class: 'ap-flow-name' }, openDone ? 'Готовые этапы' : done.map(s => stageName(s.title)).join(' · ')),
         h('span', { class: 'muted ap-flow-st' }, openDone ? 'Свернуть' : 'готово: ' + done.length),
         h('span', { class: 'avatar-gap' })),
       openDone && done.map(row),
       (openAll ? rest : rest.slice(0, FLOW_LIMIT)).map(row),
-      rest.length > FLOW_LIMIT && h('button', { class: 'rc-more link-btn ap-flow-more', type: 'button', 'aria-expanded': String(openAll), onclick: () => { openAll = !openAll; draw(); } },
+      rest.length > FLOW_LIMIT && h('button', { class: 'rc-more link-btn ap-flow-more', type: 'button', 'aria-expanded': String(openAll), onclick: () => { o.all = openAll = !openAll; draw(); } },
         openAll ? 'Свернуть' : `Показать все · ${rest.length}`));
   };
   draw();
