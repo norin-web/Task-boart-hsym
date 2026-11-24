@@ -277,7 +277,8 @@ const taskOut = r => ({
 const escRx = x => String(x).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const topicOf = (text, appName) => {
   let v = String(text || '').trim().replace(/^(апдейт|update|new app|задача|task|реджект|reject)(?=$|[\s№#:·—-])\s*(?:(№|#)\s*\d+)?\s*[:·—-]?\s*/i, '').trim();
-  if (appName) v = v.replace(new RegExp('^' + escRx(appName) + '\\s*([:·—-]\\s*)?', 'i'), '').trim();
+  // имя приложения в начале или в конце («Новые виджеты: CARROT Weather») — оно и так первым в названии
+  if (appName) v = v.replace(new RegExp('^' + escRx(appName) + '\\s*([:·—-]\\s*)?', 'i'), '').replace(new RegExp('\\s*[:·—-]?\\s*' + escRx(appName) + '$', 'i'), '').trim();
   return v.slice(0, 500);
 };
 

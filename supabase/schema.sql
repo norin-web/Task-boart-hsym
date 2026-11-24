@@ -3630,6 +3630,10 @@ begin
   if coalesce(p_app, '') <> '' and lower(left(v, length(p_app))) = lower(p_app) then
     v := trim(regexp_replace(substr(v, length(p_app) + 1), '^\s*[:·—-]?\s*', ''));
   end if;
+  -- имя приложения в конце («Новые виджеты: CARROT Weather»)
+  if coalesce(p_app, '') <> '' and length(v) > length(p_app) and lower(right(v, length(p_app))) = lower(p_app) then
+    v := trim(regexp_replace(left(v, length(v) - length(p_app)), '\s*[:·—-]?\s*$', ''));
+  end if;
   return left(v, 500);
 end $$;
 
@@ -3766,10 +3770,14 @@ declare r record; v_old text; v_new text; v_sys text := current_setting('app.sys
 begin
   if exists (select 1 from app_settings where key = 'once_naming_topic') then return; end if;
   perform set_config('app.system', 'on', true);
-  for r in select t.id, t.title, t.topic from tasks t
+  for r in select t.id, t.title, t.topic, coalesce(a.name, '') app from tasks t left join apps a on a.id = t.app_id
             where t.kind = 'request' and coalesce(t.topic, '') <> '' and t.title ~ '^.*? - \[[^]:]+\]' loop
+    -- тема без имени приложения (оно и так первым в названии); пустая после чистки — не трогаем
+    update tasks set topic = naming_topic(r.topic, r.app) where id = r.id and naming_topic(r.topic, r.app) <> r.topic;
+    update tasks set topic = naming_topic(r.topic, r.app) where parent_id = r.id and kind = 'stage' and topic = r.topic;
+    continue when naming_topic(r.topic, r.app) = '';
     v_old := substring(r.title from '^(.*? - \[[^]]+\])');
-    v_new := left(v_old, length(v_old) - 1) || ': ' || naming_clip(r.topic) || ']';
+    v_new := left(v_old, length(v_old) - 1) || ': ' || naming_clip(naming_topic(r.topic, r.app)) || ']';
     update tasks set title = left(v_new || substr(title, length(v_old) + 1), 500)
      where left(title, length(v_old)) = v_old
        and (id = r.id or parent_id = r.id or parent_id in (select c.id from tasks c where c.parent_id = r.id));
