@@ -6,7 +6,7 @@
  * Свои колонки — people.prefs.myBoard.custom [{ id, name, group, color }]; по умолчанию их нет («Как у команды» — по кнопке).
  */
 import Sortable from 'sortablejs';
-import { S, me, personById, nameFrom, inAsoView, myDirection, activeTeams, between, todayStr, PALETTE, isStaff, LS, plural } from '../state.js';
+import { S, me, personById, nameFrom, inAsoView, myDirection, activeTeams, between, todayStr, PALETTE, isStaff, LS, plural, priorityOf } from '../state.js';
 import { $, h, icon, topbar, fill, modal, showErr, statusDot, statusIcon, confirmDlg, menu, closeMenu, toast, skeleton } from '../ui.js';
 import { call, send } from '../api.js';
 import { currentView } from '../router.js';
@@ -193,9 +193,11 @@ function draw(page, data) {
     },
   };
   const card = ({ t }) => taskCard(t, false, env);
+  // в колонке — сначала выше приоритет, без приоритета — ниже; внутри одного приоритета — мой порядок
+  const rank = rankOf(data);
 
   const columnEls = cols.map(c => {
-    const mine = items.filter(i => i.col.id === c.id).sort((a, b) => a.order - b.order);
+    const mine = items.filter(i => i.col.id === c.id).sort((a, b) => rank(b.t) - rank(a.t) || a.order - b.order);
     // «Готово» при скрытых готовых: сколько их и кнопка «Показать» (их не грузили, чтобы доска открывалась быстрее)
     const hiddenDone = c.fixed && c.group === 'done' ? data.doneHidden || 0 : 0;
     const list = h('div', { class: 'col-list', dataset: { stage: c.id } }, mine.map(card),
@@ -207,6 +209,8 @@ function draw(page, data) {
         : h('div', { class: 'col-empty' }, c.group === 'review' && c.fixed ? 'Перетащите сюда — уйдёт на ревью' : 'Пусто')));
     sortables.push(Sortable.create(list, {
       group: 'myboard', animation: 150, draggable: '.card:not(.on-test)', ghostClass: 'sortable-ghost', fallbackClass: 'sortable-drag', forceFallback: true, fallbackTolerance: 4,
+      // встать можно только среди задач своего приоритета — иначе после броска карточка отскочила бы на место
+      onMove: e => fitsPriority(data, e.dragged, e.related, e.willInsertAfter),
       onEnd: evt => {
         // «Пусто» — не карточка: убираем сразу, иначе брошенная карта на миг встаёт под надпись и прыгает при перерисовке
         const ph = evt.to.querySelector(':scope > .col-empty');
@@ -234,6 +238,24 @@ function draw(page, data) {
   }
 }
 
+/** Ранг приоритета задачи для сортировки колонки: выше — раньше, без приоритета — −1. */
+function rankOf(data) {
+  const pf = (data.fields || []).find(f => f.role === 'priority' && f.type === 'select');
+  return t => { const p = priorityOf(t, pf); return p ? p.rank : -1; };
+}
+
+/** Можно ли поставить карточку в это место: сверху — не ниже приоритетом, снизу — не выше. */
+function fitsPriority(data, dragged, related, after) {
+  if (!related || !related.classList.contains('card')) return true;
+  const rank = rankOf(data);
+  const rk = el => { const t = data.tasks.find(z => z.id === el.dataset.id); return t ? rank(t) : -1; };
+  const sib = (el, next) => { let x = el; do x = next ? x.nextElementSibling : x.previousElementSibling; while (x && (x === dragged || !x.classList.contains('card'))); return x; };
+  const r = rk(dragged);
+  const prev = after ? related : sib(related, false);
+  const next = after ? sib(related, true) : related;
+  return (!prev || rk(prev) >= r) && (!next || rk(next) <= r);
+}
+
 /** Перенос: запоминаем колонку; если группа другая — меняем статус задачи в юните (не вышло — возвращаем). */
 async function onMove(evt, data, cols, page) {
   if (evt.from === evt.to && evt.oldIndex === evt.newIndex) return;
@@ -241,7 +263,10 @@ async function onMove(evt, data, cols, page) {
   const t = data.tasks.find(x => x.id === id);
   const col = cols.find(c => c.id === evt.to.dataset.stage);
   if (!t || !col) return;
-  const ids = [...evt.to.querySelectorAll('.card')].map(c => c.dataset.id);
+  // порядок — только среди соседей того же приоритета: выше и ниже стоят задачи с другим приоритетом
+  const rank = rankOf(data);
+  const byId = x => data.tasks.find(z => z.id === x);
+  const ids = [...evt.to.querySelectorAll('.card')].map(c => c.dataset.id).filter(x => x === id || (byId(x) && rank(byId(x)) === rank(t)));
   const i = ids.indexOf(id);
   const ord = x => { const y = data.tasks.find(z => z.id === x); return y && (data.placement[x] ? data.placement[x].order : y.order); };
   const order = between(ord(ids[i - 1]), ord(ids[i + 1]));
