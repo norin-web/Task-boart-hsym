@@ -92,7 +92,10 @@ export function refreshPanel(t, { soft = false } = {}) {
 /** Перерисовать открытую карточку, если она есть (пришли люди лида после старта из копии). */
 export function refreshOpenPanel() {
   const t = S.panelTaskId && S.board && (S.board.tasks || []).find(x => x.id === S.panelTaskId);
-  if (t && t.assigneeId === S.meId) refreshPanel(t);
+  // человек что-то печатает в карточке — не перерисовываем (сотрёт ввод); кнопки обновятся при следующем открытии
+  const typing = document.activeElement && document.activeElement.closest && document.activeElement.closest('.panel')
+    && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName) || (document.activeElement && document.activeElement.isContentEditable);
+  if (t && t.assigneeId === S.meId && !typing) refreshPanel(t);
 }
 
 function buildPanel(t) {
@@ -546,7 +549,13 @@ function backendRequestBlock(t) {
     } catch (e) { btn.disabled = false; showErr(e); }
   };
   let draft = ''; // текст открытой формы — перерисовка блока (отмена запроса, ответ сервера) его не стирает
+  let focusForm = false; // фокус в поле — только при открытии формы или если он там уже был
+  const openForm = () => { open = true; focusForm = true; paint(); };
+  const closeForm = () => { open = false; draft = ''; paint(); };
   const paint = () => {
+    const old = box.querySelector('.be-form textarea');
+    const hadFocus = !!old && document.activeElement === old;
+    const sel = hadFocus ? [old.selectionStart, old.selectionEnd] : null;
     const ta = open && autosize(h('textarea', { class: 'inp', rows: 2, maxlength: 5000, 'data-esc-local': '',
       placeholder: 'Что нужно по бэкенду: эндпоинт, данные, интеграция, к какому сроку…', value: draft, oninput: e => { draft = e.target.value; } }));
     const submit = async btn => {
@@ -563,7 +572,7 @@ function backendRequestBlock(t) {
       } catch (e) { btn.disabled = false; showErr(e); }
     };
     if (ta) ta.addEventListener('keydown', e => {
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); open = false; paint(); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeForm(); }
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(box.querySelector('.be-send')); }
     });
     fill(box,
@@ -574,11 +583,11 @@ function backendRequestBlock(t) {
         : h('div', { class: 'qa-bar be-bar' }, icon('code', 15),
           h('span', null, list.length ? 'Бэкенд' : 'Нужен бэкенд?'), h('span', { class: 'spacer' }),
           !open && !list.length && h('button', { class: 'btn ghost sm', title: 'Этому приложению сервер не нужен — метки «Бэкенд не запрошен» на карточке не будет', onclick: () => setOff(true) }, 'Бэкенд не нужен'),
-          !open && h('button', { class: 'btn ' + (list.length ? 'ghost' : 'primary') + ' sm', onclick: () => { open = true; paint(); } }, list.length ? 'Ещё запрос' : 'Запросить бэкенд')),
+          !open && h('button', { class: 'btn ' + (list.length ? 'ghost' : 'primary') + ' sm', onclick: openForm }, list.length ? 'Ещё запрос' : 'Запросить бэкенд')),
       open && h('div', { class: 'be-form' }, ta,
         h('div', { class: 'edit-actions' },
           h('button', { class: 'btn primary sm be-send', onclick: e => submit(e.currentTarget) }, icon('send', 13), 'Отправить'),
-          h('button', { class: 'btn ghost sm', onclick: () => { open = false; paint(); } }, 'Отмена'))),
+          h('button', { class: 'btn ghost sm', onclick: closeForm }, 'Отмена'))),
       list.length > 0 && h('div', { class: 'be-list' }, list.map(b => {
         const who = personById(b.assigneeId);
         return h('div', { class: 'be-row' + (b.state === 'done' ? ' done' : '') },
@@ -588,7 +597,11 @@ function backendRequestBlock(t) {
           b.state !== 'done' ? h('button', { class: 'btn ghost sm be-cancel', title: 'Запросили по ошибке — задача на бэкенд удалится', onclick: e => cancelReq(b, e.currentTarget) }, 'Отменить')
             : h('span', { class: 'be-cancel-gap' }));
       })));
-    if (ta) setTimeout(() => ta.focus(), 0);
+    if (ta && (focusForm || hadFocus)) {
+      focusForm = false;
+      ta.focus();
+      if (sel) ta.setSelectionRange(sel[0], sel[1]);
+    }
   };
   paint();
   // функции в базе ещё нет (схему не обновили) — блок просто не показываем
@@ -1091,7 +1104,8 @@ function sideBlock(t, { staff, editable }) {
     const onReview = !!t.reviewFrom && t.status === ((u.settings.review || {}).column || '');
     const handover = me() && me().access === 'lead' && t.assigneeId === S.meId && !taskDone(t) && !onReview && handoverPeople(t);
     // людей лиду ещё не выдали — кнопки видны, но неактивны, с подсказкой
-    const noPeople = handover && !handover.length ? (S.leadPeopleLoaded ? 'Вам пока не выдали людей — попросите CEO или PM юнита' : 'Загружаем ваших людей…') : '';
+    const noPeople = handover && !handover.length ? (S.leadPeopleState === 'ok' ? 'Вам пока не выдали людей — попросите CEO или PM юнита'
+      : S.leadPeopleState === 'error' ? 'Не удалось загрузить ваших людей — обновите страницу' : 'Загружаем ваших людей…') : '';
     prop(B.assignee.label, ro(p && h('span', { class: 'row', style: { gap: '6px', flexWrap: 'nowrap' } }, avatar(p, 'sm'), p.name)), {
       after: handover && h('div', { class: 'quick-chips' },
         h('button', { class: 'quick-chip primary', disabled: !!noPeople, title: noPeople || 'Разложить на подзадачи своим людям', onclick: () => openSplit(t, handover) }, icon('layers', 12), 'Раздать'),

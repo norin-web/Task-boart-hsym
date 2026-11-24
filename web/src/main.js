@@ -141,13 +141,19 @@ async function applyBootstrap(d, live) {
   // люди лида: на старте из копии не ждём (фоном), со свежими — ждём; ошибка запроса не обнуляет прежний список
   if ((S.people.find(p => p.id === S.meId) || {}).access !== 'lead') S.leadPeople = [];
   else {
-    if (!Array.isArray(S.leadPeople)) S.leadPeople = [];
-    // пришли — перерисовать открытую карточку (кнопки «Раздать» / «Передать целиком» зависят от списка)
+    // список другого человека («смотреть как») — не наш: начинаем заново
+    if (!Array.isArray(S.leadPeople) || S.leadPeopleFor !== S.meId) { S.leadPeople = []; S.leadPeopleState = ''; }
+    S.leadPeopleFor = S.meId;
+    const me = S.meId;
+    // пришли и список изменился — обновить открытую карточку (кнопки «Раздать» / «Передать целиком» зависят от списка)
     const lp = call('getLeadPeople', {}).then(m => {
-      S.leadPeople = (m || {})[S.meId] || [];
-      S.leadPeopleLoaded = true;
-      if (S.started) import('./views/task.js').then(x => x.refreshOpenPanel && x.refreshOpenPanel()).catch(() => {});
-    }).catch(() => {});
+      if (S.meId !== me) return;
+      const next = (m || {})[me] || [];
+      const changed = next.join() !== S.leadPeople.join() || S.leadPeopleState !== 'ok';
+      S.leadPeople = next;
+      S.leadPeopleState = 'ok';
+      if (changed && S.started) import('./views/task.js').then(x => x.refreshOpenPanel && x.refreshOpenPanel()).catch(() => {});
+    }).catch(() => { if (S.meId === me && S.leadPeopleState !== 'ok') S.leadPeopleState = 'error'; });
     if (live) await lp;
   }
   if (d.teams) S.teams = d.teams;
