@@ -47,12 +47,14 @@ export const appIcon = (a, size = 'sm') => (a.iconUrl
 
 /**
  * Флоу запроса на странице приложения (как в карточке задачи): открытые этапы строками — состояние и исполнитель,
- * клик открывает этап; готовые свёрнуты в одну строку «Готово: N» (клик — раскрыть).
+ * клик открывает этап; готовые свёрнуты в одну строку «Готово: N» (клик — раскрыть / свернуть);
+ * открытых больше 5 — первые 5 и «Показать все · N».
  */
 const FLOW_STATE = { progress: 'в работе', todo: 'не начато', blocked: 'ждёт предыдущих', done: 'готово' };
+const FLOW_LIMIT = 5;
 function stageFlow(r) {
   const box = h('div', { class: 'ap-flow' });
-  let openDone = false;
+  let openDone = false, openAll = false;
   const state = s => (s.done ? 'done' : s.blocked ? 'blocked' : s.kind === 'todo' ? 'todo' : 'progress');
   const row = s => {
     const st = state(s);
@@ -66,11 +68,15 @@ function stageFlow(r) {
   const draw = () => {
     const done = r.stages.filter(s => s.done), rest = r.stages.filter(s => !s.done);
     fill(box,
-      done.length > 0 && (openDone ? done.map(row) : h('button', { class: 'ap-flow-row done ap-flow-fold', onclick: () => { openDone = true; draw(); } },
-        h('span', { class: 'ap-flow-ic' }, icon('check', 14)),
-        h('span', { class: 'ap-flow-name' }, done.map(s => stageName(s.title)).join(' · ')),
-        h('span', { class: 'muted ap-flow-st' }, 'готово: ' + done.length))),
-      rest.map(row));
+      done.length > 0 && h('button', { class: 'ap-flow-row done ap-flow-fold', 'aria-expanded': String(openDone), onclick: () => { openDone = !openDone; draw(); } },
+        h('span', { class: 'ap-flow-ic ap-flow-chev' }, icon('chevron', 14)),
+        h('span', { class: 'ap-flow-name' }, openDone ? 'Готовые этапы' : done.map(s => stageName(s.title)).join(' · ')),
+        h('span', { class: 'muted ap-flow-st' }, openDone ? 'Свернуть' : 'готово: ' + done.length),
+        h('span', { class: 'avatar-gap' })),
+      openDone && done.map(row),
+      (openAll ? rest : rest.slice(0, FLOW_LIMIT)).map(row),
+      rest.length > FLOW_LIMIT && h('button', { class: 'rc-more link-btn ap-flow-more', type: 'button', 'aria-expanded': String(openAll), onclick: () => { openAll = !openAll; draw(); } },
+        openAll ? 'Свернуть' : `Показать все · ${rest.length}`));
   };
   draw();
   return box;

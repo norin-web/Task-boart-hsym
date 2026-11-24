@@ -1067,11 +1067,13 @@ function sideBlock(t, { staff, editable }) {
     // на ревью у лида — только «Правки / Аппрув»: раздавать и передавать можно, пока задача у него в работе
     const onReview = !!t.reviewFrom && t.status === ((u.settings.review || {}).column || '');
     const handover = me() && me().access === 'lead' && t.assigneeId === S.meId && !taskDone(t) && !onReview && handoverPeople(t);
+    // людей лиду ещё не выдали — кнопки видны, но неактивны, с подсказкой
+    const noPeople = handover && !handover.length ? 'Вам пока не выдали людей — попросите CEO или PM юнита' : '';
     prop(B.assignee.label, ro(p && h('span', { class: 'row', style: { gap: '6px', flexWrap: 'nowrap' } }, avatar(p, 'sm'), p.name)), {
-      after: handover && handover.length > 0 && h('div', { class: 'quick-chips' },
-        h('button', { class: 'quick-chip primary', title: 'Разложить на подзадачи своим людям', onclick: () => openSplit(t, handover) }, icon('layers', 12), 'Раздать'),
+      after: handover && h('div', { class: 'quick-chips' },
+        h('button', { class: 'quick-chip primary', disabled: !!noPeople, title: noPeople || 'Разложить на подзадачи своим людям', onclick: () => openSplit(t, handover) }, icon('layers', 12), 'Раздать'),
         h('button', {
-          class: 'quick-chip', onclick: e => { e.stopPropagation(); menu(e.currentTarget, [{ title: 'Передать целиком' },
+          class: 'quick-chip', disabled: !!noPeople, title: noPeople || '', onclick: e => { e.stopPropagation(); menu(e.currentTarget, [{ title: 'Передать целиком' },
             ...handover.map(x => ({ label: x.name, icon: 'user', action: () => handOver(t, x) }))]); },
         }, icon('users', 12), 'Передать целиком')),
     });

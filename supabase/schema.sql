@@ -1537,6 +1537,9 @@ begin
     join unit_members m on m.unit_id = t.unit_id and m.person_id = p.id
     join tasks s on s.parent_id = t.parent_id and t.parent_id <> '' and s.id <> t.id
                 and (s.department_id = p.position_id or p.extra_positions ? s.department_id)
+                -- только этап из зоны лида (без исполнителя, свой или его человека): чужой этап он не видит
+                and (s.assignee_id = '' or s.assignee_id = p.id
+                     or exists (select 1 from lead_people lp where lp.lead_id = p.id and lp.person_id = s.assignee_id))
    where p.active and p.id <> v_me and p.access = 'lead' and notify_test_ok(t.is_test, p.id)
    order by p.id, s.created_at;
 end $$;
@@ -2797,6 +2800,7 @@ create or replace function my_unit_ids() returns text[]
 language sql stable security definer set search_path = public as $$
   select coalesce(array(select unit_id from unit_members where person_id = my_person_id()), '{}');
 $$;
+revoke execute on function my_unit_ids() from public, anon;
 grant execute on function my_unit_ids() to authenticated;
 create or replace function my_pm_app_ids() returns text[]
 language sql stable security definer set search_path = public as $$
@@ -2810,6 +2814,7 @@ create or replace function my_lead_people() returns text[]
 language sql stable security definer set search_path = public as $$
   select coalesce(array(select person_id from lead_people where lead_id = my_person_id()), '{}');
 $$;
+revoke execute on function my_lead_people() from public, anon;
 grant execute on function my_lead_people() to authenticated;
 
 drop policy if exists tasks_read on tasks;

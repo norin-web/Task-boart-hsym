@@ -4,7 +4,7 @@ import './styles.css';
 import './ds.css';
 import './motion.css';
 import { S, setMe, todayStr, setPeople } from './state.js';
-import { $, h, icon, fill, closeMenu, closeNav, isMenuOpen, isModalOpen, refreshPresence } from './ui.js';
+import { $, h, icon, fill, closeMenu, closeNav, isMenuOpen, isModalOpen, refreshPresence, toast } from './ui.js';
 import { call } from './api.js';
 import { initBackend, mode, supabase, localLogin } from './data.js';
 import { LS, isStaff } from './state.js';
@@ -111,7 +111,8 @@ async function boot() {
       // свежие данные: не пришли (таймаут базы) — ещё раз через 4 с, а не молча оставаться на копии прошлого входа
       const refresh = d => applyBootstrap(d, true).then(() => { LS.set(bootKey, d); if (S.started) renderSidebar(); });
       fresh.then(refresh).catch(() => new Promise(r => setTimeout(r, 4000))
-        .then(() => call('bootstrap', { today: new Date().toISOString().slice(0, 10) })).then(refresh).catch(() => {}));
+        .then(() => call('bootstrap', { today: new Date().toISOString().slice(0, 10) })).then(refresh)
+        .catch(() => toast('Не удалось обновить данные — показаны данные прошлого входа. Обновите страницу позже')));
     } else {
       const d = await fresh;
       await applyBootstrap(d, true);
@@ -137,7 +138,13 @@ async function applyBootstrap(d, live) {
   S.units = d.units;
   setPeople(d.people);
   S.departments = d.departments;
-  S.leadPeople = (S.people.find(p => p.id === S.meId) || {}).access === 'lead' ? (await call('getLeadPeople', {}).catch(() => ({})))[S.meId] || [] : [];
+  // люди лида: на старте из копии не ждём (фоном), со свежими — ждём; ошибка запроса не обнуляет прежний список
+  if ((S.people.find(p => p.id === S.meId) || {}).access !== 'lead') S.leadPeople = [];
+  else {
+    if (!Array.isArray(S.leadPeople)) S.leadPeople = [];
+    const lp = call('getLeadPeople', {}).then(m => { S.leadPeople = (m || {})[S.meId] || []; }).catch(() => {});
+    if (live) await lp;
+  }
   if (d.teams) S.teams = d.teams;
   S.linkFields = d.linkFields || [];
   S.templates = d.templates || [];
