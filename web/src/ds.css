@@ -3568,3 +3568,16 @@ img.fb-ic { object-fit: cover; padding: 0; }
 
 /* длинное название «App - [Update #1: тема] - Отдел» на карточке доски — не больше 4 строк, полное — в подсказке и в карточке */
 article.card .card-title { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* страница приложения: флоу запроса под строкой «Сейчас» — этапы строками, готовые свёрнуты */
+.ap-now-req + .ap-now-req { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 6px; }
+.ap-flow { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; margin: 4px 0 2px; }
+.ap-flow-row { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto 24px; align-items: center; gap: 10px; min-height: 34px; padding: 4px 8px; border: 0; border-radius: var(--r); background: transparent; text-align: left; font: inherit; font-size: 13px; line-height: 18px; color: var(--text); cursor: pointer; }
+.ap-flow-row:hover { background: var(--surface-2); }
+.ap-flow-ic { display: grid; place-items: center; color: var(--muted); }
+.ap-flow-row.done .ap-flow-ic { color: var(--ok); }
+.ap-flow-row.progress .ap-flow-ic { color: var(--info-fill); }
+.ap-flow-row.progress .ap-flow-name { font-weight: 600; }
+.ap-flow-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-flow-row.done .ap-flow-name { color: var(--muted); }
+.ap-flow-st { font-size: 12px; white-space: nowrap; }

@@ -2718,7 +2718,8 @@ begin
        and (v.app_id = '' or v_acc <> 'moderator' or v.app_id = any(v_apps))
        and (v_su
          or (v_acc = 'moderator' and v.unit_id = any(v_units))
-         or v.assignee_id = v_pid or v.review_from = v_pid or v.reviewer_id = v_pid
+         -- пустой id (нет карточки человека) не должен совпасть с пустым исполнителем/ревьюером
+         or (v_pid <> '' and (v.assignee_id = v_pid or v.review_from = v_pid or v.reviewer_id = v_pid))
          or (v_acc = 'lead' and v.unit_id = any(v_units)
              and ((v.department_id <> '' and v.department_id = any(v_pos)) or (v.assignee_id <> '' and v.assignee_id = any(v_lp))))
          or (v_acc = 'rm' and v.unit_id = any(v_units)
@@ -3751,14 +3752,51 @@ language sql stable security definer set search_path = public as $$
 $$;
 revoke execute on function stage_flags_raw(text) from public, anon;
 grant execute on function stage_flags_raw(text) to authenticated;
--- обёртка без security definer: метки только у этапов, которые вошедший и так видит (правила чтения задач)
+-- Метки разом для списка этапов: «кто спрашивает» — один раз за вызов, видимость — тем же выражением, что tasks_read
+-- (держать вместе!); раньше на каждый этап вызывались stage_flags_raw → can_read_task — на проде это 1–3 с на доску.
+drop function if exists dev_stage_flags(text[]);
 create or replace function dev_stage_flags(p_tasks text[]) returns table (task_id text, flags jsonb)
-language sql stable set search_path = public as $$
-  select t.id, stage_flags_raw(t.id) from tasks t
-   where t.id = any(coalesce(p_tasks, '{}')) and t.kind = 'stage' and t.step in ('ios', 'integr');
-$$;
+language plpgsql stable security definer set search_path = public as $$
+declare
+  v_sys boolean := app_system(); v_pid text := coalesce(my_person_id(), ''); v_acc text := coalesce(my_access(), '');
+  v_su boolean := is_superadmin(); v_dev boolean := is_dev();
+  v_units text[] := coalesce(my_unit_ids(), '{}'); v_apps text[] := coalesce(my_pm_app_ids(), '{}');
+  v_pos text[] := coalesce(my_positions(), '{}'); v_lp text[] := coalesce(my_lead_people(), '{}'); v_teams text[] := coalesce(my_teams(), '{}');
+begin
+  if coalesce(array_length(p_tasks, 1), 0) = 0 then return; end if;
+  return query
+  with st as (
+    select t.id, t.parent_id, t.backend_need from tasks t
+     where t.id = any(p_tasks) and t.kind = 'stage' and t.step in ('ios', 'integr')
+       and (v_sys or ((not t.is_test or v_dev)
+         and (t.app_id = '' or v_acc <> 'moderator' or t.app_id = any(v_apps))
+         and (v_su
+           or (v_acc = 'moderator' and t.unit_id = any(v_units))
+           -- пустой id (нет карточки человека) не должен совпасть с пустым исполнителем/ревьюером
+         or (v_pid <> '' and (t.assignee_id = v_pid or t.review_from = v_pid or t.reviewer_id = v_pid))
+           or (v_acc = 'lead' and t.unit_id = any(v_units)
+               and ((t.department_id <> '' and t.department_id = any(v_pos)) or (t.assignee_id <> '' and t.assignee_id = any(v_lp))))
+           or (v_acc = 'rm' and t.unit_id = any(v_units)
+               and ((t.department_id <> '' and t.department_id = any(v_pos)) or (t.team_id <> '' and t.team_id = any(v_teams))))))))
+  select st.id, jsonb_build_object(
+    'account', case when coalesce(r.request_type, '') <> 'new_app' then ''
+      when acc.n = 0 then 'none' when acc.done > 0 then 'done' else 'pending' end,
+    'texts', case when tx.n = 0 then '' when tx.open > 0 then 'none' else 'done' end,
+    'backend', case when be.n = 0 then case when st.backend_need = 'no' then 'off' else '' end
+      when be.open > 0 then 'open' else 'done' end)
+    from st
+    left join tasks r on r.id = st.parent_id
+    cross join lateral (select count(*) n, count(*) filter (where task_done(a.id)) done from tasks a
+                         where a.parent_id = st.parent_id and a.kind = 'stage' and a.step = 'account' and not a.archived) acc
+    cross join lateral (select count(*) n, count(*) filter (where not task_done(x.id)) open from tasks x
+                         where x.parent_id = st.parent_id and x.kind = 'stage' and x.step = 'meta' and not x.archived) tx
+    cross join lateral (select count(*) n, count(*) filter (where not task_done(b.id)) open from tasks b
+                         where b.parent_id = st.id and b.step = 'backend' and not b.archived) be;
+end $$;
 revoke execute on function dev_stage_flags(text[]) from public, anon;
 grant execute on function dev_stage_flags(text[]) to authenticated;
+-- старая поштучная функция больше не нужна клиенту
+revoke execute on function stage_flags_raw(text) from public, anon, authenticated;
 
 -- task_done — служебная (security definer: по id любой задачи, без правил доступа). Вызывают только definer-функции базы
 -- (open_deps, notify_*, stage_flags_raw…), клиенту она не нужна — прямой вызов закрыт: иначе по id видно, закрыта ли чужая задача.

@@ -1316,9 +1316,10 @@ test('метки этапа разработки: аккаунт (New App), те
   await api.as(ios, () => api('requestBackend', { taskId: by.ios.id, text: 'Подписки' }));
   assert.deepEqual(await flagsOf(ios), { account: 'pending', texts: 'none', backend: 'open' });
   // напрямую функцию меток вызывает и тот, кто этап не видит (QA) — получает пусто: проверка видимости в базе
-  const raw = who => api.as(who, async () => (await api.pg.query('select stage_flags_raw($1) f', [by.ios.id])).rows[0].f);
-  assert.equal(await raw(qa), null);
-  assert.equal((await raw(ios)).account, 'pending');
+  const raw = who => api.as(who, async () => (await api.pg.query('select * from dev_stage_flags($1::text[])', [[by.ios.id]])).rows);
+  assert.deepEqual(await raw(qa), []); // этап ему не виден — меток нет
+  assert.equal((await raw(ios))[0].flags.account, 'pending');
+  await assert.rejects(api.as(qa, () => api.pg.query('select stage_flags_raw($1)', [by.ios.id])), /permission denied/);
   // закрыли бэкенд и тексты — «есть»
   const be = (await api.pg.query("select id from tasks where parent_id = $1 and step = 'backend'", [by.ios.id])).rows[0].id;
   await api('updateTask', { id: be, patch: { status: 'done' } });

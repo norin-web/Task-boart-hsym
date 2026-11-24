@@ -1598,4 +1598,8 @@ test('open_task_ids — только про видимые задачи и их 
   await api.pg.query('update tasks set depends_on = $1 where id = $2', [JSON.stringify([t2.id]), t1.id]);
   assert.deepEqual(await open(designer, [t2.id, t3.id]), [t2.id]);
   await assert.rejects(api.as(dev, () => api.pg.query("select notify_release($1, 'store_live')", [t2.id])), /permission denied/);
+  // вошедший без карточки человека (пустой id) не видит задачи с пустым исполнителем
+  await api.pg.query("update tasks set assignee_id = '' where id = $1", [t3.id]);
+  const ghost = { uid: '00000000-0000-4000-8000-000000000099', email: 'ghost@x.ru' };
+  assert.deepEqual(await open(ghost, [t3.id]), []);
 });

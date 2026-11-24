@@ -45,6 +45,37 @@ export const appIcon = (a, size = 'sm') => (a.iconUrl
   // заглушка: в маленьких размерах — одна буква (две не помещаются), в больших — две
   : h('span', { class: 'uc-icon ' + size, style: { background: a.color || PALETTE[0] }, 'aria-hidden': 'true' }, a.name.slice(0, size === 'xs' || size === 'sm' ? 1 : 2).toUpperCase()));
 
+/**
+ * Флоу запроса на странице приложения (как в карточке задачи): открытые этапы строками — состояние и исполнитель,
+ * клик открывает этап; готовые свёрнуты в одну строку «Готово: N» (клик — раскрыть).
+ */
+const FLOW_STATE = { progress: 'в работе', todo: 'не начато', blocked: 'ждёт предыдущих', done: 'готово' };
+function stageFlow(r) {
+  const box = h('div', { class: 'ap-flow' });
+  let openDone = false;
+  const state = s => (s.done ? 'done' : s.blocked ? 'blocked' : s.kind === 'todo' ? 'todo' : 'progress');
+  const row = s => {
+    const st = state(s);
+    const who = personById(s.assigneeId);
+    return h('button', { class: 'ap-flow-row ' + st, onclick: () => peekTask(s.unitId || r.unitId, s.id) },
+      h('span', { class: 'ap-flow-ic' }, icon(st === 'done' ? 'check' : st === 'blocked' ? 'lock' : st === 'progress' ? 'progress' : 'circle', 14)),
+      h('span', { class: 'ap-flow-name' }, stageName(s.title)),
+      h('span', { class: 'muted ap-flow-st' }, FLOW_STATE[st]),
+      who ? avatar(who, 'sm') : h('span', { class: 'avatar-gap' }));
+  };
+  const draw = () => {
+    const done = r.stages.filter(s => s.done), rest = r.stages.filter(s => !s.done);
+    fill(box,
+      done.length > 0 && (openDone ? done.map(row) : h('button', { class: 'ap-flow-row done ap-flow-fold', onclick: () => { openDone = true; draw(); } },
+        h('span', { class: 'ap-flow-ic' }, icon('check', 14)),
+        h('span', { class: 'ap-flow-name' }, done.map(s => stageName(s.title)).join(' · ')),
+        h('span', { class: 'muted ap-flow-st' }, 'готово: ' + done.length))),
+      rest.map(row));
+  };
+  draw();
+  return box;
+}
+
 /** Поле «App Store» среди полей приложения (ссылка на стор, не App Store Connect). */
 export const storeField = () => S.appFields.find(f => f.kind === 'link' && /app ?store/i.test(f.name) && !/connect/i.test(f.name)) || null;
 
@@ -615,13 +646,15 @@ export function openAppPanel(a, onChange, page = null) {
             ? active.map(r => {
               const cur = r.stages.find(s => !s.done && !s.blocked) || null;
               const who = personById(cur ? cur.assigneeId : r.assigneeId);
-              return h('button', { class: 'ap-now-row', onclick: () => peekTask(r.unitId, cur ? cur.id : r.id) },
-                h('span', { class: 'ap-now-what' }, h('b', null, cur ? stageName(cur.title) : r.stages.length ? 'Релиз' : 'Ждёт PM'),
-                  h('span', { class: 'muted' }, ' · ' + r.title)),
-                r.stages.length > 0 && h('span', { class: 'ap-now-bar' },
-                  h('span', { class: 'progress' }, h('div', { style: { width: Math.round(r.stages.filter(s => s.done).length / r.stages.length * 100) + '%' } })),
-                  h('span', { class: 'muted' }, `${r.stages.filter(s => s.done).length} из ${r.stages.length}`)),
-                who ? avatar(who, 'sm') : h('span', { class: 'avatar-gap' }));
+              return h('div', { class: 'ap-now-req' },
+                h('button', { class: 'ap-now-row', onclick: () => peekTask(r.unitId, cur ? cur.id : r.id) },
+                  h('span', { class: 'ap-now-what' }, h('b', null, cur ? stageName(cur.title) : r.stages.length ? 'Релиз' : 'Ждёт PM'),
+                    h('span', { class: 'muted' }, ' · ' + r.title)),
+                  r.stages.length > 0 && h('span', { class: 'ap-now-bar' },
+                    h('span', { class: 'progress' }, h('div', { style: { width: Math.round(r.stages.filter(s => s.done).length / r.stages.length * 100) + '%' } })),
+                    h('span', { class: 'muted' }, `${r.stages.filter(s => s.done).length} из ${r.stages.length}`)),
+                  who ? avatar(who, 'sm') : h('span', { class: 'avatar-gap' })),
+                r.stages.length > 0 && stageFlow(r));
             })
             : h('p', { class: 'muted', style: { margin: 0 } }, 'Открытых работ нет'))),
       info: infoBlock(a, manage, ceo, save, draw, () => configure('info')),
