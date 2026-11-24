@@ -549,7 +549,7 @@ function backendRequestBlock(t) {
       off && !list.length
         // отмечено «не нужен»: так и пишем; передумали — «Нужен» возвращает кнопку запроса
         ? h('div', { class: 'qa-bar be-bar be-off' }, icon('code', 15), h('span', null, 'Бэкенд не нужен'), h('span', { class: 'spacer' }),
-          h('button', { class: 'btn ghost sm', onclick: () => setOff(false) }, 'Нужен'))
+          h('button', { class: 'btn ghost sm', onclick: () => setOff(false) }, 'Нужен бэкенд'))
         : h('div', { class: 'qa-bar be-bar' }, icon('code', 15),
           h('span', null, list.length ? 'Бэкенд' : 'Нужен бэкенд?'), h('span', { class: 'spacer' }),
           !open && !list.length && h('button', { class: 'btn ghost sm', title: 'Этому приложению сервер не нужен — метки «Бэкенд не запрошен» на карточке не будет', onclick: () => setOff(true) }, 'Бэкенд не нужен'),

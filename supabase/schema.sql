@@ -762,7 +762,7 @@ begin
     end if;
   end if;
   if not can_manage(new.unit_id) then
-    if new.title is distinct from old.title
+    if new.title is distinct from old.title or new.topic is distinct from old.topic
        or (new.assignee_id is distinct from old.assignee_id and not (my_access() = 'lead' and in_lead_zone(old.unit_id, old.department_id, old.assignee_id)))
        or (new.due_date is distinct from old.due_date and not (my_access() = 'lead' and in_lead_zone(old.unit_id, old.department_id, old.assignee_id)))
        or new.unit_id is distinct from old.unit_id
@@ -909,6 +909,10 @@ begin
   -- кто заполняет опросник (dev_form.need: этап iOS — да, если не false; интеграция — только если true) решают PM и CEO
   if (new.dev_form -> 'need') is distinct from (old.dev_form -> 'need') and not (app_system() or can_manage(new.unit_id)) then
     raise exception 'Кто заполняет опросник, решает PM' using errcode = '42501';
+  end if;
+  -- «Пропустить» опросник — только функцией set_dev_form_skip (кто и когда — пишет база), не прямой правкой
+  if (new.dev_form -> 'skip') is distinct from (old.dev_form -> 'skip') and not (app_system() or can_manage(new.unit_id)) then
+    raise exception 'Пропустить опросник можно только кнопкой «Пропустить»' using errcode = '42501';
   end if;
   if app_system() or new.step not in ('ios', 'integr') or new.status is not distinct from old.status or can_manage(new.unit_id) then return new; end if;
   if new.step = 'ios' and coalesce(new.dev_form ->> 'need', '') = 'false' then return new; end if;
@@ -3754,7 +3758,7 @@ begin
   if t.id is null or t.kind <> 'stage' or coalesce(t.step, '') not in ('ios', 'integr') then
     raise exception 'Отметка про бэкенд — только у этапа разработки' using errcode = 'P0001';
   end if;
-  if not can_edit_task_links(t.id) then raise exception 'Недостаточно прав для этого действия' using errcode = '42501'; end if;
+  if not (can_edit_task_links(t.id) and can_read_task(t.id)) then raise exception 'Недостаточно прав для этого действия' using errcode = '42501'; end if;
   perform set_config('app.system', 'on', true);
   update tasks set backend_need = case when p_off then 'no' else '' end,
                    updated_at = to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
@@ -3785,3 +3789,60 @@ begin
   perform set_config('app.system', coalesce(v_sys, 'off'), true);
   insert into app_settings (key, value, updated_at) values ('once_naming_topic', 'true'::jsonb, '') on conflict (key) do nothing;
 end $$;
+
+-- «Пропустить» опросник перед релизом (апдейт, где он не нужен) или вернуть: кто и когда — пишет база.
+-- Только у этапа, который по решению PM заполняет опросник (iOS — если need не false, интеграция — если need = true);
+-- права — как у ответов на опросник: исполнитель этапа, лид его зоны, PM и CEO.
+create or replace function set_dev_form_skip(p_task text, p_skip boolean) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare t tasks; df jsonb; v_sys text := current_setting('app.system', true);
+begin
+  select * into t from tasks where id = p_task;
+  if t.id is null or coalesce(t.step, '') not in ('ios', 'integr') then raise exception 'Опросник — у этапа «Разработка iOS» или «Интеграция»' using errcode = 'P0001'; end if;
+  if not (can_edit_task_links(t.id) and can_read_task(t.id)) then raise exception 'Недостаточно прав для этого действия' using errcode = '42501'; end if;
+  df := coalesce(t.dev_form, '{}'::jsonb);
+  if (t.step = 'ios' and df ->> 'need' = 'false') or (t.step = 'integr' and coalesce(df ->> 'need', '') <> 'true') then
+    raise exception 'Опросник в этом запросе заполняет другой этап' using errcode = 'P0001';
+  end if;
+  df := case when p_skip then df || jsonb_build_object('skip', jsonb_build_object('by', coalesce(my_person_id(), ''),
+                  'at', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')))
+             else df - 'skip' end;
+  perform set_config('app.system', 'on', true);
+  update tasks set dev_form = df, updated_at = to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') where id = t.id;
+  perform set_config('app.system', coalesce(v_sys, 'off'), true);
+  return df;
+end $$;
+revoke execute on function set_dev_form_skip(text, boolean) from public, anon;
+grant execute on function set_dev_form_skip(text, boolean) to authenticated;
+
+-- Тема запроса: меняют PM и CEO; в одной операции — тема запроса и его этапов и начало названий всего дерева
+-- («App - [Update #1: тема]…»), чтобы тема и названия не разошлись.
+create or replace function set_request_topic(p_task text, p_topic text) returns text
+language plpgsql security definer set search_path = public as $$
+declare r tasks; v_topic text := left(trim(coalesce(p_topic, '')), 500); v_old text; v_new text; v_app text; v_kind text;
+  v_sys text := current_setting('app.system', true);
+  at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+begin
+  select * into r from tasks where id = p_task;
+  if r.id is null or r.kind <> 'request' then raise exception 'Тема — у запроса' using errcode = 'P0001'; end if;
+  if not (can_manage(r.unit_id) and can_read_task(r.id)) then raise exception 'Тему запроса меняют PM и CEO' using errcode = '42501'; end if;
+  perform set_config('app.system', 'on', true);
+  update tasks set topic = v_topic, updated_at = at_ where id = r.id;
+  update tasks set topic = v_topic where parent_id = r.id and kind = 'stage';
+  if r.title ~ '^.*? - \[[^]]+\]' then
+    v_old := substring(r.title from '^(.*? - \[[^]]+\])');
+    v_app := substring(r.title from '^(.*?) - \[');
+    v_kind := trim(split_part(substring(r.title from '\[([^]]+)\]'), ':', 1));
+    v_new := v_app || ' - [' || v_kind || case when naming_clip(v_topic) <> '' then ': ' || naming_clip(v_topic) else '' end || ']';
+    if v_new <> v_old then
+      with recursive tree as (select id from tasks where id = r.id
+                              union all select c.id from tasks c join tree on c.parent_id = tree.id)
+      update tasks set title = left(v_new || substr(title, length(v_old) + 1), 500)
+       where id in (select id from tree) and left(title, length(v_old)) = v_old;
+    end if;
+  end if;
+  perform set_config('app.system', coalesce(v_sys, 'off'), true);
+  return (select title from tasks where id = r.id);
+end $$;
+revoke execute on function set_request_topic(text, text) from public, anon;
+grant execute on function set_request_topic(text, text) to authenticated;

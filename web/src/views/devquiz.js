@@ -83,7 +83,7 @@ export function devFormBlock(t, canEdit) {
       const who = personById(skipped.by);
       return fill(box, icon('check', 15),
         h('span', { class: 'dq-bar-text' }, h('b', null, 'Опросник перед релизом'), h('small', { class: 'muted' }, 'пропущен' + (who ? ' · ' + who.name : ''))),
-        canEdit && h('button', { class: 'btn ghost sm', onclick: () => skip(false) }, 'Вернуть'));
+        canEdit && h('button', { class: 'btn ghost sm', onclick: () => skip(false) }, 'Не пропускать'));
     }
     fill(box, icon(at ? 'check' : 'checklist', 15),
       h('span', { class: 'dq-bar-text' }, h('b', null, 'Опросник перед релизом'), h('small', { class: (t.devForm || {}).returned && !at ? 'danger-text' : 'muted' }, at ? 'заполнен ' + fmtDate(at.slice(0, 10)) + ((t.devForm || {}).checked ? ' · RM принял' : '') : (t.devForm || {}).returned ? 'RM вернул с вопросами: ' + t.devForm.returned.note : 'заполните перед сдачей')),

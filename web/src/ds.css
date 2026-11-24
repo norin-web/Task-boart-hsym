@@ -3565,3 +3565,6 @@ img.fb-ic { object-fit: cover; padding: 0; }
 .tech-chip.ok { background: color-mix(in srgb, var(--ok) 16%, transparent); }
 
 .be-bar.be-off > span:not(.spacer) { color: var(--muted); }
+
+/* длинное название «App - [Update #1: тема] - Отдел» на карточке доски — не больше 4 строк, полное — в подсказке и в карточке */
+article.card .card-title { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }

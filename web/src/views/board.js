@@ -716,7 +716,7 @@ export function taskCard(t, inLane, env = boardEnv()) {
   },
   // Ключ задачи на доске не показываем — он в открытой карточке
   h('div', { class: 'card-top' },
-    h('div', { class: 'card-title' }, t.title),
+    h('div', { class: 'card-title', title: t.title }, t.title),
     missing.length > 0 && h('span', { class: 'warn-ic', title: 'Для следующей колонки заполните: ' + missing.map(f => f.name).join(', ') }, icon('alert', 13)),
     t.archived && h('span', { class: 'badge' }, 'архив'),
     !t._temp && h('button', {

@@ -1554,7 +1554,17 @@ export function createBackend(db, opts = {}) {
         const v = req(str(patch.title, 500), 'Название задачи');
         if (v !== t.title) { change('title', t.title, v); t.title = v; }
       }
-      if ('topic' in patch) {
+      // тема запроса — функцией базы (права PM/CEO, тема и названия всего дерева одной операцией); у остальных задач — как поле
+      if ('topic' in patch && t.kind === 'request') {
+        const v = str(patch.topic, 500);
+        if (v !== (t.topic || '')) {
+          await rpc('set_request_topic', { p_task: t.id, p_topic: v });
+          await log([{ unitId: t.unit_id, taskId: t.id, action: 'update', field: 'topic', from: t.topic || '', to: v }], ctx);
+          const fresh = await one('tasks', t.id);
+          Object.assign(r, { updated_at: fresh.updated_at });
+          Object.assign(t, { topic: fresh.topic, title: fresh.title, updated_at: fresh.updated_at });
+        }
+      } else if ('topic' in patch) {
         const v = str(patch.topic, 500);
         if (v !== (t.topic || '')) { change('topic', t.topic || '', v); t.topic = v; }
       }
@@ -1678,23 +1688,6 @@ export function createBackend(db, opts = {}) {
           fail('Недостаточно прав: менять можно только свои задачи', 'FORBIDDEN');
         }
         await log(logs, ctx);
-        // тема запроса — и у его этапов; она же в названии «App - [Update #1: тема]» — переписываем начало у запроса и всех потомков
-        if (t.kind === 'request' && (saved[0].topic || '') !== (r.topic || '')) {
-          await run(T('tasks').update({ topic: saved[0].topic || '' }).eq('parent_id', t.id).eq('kind', 'stage'));
-          const pt = parseTitle(saved[0].title);
-          if (pt) {
-            const oldBase = `${pt.app} - [${pt.type}]`;
-            const newBase = requestTitle(pt.app, pt.kind, saved[0].topic || '');
-            if (newBase !== oldBase) {
-              const kids = (await descendants([t.id])).filter(x => x.id !== t.id).map(x => x.id);
-              const rows = [saved[0], ...(kids.length ? await inChunks(kids, ids => T('tasks').select('id,title').in('id', ids)) : [])];
-              for (const x of rows) {
-                if (String(x.title).startsWith(oldBase)) await updateOne('tasks', x.id, { title: str(newBase + String(x.title).slice(oldBase.length), 500) });
-              }
-              saved[0].title = str(newBase + String(saved[0].title).slice(oldBase.length), 500);
-            }
-          }
-        }
         if ('description' in patch && saved[0].description !== r.description) await notifyMentions(t.id, saved[0].description, r.description, 'description');
         return taskOut(saved[0]); // из базы: исполнителя мог сменить триггер ревью
       }
@@ -3490,9 +3483,8 @@ export function createBackend(db, opts = {}) {
     async skipDevForm(p) {
       const t = await findTask(p.taskId);
       if (t.step !== 'ios' && t.step !== 'integr') fail('Опросник — у этапа «Разработка iOS» или «Интеграция»');
-      const df = { ...(json(t.dev_form, {}) || {}) };
-      if (p.skip) df.skip = { by: (await rpc('my_person_id', {})) || '', at: now() }; else delete df.skip;
-      await updateOne('tasks', t.id, { dev_form: df });
+      // кто и когда — пишет база (set_dev_form_skip), прямой правкой dev_form.skip не поменять
+      const df = json(await rpc('set_dev_form_skip', { p_task: t.id, p_skip: !!p.skip }), {}) || {};
       return taskOut({ ...t, dev_form: df });
     },
 

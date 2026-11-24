@@ -1349,7 +1349,16 @@ test('«Бэкенд не нужен» убирает метку; «Пропус
   // опросник: без ответов сдать нельзя, после «Пропустить» — можно
   await api.as(ios, () => api('updateTask', { id: by.ios.id, patch: { status: 'in_progress' } }));
   await assert.rejects(api.as(ios, () => api('updateTask', { id: by.ios.id, patch: { status: 'done' } })));
+  // прямой правкой «пропущен» не поставить (и не подделать, кто) — только функцией
+  await assert.rejects(api.as(ios, () => api.pg.query(`update tasks set dev_form = dev_form || '{"skip":{"by":"x","at":"y"}}' where id = $1`, [by.ios.id])), /кнопкой «Пропустить»/);
   const sk = await api.as(ios, () => api('skipDevForm', { taskId: by.ios.id, skip: true }));
   assert.equal(sk.devForm.skip.by, ios.id);
+  // тему запроса меняют только PM и CEO
+  // разработчик запрос не видит — правка ничего не меняет; лид дизайна видит этап, но не запрос — тоже
+  await api.as(ios, () => api.pg.query("update tasks set topic = 'x' where id = $1", [request.id]));
+  await assert.rejects(api.as(ios, () => api('updateTask', { id: request.id, patch: { topic: 'x' } })));
+  assert.equal((await api.pg.query('select topic from tasks where id = $1', [request.id])).rows[0].topic, '');
+  // исполнитель этапа сам тему этапа не правит (тема — от запроса)
+  await assert.rejects(api.as(ios, () => api.pg.query("update tasks set topic = 'x' where id = $1", [by.ios.id])), /Недостаточно прав|42501/);
   await api.as(ios, () => api('updateTask', { id: by.ios.id, patch: { status: 'done' } }));
 });
