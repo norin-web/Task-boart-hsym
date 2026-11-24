@@ -1274,7 +1274,7 @@ test('запрос на бэкенд из этапа iOS: задача тому,
   assert.deepEqual(await api.as(qa, () => api('getBackendRequests', { taskId: by.ios.id })), []); // чужой этап — не видно
   // запросил по ошибке — отменяет: задача удаляется (у PM пропадает), в истории этапа — запись; посторонний — нельзя
   const { id: wrong } = await api.as(ios, () => api('requestBackend', { taskId: by.ios.id, text: 'Ошибся' }));
-  await assert.rejects(api.as(qa, () => api('cancelBackendRequest', { id: wrong })));
+  await assert.rejects(api.as(qa, () => api('cancelBackendRequest', { id: wrong })), /не найден/);
   await assert.rejects(api.as(ios, () => api('cancelBackendRequest', { id: by.ios.id })), /не найден/);
   await api.as(ios, () => api('cancelBackendRequest', { id: wrong }));
   assert.equal((await api.pg.query('select count(*)::int n from tasks where id = $1', [wrong])).rows[0].n, 0);

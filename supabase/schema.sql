@@ -3607,11 +3607,10 @@ declare
   at_ text := to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
 begin
   select * into b from tasks where id = p_id;
-  if b.id is null or coalesce(b.step, '') <> 'backend' or coalesce(b.parent_id, '') = '' then
+  -- нет, не бэкенд или нет прав — одним ответом (по id не узнать, есть ли чужой запрос)
+  if b.id is null or coalesce(b.step, '') <> 'backend' or coalesce(b.parent_id, '') = ''
+     or not (can_manage(b.unit_id) or can_edit_task_links(b.parent_id)) then
     raise exception 'Запрос на бэкенд не найден' using errcode = 'P0001';
-  end if;
-  if not (can_manage(b.unit_id) or can_edit_task_links(b.parent_id)) then
-    raise exception 'Недостаточно прав для этого действия' using errcode = '42501';
   end if;
   if task_done(b.id) then raise exception 'Запрос уже выполнен — отменить нельзя' using errcode = 'P0001'; end if;
   perform set_config('app.system', 'on', true);
