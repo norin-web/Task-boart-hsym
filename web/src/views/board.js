@@ -673,7 +673,8 @@ const TEXTS_CHIP = { none: ['Текстов нет', 'no'], done: ['Тексты
 const BACKEND_CHIP = { '': ['Бэкенд не запрошен', 'no'], open: ['Бэкенд запрошен', 'wait'], done: ['Бэкенд есть', 'ok'] };
 function techChips(f) {
   const chip = (def, ic) => def && h('span', { class: 'tech-chip ' + def[1], title: def[0] }, icon(ic, 13), h('span', null, def[0]));
-  return h('div', { class: 'card-tech' }, chip(ACCOUNT_CHIP[f.account], 'lock'), chip(TEXTS_CHIP[f.texts], 'edit'), chip(BACKEND_CHIP[f.backend || ''], 'code'));
+  const list = [chip(ACCOUNT_CHIP[f.account], 'lock'), chip(TEXTS_CHIP[f.texts], 'edit'), chip(BACKEND_CHIP[f.backend || ''], 'code')].filter(Boolean);
+  return list.length ? h('div', { class: 'card-tech' }, list) : null; // нет меток — нет и пустого ряда
 }
 
 /**

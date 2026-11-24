@@ -71,14 +71,14 @@ function stageFlow(r) {
   const draw = () => {
     const done = r.stages.filter(s => s.done), rest = r.stages.filter(s => !s.done);
     fill(box,
-      done.length > 0 && h('button', { class: 'ap-flow-row done ap-flow-fold', 'aria-expanded': String(openDone), onclick: () => { o.done = openDone = !openDone; draw(); box.querySelector('.ap-flow-fold')?.focus(); } },
+      done.length > 0 && h('button', { class: 'ap-flow-row done ap-flow-fold', 'aria-expanded': String(openDone), onclick: () => { o.done = openDone = !openDone; draw(); box.querySelector('.ap-flow-fold')?.focus({ preventScroll: true }); } },
         h('span', { class: 'ap-flow-ic ap-flow-chev' }, icon('chevron', 14)),
         h('span', { class: 'ap-flow-name' }, openDone ? 'Готовые этапы' : done.map(s => stageName(s.title)).join(' · ')),
         h('span', { class: 'muted ap-flow-st' }, openDone ? 'Свернуть' : 'готово: ' + done.length),
         h('span', { class: 'avatar-gap' })),
       openDone && done.map(row),
       (openAll ? rest : rest.slice(0, FLOW_LIMIT)).map(row),
-      rest.length > FLOW_LIMIT && h('button', { class: 'rc-more link-btn ap-flow-more', type: 'button', 'aria-expanded': String(openAll), onclick: () => { o.all = openAll = !openAll; draw(); box.querySelector('.ap-flow-more')?.focus(); } },
+      rest.length > FLOW_LIMIT && h('button', { class: 'rc-more link-btn ap-flow-more', type: 'button', 'aria-expanded': String(openAll), onclick: () => { o.all = openAll = !openAll; draw(); box.querySelector('.ap-flow-more')?.focus({ preventScroll: true }); } },
         openAll ? 'Свернуть' : `Показать все · ${rest.length}`));
   };
   draw();

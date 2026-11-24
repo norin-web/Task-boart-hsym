@@ -139,7 +139,7 @@ async function applyBootstrap(d, live) {
   setPeople(d.people);
   S.departments = d.departments;
   // люди лида: на старте из копии не ждём (фоном), со свежими — ждём; ошибка запроса не обнуляет прежний список
-  if ((S.people.find(p => p.id === S.meId) || {}).access !== 'lead') S.leadPeople = [];
+  if ((S.people.find(p => p.id === S.meId) || {}).access !== 'lead') { S.leadPeople = []; S.leadPeopleState = ''; S.leadPeopleFor = ''; }
   else {
     // список другого человека («смотреть как») — не наш: начинаем заново
     if (!Array.isArray(S.leadPeople) || S.leadPeopleFor !== S.meId) { S.leadPeople = []; S.leadPeopleState = ''; }
@@ -153,7 +153,11 @@ async function applyBootstrap(d, live) {
       S.leadPeople = next;
       S.leadPeopleState = 'ok';
       if (changed && S.started) import('./views/task.js').then(x => x.refreshOpenPanel && x.refreshOpenPanel()).catch(() => {});
-    }).catch(() => { if (S.meId === me && S.leadPeopleState !== 'ok') S.leadPeopleState = 'error'; });
+    }).catch(() => {
+      if (S.meId !== me || S.leadPeopleState === 'ok') return;
+      S.leadPeopleState = 'error';
+      if (S.started) import('./views/task.js').then(x => x.refreshOpenPanel && x.refreshOpenPanel()).catch(() => {});
+    });
     if (live) await lp;
   }
   if (d.teams) S.teams = d.teams;

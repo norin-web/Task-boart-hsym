@@ -93,9 +93,14 @@ export function refreshPanel(t, { soft = false } = {}) {
 export function refreshOpenPanel() {
   const t = S.panelTaskId && S.board && (S.board.tasks || []).find(x => x.id === S.panelTaskId);
   // человек что-то печатает в карточке — не перерисовываем (сотрёт ввод); кнопки обновятся при следующем открытии
-  const typing = document.activeElement && document.activeElement.closest && document.activeElement.closest('.panel')
-    && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName) || (document.activeElement && document.activeElement.isContentEditable);
-  if (t && t.assigneeId === S.meId && !typing) refreshPanel(t);
+  const a = document.activeElement;
+  const typing = !!a && !!a.closest && !!a.closest('.panel') && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable);
+  if (!t || t.assigneeId !== S.meId || typing) return;
+  const body = document.querySelector('.panel-body');
+  const top = body ? body.scrollTop : 0;
+  refreshPanel(t);
+  const nb = document.querySelector('.panel-body');
+  if (nb) nb.scrollTop = top;
 }
 
 function buildPanel(t) {
@@ -525,10 +530,13 @@ function accountRequestBlock(t) {
  * «Бэкенд» в карточке разработчика: «Запросить бэкенд» раскрывает поле прямо здесь (что нужно) → «Отправить» —
  * задача падает тому, кто ведёт запрос (PM). Ниже — отправленные запросы: текст, у кого, состояние.
  */
+const BE_FORM = new Map(); // открытая форма и черновик запроса на бэкенд по id этапа — перерисовка карточки их не стирает
 function backendRequestBlock(t) {
   const box = h('div', { class: 'be-block' });
   let list = [];
-  let open = false;
+  const keep = BE_FORM.get(t.id) || { open: false, draft: '' };
+  BE_FORM.set(t.id, keep);
+  let open = keep.open;
   let off = t.backendNeed === 'no'; // «Бэкенд не нужен» (апдейт без сервера) — метки на карточке нет
   const setOff = v => send('setBackendNeed', { taskId: t.id, off: v })
     .then(() => { off = v; t.backendNeed = v ? 'no' : ''; paint(); toast(v ? 'Отмечено: бэкенд не нужен' : 'Отметка «не нужен» снята'); reloadBoard().catch(() => {}); })
@@ -548,27 +556,31 @@ function backendRequestBlock(t) {
       reloadBoard().catch(() => {});
     } catch (e) { btn.disabled = false; showErr(e); }
   };
-  let draft = ''; // текст открытой формы — перерисовка блока (отмена запроса, ответ сервера) его не стирает
+  let draft = keep.draft; // текст открытой формы — перерисовка блока и карточки его не стирает
   let focusForm = false; // фокус в поле — только при открытии формы или если он там уже был
-  const openForm = () => { open = true; focusForm = true; paint(); };
-  const closeForm = () => { open = false; draft = ''; paint(); };
+  const save = () => { keep.open = open; keep.draft = draft; };
+  // после закрытия формы фокус — на кнопку запроса (клавиатура не теряет место)
+  const focusAsk = () => box.querySelector('.be-ask')?.focus({ preventScroll: true });
+  const openForm = () => { open = true; focusForm = true; save(); paint(); };
+  const closeForm = () => { open = false; draft = ''; save(); paint(); focusAsk(); };
   const paint = () => {
     const old = box.querySelector('.be-form textarea');
     const hadFocus = !!old && document.activeElement === old;
     const sel = hadFocus ? [old.selectionStart, old.selectionEnd] : null;
     const ta = open && autosize(h('textarea', { class: 'inp', rows: 2, maxlength: 5000, 'data-esc-local': '',
-      placeholder: 'Что нужно по бэкенду: эндпоинт, данные, интеграция, к какому сроку…', value: draft, oninput: e => { draft = e.target.value; } }));
+      placeholder: 'Что нужно по бэкенду: эндпоинт, данные, интеграция, к какому сроку…', value: draft, oninput: e => { draft = e.target.value; save(); } }));
     const submit = async btn => {
       const text = ta.value.trim();
       if (!text) { ta.focus(); return; }
       btn.disabled = true;
       try {
         await send('requestBackend', { taskId: t.id, text });
-        open = false; draft = '';
+        open = false; draft = ''; save();
         list = await call('getBackendRequests', { taskId: t.id }).catch(() => list);
         const to = personById((list[list.length - 1] || {}).assigneeId);
         toast(to ? `Запрос на бэкенд ушёл: ${to.name}` : 'Запрос на бэкенд отправлен');
         paint();
+        focusAsk();
       } catch (e) { btn.disabled = false; showErr(e); }
     };
     if (ta) ta.addEventListener('keydown', e => {
@@ -583,7 +595,7 @@ function backendRequestBlock(t) {
         : h('div', { class: 'qa-bar be-bar' }, icon('code', 15),
           h('span', null, list.length ? 'Бэкенд' : 'Нужен бэкенд?'), h('span', { class: 'spacer' }),
           !open && !list.length && h('button', { class: 'btn ghost sm', title: 'Этому приложению сервер не нужен — метки «Бэкенд не запрошен» на карточке не будет', onclick: () => setOff(true) }, 'Бэкенд не нужен'),
-          !open && h('button', { class: 'btn ' + (list.length ? 'ghost' : 'primary') + ' sm', onclick: openForm }, list.length ? 'Ещё запрос' : 'Запросить бэкенд')),
+          !open && h('button', { class: 'btn be-ask ' + (list.length ? 'ghost' : 'primary') + ' sm', onclick: openForm }, list.length ? 'Ещё запрос' : 'Запросить бэкенд')),
       open && h('div', { class: 'be-form' }, ta,
         h('div', { class: 'edit-actions' },
           h('button', { class: 'btn primary sm be-send', onclick: e => submit(e.currentTarget) }, icon('send', 13), 'Отправить'),
