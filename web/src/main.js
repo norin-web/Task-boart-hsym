@@ -108,11 +108,10 @@ async function boot() {
     if (cached) {
       await applyBootstrap(cached, false);
       // экраны свои данные грузят сами — после свежего bootstrap обновляем меню (юниты, цифры), экран не перерисовываем
-      fresh.then(async d => {
-        await applyBootstrap(d, true);
-        LS.set(bootKey, d);
-        if (S.started) renderSidebar();
-      }).catch(() => {});
+      // свежие данные: не пришли (таймаут базы) — ещё раз через 4 с, а не молча оставаться на копии прошлого входа
+      const refresh = d => applyBootstrap(d, true).then(() => { LS.set(bootKey, d); if (S.started) renderSidebar(); });
+      fresh.then(refresh).catch(() => new Promise(r => setTimeout(r, 4000))
+        .then(() => call('bootstrap', { today: new Date().toISOString().slice(0, 10) })).then(refresh).catch(() => {}));
     } else {
       const d = await fresh;
       await applyBootstrap(d, true);

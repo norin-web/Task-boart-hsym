@@ -2703,11 +2703,32 @@ grant execute on function fast_forward_request(text, text[], text) to authentica
 create index if not exists tasks_depends_on on tasks using gin (depends_on);
 create or replace function open_task_ids(p_ids text[]) returns setof text
 language plpgsql stable security definer set search_path = public as $$
+declare
+  -- кто спрашивает — один раз на вызов (раньше can_read_task считал это заново для каждой задачи — на проде упиралось в таймаут)
+  v_sys boolean := app_system(); v_pid text := coalesce(my_person_id(), ''); v_acc text := coalesce(my_access(), '');
+  v_su boolean := is_superadmin(); v_dev boolean := is_dev();
+  v_units text[] := coalesce(my_unit_ids(), '{}'); v_apps text[] := coalesce(my_pm_app_ids(), '{}');
+  v_pos text[] := coalesce(my_positions(), '{}'); v_lp text[] := coalesce(my_lead_people(), '{}'); v_teams text[] := coalesce(my_teams(), '{}');
 begin
-  return query select t.id from tasks t join units u on u.id = t.unit_id
-   where t.id = any(coalesce(p_ids, '{}'))
-     and not exists (select 1 from jsonb_array_elements(u.settings -> 'columns') c where c ->> 'id' = t.status and c ->> 'kind' = 'done')
-     and (can_read_task(t.id) or exists (select 1 from tasks v where v.depends_on ? t.id and can_read_task(v.id)));
+  if coalesce(array_length(p_ids, 1), 0) = 0 then return; end if;
+  return query
+  with vis as (  -- видимые вошедшему задачи: то же выражение, что правило tasks_read (держать вместе!)
+    select v.id, v.depends_on from tasks v
+     where v_sys or ((not v.is_test or v_dev)
+       and (v.app_id = '' or v_acc <> 'moderator' or v.app_id = any(v_apps))
+       and (v_su
+         or (v_acc = 'moderator' and v.unit_id = any(v_units))
+         or v.assignee_id = v_pid or v.review_from = v_pid or v.reviewer_id = v_pid
+         or (v_acc = 'lead' and v.unit_id = any(v_units)
+             and ((v.department_id <> '' and v.department_id = any(v_pos)) or (v.assignee_id <> '' and v.assignee_id = any(v_lp))))
+         or (v_acc = 'rm' and v.unit_id = any(v_units)
+             and ((v.department_id <> '' and v.department_id = any(v_pos)) or (v.team_id <> '' and v.team_id = any(v_teams))))))),
+  allowed as (  -- можно спрашивать: видимые задачи и те, от которых зависят видимые
+    select id from vis
+    union select jsonb_array_elements_text(depends_on) from vis where depends_on <> '[]'::jsonb)
+  select t.id from tasks t join units u on u.id = t.unit_id
+   where t.id = any(p_ids) and t.id in (select id from allowed)
+     and not exists (select 1 from jsonb_array_elements(u.settings -> 'columns') c where c ->> 'id' = t.status and c ->> 'kind' = 'done');
 end $$;
 revoke execute on function open_task_ids(text[]) from public, anon;
 grant execute on function open_task_ids(text[]) to authenticated;
