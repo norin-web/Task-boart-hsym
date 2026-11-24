@@ -106,12 +106,12 @@ function buildPanel(t) {
     },
   }));
 
-  // тема запроса второй строкой под «App - [Update #3] - Design»; у запроса её правят CEO/PM (этапы подхватят)
+  // тема запроса — в названии «App - [Update #3: тема]»; у запроса её правят CEO/PM отдельным полем (названия запроса и этапов обновятся)
   const topicEl = (t.kind === 'request' && staff)
     ? h('input', { class: 'topic-inp', value: t.topic || '', maxlength: 500, placeholder: 'Тема: что делаем в этом запросе', 'aria-label': 'Тема',
       onkeydown: e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } },
       onchange: e => { const v = e.target.value.trim(); if (v !== (t.topic || '')) patchTask(t, { topic: v }); } })
-    : t.topic && h('div', { class: 'topic-line' }, t.topic);
+    : null; // у этапа тема — в названии
 
   // карточка релиза: блоки по настройке RM («Настроить карточку релиза»)
   const relHide = id => t.step === 'release' && releaseHidden().includes(id);
@@ -520,6 +520,10 @@ function backendRequestBlock(t) {
   const box = h('div', { class: 'be-block' });
   let list = [];
   let open = false;
+  let off = t.backendNeed === 'no'; // «Бэкенд не нужен» (апдейт без сервера) — метки на карточке нет
+  const setOff = v => send('setBackendNeed', { taskId: t.id, off: v })
+    .then(() => { off = v; t.backendNeed = v ? 'no' : ''; paint(); toast(v ? 'Отмечено: бэкенд не нужен' : 'Отметка «не нужен» снята'); reloadBoard().catch(() => {}); })
+    .catch(showErr);
   const STATE = { todo: 'ждёт', progress: 'в работе', done: 'готово' };
   const paint = () => {
     const ta = open && autosize(h('textarea', { class: 'inp', rows: 2, maxlength: 5000, 'data-esc-local': '',
@@ -542,9 +546,14 @@ function backendRequestBlock(t) {
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(box.querySelector('.be-send')); }
     });
     fill(box,
-      h('div', { class: 'qa-bar be-bar' }, icon('code', 15),
-        h('span', null, list.length ? 'Бэкенд' : 'Нужен бэкенд?'), h('span', { class: 'spacer' }),
-        !open && h('button', { class: 'btn ' + (list.length ? 'ghost' : 'primary') + ' sm', onclick: () => { open = true; paint(); } }, list.length ? 'Ещё запрос' : 'Запросить бэкенд')),
+      off && !list.length
+        // отмечено «не нужен»: так и пишем; передумали — «Нужен» возвращает кнопку запроса
+        ? h('div', { class: 'qa-bar be-bar be-off' }, icon('code', 15), h('span', null, 'Бэкенд не нужен'), h('span', { class: 'spacer' }),
+          h('button', { class: 'btn ghost sm', onclick: () => setOff(false) }, 'Нужен'))
+        : h('div', { class: 'qa-bar be-bar' }, icon('code', 15),
+          h('span', null, list.length ? 'Бэкенд' : 'Нужен бэкенд?'), h('span', { class: 'spacer' }),
+          !open && !list.length && h('button', { class: 'btn ghost sm', title: 'Этому приложению сервер не нужен — метки «Бэкенд не запрошен» на карточке не будет', onclick: () => setOff(true) }, 'Бэкенд не нужен'),
+          !open && h('button', { class: 'btn ' + (list.length ? 'ghost' : 'primary') + ' sm', onclick: () => { open = true; paint(); } }, list.length ? 'Ещё запрос' : 'Запросить бэкенд')),
       open && h('div', { class: 'be-form' }, ta,
         h('div', { class: 'edit-actions' },
           h('button', { class: 'btn primary sm be-send', onclick: e => submit(e.currentTarget) }, icon('send', 13), 'Отправить'),

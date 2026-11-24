@@ -2,7 +2,7 @@
  * Опросник разработчика: окно с вопросами (web/src/devform.js) и блок в карточке этапа iOS.
  * База не пускает этап на ревью без ответов (DEV_FORM:<id>) — showErr присылает tasks:devform, и окно открывается само.
  */
-import { S, taskById, fmtDate, isSuper, isStaff, myAccess } from '../state.js';
+import { S, taskById, personById, fmtDate, isSuper, isStaff, myAccess } from '../state.js';
 import { h, icon, modal, toast, showErr, fill } from '../ui.js';
 import { call, send } from '../api.js';
 import { DEV_QUESTIONS } from '../devform.js';
@@ -72,10 +72,22 @@ export async function openDevForm(t, onSaved) {
 /** Блок в карточке этапа iOS: заполнен или нет, кнопка открыть. */
 export function devFormBlock(t, canEdit) {
   const box = h('div', { class: 'dq-bar' });
+  // «Пропустить» — апдейт, где опросник не нужен: этап сдаётся без ответов, RM видит «пропущен»; «Вернуть» — снова нужен
+  const skip = v => send('skipDevForm', { taskId: t.id, skip: v })
+    .then(saved => { t.devForm = saved.devForm; draw(); toast(v ? 'Опросник пропущен' : 'Опросник снова нужен'); })
+    .catch(showErr);
   const draw = () => {
     const at = t.devForm && t.devForm.at;
+    const skipped = !at && t.devForm && t.devForm.skip;
+    if (skipped) {
+      const who = personById(skipped.by);
+      return fill(box, icon('check', 15),
+        h('span', { class: 'dq-bar-text' }, h('b', null, 'Опросник перед релизом'), h('small', { class: 'muted' }, 'пропущен' + (who ? ' · ' + who.name : ''))),
+        canEdit && h('button', { class: 'btn ghost sm', onclick: () => skip(false) }, 'Вернуть'));
+    }
     fill(box, icon(at ? 'check' : 'checklist', 15),
       h('span', { class: 'dq-bar-text' }, h('b', null, 'Опросник перед релизом'), h('small', { class: (t.devForm || {}).returned && !at ? 'danger-text' : 'muted' }, at ? 'заполнен ' + fmtDate(at.slice(0, 10)) + ((t.devForm || {}).checked ? ' · RM принял' : '') : (t.devForm || {}).returned ? 'RM вернул с вопросами: ' + t.devForm.returned.note : 'заполните перед сдачей')),
+      canEdit && !at && h('button', { class: 'btn ghost sm', title: 'Опросник не нужен (например, небольшой апдейт) — этап можно сдать без ответов', onclick: () => skip(true) }, 'Пропустить'),
       canEdit && h('button', { class: 'btn sm' + (at ? ' ghost' : ' primary'), onclick: () => openDevForm(t, draw) }, at ? 'Изменить' : 'Заполнить'));
   };
   draw();

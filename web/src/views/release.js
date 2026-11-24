@@ -226,8 +226,11 @@ function devAnswers(form, t, canCheck, reload) {
   const who = form && personById(form.by);
   const back = form && form.returned;
   if (!form || !form.at) {
+    const skipped = form && form.skip;
     return h('div', { class: 'rl-card rl-dev-empty' }, h('h3', null, 'Опросник разработчика'),
-      back
+      skipped
+        ? h('p', { class: 'muted rl-small' }, 'Опросник пропущен' + (personById(skipped.by) ? ' — ' + personById(skipped.by).name : '') + ': в этом релизе он не нужен.')
+        : back
         ? h('p', { class: 'rl-small' }, h('span', { class: 'danger-text' }, 'Вернули с вопросами: '), back.note, h('span', { class: 'muted' }, ' · ждём ответа разработчика'))
         : h('p', { class: 'muted rl-small' }, 'Разработчик ещё не заполнил опросник — ответы появятся здесь.'));
   }

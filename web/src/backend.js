@@ -260,7 +260,7 @@ const unitOut = r => ({
 });
 
 const taskOut = r => ({
-  id: r.id, unitId: r.unit_id, num: r.num, title: r.title, topic: r.topic || '', description: r.description, status: r.status,
+  id: r.id, unitId: r.unit_id, num: r.num, title: r.title, topic: r.topic || '', backendNeed: r.backend_need || '', description: r.description, status: r.status,
   assigneeId: r.assignee_id, departmentId: r.department_id || '', dueDate: r.due_date, order: r.ord,
   fields: json(r.fields, {}), checklist: json(r.checklist, []), archived: !!r.archived, doneAt: r.done_at,
   reviewFrom: r.review_from || '', reviewerId: r.reviewer_id || '', teamId: r.team_id || '', specUrl: r.spec_url || '',
@@ -843,7 +843,7 @@ export function createBackend(db, opts = {}) {
     const pt = parseTitle(r.title);
     if (pt) return `${pt.app} - [${pt.type}]`;
     const a = r.app_id ? await one('apps', r.app_id) : null;
-    return requestTitle(a ? a.name : r.title, typeLabel(r.request_type, 1));
+    return requestTitle(a ? a.name : r.title, typeLabel(r.request_type, 1), r.topic || '');
   }
 
   /** Стикер в комментарии — только его владелец (личные стикеры, stickers.js). */
@@ -1677,9 +1677,22 @@ export function createBackend(db, opts = {}) {
           fail('Недостаточно прав: менять можно только свои задачи', 'FORBIDDEN');
         }
         await log(logs, ctx);
-        // тема запроса — и у его этапов (она у них второй строкой)
+        // тема запроса — и у его этапов; она же в названии «App - [Update #1: тема]» — переписываем начало у запроса и всех потомков
         if (t.kind === 'request' && (saved[0].topic || '') !== (r.topic || '')) {
           await run(T('tasks').update({ topic: saved[0].topic || '' }).eq('parent_id', t.id).eq('kind', 'stage'));
+          const pt = parseTitle(saved[0].title);
+          if (pt) {
+            const oldBase = `${pt.app} - [${pt.type}]`;
+            const newBase = requestTitle(pt.app, pt.kind, saved[0].topic || '');
+            if (newBase !== oldBase) {
+              const kids = (await descendants([t.id])).filter(x => x.id !== t.id).map(x => x.id);
+              const rows = [saved[0], ...(kids.length ? await inChunks(kids, ids => T('tasks').select('id,title').in('id', ids)) : [])];
+              for (const x of rows) {
+                if (String(x.title).startsWith(oldBase)) await updateOne('tasks', x.id, { title: str(newBase + String(x.title).slice(oldBase.length), 500) });
+              }
+              saved[0].title = str(newBase + String(saved[0].title).slice(oldBase.length), 500);
+            }
+          }
         }
         if ('description' in patch && saved[0].description !== r.description) await notifyMentions(t.id, saved[0].description, r.description, 'description');
         return taskOut(saved[0]); // из базы: исполнителя мог сменить триггер ревью
@@ -2979,8 +2992,8 @@ export function createBackend(db, opts = {}) {
       const tpl = p.templateId ? await one('task_templates', String(p.templateId)) : null;
       // название — «App - [Update #3]» (апдейты нумеруются сами по приложению), что написали — тема второй строкой
       const n = type === 'update' ? (await run(T('tasks').select('id').eq('app_id', a.id).eq('kind', 'request').eq('request_type', 'update'))).length + 1 : 0;
-      const title = str(requestTitle(a.name, typeLabel(type, n)), 500);
       const topic = topicOf(str(p.title, 500) || (tpl && tpl.title) || '', a.name);
+      const title = str(requestTitle(a.name, typeLabel(type, n), topic), 500);
       return methods.createTask({
         unitId: a.unit_id, title, topic,
         description: p.description || (tpl ? tpl.description : ''),
@@ -3469,6 +3482,19 @@ export function createBackend(db, opts = {}) {
     },
 
     /** Опросник разработчика перед релизом: только этап iOS, все обязательные ответы; при «Нет» уточнение не хранится. */
+    /**
+     * «Пропустить» опросник (апдейт, где он не нужен) — или вернуть. Отметка { by, at } в dev_form.skip: этап сдаётся без ответов,
+     * RM в карточке релиза видит «Опросник пропущен». Менять — как ответы: исполнитель этапа, PM и CEO.
+     */
+    async skipDevForm(p) {
+      const t = await findTask(p.taskId);
+      if (t.step !== 'ios' && t.step !== 'integr') fail('Опросник — у этапа «Разработка iOS» или «Интеграция»');
+      const df = { ...(json(t.dev_form, {}) || {}) };
+      if (p.skip) df.skip = { by: (await rpc('my_person_id', {})) || '', at: now() }; else delete df.skip;
+      await updateOne('tasks', t.id, { dev_form: df });
+      return taskOut({ ...t, dev_form: df });
+    },
+
     async saveDevForm(p) {
       const t = await findTask(p.taskId);
       if (t.step !== 'ios' && t.step !== 'integr') fail('Опросник — у этапа «Разработка iOS» или «Интеграция»');
@@ -3676,6 +3702,12 @@ export function createBackend(db, opts = {}) {
       const text = req(str(p.text, 5000), 'Что нужно по бэкенду');
       const id = await rpc('request_backend', { p_task: t.id, p_text: text });
       return { id: typeof id === 'object' && id ? Object.values(id)[0] : id };
+    },
+    /** «Бэкенд не нужен» на этапе разработки (off) или снять отметку. */
+    async setBackendNeed(p) {
+      const t = await findTask(p.taskId);
+      await rpc('set_backend_need', { p_task: t.id, p_off: !!p.off });
+      return { backendNeed: p.off ? 'no' : '' };
     },
     /** Запросы на бэкенд этапа для его карточки: [{ id, text, state todo|progress|done, assigneeId, createdAt }]. */
     async getBackendRequests(p) {

@@ -325,6 +325,8 @@ end $$;
 alter table tasks add column if not exists team_id text not null default '';
 -- тема запроса («Фикс анимации на пейволле»): второй строкой под названием «App - [Update #3] - Design» (web/src/naming.js)
 alter table tasks add column if not exists topic text not null default '';
+-- этап разработки: бэкенд не нужен ('no') — кнопка «Бэкенд не нужен» в карточке, метки «Бэкенд не запрошен» на карточке нет
+alter table tasks add column if not exists backend_need text not null default '';
 
 -- Позиция по умолчанию — первый «отдел в команде» человека (однократно, если позиции ещё нет)
 update people p set position_id = m.department_id
@@ -912,6 +914,8 @@ begin
   if new.step = 'ios' and coalesce(new.dev_form ->> 'need', '') = 'false' then return new; end if;
   if new.step = 'integr' and coalesce(new.dev_form ->> 'need', '') <> 'true' then return new; end if;
   if coalesce(new.dev_form ->> 'at', '') <> '' then return new; end if;
+  -- опросник пропустили («Пропустить» — апдейт, где он не нужен): сдавать можно
+  if coalesce(new.dev_form ->> 'skip', '') <> '' then return new; end if;
   select settings into st from units where id = new.unit_id;
   select x ->> 'kind' into k from jsonb_array_elements(st -> 'columns') x where x ->> 'id' = new.status limit 1;
   if coalesce(k, '') = 'done' or new.status = coalesce(st -> 'review' ->> 'column', '') then
@@ -1663,7 +1667,9 @@ begin
     v_id := 't_' || substr(md5(random()::text || clock_timestamp()::text), 1, 12);
     insert into tasks (id, unit_id, num, title, topic, description, status, assignee_id, department_id, due_date, ord, fields, checklist,
                        archived, done_at, created_by, created_at, updated_at, parent_id, kind, request_type, app_id, is_test, spec_url)
-    values (v_id, t.unit_id, next_task_num(t.unit_id), left(coalesce(a.name, '') || ' - [Reject #' || v_no || ']', 500), left(trim(p_reason), 500),
+    values (v_id, t.unit_id, next_task_num(t.unit_id),
+            left(coalesce(a.name, '') || ' - [Reject #' || v_no || case when naming_clip(p_reason) <> '' then ': ' || naming_clip(p_reason) else '' end || ']', 500),
+            left(trim(p_reason), 500),
             'Apple отклонил релиз «' || coalesce(a.name, '') || '» (реджект №' || v_no || ').' || chr(10) || trim(p_reason)
               || case when coalesce(trim(p_shot), '') <> '' then chr(10) || 'Скрин: ' || trim(p_shot) else '' end,
             u.settings -> 'columns' -> 0 ->> 'id', case when p_self then v_actor else coalesce(pm, '') end, '', '', 0,
@@ -2688,12 +2694,18 @@ grant execute on function fast_forward_request(text, text[], text) to authentica
 -- Цифры по юнитам для меню и карточек (вместо выгрузки всех задач в браузер): по колонкам, просрочено, на ревью, закрыто за неделю.
 -- Права — как на доске (RLS): сотрудник считает только видимое ему; этапы, которые ждут предыдущих, у не-администраторов не считаются.
 -- Незакрытые среди переданных задач (одним запросом — для подсчёта «ждущих» этапов сразу у всех).
+-- Только про задачи, которые вошедший видит сам или от которых зависит видимая ему задача (can_read_task — ниже в файле;
+-- plpgsql разрешает её при вызове, поэтому повторный прогон схемы ни на миг не открывает статус чужих задач).
+create index if not exists tasks_depends_on on tasks using gin (depends_on);
 create or replace function open_task_ids(p_ids text[]) returns setof text
-language sql stable security definer set search_path = public as $$
-  select t.id from tasks t join units u on u.id = t.unit_id
+language plpgsql stable security definer set search_path = public as $$
+begin
+  return query select t.id from tasks t join units u on u.id = t.unit_id
    where t.id = any(coalesce(p_ids, '{}'))
-     and not exists (select 1 from jsonb_array_elements(u.settings -> 'columns') c where c ->> 'id' = t.status and c ->> 'kind' = 'done');
-$$;
+     and not exists (select 1 from jsonb_array_elements(u.settings -> 'columns') c where c ->> 'id' = t.status and c ->> 'kind' = 'done')
+     and (can_read_task(t.id) or exists (select 1 from tasks v where v.depends_on ? t.id and can_read_task(v.id)));
+end $$;
+revoke execute on function open_task_ids(text[]) from public, anon;
 grant execute on function open_task_ids(text[]) to authenticated;
 
 create or replace function unit_task_counts(p_day text, p_week text) returns table (unit_id text, todo int, in_progress int, done int, overdue int, review int, done_week int)
@@ -3568,6 +3580,12 @@ create or replace function naming_dept(p_step text, p_title text) returns text l
       else trim(coalesce(p_title, '')) end end;
 $$;
 
+-- тема для названия «App - [Update #1: тема]»: без квадратных скобок, до 80 знаков (то же — clipTopic в naming.js)
+create or replace function naming_clip(p_topic text) returns text language sql immutable set search_path = public as $$
+  select case when length(v) > 80 then rtrim(left(v, 79)) || '…' else v end
+    from (select trim(regexp_replace(translate(coalesce(p_topic, ''), '[]', '()'), '\s+', ' ', 'g')) v) x;
+$$;
+
 -- короткое имя этапа: отдел из «App - [Тип] - Отдел», старое «Дизайн · App» — до « · »
 create or replace function naming_stage(p_title text) returns text language sql immutable set search_path = public as $$
   select case when p_title ~ ' - \[[^]]+\] - ' then regexp_replace(p_title, '^.*? - \[[^]]+\] - ', '') else split_part(p_title, ' · ', 1) end;
@@ -3695,7 +3713,8 @@ language sql stable security definer set search_path = public as $$
     'texts', case when not exists (select 1 from tasks x where x.parent_id = t.parent_id and x.kind = 'stage' and x.step = 'meta' and not x.archived) then ''
       when exists (select 1 from tasks x where x.parent_id = t.parent_id and x.kind = 'stage' and x.step = 'meta' and not x.archived and not task_done(x.id)) then 'none'
       else 'done' end,
-    'backend', case when not exists (select 1 from tasks b where b.parent_id = t.id and b.step = 'backend' and not b.archived) then ''
+    'backend', case when not exists (select 1 from tasks b where b.parent_id = t.id and b.step = 'backend' and not b.archived)
+        then case when t.backend_need = 'no' then 'off' else '' end
       when exists (select 1 from tasks b where b.parent_id = t.id and b.step = 'backend' and not b.archived and not task_done(b.id)) then 'open'
       else 'done' end)
     from tasks t left join tasks r on r.id = t.parent_id
@@ -3717,20 +3736,44 @@ grant execute on function dev_stage_flags(text[]) to authenticated;
 -- Стоит после «grant execute on all functions … to authenticated» выше, чтобы повторный прогон схемы не открыл её снова.
 revoke execute on function task_done(text) from public, anon, authenticated;
 
--- open_task_ids — «какие из этих задач не закрыты» (для этапов, которые ждут чужих, невидимых задач). Раньше отвечала
--- по любым id. Теперь — только про задачи, которые вошедший видит сам или от которых зависит видимая ему задача.
--- (Переопределена здесь, после can_read_task; первая версия выше — для unit_task_counts при первом прогоне схемы.)
-create index if not exists tasks_depends_on on tasks using gin (depends_on);
-create or replace function open_task_ids(p_ids text[]) returns setof text
-language sql stable security definer set search_path = public as $$
-  select t.id from tasks t join units u on u.id = t.unit_id
-   where t.id = any(coalesce(p_ids, '{}'))
-     and not exists (select 1 from jsonb_array_elements(u.settings -> 'columns') c where c ->> 'id' = t.status and c ->> 'kind' = 'done')
-     and (can_read_task(t.id) or exists (select 1 from tasks v where v.depends_on ? t.id and can_read_task(v.id)));
-$$;
-revoke execute on function open_task_ids(text[]) from public, anon;
-grant execute on function open_task_ids(text[]) to authenticated;
-
 -- notify_release — рассылка «вышло в стор / реджект»; зовёт только release_step (security definer, сам проверяет права).
 -- Проверки роли внутри нет — прямой вызов закрыт, иначе любой мог разослать уведомление по любой задаче.
 revoke execute on function notify_release(text, text) from public, anon, authenticated;
+
+-- «Бэкенд не нужен» на этапе разработки (iOS / интеграция): ставит/снимает исполнитель этапа, лид его зоны, PM и CEO
+-- (как «Запросить бэкенд»). Метка «Бэкенд не запрошен» на карточке тогда не показывается.
+create or replace function set_backend_need(p_task text, p_off boolean) returns void
+language plpgsql security definer set search_path = public as $$
+declare t tasks; v_sys text := current_setting('app.system', true);
+begin
+  select * into t from tasks where id = p_task;
+  if t.id is null or t.kind <> 'stage' or coalesce(t.step, '') not in ('ios', 'integr') then
+    raise exception 'Отметка про бэкенд — только у этапа разработки' using errcode = 'P0001';
+  end if;
+  if not can_edit_task_links(t.id) then raise exception 'Недостаточно прав для этого действия' using errcode = '42501'; end if;
+  perform set_config('app.system', 'on', true);
+  update tasks set backend_need = case when p_off then 'no' else '' end,
+                   updated_at = to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+   where id = t.id;
+  perform set_config('app.system', coalesce(v_sys, 'off'), true);
+end $$;
+revoke execute on function set_backend_need(text, boolean) from public, anon;
+grant execute on function set_backend_need(text, boolean) to authenticated;
+
+-- Один раз: тема запроса — в название, как просил владелец («App - [Update #1: Prod UPD] - iOS»), у запроса и всех его потомков
+do $$
+declare r record; v_old text; v_new text; v_sys text := current_setting('app.system', true);
+begin
+  if exists (select 1 from app_settings where key = 'once_naming_topic') then return; end if;
+  perform set_config('app.system', 'on', true);
+  for r in select t.id, t.title, t.topic from tasks t
+            where t.kind = 'request' and coalesce(t.topic, '') <> '' and t.title ~ '^.*? - \[[^]:]+\]' loop
+    v_old := substring(r.title from '^(.*? - \[[^]]+\])');
+    v_new := left(v_old, length(v_old) - 1) || ': ' || naming_clip(r.topic) || ']';
+    update tasks set title = left(v_new || substr(title, length(v_old) + 1), 500)
+     where left(title, length(v_old)) = v_old
+       and (id = r.id or parent_id = r.id or parent_id in (select c.id from tasks c where c.parent_id = r.id));
+  end loop;
+  perform set_config('app.system', coalesce(v_sys, 'off'), true);
+  insert into app_settings (key, value, updated_at) values ('once_naming_topic', 'true'::jsonb, '') on conflict (key) do nothing;
+end $$;

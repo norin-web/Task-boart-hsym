@@ -3563,3 +3563,5 @@ img.fb-ic { object-fit: cover; padding: 0; }
 .tech-chip.no { background: color-mix(in srgb, var(--warn-fill) 18%, transparent); }
 .tech-chip.wait { background: var(--info-soft); } /* голубой — не путать с фиолетовым «На тесте у …» */
 .tech-chip.ok { background: color-mix(in srgb, var(--ok) 16%, transparent); }
+
+.be-bar.be-off > span:not(.spacer) { color: var(--muted); }

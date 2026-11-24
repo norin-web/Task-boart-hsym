@@ -191,10 +191,10 @@ test('сценарии: роли × позиции × жизненный цик�
   // ---------- апдейт ----------
   const upd = await api.as(ceo, () => api('createRequest', { appId: app.id, type: 'update', title: 'Апдейт 1.1' }));
   await check('апдейты нумеруются сами по приложению', async () => {
-    assert.match(upd.title, / - \[Update #1\]$/);
+    assert.match(upd.title, / - \[Update #1: 1\.1\]$/);
     assert.equal(upd.topic, '1.1');
     const u2 = await api.as(ceo, () => api('createRequest', { appId: app.id, type: 'update', title: 'Виджеты' }));
-    assert.match(u2.title, / - \[Update #2\]$/);
+    assert.match(u2.title, / - \[Update #2: Виджеты\]$/);
     assert.equal(u2.topic, 'Виджеты');
   });
   const us = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: upd.id }))).map(t => [t.step, t]));

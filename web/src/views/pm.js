@@ -98,7 +98,7 @@ function inbox(d, reload, redraw) {
 // «Streaks - [Update #2]» → «Update #2» (+ тема): название приложения уже стоит рядом; старое «New App: Streaks» → «New App»
 const shortTitle = r => {
   const pt = parseTitle(r.title);
-  if (pt) return [pt.type, r.topic].filter(Boolean).join(' · ');
+  if (pt) return pt.type; // «Update #2: тема»
   return (r.app ? r.title.replace(new RegExp('\\s*[:·—-]\\s*' + r.app.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$'), '') : r.title) || r.title;
 };
 

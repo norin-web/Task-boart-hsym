@@ -499,7 +499,7 @@ test('RM: релиз — поля, свой чеклист, отправка в 
   const appNow = id => api.as(ceo, async () => (await api('listApps', {})).find(a => a.id === id));
   assert.equal((await appNow(app.id)).status, 'reject');
   // PM перевёл свою задачу по реджекту в Done — у RM релиз не пропал, а вернулся в очередь «исправлено»
-  const fix = (await api.as(pm, () => api('getBoard', { unitId: gold.id }))).tasks.find(t => /\[Reject #1\]$/.test(t.title) && t.topic === 'Guideline 3.1.2');
+  const fix = (await api.as(pm, () => api('getBoard', { unitId: gold.id }))).tasks.find(t => /\[Reject #1: Guideline 3\.1\.2\]$/.test(t.title) && t.topic === 'Guideline 3.1.2');
   assert.ok(fix && fix.kind === 'request' && fix.assigneeId === pm.id && fix.specUrl === 'https://drive.google.com/shot1');
   await api.as(pm, () => api('updateTask', { id: fix.id, patch: { status: 'done' } }));
   await api.as(rm, async () => {
@@ -842,7 +842,7 @@ test('шаблон апдейта: пункты и нужные этапы; за
   assert.equal(tpl.kind, 'update');
   const { app } = await api.as(ceo, () => api('createApp', { name: 'Tpl', unitId: gold.id, noRequest: true }));
   const r = await api.as(ceo, () => api('createRequest', { appId: app.id, type: 'update', templateId: tpl.id }));
-  assert.equal(r.title, 'Tpl - [Update #1]'); // номер ставится сам
+  assert.equal(r.title, 'Tpl - [Update #1: новый пейвол]'); // номер ставится сам, тема — в названии
   assert.equal(r.topic, 'новый пейвол'); // что написали — тема
   assert.deepEqual(r.checklist.map(i => i.text), ['Макет', 'Тексты']);
   const stages = await api.as(pm, () => api('decomposeRequest', { taskId: r.id }));
@@ -883,7 +883,7 @@ test('опросник разработчика: без него этап iOS н
     assert.ok(closed.task.release.fixedAt);
     await assert.rejects(() => api('releaseStep', { taskId: by.release.id, action: 'close_reject' }), /только реджект/);
   });
-  const rej = (await api.as(pm, () => api('getBoard', { unitId: gold.id }))).tasks.find(t => /\[Reject #1\]$/.test(t.title));
+  const rej = (await api.as(pm, () => api('getBoard', { unitId: gold.id }))).tasks.find(t => /\[Reject #1[\]:]/.test(t.title));
   assert.ok(rej.doneAt);
 });
 
@@ -957,7 +957,7 @@ test('бэклог: идеи и ТЗ ведёт CEO; запуск — новое
   const app = (await api.pg.query("select id from apps where name = 'Photo AI'")).rows[0];
   const upd = await api.as(ceo, () => api('saveIdea', { kind: 'update', appId: app.id, title: 'Виджеты' }));
   const r2 = await api.as(ceo, () => api('startIdea', { id: upd.id }));
-  assert.equal(r2.request.title, 'Photo AI - [Update #1]');
+  assert.equal(r2.request.title, 'Photo AI - [Update #1: Виджеты]');
   assert.equal(r2.request.topic, 'Виджеты');
   assert.equal((await api.as(ceo, () => api('listIdeas', {}))).filter(x => x.status === 'started').length, 2);
 });
@@ -1275,28 +1275,31 @@ test('названия «App - [Тип] - Отдел»: новые сразу т
   const { app, request } = await api.as(ceo, () => api('createApp', { name: 'Video Player v1', unitId: gold.id }));
   assert.equal(request.title, 'Video Player v1 - [New App]');
   const upd = await api.as(ceo, () => api('createRequest', { appId: app.id, type: 'update', title: 'Фикс анимации (на пейволле)' }));
-  assert.deepEqual([upd.title, upd.topic], ['Video Player v1 - [Update #1]', 'Фикс анимации (на пейволле)']);
+  assert.deepEqual([upd.title, upd.topic], ['Video Player v1 - [Update #1: Фикс анимации (на пейволле)]', 'Фикс анимации (на пейволле)']);
   const st = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: upd.id }))).map(t => [t.step, t]));
-  assert.deepEqual([st.design.title, st.design.topic], ['Video Player v1 - [Update #1] - Design', 'Фикс анимации (на пейволле)']);
+  assert.deepEqual([st.design.title, st.design.topic], ['Video Player v1 - [Update #1: Фикс анимации (на пейволле)] - Design', 'Фикс анимации (на пейволле)']);
   // старые названия (до перехода) — переименовываются при обновлении схемы
   const q = (sql, args) => api.pg.query(sql, args);
   await q("update tasks set title = 'Апдейт №1: Фикс анимации (на пейволле)', topic = '' where id = $1", [upd.id]);
   await q("update tasks set title = 'Дизайн · Апдейт №1: Фикс анимации (на пейволле)', topic = '' where id = $1", [st.design.id]);
   await q("update tasks set title = 'Моушн дизайн · Апдейт №1: Фикс', topic = '', step = 'motion' where id = $1", [st.ios.id]);
   await q("update tasks set title = 'New App: Video Player v1' where id = $1", [request.id]);
-  await q("delete from app_settings where key = 'once_naming_en'");
+  await q("delete from app_settings where key in ('once_naming_en', 'once_naming_topic')");
   await api.pg.exec(fs.readFileSync(new URL('../supabase/schema.sql', import.meta.url), 'utf8'));
   const row = async id => (await q('select title, topic from tasks where id = $1', [id])).rows[0];
-  assert.deepEqual(await row(upd.id), { title: 'Video Player v1 - [Update #1]', topic: 'Фикс анимации (на пейволле)' });
-  assert.deepEqual(await row(st.design.id), { title: 'Video Player v1 - [Update #1] - Design', topic: 'Фикс анимации (на пейволле)' });
-  assert.equal((await row(st.ios.id)).title, 'Video Player v1 - [Update #1] - Motion Design');
+  assert.deepEqual(await row(upd.id), { title: 'Video Player v1 - [Update #1: Фикс анимации (на пейволле)]', topic: 'Фикс анимации (на пейволле)' });
+  assert.deepEqual(await row(st.design.id), { title: 'Video Player v1 - [Update #1: Фикс анимации (на пейволле)] - Design', topic: 'Фикс анимации (на пейволле)' });
+  assert.equal((await row(st.ios.id)).title, 'Video Player v1 - [Update #1: Фикс анимации (на пейволле)] - Motion Design');
   assert.deepEqual(await row(request.id), { title: 'Video Player v1 - [New App]', topic: '' });
   // переименовали приложение — названия задач следом
   await api.as(ceo, () => api('updateApp', { id: app.id, name: 'Video Player v2' }));
-  assert.equal((await row(st.design.id)).title, 'Video Player v2 - [Update #1] - Design');
+  assert.equal((await row(st.design.id)).title, 'Video Player v2 - [Update #1: Фикс анимации (на пейволле)] - Design');
   // тема запроса — и у этапов
   await api.as(pm, () => api('updateTask', { id: upd.id, patch: { topic: 'Новая тема' } }));
   assert.equal((await row(st.design.id)).topic, 'Новая тема');
+  // тема — и в названиях запроса и этапов
+  assert.equal((await row(upd.id)).title, 'Video Player v2 - [Update #1: Новая тема]');
+  assert.equal((await row(st.design.id)).title, 'Video Player v2 - [Update #1: Новая тема] - Design');
 });
 
 test('метки этапа разработки: аккаунт (New App), тексты, бэкенд — на доске и в «Моих задачах»', async () => {
@@ -1328,4 +1331,25 @@ test('метки этапа разработки: аккаунт (New App), те
   const ub = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: upd.id }))).map(t => [t.step, t]));
   const uf = (await api.as(pm, () => api('getBoard', { unitId: gold.id }))).tasks.find(t => t.id === ub.ios.id).flags;
   assert.equal(uf.account, '');
+});
+
+test('«Бэкенд не нужен» убирает метку; «Пропустить» опросник — этап iOS сдаётся без ответов, RM видит пропуск', async () => {
+  const api = await setup();
+  const { ceo, pm, lead, ios, qa, gold } = await studio(api);
+  const { request } = await api.as(ceo, () => api('createApp', { name: 'Skip', unitId: gold.id }));
+  const by = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: request.id }))).map(t => [t.step, t]));
+  await finish(api, lead, pm, by.design.id);
+  const flags = async () => (await api.as(ios, () => api('getMyBoard', { personId: ios.id, today: '2026-11-24' }))).tasks.find(t => t.id === by.ios.id).flags;
+  assert.equal((await flags()).backend, '');
+  await assert.rejects(api.as(qa, () => api('setBackendNeed', { taskId: by.ios.id, off: true })));
+  await api.as(ios, () => api('setBackendNeed', { taskId: by.ios.id, off: true }));
+  assert.equal((await flags()).backend, 'off');
+  await api.as(ios, () => api('setBackendNeed', { taskId: by.ios.id, off: false }));
+  assert.equal((await flags()).backend, '');
+  // опросник: без ответов сдать нельзя, после «Пропустить» — можно
+  await api.as(ios, () => api('updateTask', { id: by.ios.id, patch: { status: 'in_progress' } }));
+  await assert.rejects(api.as(ios, () => api('updateTask', { id: by.ios.id, patch: { status: 'done' } })));
+  const sk = await api.as(ios, () => api('skipDevForm', { taskId: by.ios.id, skip: true }));
+  assert.equal(sk.devForm.skip.by, ios.id);
+  await api.as(ios, () => api('updateTask', { id: by.ios.id, patch: { status: 'done' } }));
 });

@@ -668,6 +668,7 @@ const boardEnv = () => ({
 /** Метки этапа разработки: «Аккаунта нет / запрошен / есть» (только New App), «Текстов нет / Тексты есть», «Бэкенд не запрошен / запрошен / есть». */
 const ACCOUNT_CHIP = { none: ['Аккаунта нет', 'no'], pending: ['Аккаунт запрошен', 'wait'], done: ['Аккаунт есть', 'ok'] };
 const TEXTS_CHIP = { none: ['Текстов нет', 'no'], done: ['Тексты есть', 'ok'] };
+// off — «Бэкенд не нужен»: метки нет
 const BACKEND_CHIP = { '': ['Бэкенд не запрошен', 'no'], open: ['Бэкенд запрошен', 'wait'], done: ['Бэкенд есть', 'ok'] };
 function techChips(f) {
   const chip = (def, ic) => def && h('span', { class: 'tech-chip ' + def[1], title: def[0] }, icon(ic, 13), h('span', null, def[0]));
@@ -722,8 +723,7 @@ export function taskCard(t, inLane, env = boardEnv()) {
       class: 'icon-btn sm card-more', title: 'Что показывать на карточках · действия — правый клик',
       onclick: e => { e.stopPropagation(); cardViewMenu(e.currentTarget, t, env); },
     }, icon('more'))),
-  // тема запроса («Фикс анимации на пейволле») — второй строкой под «App - [Update #3] - Design»
-  t.topic && h('div', { class: 'card-topic', title: t.topic }, t.topic),
+  // тема запроса — уже в названии «App - [Update #3: тема] - Design», второй строкой не повторяем
   // этап разработки: технические метки — аккаунт в сторе (у New App) и бэкенд
   !done && t.flags && techChips(t.flags),
   // доработка по багам QA: на карточке видно, что это возврат с баг-репортом, а не новая задача
