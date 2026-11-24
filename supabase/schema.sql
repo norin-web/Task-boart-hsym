@@ -3661,3 +3661,33 @@ language sql stable security definer set search_path = public as $$
   select string_agg(naming_stage(t.title), ', ' order by naming_stage(t.title)) from tasks t
    where t.id in (select jsonb_array_elements_text(coalesce(p_deps, '[]'::jsonb))) and not task_done(t.id);
 $$;
+
+-- Метки на карточках этапов разработки (iOS / интеграция): аккаунт в сторе (только New App), тексты OB/PW/ASO и запрос на бэкенд.
+-- Сами этапы «Аккаунт» (у RM) и задачи «Backend» (у PM) разработчику не видны по правилам — состояние отдаёт функция.
+-- account: '' (не New App) | none | pending | done; texts: '' (нет этапа текстов) | none | done; backend: '' (не запрашивали) | open | done
+create or replace function stage_flags_raw(p_task text) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'account', case when coalesce(r.request_type, '') <> 'new_app' then ''
+      when exists (select 1 from tasks a where a.parent_id = t.parent_id and a.kind = 'stage' and a.step = 'account' and not a.archived and task_done(a.id)) then 'done'
+      when exists (select 1 from tasks a where a.parent_id = t.parent_id and a.kind = 'stage' and a.step = 'account' and not a.archived) then 'pending'
+      else 'none' end,
+    'texts', case when not exists (select 1 from tasks x where x.parent_id = t.parent_id and x.kind = 'stage' and x.step = 'meta' and not x.archived) then ''
+      when exists (select 1 from tasks x where x.parent_id = t.parent_id and x.kind = 'stage' and x.step = 'meta' and not x.archived and not task_done(x.id)) then 'none'
+      else 'done' end,
+    'backend', case when not exists (select 1 from tasks b where b.parent_id = t.id and b.step = 'backend' and not b.archived) then ''
+      when exists (select 1 from tasks b where b.parent_id = t.id and b.step = 'backend' and not b.archived and not task_done(b.id)) then 'open'
+      else 'done' end)
+    from tasks t left join tasks r on r.id = t.parent_id
+   where t.id = p_task and t.kind = 'stage' and t.step in ('ios', 'integr');
+$$;
+revoke execute on function stage_flags_raw(text) from public, anon;
+grant execute on function stage_flags_raw(text) to authenticated;
+-- обёртка без security definer: метки только у этапов, которые вошедший и так видит (правила чтения задач)
+create or replace function dev_stage_flags(p_tasks text[]) returns table (task_id text, flags jsonb)
+language sql stable set search_path = public as $$
+  select t.id, stage_flags_raw(t.id) from tasks t
+   where t.id = any(coalesce(p_tasks, '{}')) and t.kind = 'stage' and t.step in ('ios', 'integr');
+$$;
+revoke execute on function dev_stage_flags(text[]) from public, anon;
+grant execute on function dev_stage_flags(text[]) to authenticated;

@@ -3554,3 +3554,11 @@ img.fb-ic { object-fit: cover; padding: 0; }
 .crumbs .crumb-app-ic { width: 16px; height: 16px; border-radius: 4px; flex: none; display: inline-grid; place-items: center; color: #fff; font-size: 9px; font-weight: 700; object-fit: cover; }
 .parent-app-ic { width: 28px; height: 28px; border-radius: 7px; flex: none; display: grid; place-items: center; color: #fff; font-size: 12px; font-weight: 700; object-fit: cover; }
 .parent-card .parent-go { color: var(--muted); transform: rotate(-90deg); display: grid; place-items: center; }
+
+/* технические метки этапа разработки (аккаунт, бэкенд) — чипы как «На тесте у …»: цветная заливка по состоянию */
+.card-tech { display: flex; flex-wrap: wrap; gap: 4px; }
+.tech-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--text); white-space: nowrap; }
+.tech-chip .i { flex: none; }
+.tech-chip.no { background: color-mix(in srgb, var(--warn-fill) 18%, transparent); }
+.tech-chip.wait { background: color-mix(in srgb, var(--review) 14%, transparent); }
+.tech-chip.ok { background: color-mix(in srgb, var(--ok) 16%, transparent); }

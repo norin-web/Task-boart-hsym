@@ -823,6 +823,21 @@ export function createBackend(db, opts = {}) {
   }
 
   /** Кого отметили «@Имя Фамилия» в тексте (новые относительно before). Уведомляет база — notify_mention. */
+  /**
+   * Метки этапов разработки (iOS / интеграция) для карточек: аккаунт в сторе и запрос на бэкенд — { id → { account, backend } }.
+   * Функция базы (этапы «Аккаунт» и задачи «Backend» разработчику не видны); её ещё нет в базе — меток просто нет.
+   */
+  async function stageFlags(rows) {
+    const ids = rows.filter(t => t.kind === 'stage' && ['ios', 'integr'].includes(t.step) && !t.archived).map(t => t.id);
+    if (!ids.length) return {};
+    const out = {};
+    for (let i = 0; i < ids.length; i += 150) {
+      const res = await rpc('dev_stage_flags', { p_tasks: ids.slice(i, i + 150) }).catch(() => []);
+      (Array.isArray(res) ? res : res ? [res] : []).forEach(r => { if (r && r.task_id) out[r.task_id] = json(r.flags, {}) || {}; });
+    }
+    return out;
+  }
+
   /** Начало названия этапов запроса: «App - [Update #3]» (из названия запроса, если оно в формате; иначе собираем). */
   async function requestBase(r) {
     const pt = parseTitle(r.title);
@@ -1348,11 +1363,11 @@ export function createBackend(db, opts = {}) {
       const cc = Object.fromEntries((counts || []).map(c => [c.task_id, Number(c.n)]));
       const lk = {};
       links.forEach(l => { (lk[l.task_id] || (lk[l.task_id] = {}))[l.field_id] = l.url; });
-      const tree = await treeInfo(tasks.filter(t => !t.archived), today(p.today));
+      const [tree, flags] = await Promise.all([treeInfo(tasks.filter(t => !t.archived), today(p.today)), stageFlags(tasks)]);
       return {
         unit: unitOut(unit),
         fields,
-        tasks: tasks.map(t => ({ ...taskOut(t), commentCount: cc[t.id] || 0, links: lk[t.id] || {}, tree: tree.stats[t.id] || null, parent: tree.parents[t.id] || null })),
+        tasks: tasks.map(t => ({ ...taskOut(t), commentCount: cc[t.id] || 0, links: lk[t.id] || {}, tree: tree.stats[t.id] || null, parent: tree.parents[t.id] || null, ...(flags[t.id] ? { flags: flags[t.id] } : {}) })),
         units: units.map(u => ({ ...u, archived: !!u.archived })),
         people: ppl,
         departments: depts,
@@ -1901,12 +1916,13 @@ export function createBackend(db, opts = {}) {
       // для общей карточки доски (как в юните): комментарии, ссылки, прогресс и родитель, «Сейчас: …» у запросов, поле приоритета
       const ids = shown.map(t => t.id);
       const reqIds = shown.filter(t => t.kind === 'request' && !t.done_at).map(t => t.id);
-      const [tree, cms, lks, kids, gfields] = await Promise.all([
+      const [tree, cms, lks, kids, gfields, flags] = await Promise.all([
         treeInfo(shown, today(p.today)),
         inChunks(ids, ch => T('comments').select('task_id').in('task_id', ch)),
         inChunks(ids, ch => T('task_links').select('task_id,field_id,url').in('task_id', ch)),
         inChunks(reqIds, ch => T('tasks').select('id,parent_id,title,depends_on,done_at').in('parent_id', ch).eq('archived', false)),
         globalFields(),
+        stageFlags(shown),
       ]);
       const cc = {}, lk = {}, now = {};
       cms.forEach(c => { cc[c.task_id] = (cc[c.task_id] || 0) + 1; });
@@ -1923,6 +1939,7 @@ export function createBackend(db, opts = {}) {
           commentCount: cc[t.id] || 0, links: lk[t.id] || {}, tree: tree.stats[t.id] || null, parent: tree.parents[t.id] || null,
           ...(t.kind === 'request' ? { now: now[t.id] || [] } : {}),
           ...(t.id in onTest ? { onTest: { qaId: onTest[t.id] } } : {}),
+          ...(flags[t.id] ? { flags: flags[t.id] } : {}),
         })),
         fields: gfields.filter(f => !f.archived),
         units: units.filter(u => !u.archived).map(u => ({ id: u.id, name: u.name, key: u.key, color: u.color, columns: unitSettings(u.settings).columns })),

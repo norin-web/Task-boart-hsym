@@ -1298,3 +1298,30 @@ test('названия «App - [Тип] - Отдел»: новые сразу т
   await api.as(pm, () => api('updateTask', { id: upd.id, patch: { topic: 'Новая тема' } }));
   assert.equal((await row(st.design.id)).topic, 'Новая тема');
 });
+
+test('метки этапа разработки: аккаунт (New App), тексты, бэкенд — на доске и в «Моих задачах»', async () => {
+  const api = await setup();
+  const { ceo, pm, lead, ios, gold } = await studio(api);
+  const { request } = await api.as(ceo, () => api('createApp', { name: 'Flags', unitId: gold.id }));
+  const by = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: request.id }))).map(t => [t.step, t]));
+  await finish(api, lead, pm, by.design.id);
+  const flagsOf = async who => (await api.as(who, () => api('getMyBoard', { personId: who.id, today: '2026-11-24' }))).tasks.find(t => t.id === by.ios.id).flags;
+  const onBoard = async () => (await api.as(pm, () => api('getBoard', { unitId: gold.id }))).tasks.find(t => t.id === by.ios.id).flags;
+  assert.deepEqual(await flagsOf(ios), { account: 'none', texts: 'none', backend: '' });
+  assert.deepEqual(await onBoard(), { account: 'none', texts: 'none', backend: '' });
+  await api.as(ios, () => api('requestAccount', { taskId: by.ios.id, comment: '' }));
+  await api.as(ios, () => api('requestBackend', { taskId: by.ios.id, text: 'Подписки' }));
+  assert.deepEqual(await flagsOf(ios), { account: 'pending', texts: 'none', backend: 'open' });
+  // закрыли бэкенд и тексты — «есть»
+  const be = (await api.pg.query("select id from tasks where parent_id = $1 and step = 'backend'", [by.ios.id])).rows[0].id;
+  await api('updateTask', { id: be, patch: { status: 'done' } });
+  await api.pg.query("update tasks set status = 'done', done_at = 'x' where id = $1", [by.meta.id]);
+  const f = await flagsOf(ios);
+  assert.equal(f.backend, 'done');
+  assert.equal(f.texts, 'done');
+  // у апдейта аккаунта нет в метках
+  const upd = await api.as(ceo, () => api('createRequest', { appId: request.appId, type: 'update', title: 'x' }));
+  const ub = Object.fromEntries((await api.as(pm, () => api('decomposeRequest', { taskId: upd.id }))).map(t => [t.step, t]));
+  const uf = (await api.as(pm, () => api('getBoard', { unitId: gold.id }))).tasks.find(t => t.id === ub.ios.id).flags;
+  assert.equal(uf.account, '');
+});

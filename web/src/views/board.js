@@ -665,6 +665,15 @@ const boardEnv = () => ({
   actions: (anchor, t) => cardMenu(anchor, t), pick: true, redraw: renderTasks,
 });
 
+/** Метки этапа разработки: «Аккаунта нет / запрошен / есть» (только New App), «Текстов нет / Тексты есть», «Бэкенд не запрошен / запрошен / есть». */
+const ACCOUNT_CHIP = { none: ['Аккаунта нет', 'no'], pending: ['Аккаунт запрошен', 'wait'], done: ['Аккаунт есть', 'ok'] };
+const TEXTS_CHIP = { none: ['Текстов нет', 'no'], done: ['Тексты есть', 'ok'] };
+const BACKEND_CHIP = { '': ['Бэкенд не запрошен', 'no'], open: ['Бэкенд запрошен', 'wait'], done: ['Бэкенд есть', 'ok'] };
+function techChips(f) {
+  const chip = (def, ic) => def && h('span', { class: 'tech-chip ' + def[1] }, icon(ic, 13), def[0]);
+  return h('div', { class: 'card-tech' }, chip(ACCOUNT_CHIP[f.account], 'lock'), chip(TEXTS_CHIP[f.texts], 'edit'), chip(BACKEND_CHIP[f.backend || ''], 'code'));
+}
+
 export function taskCard(t, inLane, env = boardEnv()) {
   const show = cardShow();
   const done = env.done(t);
@@ -715,6 +724,8 @@ export function taskCard(t, inLane, env = boardEnv()) {
     }, icon('more'))),
   // тема запроса («Фикс анимации на пейволле») — второй строкой под «App - [Update #3] - Design»
   t.topic && h('div', { class: 'card-topic', title: t.topic }, t.topic),
+  // этап разработки: технические метки — аккаунт в сторе (у New App) и бэкенд
+  !done && t.flags && techChips(t.flags),
   // доработка по багам QA: на карточке видно, что это возврат с баг-репортом, а не новая задача
   (() => { const b = (t.bugs || []).filter(x => !x.closedAt && !x.fixedAt).pop(); return b && !done && h('div', { class: 'card-bug' }, icon('alert', 12), `Баг-репорт №${b.n}`); })(),
   reqAppLine,
