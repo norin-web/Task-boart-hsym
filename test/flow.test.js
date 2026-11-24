@@ -1272,10 +1272,19 @@ test('запрос на бэкенд из этапа iOS: задача тому,
   let list = await api.as(ios, () => api('getBackendRequests', { taskId: by.ios.id }));
   assert.deepEqual(list.map(x => [x.id, x.state, x.text]), [[id, 'todo', 'Эндпоинт для подписок\nи вебхук App Store']]);
   assert.deepEqual(await api.as(qa, () => api('getBackendRequests', { taskId: by.ios.id })), []); // чужой этап — не видно
-  // закрыли — у разработчика «готово»
+  // запросил по ошибке — отменяет: задача удаляется (у PM пропадает), в истории этапа — запись; посторонний — нельзя
+  const { id: wrong } = await api.as(ios, () => api('requestBackend', { taskId: by.ios.id, text: 'Ошибся' }));
+  await assert.rejects(api.as(qa, () => api('cancelBackendRequest', { id: wrong })));
+  await assert.rejects(api.as(ios, () => api('cancelBackendRequest', { id: by.ios.id })), /не найден/);
+  await api.as(ios, () => api('cancelBackendRequest', { id: wrong }));
+  assert.equal((await api.pg.query('select count(*)::int n from tasks where id = $1', [wrong])).rows[0].n, 0);
+  assert.deepEqual((await api.as(ios, () => api('getBackendRequests', { taskId: by.ios.id }))).map(x => x.id), [id]);
+  assert.ok((await api.pg.query("select 1 from activity where task_id = $1 and action = 'backend_cancel'", [by.ios.id])).rows.length);
+  // закрыли — у разработчика «готово»; готовый отменить нельзя
   await api('updateTask', { id, patch: { status: 'done' } });
   list = await api.as(ios, () => api('getBackendRequests', { taskId: by.ios.id }));
   assert.equal(list[0].state, 'done');
+  await assert.rejects(api.as(ios, () => api('cancelBackendRequest', { id })), /выполнен/);
 });
 
 test('названия «App - [Тип] - Отдел»: новые сразу так, старые переименовываются разово, тема — отдельно; переименовали приложение — и названия', async () => {

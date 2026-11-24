@@ -97,6 +97,7 @@ export function activityText(a) {
     case 'delete': return 'удаление задачи «' + a.fromText + '»';
     case 'stage_add': return 'добавлен этап «' + a.toText + '»';
     case 'stage_remove': return 'убран этап «' + a.fromText + '»';
+    case 'backend_cancel': return 'отменён запрос на бэкенд «' + cut(a.fromText) + '»';
     case 'unit_pm': return 'ответственный за юнит — ' + a.toText;
     case 'form_step': return 'опросник заполняет ' + a.toText;
     case 'deputy': return 'замещение: ' + a.toText;
@@ -148,6 +149,7 @@ function journalPhrase(a) {
     case 'unarchive': return { text: 'вернул(а) из архива' };
     case 'move': return { text: 'перенёс(ла) ' + a.fromText + ' → ' + a.toText + ':' };
     case 'delete': return { text: 'удалил(а) задачу ' + q(a.fromText) };
+    case 'backend_cancel': return { text: 'отменил(а) запрос на бэкенд ' + q(a.fromText) + ' в' };
     case 'update': break;
     default: return { text: activityText(a) };
   }

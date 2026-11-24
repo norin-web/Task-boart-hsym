@@ -525,6 +525,20 @@ function backendRequestBlock(t) {
     .then(() => { off = v; t.backendNeed = v ? 'no' : ''; paint(); toast(v ? 'Отмечено: бэкенд не нужен' : 'Отметка «не нужен» снята'); reloadBoard().catch(() => {}); })
     .catch(showErr);
   const STATE = { todo: 'ждёт', progress: 'в работе', done: 'готово' };
+  // запросили по ошибке — отменить: задача на бэкенд удаляется (у того, на кого упала, она пропадает)
+  const cancelReq = async (b, btn) => {
+    const who = personById(b.assigneeId);
+    if (!await confirmDlg(`Задача на бэкенд${who ? ' у ' + who.name : ''} удалится. Вернуть её будет нельзя — только запросить заново.`,
+      { title: 'Отменить запрос на бэкенд?', ok: 'Отменить запрос', cancel: 'Оставить', danger: true })) return;
+    btn.disabled = true;
+    try {
+      await send('cancelBackendRequest', { id: b.id });
+      list = list.filter(x => x.id !== b.id);
+      toast('Запрос на бэкенд отменён');
+      paint();
+      reloadBoard().catch(() => {});
+    } catch (e) { btn.disabled = false; showErr(e); }
+  };
   const paint = () => {
     const ta = open && autosize(h('textarea', { class: 'inp', rows: 2, maxlength: 5000, 'data-esc-local': '',
       placeholder: 'Что нужно по бэкенду: эндпоинт, данные, интеграция, к какому сроку…' }));
@@ -563,7 +577,9 @@ function backendRequestBlock(t) {
         return h('div', { class: 'be-row' + (b.state === 'done' ? ' done' : '') },
           h('span', { class: 'be-state ' + b.state }, b.state === 'done' && icon('check', 12), STATE[b.state] || b.state),
           isStaff() ? h('button', { class: 'link-btn be-text', title: b.text, onclick: () => peekTask(t.unitId, b.id) }, b.text) : h('span', { class: 'be-text', title: b.text }, b.text),
-          who ? avatar(who, 'sm') : h('span', { class: 'muted' }, '—'));
+          who ? avatar(who, 'sm') : h('span', { class: 'muted' }, '—'),
+          b.state !== 'done' ? h('button', { class: 'btn ghost sm be-cancel', title: 'Запросили по ошибке — задача на бэкенд удалится', onclick: e => cancelReq(b, e.currentTarget) }, 'Отменить')
+            : h('span', { class: 'be-cancel-gap' }));
       })));
     if (ta) setTimeout(() => ta.focus(), 0);
   };

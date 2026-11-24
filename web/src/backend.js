@@ -3698,6 +3698,11 @@ export function createBackend(db, opts = {}) {
       const id = await rpc('request_backend', { p_task: t.id, p_text: text });
       return { id: typeof id === 'object' && id ? Object.values(id)[0] : id };
     },
+    /** Отменить запрос на бэкенд (ошибся): задача бэкенда удаляется; готовый — нельзя. */
+    async cancelBackendRequest(p) {
+      await rpc('cancel_backend_request', { p_id: str(p.id, 40) });
+      return true;
+    },
     /** «Бэкенд не нужен» на этапе разработки (off) или снять отметку. */
     async setBackendNeed(p) {
       const t = await findTask(p.taskId);
